@@ -7,11 +7,31 @@ export interface MetaStats {
   battlesWon: number;
   evolutions: number;
   events: number;
+  coinsEarned: number;
+  levelups: number;
+  skillUps: number;
+  stars: number;
+  wipes: number;
+  elites: number;
+  treasures: number;
 }
 
-export const emptyStats = (): MetaStats => ({ rests: 0, caught: 0, battlesWon: 0, evolutions: 0, events: 0 });
+export const emptyStats = (): MetaStats => ({
+  rests: 0,
+  caught: 0,
+  battlesWon: 0,
+  evolutions: 0,
+  events: 0,
+  coinsEarned: 0,
+  levelups: 0,
+  skillUps: 0,
+  stars: 0,
+  wipes: 0,
+  elites: 0,
+  treasures: 0,
+});
 
-export type StatKey = keyof MetaStats | 'coinsSpent' | 'wins';
+export type StatKey = keyof MetaStats | 'coinsSpent' | 'wins' | 'bossesDefeated' | 'speciesCaught';
 
 export interface Achievement {
   id: string;
@@ -31,6 +51,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'metamorphosis', name: 'Metamorphosis', desc: 'Evolve 5 creatures', stat: 'evolutions', goal: 5, passive: 'evolutionist' },
   { id: 'wanderer', name: 'Wanderer', desc: 'Resolve 20 events', stat: 'events', goal: 20, passive: 'explorer' },
   { id: 'champion', name: 'Champion', desc: 'Win a run', stat: 'wins', goal: 1, passive: 'champion' },
+  { id: 'prospector', name: 'Prospector', desc: 'Earn 2,000 coins', stat: 'coinsEarned', goal: 2000, passive: 'coinpurse' },
+  { id: 'drill-master', name: 'Drill Master', desc: 'Train at 15 Level Up nodes', stat: 'levelups', goal: 15, passive: 'trainer' },
+  { id: 'scholar', name: 'Scholar', desc: 'Upgrade 15 moves', stat: 'skillUps', goal: 15, passive: 'sage' },
+  { id: 'ascension', name: 'Ascension', desc: 'Earn 10 prestige stars', stat: 'stars', goal: 10, passive: 'ascendant' },
+  { id: 'second-wind', name: 'Second Wind', desc: 'Survive 3 team wipes', stat: 'wipes', goal: 3, passive: 'bodyguard' },
+  { id: 'elite-hunter', name: 'Elite Hunter', desc: 'Defeat 10 elites', stat: 'elites', goal: 10, passive: 'hunter' },
+  { id: 'naturalist', name: 'Naturalist', desc: 'Catch 40 different species', stat: 'speciesCaught', goal: 40, passive: 'naturalist' },
+  { id: 'guardian-slayer', name: 'Guardian Slayer', desc: 'Defeat 15 floor bosses', stat: 'bossesDefeated', goal: 15, passive: 'ironwill' },
+  { id: 'treasure-hunter', name: 'Treasure Hunter', desc: 'Open 15 treasure chests', stat: 'treasures', goal: 15, passive: 'lucky' },
 ];
 
 export function achievementFor(passive: PassiveId): Achievement | undefined {
@@ -40,6 +69,8 @@ export function achievementFor(passive: PassiveId): Achievement | undefined {
 export function progress(meta: Meta, a: Achievement): number {
   if (a.stat === 'coinsSpent') return meta.coinsSpent;
   if (a.stat === 'wins') return meta.wins;
+  if (a.stat === 'bossesDefeated') return meta.bossesDefeated;
+  if (a.stat === 'speciesCaught') return meta.dex.caught.length;
   return meta.stats[a.stat];
 }
 

@@ -184,5 +184,14 @@ Runs unlock:
   | Metamorphosis | Evolve 5 creatures | Evolutionist: start with an Evolution Stone |
   | Wanderer | Resolve 20 events | Explorer: treasure +50% coins |
   | Champion | Win a run | Champion: starter begins at Lv 10 |
+  | Prospector | Earn 2,000 coins | Coin Purse: start with ◉50 |
+  | Drill Master | Train at 15 Level Up nodes | Personal Trainer: +1 level from Level Up nodes |
+  | Scholar | Upgrade 15 moves | Sage: Skill Shrines offer 4 choices |
+  | Ascension | Earn 10 prestige stars | Ascendant: Prestige Altars need no sacrifice |
+  | Second Wind | Survive 3 team wipes | Bodyguard: bench steps in fully healed |
+  | Elite Hunter | Defeat 10 elites | Big Game Hunter: elites drop 2 stones |
+  | Naturalist | Catch 40 different species | Naturalist: +25% XP from wild battles |
+  | Guardian Slayer | Defeat 15 floor bosses | Iron Will: survivors recover 85% after wins |
+  | Treasure Hunter | Open 15 treasure chests | Lucky Charm: coin-flip events succeed 75% |
 
 ## Open questions

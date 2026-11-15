@@ -7,12 +7,11 @@ import {
   createCreature,
   healFraction,
   levelCap,
-  prestige,
   stats,
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, BENCH_MAX, highestLevel, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, highestLevel, prestigeTracked, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit';
 
@@ -135,12 +134,13 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
     }
     case 'scroll':
       target!.moves[moveIndex!].tier += 1;
+      trackStat(run, 'skillUps');
       return `Move upgraded to tier ${target!.moves[moveIndex!].tier}.`;
     case 'stone':
       run.evoStones += 1;
       return 'Evolution Stone added. Use it from the Team screen on a creature at its level cap.';
     case 'sigil':
-      prestige(target!);
+      prestigeTracked(run, target!);
       return `Prestiged to ${'★'.repeat(target!.stars)}.`;
     case 'recruit': {
       const c = slot.recruit!;

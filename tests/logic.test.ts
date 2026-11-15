@@ -472,3 +472,32 @@ describe('starter unlocks', () => {
     expect(meta.unlockedStarters).toContain('gloomkit');
   });
 });
+
+describe('more passives', () => {
+  const fresh = (): Meta => ({ unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] });
+  it('every passive except Mentor has exactly one achievement', async () => {
+    const { ACHIEVEMENTS } = await import('../src/logic/achievements');
+    const { PASSIVES } = await import('../src/logic/run');
+    for (const id of Object.keys(PASSIVES)) {
+      const n = ACHIEVEMENTS.filter((a) => a.passive === id).length;
+      expect(n).toBe(id === 'mentor' ? 0 : 1);
+    }
+  });
+  it('coin purse, bodyguard and lucky odds work', async () => {
+    const { promoteBench, luckyOdds } = await import('../src/logic/run');
+    const meta = fresh();
+    meta.equippedPassive = 'coinpurse';
+    expect(startRun(meta, 'emberkit', 1).coins).toBe(50);
+    meta.equippedPassive = 'bodyguard';
+    const run = startRun(meta, 'emberkit', 1);
+    const b = createCreature('mossling', 5);
+    b.hp = 1;
+    run.bench.push(b);
+    run.team[0].hp = 0;
+    expect(promoteBench(run)).toBe(true);
+    expect(run.team[0].hp).toBe(stats(run.team[0]).hp);
+    expect(meta.stats.wipes).toBe(1);
+    run.passive = 'lucky';
+    expect(luckyOdds(run)).toBe(0.75);
+  });
+});

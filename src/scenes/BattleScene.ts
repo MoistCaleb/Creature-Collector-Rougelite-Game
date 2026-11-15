@@ -10,7 +10,6 @@ import {
   healFraction,
   isAlive,
   moveDef,
-  prestige,
   species,
   stats,
   type Creature,
@@ -27,7 +26,9 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
+  earnCoins,
   evolveTracked,
+  prestigeTracked,
   trackStat,
   isUnlockedStarter,
   catchBonus,
@@ -325,7 +326,7 @@ export class BattleScene extends Phaser.Scene {
   private onWin() {
     const run = state.run!;
     const ab = run.activeBattle!;
-    const xp = battleXp(this.enemies, this.kind, state.run!.floor);
+    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1));
     const coins = battleCoins(this.enemies, this.kind);
     // Bookkeeping happens once, even if the page reloads before the reward choice.
     if (!ab.settled) {
@@ -335,12 +336,14 @@ export class BattleScene extends Phaser.Scene {
       postBattleRecover(run);
       ab.summary = fallen;
       if (this.kind === 'elite') {
-        run.evoStones += 1;
-        run.coins += coins;
-        ab.summary = `You found an Evolution Stone ◆ and ◉ ${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        const stones = run.passive === 'hunter' ? 2 : 1;
+        run.evoStones += stones;
+        earnCoins(run, coins);
+        trackStat(run, 'elites');
+        ab.summary = `You found ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'} and ◉ ${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
-        run.coins += coins;
+        earnCoins(run, coins);
         ab.summary = `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       }
       ab.settled = true;
@@ -364,7 +367,7 @@ export class BattleScene extends Phaser.Scene {
         ],
         onPick: (i) => {
           if (i === 0) {
-            run.coins += coins;
+            earnCoins(run, coins);
             showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}`, () => this.toMap());
           } else {
             const wasStarter = isUnlockedStarter(run, this.enemies[i - 1].speciesId);
@@ -416,7 +419,7 @@ export class BattleScene extends Phaser.Scene {
           for (const c of allCreatures(run)) healFraction(c, 1);
           this.finishFloor('Your creatures are fully healed.');
         } else if (i === 1) {
-          run.team.forEach((c) => canPrestige(c) && prestige(c));
+          run.team.forEach((c) => canPrestige(c) && prestigeTracked(run, c));
           this.finishFloor('Your team glows with prestige!');
         } else if (i === 2) {
           openPicker(this, {

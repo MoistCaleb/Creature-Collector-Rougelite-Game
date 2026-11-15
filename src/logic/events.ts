@@ -10,11 +10,10 @@ import {
   knows,
   levelCap,
   MAX_MOVES,
-  prestige,
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, highestLevel, registerJoin, rosterFull, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, earnCoins, highestLevel, luckyOdds, prestigeTracked, registerJoin, rosterFull, TEAM_MAX, type Run } from './run';
 import { speciesWithElement } from '../data/species';
 
 export interface EventResult {
@@ -67,7 +66,7 @@ export const EVENTS: GameEvent[] = [
         eligible: (_r, c) => c.hp > stats(c).hp * 0.35,
         run: (run, c) => {
           c!.hp = Math.max(1, c!.hp - Math.ceil(stats(c!).hp * 0.3));
-          run.coins += scale(run, 40);
+          earnCoins(run, scale(run, 40));
           return { text: `${creatureName(c!)} feels weaker. You pocket ◉ ${scale(run, 40)}.` };
         },
       },
@@ -98,12 +97,12 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Bet',
-        sub: (run) => `Wager ◉ ${scale(run, 30)}: 50% to double it`,
+        sub: (run) => `Wager ◉ ${scale(run, 30)}: ${luckyOdds(run) * 100}% to double it`,
         blocked: (run) => (run.coins < scale(run, 30) ? 'Not enough coins' : null),
         run: (run) => {
           const bet = scale(run, 30);
-          if (run.rng.chance(0.5)) {
-            run.coins += bet;
+          if (run.rng.chance(luckyOdds(run))) {
+            earnCoins(run, bet);
             return { text: `Heads! You win ◉ ${bet}.` };
           }
           run.coins -= bet;
@@ -194,12 +193,12 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Pray',
-        sub: () => 'One creature: 50% gain ★, 50% lose 40% HP',
+        sub: (run) => `One creature: ${luckyOdds(run) * 100}% gain ★, otherwise lose 40% HP`,
         target: true,
         eligible: (_r, c) => canPrestige(c),
         run: (run, c) => {
-          if (run.rng.chance(0.5)) {
-            prestige(c!);
+          if (run.rng.chance(luckyOdds(run))) {
+            prestigeTracked(run, c!);
             return { text: `The shrine glows. ${creatureName(c!)} is now ${'★'.repeat(c!.stars)}!` };
           }
           c!.hp = Math.max(1, c!.hp - Math.ceil(stats(c!).hp * 0.4));

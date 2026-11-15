@@ -7,6 +7,7 @@ import {
   catchUpMultiplier,
   createCreature,
   creatureName,
+  prestige,
   evolve,
   setNextUid,
   xpToNext,
@@ -27,7 +28,24 @@ export const FLOORS = 3;
 
 // ---------------------------------------------------------------- passives
 
-export type PassiveId = 'mentor' | 'medic' | 'scout' | 'drill' | 'haggler' | 'evolutionist' | 'explorer' | 'champion';
+export type PassiveId =
+  | 'mentor'
+  | 'medic'
+  | 'scout'
+  | 'drill'
+  | 'haggler'
+  | 'evolutionist'
+  | 'explorer'
+  | 'champion'
+  | 'coinpurse'
+  | 'trainer'
+  | 'sage'
+  | 'ascendant'
+  | 'bodyguard'
+  | 'hunter'
+  | 'naturalist'
+  | 'ironwill'
+  | 'lucky';
 
 /** Trainer passives. All but Mentor unlock through achievements (see achievements.ts). */
 export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
@@ -39,6 +57,15 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   evolutionist: { name: 'Evolutionist', desc: 'Start each run with an Evolution Stone.' },
   explorer: { name: 'Explorer', desc: 'Treasure chests hold 50% more coins.' },
   champion: { name: 'Champion', desc: 'Your starter begins at level 10.' },
+  coinpurse: { name: 'Coin Purse', desc: 'Start each run with 50 coins.' },
+  trainer: { name: 'Personal Trainer', desc: 'Level Up nodes give one extra level.' },
+  sage: { name: 'Sage', desc: 'Skill Shrines offer 4 choices instead of 3.' },
+  ascendant: { name: 'Ascendant', desc: 'Prestige Altars need no sacrifice.' },
+  bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
+  hunter: { name: 'Big Game Hunter', desc: 'Elites drop 2 Evolution Stones.' },
+  naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
+  ironwill: { name: 'Iron Will', desc: 'Survivors recover 85% HP after wins.' },
+  lucky: { name: 'Lucky Charm', desc: 'Coin-flip events succeed 75% of the time.' },
 };
 
 // ---------------------------------------------------------------- meta save
@@ -169,7 +196,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     team: [createCreature(starterId, meta.equippedPassive === 'champion' ? 10 : BALANCE.starterLevel)],
     bench: [],
     evoStones: meta.equippedPassive === 'evolutionist' ? 1 : 0,
-    coins: 0,
+    coins: meta.equippedPassive === 'coinpurse' ? 50 : 0,
     shop: null,
     claimedTypes: [],
     bossPending: false,
@@ -259,7 +286,8 @@ export function highestLevel(run: Run): number {
 
 /** Survivors catch their breath after a win. */
 export function postBattleRecover(run: Run) {
-  for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * BALANCE.postBattleHeal));
+  const frac = run.passive === 'ironwill' ? 0.85 : BALANCE.postBattleHeal;
+  for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * frac));
 }
 
 /** Remove fainted creatures (permadeath). Returns their names. */
@@ -275,6 +303,8 @@ export function promoteBench(run: Run): boolean {
   buryFallen(run);
   if (run.bench.length === 0) return false;
   run.team = run.bench.splice(0, TEAM_MAX);
+  if (run.passive === 'bodyguard') for (const c of run.team) c.hp = stats(c).hp;
+  trackStat(run, 'wipes');
   return true;
 }
 
@@ -471,6 +501,24 @@ export function evolveTracked(run: Run, c: Creature): boolean {
   track(run.meta, 'evolutions');
   saveMeta(run.meta);
   return true;
+}
+
+/** Gain coins (counts toward the Prospector achievement). */
+export function earnCoins(run: Run, n: number) {
+  run.coins += n;
+  trackStat(run, 'coinsEarned', n);
+}
+
+/** Prestige a creature (counts toward the Ascension achievement). */
+export function prestigeTracked(run: Run, c: Creature): boolean {
+  if (!prestige(c)) return false;
+  trackStat(run, 'stars');
+  return true;
+}
+
+/** Odds for 50/50 events, improved by Lucky Charm. */
+export function luckyOdds(run: Run): number {
+  return run.passive === 'lucky' ? 0.75 : 0.5;
 }
 
 /** Bump a lifetime counter for this run's player and save. */

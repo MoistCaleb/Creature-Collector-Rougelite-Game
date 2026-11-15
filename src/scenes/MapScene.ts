@@ -8,14 +8,13 @@ import {
   healFraction,
   levelCap,
   moveDef,
-  prestige,
   resolvePending,
   sharesType,
   stats,
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, type MapNode } from '../logic/map';
-import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, registerJoin, trackStat } from '../logic/run';
+import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
@@ -285,9 +284,11 @@ export class MapScene extends Phaser.Scene {
       ],
       onPick: (i) => {
         if (i === 0) {
-          run.coins += offer.coins;
+          earnCoins(run, offer.coins);
+          trackStat(run, 'treasures');
           return showMessage(this, 'Treasure', `You take ◉ ${offer.coins}.`, this.done);
         }
+        trackStat(run, 'treasures');
         this.buy(slot, () => this.doTreasure());
       },
     });
@@ -366,21 +367,24 @@ export class MapScene extends Phaser.Scene {
 
   private doLevelUp() {
     const run = state.run!;
+    const extra = run.passive === 'trainer' ? 1 : 0;
     openPicker(this, {
       title: 'Training Grounds',
       subtitle: 'How do you want to train?',
       options: [
-        { label: 'Focus training', sub: 'One creature gains 3 levels' },
-        { label: 'Team drills', sub: 'Every creature on your team gains 1 level' },
+        { label: 'Focus training', sub: `One creature gains ${3 + extra} levels` },
+        { label: 'Team drills', sub: `Every creature on your team gains ${1 + extra} level${extra ? 's' : ''}` },
       ],
       onPick: (i) => {
         if (i === 1) {
-          const lines = run.team.map((c) => `${creatureName(c)}: ${addLevels(c, 1) ? `Lv ${c.level}` : 'at level cap'}`);
+          trackStat(run, 'levelups');
+          const lines = run.team.map((c) => `${creatureName(c)}: ${addLevels(c, extra + 1) ? `Lv ${c.level}` : 'at level cap'}`);
           showMessage(this, 'Team drills', lines.join('\n'), this.done);
           return;
         }
-        this.pickCreature('Focus training', 'Choose a creature (+3 levels)', allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
-          const gained = addLevels(c, 3);
+        this.pickCreature('Focus training', `Choose a creature (+${3 + extra} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
+          trackStat(run, 'levelups');
+          const gained = addLevels(c, extra + 3);
           showMessage(this, 'Focus training', `${creatureName(c)} gained ${gained} level${gained === 1 ? '' : 's'}! Now Lv ${c.level}.`, this.done);
         }, true);
       },
@@ -395,10 +399,11 @@ export class MapScene extends Phaser.Scene {
       showMessage(this, 'Skill Shrine', 'All of your moves are fully upgraded!', this.done);
       return;
     }
-    // Three offers, never the same move twice.
+    // Three offers (four with Sage), never the same move twice.
+    const want = run.passive === 'sage' ? 4 : 3;
     const picks: { c: Creature; i: number }[] = [];
     for (const o of run.rng.shuffle(offers)) {
-      if (picks.length === 3) break;
+      if (picks.length === want) break;
       if (!picks.some((p) => p.c.moves[p.i].id === o.c.moves[o.i].id)) picks.push(o);
     }
     openPicker(this, {
@@ -415,6 +420,7 @@ export class MapScene extends Phaser.Scene {
       onPick: (k) => {
         const { c, i } = picks[k];
         c.moves[i].tier += 1;
+        trackStat(run, 'skillUps');
         this.done();
       },
     });
@@ -422,6 +428,19 @@ export class MapScene extends Phaser.Scene {
 
   private doPrestige() {
     const run = state.run!;
+    if (run.passive === 'ascendant') {
+      return this.pickCreature(
+        'Prestige Altar',
+        'Ascendant: choose a creature to empower, no sacrifice needed (+15% stats, +5 level cap)',
+        allCreatures(run),
+        (c) => !canPrestige(c),
+        (target) => {
+          prestigeTracked(run, target);
+          showMessage(this, 'Prestige!', `${creatureName(target)} is now ${'★'.repeat(target.stars)}`, this.done);
+        },
+        true,
+      );
+    }
     const targets = allCreatures(run).filter(
       (t) => canPrestige(t) && run.bench.some((b) => b !== t && sharesType(b, t)),
     );
@@ -436,7 +455,7 @@ export class MapScene extends Phaser.Scene {
     }
     this.pickCreature(
       'Prestige Altar',
-      'Choose a creature to empower (+15% stats, +3 level cap)',
+      'Choose a creature to empower (+15% stats, +5 level cap)',
       allCreatures(run),
       (c) => !targets.includes(c),
       (target) => {
@@ -448,7 +467,7 @@ export class MapScene extends Phaser.Scene {
           () => false,
           (sac) => {
             run.bench = run.bench.filter((b) => b !== sac);
-            prestige(target);
+            prestigeTracked(run, target);
             showMessage(this, 'Prestige!', `${creatureName(sac)} was sacrificed.\n${creatureName(target)} is now ${'★'.repeat(target.stars)}`, this.done);
           },
           true,
