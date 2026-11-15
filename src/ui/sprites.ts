@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SPECIES_BY_ID } from '../data/species';
+import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 
@@ -59,11 +59,43 @@ const LOCO_BIAS: Partial<Record<Element, Partial<Record<Loco, number>>>> = {
   Fire: { biped: 4, quad: 3, avian: 1 },
 };
 
+/** Hand-picked body types where the family's name suggests one (everything else is rolled by element). */
+const LOCO_OVERRIDE: Record<string, Loco> = {
+  emberkit: 'biped', cinderpup: 'quad', flicklet: 'floater', magmite: 'slime',
+  frostling: 'avian', snowmote: 'floater', icebuck: 'quad', shiverfin: 'serpent',
+  sproutle: 'biped', mosskit: 'quad', beetlet: 'insect', budlet: 'biped',
+  pebblin: 'quad', molet: 'quad', dustbun: 'biped', golemite: 'biped',
+  zapling: 'avian', staticat: 'quad', gustling: 'floater', sparkbug: 'insect',
+  puddlet: 'serpent', tidepup: 'quad', jellet: 'floater', shellop: 'slime',
+  cogling: 'biped', boltkit: 'quad', mitebot: 'insect', edgelet: 'insect',
+  sludgit: 'slime', toadlet: 'quad', stingit: 'insect', oozel: 'serpent',
+  gloomkit: 'biped', mothlet: 'insect', murkpup: 'quad', creepet: 'insect',
+  glimmer: 'floater', lumbug: 'insect', prismkit: 'quad', dawnling: 'avian',
+  wispling: 'floater', boolet: 'floater', lampling: 'serpent', maskit: 'biped',
+  drakelet: 'biped', wyrmlet: 'serpent', draclet: 'avian', hatchwyrm: 'quad',
+  lavapup: 'quad', ashtoad: 'quad', kindrake: 'biped', scaldlet: 'avian', hexkit: 'biped', dimember: 'floater',
+  blazejay: 'avian', plasmite: 'floater', penglet: 'biped', narwee: 'serpent', lilyfrog: 'quad', kelpling: 'serpent',
+  eddylet: 'serpent', mistlet: 'serpent', stingrae: 'floater', blobble: 'slime', stumpling: 'biped', truffkin: 'slime',
+  shroomlet: 'biped', pitchling: 'slime', buzzlet: 'insect', sproutbolt: 'biped', drillmole: 'quad', ferrock: 'biped',
+  sandling: 'serpent', craglet: 'quad', magnetite: 'floater', whirlbot: 'floater', snowpip: 'avian', cryospark: 'floater',
+  wailet: 'floater', grimlet: 'floater', belladot: 'slime', plaguerat: 'quad', cherublet: 'floater', lumenwisp: 'floater',
+  aurorabit: 'quad', flashkit: 'avian', glintmite: 'insect', squirelet: 'biped', yukilet: 'floater', rimeghost: 'floater',
+  woollet: 'quad', slablet: 'biped', gildwing: 'avian',
+};
+
+/** Position of a pure-type family among the families of its element (0..3), for accent variety. */
+function pureIndex(id: string): number {
+  const sp = SPECIES_BY_ID[id];
+  if (sp.types[0] !== sp.types[1]) return -1;
+  return SPECIES.filter((x) => x.types[0] === sp.types[0] && x.types[1] === sp.types[0]).findIndex((x) => x.id === id);
+}
+
 function familyPlan(id: string, types: readonly Element[]): Family {
   const r = new Rng(hashString(id + ':family'));
   const eyeRoll = pickW<'one' | 'two' | 'three' | 'four'>(r, { two: 7, one: 1.5, three: 1, four: 1.5 });
+  const rolled = pickW<Loco>(r, LOCO_BIAS[types[0]] ?? { biped: 1 });
   return {
-    loco: pickW<Loco>(r, LOCO_BIAS[types[0]] ?? { biped: 1 }),
+    loco: LOCO_OVERRIDE[id] ?? rolled,
     eyes: ({ one: 1, two: 2, three: 3, four: 4 } as const)[eyeRoll],
     pattern: r.pick(['spots', 'hstripes', 'vstripes', 'belly', 'chevrons', 'core', 'rings'] as const),
     tail: pickW<Tail>(r, { none: 3, thin: 2, spiked: 2, club: 1, flame: types.includes('Fire') ? 3 : 0 }),
@@ -736,6 +768,22 @@ function jitter(color: number, j: number): number {
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 
+/** A related contrasting colour used as the accent for one family of each pure element. */
+const PURE_ACCENT: Record<Element, number> = {
+  Fire: 0xffe14d,
+  Frost: 0x3d6bff,
+  Nature: 0xc8935a,
+  Earth: 0x6fd36a,
+  Storm: 0x5a7dff,
+  Water: 0x2fd6c0,
+  Metal: 0xd94060,
+  Toxic: 0x7dff6a,
+  Shadow: 0xd33a4a,
+  Light: 0xff9fd0,
+  Spirit: 0x9fe8ff,
+  Dragon: 0xffc94d,
+};
+
 const SIGNATURE_COLOR: Record<Element, number> = {
   Fire: 0xffb02e,
   Frost: 0xd8f6ff,
@@ -758,8 +806,12 @@ function paletteFor(speciesId: string, stage: number) {
   const dark = t1 === 'Shadow';
   const base = jitter(shade(ELEMENT_COLORS[t1], dark ? [1.25, 1.15, 1.05][stage] : [0.97, 0.86, 0.74][stage]), fam.hueJitter);
   let sec = ELEMENT_COLORS[t2];
-  if (t1 === t2) sec = stage === 2 ? shade(ELEMENT_COLORS[t1], 1.4) : shade(ELEMENT_COLORS[t1], 0.6);
-  else if (stage === 2) sec = shade(sec, 1.1);
+  if (t1 === t2) {
+    // Pure families of one element each get a different accent.
+    const accents = [shade(ELEMENT_COLORS[t1], 0.55), PURE_ACCENT[t1], 0x2a2238, shade(ELEMENT_COLORS[t1], 1.55)];
+    sec = accents[Math.max(0, pureIndex(speciesId)) % accents.length];
+    if (stage === 2) sec = shade(sec, 1.1);
+  } else if (stage === 2) sec = shade(sec, 1.1);
   const sig = SIGNATURE_COLOR[t1];
   const pal: Record<number, number> = {
     1: base,

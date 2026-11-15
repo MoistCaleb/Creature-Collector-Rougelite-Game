@@ -61,7 +61,12 @@ Working doc. Items marked **[OPEN]** still need a decision.
 
 ## Battle
 - **1v1 with swapping**, turn-based. Switching uses your turn (the incoming creature takes the hit).
-- **Moves:** each element has 4 attacks plus a stat-boost move and a stat-lowering move.
+- **Moves:** each element has a 10-move pool: a 4-rank attack line (upgraded on evolution), 3 special
+  attacks (quick/first-strike, heavy+recoil, multi-hit, drain, stat-sapping, self-boosting), a stat boost,
+  a stat drop, and a heal or second boost. Each family learns its own seeded mix of its elements' pools,
+  plus a **signature move** (learned at Lv 11) whose effect matches its name: first-strike, finisher (x2 vs
+  hurt targets), flurry, draining, all-out (lowers own DEF/SPD), best-of-your-types strike, fortify+heal,
+  or a heavy curse.
   Species learn from their two types at set levels; with 4 moves known, you choose what to forget (or skip).
   A creature can never know the same move twice. Evolving upgrades each attack to the next rank it doesn't know.
 - **Stat stages:** ATK/DEF/SPD from -4 to +4 (±25% per stage), reset on switch.
@@ -127,7 +132,8 @@ Proposed math:
 - Elements tab reveals matchups once encountered.
 
 ## Creatures & sprites
-- 39 families (3 forms each). Every element has at least 4 families.
+- 120 families (3 forms each): 4 pure families per element, 2-3 families for each of 22 thematic dual pairings,
+  plus a few singles. Body types are hand-picked where the name suggests one.
 - Procedural 40x40 pixel art from a parts library. Per family (kept across evolutions): locomotion
   (biped, quad, insect, floater, slime, serpent, avian; biased by element), eye count (1-4), pattern,
   tail, palette, and an element signature that grows each stage (flame crown, ice crystals, leaves,

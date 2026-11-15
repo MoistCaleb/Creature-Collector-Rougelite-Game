@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, reachable } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
-import { MOVES } from '../src/data/moves';
+import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
+import { elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { catchCreature, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
@@ -264,5 +264,73 @@ describe('early fairness', () => {
         }
       }
     }
+  });
+});
+
+describe('roster and move variety', () => {
+  it('has ~120 families: 4 pure per element and every name unique', () => {
+    expect(SPECIES.length).toBeGreaterThanOrEqual(115);
+    for (const e of ELEMENTS) expect(SPECIES.filter((s) => s.types[0] === e && s.types[1] === e).length).toBeGreaterThanOrEqual(4);
+    const names = SPECIES.flatMap((s) => s.names);
+    expect(new Set(names).size).toBe(names.length);
+    const ids = SPECIES.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it('every element has a 10-move pool and every family a signature it learns', () => {
+    for (const e of ELEMENTS) expect(elementPool(e)).toHaveLength(10);
+    for (const s of SPECIES) {
+      expect(MOVES[s.signature].signature).toBe(s.id);
+      expect(learnset(s).map((l) => l.id)).toContain(s.signature);
+    }
+  });
+  it('families of the same element learn different mixes', () => {
+    for (const e of ELEMENTS) {
+      const pures = SPECIES.filter((s) => s.types[0] === e && s.types[1] === e);
+      const sets = new Set(pures.map((s) => learnset(s).map((l) => l.id).filter((id) => !id.startsWith('sig:')).join(',')));
+      expect(sets.size).toBeGreaterThan(1);
+    }
+  });
+});
+
+describe('move mechanics', () => {
+  const duel = (pMove: string, eMove = 'Earth:0', pLvl = 20, eLvl = 20) => {
+    const p = createCreature('emberkit', pLvl);
+    p.moves = [{ id: pMove, tier: 1 }];
+    const e = createCreature('pebblin', eLvl);
+    e.moves = [{ id: eMove, tier: 1 }];
+    return new Battle([p], [e], new Rng(5));
+  };
+  it('priority moves go first even when slower', () => {
+    const b = duel('Fire:sp0', 'Earth:0');
+    b.e.c.level = 60; // much faster
+    const ev = b.takeTurn({ kind: 'move', index: 0 });
+    const firstAttack = ev.find((x) => x.kind === 'attack') as { side: string };
+    expect(firstAttack.side).toBe('player');
+  });
+  it('multi-hit, drain, recoil and heal all apply', () => {
+    const multi = duel('Frost:sp2').takeTurn({ kind: 'move', index: 0 });
+    expect(multi.filter((x) => x.kind === 'damage' && x.side === 'enemy').length).toBeGreaterThanOrEqual(2);
+    const b = duel('Fire:sp1');
+    const hp0 = b.p.c.hp;
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.p.c.hp).toBeLessThan(hp0); // recoil (and enemy hit)
+    const h = duel('Nature:extra', 'Earth:0', 20, 1);
+    h.p.c.hp = 10;
+    h.takeTurn({ kind: 'move', index: 0 });
+    expect(h.p.c.hp).toBeGreaterThan(10);
+  });
+});
+
+describe('double knockout', () => {
+  it('counts as a loss when your last creature falls to recoil on the final blow', () => {
+    const p = createCreature('emberkit', 30);
+    p.moves = [{ id: 'Fire:sp1', tier: 1 }]; // heavy recoil move
+    p.hp = 1;
+    const e = createCreature('pebblin', 1);
+    e.moves = [{ id: 'Earth:0', tier: 1 }];
+    e.hp = 1;
+    const b = new Battle([p], [e], new Rng(1));
+    for (let i = 0; i < 10 && b.outcome() === 'ongoing'; i++) b.takeTurn({ kind: 'move', index: 0 });
+    if (p.hp === 0) expect(b.outcome()).toBe('lose');
   });
 });

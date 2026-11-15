@@ -1,4 +1,5 @@
-import { attackId, buffId, debuffId, MAX_TIER, MOVES, type MoveDef } from '../data/moves';
+import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, MOVES, specialId, type MoveDef } from '../data/moves';
+import { hashString, Rng } from './rng';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
 import type { Element, TypePair } from '../data/types';
 
@@ -60,29 +61,42 @@ export interface LearnEntry {
   level: number;
 }
 
-/** Ordered list of moves a species learns, each at a level. Attack ids are base ranks (shifted up on evolved creatures). */
+/**
+ * Ordered list of moves a species learns, each at a level. Every family draws its own mix from its
+ * elements' pools (seeded by species id) and learns its signature move at level 11.
+ * Line attacks are listed at base rank and shift up on evolved creatures.
+ */
 export function learnset(sp: Species): LearnEntry[] {
+  const cached = LEARNSET_CACHE.get(sp.id);
+  if (cached) return cached;
+  const r = new Rng(hashString(sp.id + ':learn'));
   const [a, b] = sp.types;
-  if (a === b) {
-    return [
-      { id: attackId(a, 0), level: 1 },
-      { id: attackId(a, 1), level: 1 },
-      { id: buffId(a), level: 5 },
-      { id: attackId(a, 2), level: 9 },
-      { id: debuffId(a), level: 13 },
-      { id: attackId(a, 3), level: 18 },
-    ];
-  }
-  return [
+  const pure = a === b;
+  const statusOf = (el: Element) => [buffId(el), debuffId(el), extraId(el)];
+  const specialsOf = (el: Element) => [specialId(el, 0), specialId(el, 1), specialId(el, 2)];
+  const pickFrom = (list: string[], used: Set<string>) => {
+    const left = list.filter((x) => !used.has(x));
+    const pick = left.length ? r.pick(left) : list[0];
+    used.add(pick);
+    return pick;
+  };
+  const used = new Set<string>();
+  const statusPool = pure ? statusOf(a) : [...statusOf(a), ...statusOf(b)];
+  const specialPool = pure ? specialsOf(a) : [...specialsOf(a), ...specialsOf(b)];
+  const out: LearnEntry[] = [
     { id: attackId(a, 0), level: 1 },
-    { id: attackId(b, 0), level: 1 },
-    { id: buffId(a), level: 5 },
-    { id: attackId(b, 1), level: 9 },
-    { id: debuffId(b), level: 12 },
-    { id: attackId(a, 2), level: 16 },
-    { id: attackId(b, 2), level: 21 },
+    { id: pure ? pickFrom(specialPool, used) : attackId(b, 0), level: 1 },
+    { id: pickFrom(statusPool, used), level: 5 },
+    { id: pickFrom(specialPool, used), level: 8 },
+    { id: sp.signature, level: 11 },
+    { id: attackId(pure ? a : r.pick([a, b]), 2), level: 14 },
+    { id: pickFrom(r.chance(0.5) ? statusPool : specialPool, used), level: 18 },
+    { id: attackId(a, 3), level: 22 },
   ];
+  LEARNSET_CACHE.set(sp.id, out);
+  return out;
 }
+const LEARNSET_CACHE = new Map<string, LearnEntry[]>();
 
 export function knows(c: Creature, id: string): boolean {
   return c.moves.some((m) => m.id === id);
@@ -98,7 +112,7 @@ function unknownAttack(c: Creature, el: Element, rank: number): string | null {
 /** Resolve a learnset entry to a concrete move id for this creature (no duplicates). */
 function resolveLearn(c: Creature, id: string): string | null {
   const def = MOVES[id];
-  if (def.kind === 'attack') return unknownAttack(c, def.element, def.rank + c.stage);
+  if (def.kind === 'attack' && def.rank >= 0) return unknownAttack(c, def.element, def.rank + c.stage);
   return knows(c, id) ? null : id;
 }
 
@@ -120,10 +134,13 @@ export function learnMoves(c: Creature, auto = false): string[] {
     } else if (auto) {
       const nd = MOVES[id];
       if (nd.kind !== 'attack') continue;
+      // Enemies swap their weakest attack for a stronger one (signatures always make the cut).
+      const val = nd.signature ? Infinity : attackValue(nd);
       let weakest = -1;
       c.moves.forEach((m, i) => {
         const d = MOVES[m.id];
-        if (d.kind === 'attack' && d.power < nd.power && (weakest < 0 || d.power < MOVES[c.moves[weakest].id].power)) weakest = i;
+        if (d.kind === 'attack' && !d.signature && attackValue(d) < val && (weakest < 0 || attackValue(d) < attackValue(MOVES[c.moves[weakest].id])))
+          weakest = i;
       });
       if (weakest >= 0) c.moves[weakest] = { id, tier: 1 };
     } else if (!c.pendingMoves.includes(id)) {
@@ -220,7 +237,7 @@ export function evolve(c: Creature): boolean {
   c.stage += 1;
   const order = c.moves
     .map((m, i) => ({ m, i, d: MOVES[m.id] }))
-    .filter((x) => x.d.kind === 'attack')
+    .filter((x) => x.d.kind === 'attack' && x.d.rank >= 0)
     .sort((a, b) => b.d.rank - a.d.rank);
   for (const { i, d } of order) {
     for (let r = d.rank + 1; r <= 3; r++) {

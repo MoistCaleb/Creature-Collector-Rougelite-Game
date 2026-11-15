@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ALL_MOVE_IDS, MOVES, moveSummary } from '../data/moves';
+import { allMoveIds, elementPool, MOVES, moveSummary } from '../data/moves';
 import { SPECIES } from '../data/species';
 import { ELEMENT_COLORS, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { formName, hasSeenForm } from '../logic/dex';
@@ -48,7 +48,7 @@ export class DexScene extends Phaser.Scene {
       this,
       16,
       48,
-      `Forms ${dex.forms.length}/${totalForms}   Caught ${dex.caught.length}/${SPECIES.length}   Moves ${dex.moves.length}/${ALL_MOVE_IDS.length}   Elements ${dex.elements.length}/${ELEMENTS.length}`,
+      `Forms ${dex.forms.length}/${totalForms}  Caught ${dex.caught.length}/${SPECIES.length}  Moves ${dex.moves.length}/${allMoveIds().length}  Elements ${dex.elements.length}/${ELEMENTS.length}`,
       13,
       COLORS.textDim,
     );
@@ -83,7 +83,7 @@ export class DexScene extends Phaser.Scene {
 
   private drawCreatures() {
     const dex = state.meta.dex;
-    const rowH = 110;
+    const rowH = 124;
     SPECIES.forEach((sp, i) => {
       const y = i * rowH + 8;
       const anySeen = [0, 1, 2].some((s) => hasSeenForm(dex, sp.id, s));
@@ -104,6 +104,13 @@ export class DexScene extends Phaser.Scene {
           this.content.add(text(this, cx, cy, '?', 24, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
         }
         this.content.add(text(this, cx, y + 86, formName(dex, sp.id, s), 12, hasSeenForm(dex, sp.id, s) ? COLORS.text : '#4a4068').setOrigin(0.5, 0));
+        if (s === 2) {
+          const sig = MOVES[sp.signature];
+          const seenSig = dex.moves.includes(sig.id);
+          this.content.add(
+            text(this, 22, y + 102, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)}` : 'Signature: ???', 11, seenSig ? '#ffc94d' : '#4a4068'),
+          );
+        }
         if (s < 2) this.content.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
       }
     });
@@ -118,7 +125,7 @@ export class DexScene extends Phaser.Scene {
       if (elSeen) this.content.add(typeChip(this, 16, y + 12, el));
       else this.content.add(text(this, 16, y + 2, '??? element', 14, '#4a4068'));
       y += 30;
-      const ids = ALL_MOVE_IDS.filter((id) => MOVES[id].element === el);
+      const ids = elementPool(el);
       for (const id of ids) {
         const m = MOVES[id];
         const seen = dex.moves.includes(id);

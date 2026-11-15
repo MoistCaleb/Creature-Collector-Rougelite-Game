@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
-import { effectsAtTier, MAX_STAGE, STAT_LABEL, TIER_POWER, type MoveDef, type StatKey } from '../data/moves';
+import { attackValue, effectsAtTier, healAtTier, MAX_STAGE, STAT_LABEL, TIER_POWER, type MoveDef, type StatKey } from '../data/moves';
+import type { Element } from '../data/types';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
 import { creatureName, creatureTypes, isAlive, levelFactor, moveDef, stats, type Creature, type MoveSlot } from './creature';
 import { Rng } from './rng';
@@ -64,8 +65,9 @@ export class Battle {
   }
 
   outcome(): BattleOutcome {
-    if (this.enemy.every((x) => !isAlive(x.c))) return 'win';
+    // A double knockout (e.g. recoil on the final blow) counts as a loss.
     if (this.player.every((x) => !isAlive(x.c))) return 'lose';
+    if (this.enemy.every((x) => !isAlive(x.c))) return 'win';
     if (!isAlive(this.p.c)) return 'needSwitch';
     return 'ongoing';
   }
@@ -99,7 +101,10 @@ export class Battle {
       this.useMove('enemy', enemyMove, ev);
     } else {
       const enemyAtStart = this.e;
-      const order = this.playerGoesFirst() ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
+      const pPri = !!moveDef(this.p.c.moves[action.index]).priority;
+      const ePri = !!moveDef(enemyMove).priority;
+      const playerFirst = pPri !== ePri ? pPri : this.playerGoesFirst();
+      const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       for (const side of order) {
         // A freshly sent-in enemy doesn't act on the turn its predecessor fainted.
         if (side === 'enemy' && this.e !== enemyAtStart) continue;
@@ -131,11 +136,7 @@ export class Battle {
     let bestScore = -1;
     for (const m of moves) {
       const d = moveDef(m);
-      const score = d.kind !== 'attack' ? this.statusScore(m) : d.power *
-        TIER_POWER[m.tier] *
-        (d.accuracy / 100) *
-        typeMultiplier(d.element, creatureTypes(this.p.c)) *
-        stabMultiplier(d.element, creatureTypes(this.e.c));
+      const score = d.kind !== 'attack' ? this.statusScore(m) : this.attackScore(this.e, this.p, m);
       if (score > bestScore) {
         bestScore = score;
         best = m;
@@ -144,10 +145,22 @@ export class Battle {
     return best;
   }
 
+  /** Expected damage-ish score for an attack, used by the AI. */
+  private attackScore(user: Combatant, target: Combatant, m: MoveSlot): number {
+    const d = moveDef(m);
+    const el = attackElement(d, user, target);
+    let v = attackValue(d, m.tier) * typeMultiplier(el, creatureTypes(target.c)) * stabMultiplier(el, creatureTypes(user.c));
+    const targetFrac = target.c.hp / stats(target.c).hp;
+    if (d.execute && targetFrac < 0.5) v *= 2;
+    if (d.priority && targetFrac < 0.25) v *= 1.5;
+    return v;
+  }
+
   /** How attractive a status move is to the AI right now (comparable to attack power). */
   private statusScore(m: MoveSlot): number {
     const d = moveDef(m);
     const hpFrac = this.e.c.hp / stats(this.e.c).hp;
+    if (d.kind === 'heal') return hpFrac < 0.5 ? 90 * (1 - hpFrac) : 0;
     if (hpFrac < 0.4) return 0;
     const holder = d.kind === 'buff' ? this.e : this.p;
     const room = effectsAtTier(d, m.tier).some((e) => {
@@ -192,30 +205,59 @@ export class Battle {
       ev.push({ kind: 'text', text: 'It missed!' });
       return;
     }
+    if (def.kind === 'heal') {
+      const max = stats(user.c).hp;
+      user.c.hp = Math.min(max, user.c.hp + Math.ceil(max * healAtTier(def, slot.tier)));
+      ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: max });
+      ev.push({ kind: 'text', text: `${who} recovered health!` });
+      if (def.effects.length) this.applyStatus(side, slot, ev);
+      return;
+    }
     if (def.kind !== 'attack') {
       this.applyStatus(side, slot, ev);
       return;
     }
 
-    const hits = slot.tier >= 3 && def.element === 'Storm' && this.rng.chance(0.35) ? 2 : 1;
+    const el = attackElement(def, user, target);
+    const powerMult = def.execute && target.c.hp < stats(target.c).hp / 2 ? 2 : 1;
+    let hits = def.hits ?? 1;
+    if (slot.tier >= 3 && def.element === 'Storm' && this.rng.chance(0.35)) hits += 1;
     let total = 0;
+    let landed = 0;
     for (let h = 0; h < hits && isAlive(target.c); h++) {
-      const r = computeDamage(user, target, def, slot.tier, this.rng);
-      const mult = r.mult;
+      const r = computeDamage(user, target, def, slot.tier, this.rng, el, powerMult);
       const dmg = side === 'player' ? Math.round(r.dmg * this.playerDamageMult) : r.dmg;
       target.c.hp = Math.max(0, target.c.hp - dmg);
       total += dmg;
+      landed++;
       ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg });
       if (h === 0) {
-        const label = effectivenessLabel(mult);
+        const label = effectivenessLabel(r.mult);
         if (label) ev.push({ kind: 'text', text: label });
+        if (powerMult > 1) ev.push({ kind: 'text', text: 'A finishing blow!' });
       }
     }
-    if (hits === 2) ev.push({ kind: 'text', text: 'Struck twice!' });
+    if (landed > 1) ev.push({ kind: 'text', text: `Hit ${landed} times!` });
+
+    const userMax = stats(user.c).hp;
+    if (def.drain && isAlive(user.c)) {
+      user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * def.drain));
+      ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
+      ev.push({ kind: 'text', text: `${who} drained energy!` });
+    }
+    if (def.recoil && isAlive(user.c)) {
+      const rc = Math.max(1, Math.round(total * def.recoil));
+      user.c.hp = Math.max(0, user.c.hp - rc);
+      ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: rc });
+      ev.push({ kind: 'text', text: `${who} is hurt by recoil!` });
+    }
+    if (def.targetAfter && isAlive(target.c)) for (const e of def.targetAfter) this.bump(target, targetSide, e.stat, e.stages, ev);
+    if (def.selfAfter && isAlive(user.c)) for (const e of def.selfAfter) this.bump(user, side, e.stat, e.stages, ev);
 
     if (slot.tier >= 3) this.applyTier3(def, user, target, side, total, ev);
 
     if (!isAlive(target.c)) this.handleFaint(targetSide, ev);
+    if (!isAlive(user.c)) this.handleFaint(side, ev);
   }
 
   private applyTier3(
@@ -348,20 +390,30 @@ function resetStages(x: Combatant) {
   x.burn = 0;
 }
 
+/** The element an attack actually hits with (bestType moves pick the user's most effective type). */
+export function attackElement(def: MoveDef, user: Combatant, target: Combatant): Element {
+  if (!def.bestType) return def.element;
+  const types = creatureTypes(user.c);
+  const tt = creatureTypes(target.c);
+  return typeMultiplier(types[1], tt) > typeMultiplier(types[0], tt) ? types[1] : types[0];
+}
+
 export function computeDamage(
   user: Combatant,
   target: Combatant,
   def: MoveDef,
   tier: number,
   rng: Rng,
+  element: Element = def.element,
+  powerMult = 1,
 ): { dmg: number; mult: number } {
   const us = stats(user.c);
   const ts = stats(target.c);
   const atk = us.atk * stageMult(user.atkStage);
   const dfn = ts.def * stageMult(target.defStage);
-  const mult = typeMultiplier(def.element, creatureTypes(target.c));
-  const stab = stabMultiplier(def.element, creatureTypes(user.c));
-  const power = def.power * TIER_POWER[tier] * (tier >= 3 && def.element === 'Dragon' ? 1.2 : 1);
+  const mult = typeMultiplier(element, creatureTypes(target.c));
+  const stab = stabMultiplier(element, creatureTypes(user.c));
+  const power = def.power * powerMult * TIER_POWER[tier] * (tier >= 3 && def.element === 'Dragon' ? 1.2 : 1);
   const base = power * (atk / dfn) * levelFactor(user.c.level) * BALANCE.damageScale;
   const roll = 0.85 + rng.next() * 0.15;
   return { dmg: Math.max(1, Math.round(base * mult * stab * roll)), mult };
