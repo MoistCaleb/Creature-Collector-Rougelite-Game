@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BattleScene } from './scenes/BattleScene';
+import { DexScene } from './scenes/DexScene';
 import { EndScene } from './scenes/EndScene';
 import { MapScene } from './scenes/MapScene';
 import { StarterScene } from './scenes/StarterScene';
@@ -16,7 +17,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.bg,
   pixelArt: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [TitleScene, StarterScene, MapScene, BattleScene, TeamScene, EndScene],
+  scene: [TitleScene, StarterScene, MapScene, BattleScene, TeamScene, EndScene, DexScene],
 });
 
 // Handy for debugging in the browser console.

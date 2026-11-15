@@ -18,7 +18,7 @@ export class TitleScene extends Phaser.Scene {
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);
     ids.forEach((id, i) => {
-      const key = ensureCreatureTexture(this, id, i % 3);
+      const key = ensureCreatureTexture(this, id, 0);
       const x = 55 + i * 68;
       const img = this.add.image(x, 190, key).setScale(2.2);
       this.tweens.add({ targets: img, y: 180, yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
@@ -47,10 +47,12 @@ export class TitleScene extends Phaser.Scene {
       { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Tap to equip one', fontSize: 16 },
     );
 
+    button(this, W / 2, 550, 200, 50, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 17 });
+
     text(
       this,
       W / 2,
-      H - 150,
+      H - 130,
       'Climb 3 floors. Pick your path.\nCatch creatures, evolve, prestige.\nDeath is permanent.',
       16,
       COLORS.textDim,

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
-import { generateFloor, reachable } from '../src/logic/map';
+import { branchiness, generateFloor, reachable } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, stats } from '../src/logic/creature';
+import { addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
+import { MOVES } from '../src/data/moves';
+import { emptyDex, formName, seeCreature } from '../src/logic/dex';
 import { Rng } from '../src/logic/rng';
 import { SPECIES } from '../src/data/species';
 
@@ -38,6 +40,7 @@ describe('map', () => {
           if (n.kind !== 'boss') expect(n.next.length).toBeGreaterThan(0);
           for (const nx of n.next) expect(m.nodes[nx].y).toBeLessThan(n.y); // always forward
         }
+        expect(branchiness(m)).toBeGreaterThanOrEqual(1.7);
       }
     }
   });
@@ -56,11 +59,31 @@ describe('creature growth', () => {
     expect(stats(c).atk).toBeGreaterThan(before);
     expect(c.stage).toBe(1);
   });
-  it('learns moves as it levels', () => {
+  it('learns moves as it levels, queueing extras when full', () => {
     const c = createCreature('steamle', 1);
     expect(c.moves).toHaveLength(2);
     addXp(c, 1e6);
     expect(c.moves).toHaveLength(4);
+    expect(c.pendingMoves.length).toBeGreaterThan(0);
+  });
+  it('never has duplicate moves through leveling, learning and evolving', () => {
+    const rng = new Rng(7);
+    for (const sp of SPECIES) {
+      for (let trial = 0; trial < 20; trial++) {
+        const c = createCreature(sp.id, rng.int(1, 30), rng.int(0, 2));
+        for (let step = 0; step < 12; step++) {
+          if (rng.chance(0.3)) evolve(c);
+          else if (rng.chance(0.3)) prestige(c);
+          else addLevels(c, rng.int(1, 6));
+          while (c.pendingMoves.length) {
+            resolvePending(c, c.pendingMoves[0], rng.chance(0.7) ? rng.int(0, c.moves.length - 1) : null);
+          }
+          const ids = c.moves.map((m) => m.id);
+          expect(new Set(ids).size).toBe(ids.length);
+          expect(ids.length).toBeLessThanOrEqual(4);
+        }
+      }
+    }
   });
   it('catch-up XP tapers as the gap closes', () => {
     expect(catchUpMultiplier(1, 11)).toBe(3.5);
@@ -69,7 +92,31 @@ describe('creature growth', () => {
   });
 });
 
+describe('dex', () => {
+  it('hides evolutions until seen', () => {
+    const d = emptyDex();
+    expect(formName(d, 'emberkit', 1)).toBe('???');
+    seeCreature(d, createCreature('emberkit', 20, 1), true);
+    expect(formName(d, 'emberkit', 1)).toBe('Blazefang');
+    expect(d.elements).toContain('Fire');
+    expect(d.moves.length).toBeGreaterThan(0);
+  });
+});
+
 describe('battle', () => {
+  it('status moves change stat stages', () => {
+    const p = createCreature('emberkit', 10);
+    p.moves = [{ id: 'Fire:buff', tier: 1 }, { id: 'Fire:debuff', tier: 3 }];
+    const e = createCreature('pebblin', 1);
+    e.moves = [{ id: 'Earth:0', tier: 1 }];
+    const b = new Battle([p], [e], new Rng(3));
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.p.atkStage).toBe(2);
+    for (let i = 0; i < 5 && b.outcome() === 'ongoing'; i++) b.takeTurn({ kind: 'move', index: 1 });
+    expect(b.e.defStage).toBeLessThan(0);
+    expect(b.e.defStage).toBeGreaterThanOrEqual(-4);
+    expect(MOVES['Fire:debuff'].kind).toBe('debuff');
+  });
   it('always terminates with a winner', () => {
     const rng = new Rng(42);
     for (let i = 0; i < 100; i++) {

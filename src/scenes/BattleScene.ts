@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TIER_POWER } from '../data/moves';
+import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS, typeMultiplier } from '../data/types';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
@@ -30,7 +30,7 @@ import {
   type EncounterKind,
   type XpResult,
 } from '../logic/run';
-import { state } from '../state';
+import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture } from '../ui/sprites';
 import { background, button, COLORS, HpBar, stars, text, typeChip, W } from '../ui/widgets';
@@ -128,6 +128,7 @@ export class BattleScene extends Phaser.Scene {
 
   private refreshEnemy() {
     const e = this.battle.e.c;
+    dex.creature(e);
     this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale(this.kind === 'boss' ? 6 : 5);
     this.fillPanel(this.enemyPanel, e);
@@ -137,6 +138,7 @@ export class BattleScene extends Phaser.Scene {
 
   private refreshPlayer() {
     const p = this.battle.p.c;
+    dex.creature(p, true);
     this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.fillPanel(this.playerPanel, p);
   }
@@ -151,14 +153,14 @@ export class BattleScene extends Phaser.Scene {
     p.moves.forEach((m, i) => {
       const d = moveDef(m);
       const mult = typeMultiplier(d.element, creatureTypes(e));
-      const hint = mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
+      const hint = d.kind !== 'attack' ? '' : mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
       const x = 12 + bw / 2 + (i % 2) * (bw + 12);
       const y = 640 + Math.floor(i / 2) * 74;
       const color = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(45).color;
       this.actions.add(
         button(this, x, y, bw, 64, d.name + hint, () => this.act({ kind: 'move', index: i }), {
           color,
-          sub: `${d.element}  ·  Pow ${Math.round(d.power * TIER_POWER[m.tier])}  ·  ${'✦'.repeat(m.tier)}`,
+          sub: `${moveSummary(d, m.tier)}  ·  ${'✦'.repeat(m.tier)}`,
           fontSize: 17,
         }),
       );
@@ -206,7 +208,17 @@ export class BattleScene extends Phaser.Scene {
           this.msg.setText(ev.text);
           await this.wait(620);
           break;
+        case 'stat': {
+          const s = ev.side === 'player' ? this.playerSprite : this.enemySprite;
+          const arrow = text(this, s.x, s.y - 60, ev.up ? '▲▲' : '▼▼', 28, ev.up ? '#8fe08a' : '#f08a80', { fontStyle: 'bold' }).setOrigin(0.5);
+          s.setTint(ev.up ? 0xaaffaa : 0xff9a9a);
+          this.tweens.add({ targets: arrow, y: arrow.y + (ev.up ? -30 : 30), alpha: 0, duration: 500, onComplete: () => arrow.destroy() });
+          await this.wait(300);
+          s.clearTint();
+          break;
+        }
         case 'attack': {
+          dex.move(ev.moveId);
           const s = ev.side === 'player' ? this.playerSprite : this.enemySprite;
           const dx = ev.side === 'player' ? 30 : -30;
           this.tweens.add({ targets: s, x: s.x + dx, y: s.y + (ev.side === 'player' ? -12 : 12), yoyo: true, duration: 120 });
@@ -359,6 +371,7 @@ export class BattleScene extends Phaser.Scene {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
               evolve(c);
+              dex.creature(c, true);
               this.finishFloor(`${from} evolved into ${creatureName(c)}!`);
             },
           });

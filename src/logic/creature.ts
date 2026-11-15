@@ -1,10 +1,9 @@
-import { getMove, MAX_TIER, type MoveDef } from '../data/moves';
+import { attackId, buffId, debuffId, MAX_TIER, MOVES, type MoveDef } from '../data/moves';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
 import type { Element, TypePair } from '../data/types';
 
 export interface MoveSlot {
-  element: Element;
-  rank: number;
+  id: string;
   tier: number; // 1..3 (skill buffs)
 }
 
@@ -17,6 +16,10 @@ export interface Creature {
   stars: number; // prestige
   hp: number;
   moves: MoveSlot[];
+  /** Index of the next learnset entry not yet processed. */
+  learnIndex: number;
+  /** Moves the creature wants to learn but has no free slot for (player decides). */
+  pendingMoves: string[];
 }
 
 export type Stats = BaseStats;
@@ -26,8 +29,6 @@ export const MAX_STARS = 5;
 export const MAX_MOVES = 4;
 const STAGE_MULT = [1, 1.35, 1.7];
 const STAR_MULT = 0.15;
-/** Levels at which move slots 3 and 4 unlock. */
-export const MOVE_UNLOCK_LEVELS = [1, 1, 6, 12];
 
 let nextUid = 1;
 export function setNextUid(n: number) {
@@ -54,36 +55,106 @@ export function xpToNext(level: number): number {
   return 8 + level * 5;
 }
 
-/** Ordered list of moves a species learns; slot i unlocks at MOVE_UNLOCK_LEVELS[i]. */
-export function learnset(sp: Species): MoveSlot[] {
+export interface LearnEntry {
+  id: string;
+  level: number;
+}
+
+/** Ordered list of moves a species learns, each at a level. Attack ids are base ranks (shifted up on evolved creatures). */
+export function learnset(sp: Species): LearnEntry[] {
   const [a, b] = sp.types;
   if (a === b) {
-    return [0, 1, 2, 3].map((rank) => ({ element: a, rank, tier: 1 }));
+    return [
+      { id: attackId(a, 0), level: 1 },
+      { id: attackId(a, 1), level: 1 },
+      { id: buffId(a), level: 5 },
+      { id: attackId(a, 2), level: 9 },
+      { id: debuffId(a), level: 13 },
+      { id: attackId(a, 3), level: 18 },
+    ];
   }
   return [
-    { element: a, rank: 0, tier: 1 },
-    { element: b, rank: 0, tier: 1 },
-    { element: a, rank: 2, tier: 1 },
-    { element: b, rank: 2, tier: 1 },
+    { id: attackId(a, 0), level: 1 },
+    { id: attackId(b, 0), level: 1 },
+    { id: buffId(a), level: 5 },
+    { id: attackId(b, 1), level: 9 },
+    { id: debuffId(b), level: 12 },
+    { id: attackId(a, 2), level: 16 },
+    { id: attackId(b, 2), level: 21 },
   ];
 }
 
-/** Adds any moves the creature is now high enough level to know. Returns names of new moves. */
-export function learnMoves(c: Creature): string[] {
+export function knows(c: Creature, id: string): boolean {
+  return c.moves.some((m) => m.id === id);
+}
+
+/** Pick an attack of this element the creature doesn't already know, preferring `rank` and above. */
+function unknownAttack(c: Creature, el: Element, rank: number): string | null {
+  for (let r = Math.min(3, rank); r <= 3; r++) if (!knows(c, attackId(el, r))) return attackId(el, r);
+  for (let r = Math.min(3, rank) - 1; r >= 0; r--) if (!knows(c, attackId(el, r))) return attackId(el, r);
+  return null;
+}
+
+/** Resolve a learnset entry to a concrete move id for this creature (no duplicates). */
+function resolveLearn(c: Creature, id: string): string | null {
+  const def = MOVES[id];
+  if (def.kind === 'attack') return unknownAttack(c, def.element, def.rank + c.stage);
+  return knows(c, id) ? null : id;
+}
+
+/**
+ * Learn every move the creature's level now allows. With a full move list, the move goes to
+ * pendingMoves for the player to decide, or (auto, for enemies) replaces its weakest attack.
+ * Returns names of moves learned immediately.
+ */
+export function learnMoves(c: Creature, auto = false): string[] {
   const learned: string[] = [];
   const set = learnset(species(c));
-  for (let i = c.moves.length; i < MAX_MOVES; i++) {
-    if (c.level < MOVE_UNLOCK_LEVELS[i]) break;
-    const slot = { ...set[i], rank: Math.min(3, set[i].rank + c.stage) };
-    c.moves.push(slot);
-    learned.push(getMove(slot.element, slot.rank).name);
+  while (c.learnIndex < set.length && set[c.learnIndex].level <= c.level) {
+    const id = resolveLearn(c, set[c.learnIndex].id);
+    c.learnIndex++;
+    if (!id) continue;
+    if (c.moves.length < MAX_MOVES) {
+      c.moves.push({ id, tier: 1 });
+      learned.push(MOVES[id].name);
+    } else if (auto) {
+      const nd = MOVES[id];
+      if (nd.kind !== 'attack') continue;
+      let weakest = -1;
+      c.moves.forEach((m, i) => {
+        const d = MOVES[m.id];
+        if (d.kind === 'attack' && d.power < nd.power && (weakest < 0 || d.power < MOVES[c.moves[weakest].id].power)) weakest = i;
+      });
+      if (weakest >= 0) c.moves[weakest] = { id, tier: 1 };
+    } else if (!c.pendingMoves.includes(id)) {
+      c.pendingMoves.push(id);
+    }
   }
   return learned;
 }
 
+/** Player decision on a pending move: replace slot `replaceIndex`, or null to skip it. */
+export function resolvePending(c: Creature, id: string, replaceIndex: number | null) {
+  c.pendingMoves = c.pendingMoves.filter((p) => p !== id);
+  if (replaceIndex === null || knows(c, id)) return;
+  c.moves[replaceIndex] = { id, tier: 1 };
+}
+
 export function createCreature(speciesId: string, level = 1, stage = 0): Creature {
-  const c: Creature = { uid: nextUid++, speciesId, level, xp: 0, stage, stars: 0, hp: 1, moves: [] };
-  learnMoves(c);
+  const c: Creature = {
+    uid: nextUid++,
+    speciesId,
+    level,
+    xp: 0,
+    stage: 0,
+    stars: 0,
+    hp: 1,
+    moves: [],
+    learnIndex: 0,
+    pendingMoves: [],
+  };
+  learnMoves(c, true);
+  for (let i = 0; i < stage; i++) evolve(c);
   c.hp = stats(c).hp;
   return c;
 }
@@ -106,7 +177,7 @@ export function stats(c: Creature): Stats {
 }
 
 export function moveDef(slot: MoveSlot): MoveDef {
-  return getMove(slot.element, slot.rank);
+  return MOVES[slot.id];
 }
 
 export function isAlive(c: Creature): boolean {
@@ -142,12 +213,25 @@ export function canEvolve(c: Creature): boolean {
   return c.stage < MAX_STAGE;
 }
 
-/** Evolve: big stat jump, moves upgrade a rank, HP keeps its missing amount. */
+/** Evolve: big stat jump, each attack upgrades to the next rank it doesn't know, HP keeps its missing amount. */
 export function evolve(c: Creature): boolean {
   if (!canEvolve(c)) return false;
   const oldMax = stats(c).hp;
   c.stage += 1;
-  c.moves = c.moves.map((m) => ({ ...m, rank: Math.min(3, m.rank + 1) }));
+  const order = c.moves
+    .map((m, i) => ({ m, i, d: MOVES[m.id] }))
+    .filter((x) => x.d.kind === 'attack')
+    .sort((a, b) => b.d.rank - a.d.rank);
+  for (const { i, d } of order) {
+    for (let r = d.rank + 1; r <= 3; r++) {
+      const id = attackId(d.element, r);
+      if (!knows(c, id)) {
+        c.moves[i] = { ...c.moves[i], id };
+        break;
+      }
+    }
+  }
+  c.pendingMoves = c.pendingMoves.filter((p) => !knows(c, p));
   const newMax = stats(c).hp;
   c.hp = Math.min(newMax, c.hp + (newMax - oldMax));
   return true;

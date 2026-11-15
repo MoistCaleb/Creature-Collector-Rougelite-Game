@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MAX_TIER, TIER3_EFFECT } from '../data/moves';
+import { MAX_TIER, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
   addLevels,
@@ -9,13 +9,14 @@ import {
   levelCap,
   moveDef,
   prestige,
+  resolvePending,
   sharesType,
   stats,
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, type MapNode } from '../logic/map';
 import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS } from '../logic/run';
-import { state } from '../state';
+import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture } from '../ui/sprites';
 import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
@@ -129,7 +130,35 @@ export class MapScene extends Phaser.Scene {
     this.drawTopBar();
     this.drawBottomBar();
 
-    if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner);
+    for (const c of allCreatures(run)) dex.creature(c, true);
+    const next = () => this.promptPendingMoves();
+    if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner, next);
+    else next();
+  }
+
+  /** Creatures that leveled into a new move with a full move list ask what to forget. */
+  private promptPendingMoves() {
+    const run = state.run!;
+    const c = allCreatures(run).find((x) => x.pendingMoves.length > 0);
+    if (!c) return;
+    const id = c.pendingMoves[0];
+    const nm = MOVES[id];
+    openPicker(this, {
+      title: `${creatureName(c)} wants to learn ${nm.name}`,
+      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${nm.accuracy}%\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      options: [
+        ...c.moves.map((m) => {
+          const d = moveDef(m);
+          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · T${m.tier}` };
+        }),
+        { label: `Don't learn ${nm.name}`, color: 0x3a3450 },
+      ],
+      onPick: (i) => {
+        resolvePending(c, id, i < c.moves.length ? i : null);
+        dex.move(id);
+        this.scene.restart();
+      },
+    });
   }
 
   private drawTopBar() {
@@ -137,8 +166,9 @@ export class MapScene extends Phaser.Scene {
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
-    text(this, 190, 22, `◆ Evo stones: ${run.evoStones}`, 14, COLORS.textDim);
-    button(this, W - 52, TOP_BAR / 2, 88, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
+    text(this, 150, 22, `◆ ${run.evoStones}`, 15, COLORS.textDim);
+    button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
+    button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
   }
 
   private drawBottomBar() {
@@ -225,7 +255,12 @@ export class MapScene extends Phaser.Scene {
       showMessage(this, 'Skill Shrine', 'All of your moves are fully upgraded!', this.done);
       return;
     }
-    const picks = run.rng.shuffle(offers).slice(0, 3);
+    // Three offers, never the same move twice.
+    const picks: { c: Creature; i: number }[] = [];
+    for (const o of run.rng.shuffle(offers)) {
+      if (picks.length === 3) break;
+      if (!picks.some((p) => p.c.moves[p.i].id === o.c.moves[o.i].id)) picks.push(o);
+    }
     openPicker(this, {
       title: 'Skill Shrine',
       subtitle: 'Choose one move to upgrade',
@@ -234,7 +269,7 @@ export class MapScene extends Phaser.Scene {
         const d = moveDef(m);
         return {
           label: `${creatureName(c)}: ${d.name}  T${m.tier} → T${m.tier + 1}`,
-          sub: m.tier + 1 === 3 ? `+50% power total, ${TIER3_EFFECT[d.element]}` : '+25% power',
+          sub: tierUpgradeText(d, m.tier + 1),
         };
       }),
       onPick: (k) => {

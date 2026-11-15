@@ -14,6 +14,8 @@ Working doc. Items marked **[OPEN]** still need a decision.
   - You may move to any hex **connected above** your current one (never sideways/back).
   - One path per floor, but branching choices at every step.
   - Floors get wider/denser as you go (floor 1 narrow, floor 3 wide with more elites).
+- Generated as a honeycomb: most of a 5/6/7-column grid is filled, then pruned to cells that are
+  reachable and lead to the boss. Every node branches ~2 ways on average, with gaps that split lanes.
 - Bare-bones first version: colored hexes with icons/letters.
 
 ### Node types (draft)
@@ -50,8 +52,10 @@ Working doc. Items marked **[OPEN]** still need a decision.
 
 ## Battle
 - **1v1 with swapping**, turn-based. Switching uses your turn (the incoming creature takes the hit).
-- **Moves:** each species learns moves from its two types: 2 at start, 3rd at Lv 6, 4th at Lv 12.
-  Evolving upgrades every move one rank (e.g. Ember → Flame Lash).
+- **Moves:** each element has 4 attacks plus a stat-boost move and a stat-lowering move.
+  Species learn from their two types at set levels; with 4 moves known, you choose what to forget (or skip).
+  A creature can never know the same move twice. Evolving upgrades each attack to the next rank it doesn't know.
+- **Stat stages:** ATK/DEF/SPD from -4 to +4 (±25% per stage), reset on switch.
 - Survivors recover 30% HP after a win (tunable in `src/data/balance.ts`).
 - Each creature has **2 types** (can be the same, e.g. Fire/Fire).
 - Type advantages apply (see Types).
@@ -87,6 +91,11 @@ Draft chart (6 types, each strong vs 2, weak vs 2, neutral vs 1):
 Proposed math:
 - Super effective ×1.5, resisted ×0.67, per defending type → dual weakness = ×2.25.
 - Pure types count their type once (no ×2.25 weakness possible) but get a bigger same-type-attack bonus.
+
+## Creature Dex
+- Persistent across runs: forms seen (per evolution stage), moves seen, elements seen.
+- Evolutions show as ??? until you've seen that form (starter cards, team screen, dex).
+- Elements tab reveals matchups once encountered.
 
 ## Meta progression (between runs)
 Runs unlock:

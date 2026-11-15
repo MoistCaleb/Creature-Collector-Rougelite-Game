@@ -4,7 +4,8 @@ import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { rollStarterChoices, startRun } from '../logic/run';
-import { state } from '../state';
+import { formName } from '../logic/dex';
+import { dex, state } from '../state';
 import { ensureCreatureTexture } from '../ui/sprites';
 import { background, button, COLORS, text, typeChips, W } from '../ui/widgets';
 
@@ -21,6 +22,7 @@ export class StarterScene extends Phaser.Scene {
     const choices = rollStarterChoices(state.meta, new Rng());
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
+      dex.form(id, 0);
       const preview = createCreature(id, BALANCE.starterLevel);
       const s = stats(preview);
       const y = 100 + i * 228;
@@ -36,7 +38,7 @@ export class StarterScene extends Phaser.Scene {
       text(this, 175, y + 122, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 13, COLORS.textDim, {
         wordWrap: { width: W - 215 },
       });
-      text(this, 175, y + 146, `Evolves: ${sp.names[1]} → ${sp.names[2]}`, 12, '#8e86ad', { wordWrap: { width: W - 215 } });
+      text(this, 175, y + 146, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 12, '#8e86ad', { wordWrap: { width: W - 215 } });
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 

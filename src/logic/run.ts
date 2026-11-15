@@ -11,6 +11,7 @@ import {
   stats,
   type Creature,
 } from './creature';
+import { emptyDex, type Dex } from './dex';
 import { generateFloor, type FloorMap, type MapNode } from './map';
 import { Rng } from './rng';
 
@@ -38,6 +39,7 @@ export interface Meta {
   equippedPassive: PassiveId | null;
   runs: number;
   wins: number;
+  dex: Dex;
 }
 
 const META_KEY = 'ccr-meta-v1';
@@ -49,11 +51,13 @@ export function loadMeta(): Meta {
     equippedPassive: null,
     runs: 0,
     wins: 0,
+    dex: emptyDex(),
   };
   try {
     const raw = localStorage.getItem(META_KEY);
     if (!raw) return fallback;
-    return { ...fallback, ...JSON.parse(raw) };
+    const saved = JSON.parse(raw);
+    return { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) } };
   } catch {
     return fallback;
   }

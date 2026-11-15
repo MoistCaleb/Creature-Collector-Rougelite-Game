@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { TIER_POWER, type MoveDef } from '../data/moves';
+import { effectsAtTier, MAX_STAGE, STAT_LABEL, TIER_POWER, type MoveDef, type StatKey } from '../data/moves';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
 import { creatureName, creatureTypes, isAlive, levelFactor, moveDef, stats, type Creature, type MoveSlot } from './creature';
 import { Rng } from './rng';
@@ -19,7 +19,8 @@ export type PlayerAction = { kind: 'move'; index: number } | { kind: 'swap'; ind
 export type BattleEvent =
   | { kind: 'text'; text: string }
   | { kind: 'swap'; side: Side; index: number }
-  | { kind: 'attack'; side: Side; move: string }
+  | { kind: 'attack'; side: Side; move: string; moveId: string }
+  | { kind: 'stat'; side: Side; up: boolean }
   | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number }
   | { kind: 'heal'; side: Side; hp: number; maxHp: number }
   | { kind: 'faint'; side: Side; index: number }
@@ -129,8 +130,7 @@ export class Battle {
     let bestScore = -1;
     for (const m of moves) {
       const d = moveDef(m);
-      const score =
-        d.power *
+      const score = d.kind !== 'attack' ? this.statusScore(m) : d.power *
         TIER_POWER[m.tier] *
         (d.accuracy / 100) *
         typeMultiplier(d.element, creatureTypes(this.p.c)) *
@@ -143,17 +143,56 @@ export class Battle {
     return best;
   }
 
+  /** How attractive a status move is to the AI right now (comparable to attack power). */
+  private statusScore(m: MoveSlot): number {
+    const d = moveDef(m);
+    const hpFrac = this.e.c.hp / stats(this.e.c).hp;
+    if (hpFrac < 0.4) return 0;
+    const holder = d.kind === 'buff' ? this.e : this.p;
+    const room = effectsAtTier(d, m.tier).some((e) => {
+      const cur = holder[stageKey(e.stat)];
+      return e.stages > 0 ? cur < 2 : cur > -2;
+    });
+    return room ? 50 * hpFrac : 0;
+  }
+
+  private applyStatus(side: Side, slot: MoveSlot, ev: BattleEvent[]) {
+    const def = moveDef(slot);
+    const user = side === 'player' ? this.p : this.e;
+    const target = side === 'player' ? this.e : this.p;
+    const holder = def.kind === 'buff' ? user : target;
+    const holderSide: Side = def.kind === 'buff' ? side : side === 'player' ? 'enemy' : 'player';
+    const name = (holderSide === 'enemy' ? 'Enemy ' : '') + creatureName(holder.c);
+    for (const e of effectsAtTier(def, slot.tier)) {
+      const key = stageKey(e.stat);
+      const before = holder[key];
+      holder[key] = Math.max(-MAX_STAGE, Math.min(MAX_STAGE, before + e.stages));
+      const diff = holder[key] - before;
+      if (diff === 0) {
+        ev.push({ kind: 'text', text: `${name}'s ${STAT_LABEL[e.stat]} won't go any ${e.stages > 0 ? 'higher' : 'lower'}!` });
+        continue;
+      }
+      const how = Math.abs(diff) >= 2 ? (diff > 0 ? 'rose sharply' : 'fell harshly') : diff > 0 ? 'rose' : 'fell';
+      ev.push({ kind: 'stat', side: holderSide, up: diff > 0 });
+      ev.push({ kind: 'text', text: `${name}'s ${STAT_LABEL[e.stat]} ${how}!` });
+    }
+  }
+
   private useMove(side: Side, slot: MoveSlot, ev: BattleEvent[]) {
     const user = side === 'player' ? this.p : this.e;
     const target = side === 'player' ? this.e : this.p;
     const targetSide: Side = side === 'player' ? 'enemy' : 'player';
     const def = moveDef(slot);
     const who = side === 'enemy' ? `Enemy ${creatureName(user.c)}` : creatureName(user.c);
-    ev.push({ kind: 'attack', side, move: def.name });
+    ev.push({ kind: 'attack', side, move: def.name, moveId: def.id });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
 
     if (this.rng.next() * 100 >= def.accuracy) {
       ev.push({ kind: 'text', text: 'It missed!' });
+      return;
+    }
+    if (def.kind !== 'attack') {
+      this.applyStatus(side, slot, ev);
       return;
     }
 
@@ -195,7 +234,7 @@ export class Battle {
         }
         break;
       case 'Frost':
-        if (isAlive(target.c) && target.spdStage > -3) {
+        if (isAlive(target.c) && target.spdStage > -MAX_STAGE) {
           target.spdStage -= 1;
           ev.push({ kind: 'text', text: `${creatureName(target.c)}'s Speed fell!` });
         }
@@ -210,7 +249,7 @@ export class Battle {
         break;
       }
       case 'Earth':
-        if (user.defStage < 3) {
+        if (user.defStage < MAX_STAGE) {
           user.defStage += 1;
           ev.push({ kind: 'text', text: `${creatureName(user.c)}'s Defense rose!` });
         }
@@ -260,6 +299,10 @@ export class Battle {
       }
     }
   }
+}
+
+function stageKey(stat: StatKey): 'atkStage' | 'defStage' | 'spdStage' {
+  return stat === 'atk' ? 'atkStage' : stat === 'def' ? 'defStage' : 'spdStage';
 }
 
 function fresh(c: Creature): Combatant {

@@ -71,7 +71,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
 }
 
 function simulate(seed: number): { floor: number; won: boolean; diedAt?: string } {
-  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0 };
+  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [] } };
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);
   for (let step = 0; step < 200; step++) {

@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { TIER_POWER } from '../data/moves';
+import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import { canEvolve, creatureName, evolve, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { allCreatures, BENCH_MAX, TEAM_MAX } from '../logic/run';
-import { state } from '../state';
+import { formName } from '../logic/dex';
+import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { background, button, COLORS, creatureRow, stars, text, W } from '../ui/widgets';
 
@@ -84,9 +85,9 @@ export class TeamScene extends Phaser.Scene {
       const x = 18 + (i % 2) * 210;
       const y = y0 + 72 + Math.floor(i / 2) * 20;
       this.add.rectangle(x, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
-      text(this, x + 12, y, `${d.name} ${Math.round(d.power * TIER_POWER[m.tier])} T${m.tier}`, 12, COLORS.text);
+      text(this, x + 12, y, `${d.name} · ${moveSummary(d, m.tier)} · T${m.tier}`, 11, COLORS.text);
     });
-    const next = c.stage < 2 ? `Evolves into ${sp.names[c.stage + 1]}` : 'Final form';
+    const next = c.stage < 2 ? `Evolves into ${formName(state.meta.dex, sp.id, c.stage + 1)}` : 'Final form';
     text(this, 18, y0 + 116, next, 12, '#8e86ad');
 
     const bx = 70;
@@ -103,6 +104,7 @@ export class TeamScene extends Phaser.Scene {
         run.evoStones -= 1;
         const from = creatureName(c);
         evolve(c);
+        dex.creature(c, true);
         showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected }));
       },
       { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a },

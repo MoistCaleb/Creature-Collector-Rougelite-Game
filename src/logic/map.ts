@@ -26,9 +26,9 @@ export interface FloorMap {
 }
 
 const FLOOR_SHAPES = [
-  { cols: 3, steps: 9, paths: 3 },
-  { cols: 4, steps: 10, paths: 4 },
-  { cols: 5, steps: 11, paths: 5 },
+  { cols: 5, steps: 9, density: 0.65 },
+  { cols: 6, steps: 10, density: 0.65 },
+  { cols: 7, steps: 11, density: 0.65 },
 ];
 
 const nid = (col: number, y: number) => `${col},${y}`;
@@ -42,84 +42,84 @@ function forward(col: number, y: number): [number, number][] {
   ];
 }
 
+/**
+ * Builds a honeycomb: fill most of the hex grid at random, then keep only cells that are
+ * reachable from the start AND can reach the top. Every kept neighbour above you is a valid move,
+ * so most nodes branch two or three ways. Retries until the floor has enough choice.
+ */
 export function generateFloor(floor: number, biome: Element, seed: number): FloorMap {
   const rng = new Rng(seed);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const m = tryFloor(floor, biome, rng);
+    if (m && branchiness(m) >= 1.7) return m;
+  }
+  return tryFloor(floor, biome, rng, 1)!;
+}
+
+/** Average number of forward choices per non-boss node. */
+export function branchiness(m: FloorMap): number {
+  const ns = Object.values(m.nodes).filter((n) => n.kind !== 'boss');
+  return ns.reduce((s, n) => s + n.next.length, 0) / ns.length;
+}
+
+function tryFloor(floor: number, biome: Element, rng: Rng, forceDensity?: number): FloorMap | null {
   const shape = FLOOR_SHAPES[floor];
   const { cols } = shape;
-  const midCol = Math.floor(cols / 2);
-  // Rows measured in "y" units; a straight-up step is 2 units.
+  const density = forceDensity ?? shape.density;
+  const startCol = Math.floor((cols - 1) / 2) + (cols % 2 === 0 ? rng.int(0, 1) : 0);
   let maxY = shape.steps * 2;
-  if ((midCol + maxY) % 2 !== 0) maxY += 1;
+  if ((startCol + maxY) % 2 !== 0) maxY += 1;
   const topY = 2; // cells with y <= topY+1 connect to the boss
+  const inGrid = (c: number, y: number) => c >= 0 && c < cols && y >= topY && y <= maxY && (c + y) % 2 === 0;
 
+  // Random fill. Rows near the start are narrower so the floor fans out like a tree.
   const cells = new Set<string>();
-  const edges = new Map<string, Set<string>>();
-  const startKey = nid(midCol, maxY);
+  for (let y = topY; y < maxY; y++)
+    for (let c = 0; c < cols; c++) {
+      if (!inGrid(c, y)) continue;
+      const fromStart = maxY - y;
+      if (Math.abs(c - startCol) > fromStart) continue; // can't be reached anyway
+      if (rng.chance(density)) cells.add(nid(c, y));
+    }
+  const startKey = nid(startCol, maxY);
   cells.add(startKey);
 
-  const addEdge = (a: string, b: string) => {
-    if (!edges.has(a)) edges.set(a, new Set());
-    edges.get(a)!.add(b);
+  const fwd = (key: string) => {
+    const [c, y] = key.split(',').map(Number);
+    return forward(c, y)
+      .map(([a, b]) => nid(a, b))
+      .filter((k) => cells.has(k));
   };
 
-  for (let p = 0; p < shape.paths; p++) {
-    let col = midCol;
-    let y = maxY;
-    // Force the first step of the first paths to diverge so there's a choice immediately.
-    let first = true;
-    while (y > topY + 1) {
-      let opts = forward(col, y).filter(([c, yy]) => c >= 0 && c < cols && yy >= topY);
-      if (first) {
-        const forced = opts[p % opts.length];
-        opts = [forced];
-        first = false;
-      }
-      // Bias toward existing cells a little so paths merge and split naturally.
-      const [nc, ny] = rng.chance(0.25)
-        ? (opts.find(([c, yy]) => cells.has(nid(c, yy))) ?? rng.pick(opts))
-        : rng.pick(opts);
-      const from = nid(col, y);
-      const to = nid(nc, ny);
-      cells.add(to);
-      addEdge(from, to);
-      col = nc;
-      y = ny;
-    }
+  // Keep cells reachable from start...
+  const reach = new Set<string>([startKey]);
+  const order = [...cells].sort((a, b) => Number(b.split(',')[1]) - Number(a.split(',')[1]));
+  for (const k of order) if (reach.has(k)) for (const n of fwd(k)) reach.add(n);
+  // ...that can also reach the top row.
+  const alive = new Set<string>();
+  for (const k of [...order].reverse()) {
+    const y = Number(k.split(',')[1]);
+    if (!reach.has(k)) continue;
+    if (y <= topY + 1 || fwd(k).some((n) => alive.has(n))) alive.add(k);
   }
+  if (!alive.has(startKey)) return null;
 
-  // Connect every adjacent pair of kept cells (forward only), so any touching hex is reachable.
-  for (const key of cells) {
-    const [c, y] = key.split(',').map(Number);
-    for (const [fc, fy] of forward(c, y)) {
-      const k = nid(fc, fy);
-      if (cells.has(k)) addEdge(key, k);
-    }
-  }
-
-  const bossCol = midCol;
+  const bossCol = Math.floor((cols - 1) / 2);
   const bossY = topY - 2 - ((bossCol + topY) % 2 === 0 ? 0 : 1);
   const bossKey = nid(bossCol, bossY);
 
   const nodes: Record<string, MapNode> = {};
   const span = maxY - topY;
-  for (const key of cells) {
+  for (const key of alive) {
     const [c, y] = key.split(',').map(Number);
-    const isTop = y <= topY + 1;
-    const next = [...(edges.get(key) ?? [])];
-    if (isTop) next.push(bossKey);
-    nodes[key] = {
-      id: key,
-      col: c,
-      y,
-      kind: 'battle',
-      next,
-      progress: (maxY - y) / (span + 2),
-    };
+    const next = fwd(key).filter((n) => alive.has(n));
+    if (y <= topY + 1) next.push(bossKey);
+    nodes[key] = { id: key, col: c, y, kind: 'battle', next, progress: (maxY - y) / (span + 2) };
   }
   nodes[bossKey] = { id: bossKey, col: bossCol, y: bossY, kind: 'boss', next: [], progress: 1 };
+  if (nodes[startKey].next.length < 2) return null;
 
   assignKinds(nodes, startKey, topY, rng);
-
   return { floor, biome, cols, maxY, nodes, startId: startKey, bossId: bossKey };
 }
 
