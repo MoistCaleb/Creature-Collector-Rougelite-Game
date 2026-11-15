@@ -135,7 +135,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
         }
         break;
       }
-      case 'levelup': run.team.forEach((c) => addLevels(c, 1)); break;
+      case 'levelup': allCreatures(run).forEach((c) => addLevels(c, BALANCE.levelUpTeam[run.floor])); break;
       case 'skill': { const c = run.team[0]; const m = c.moves.find((m) => m.tier < 3); if (m) m.tier++; break; }
     }
     // move team/bench: keep strongest 4 in team

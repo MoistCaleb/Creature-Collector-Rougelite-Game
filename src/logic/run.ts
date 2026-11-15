@@ -58,7 +58,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   explorer: { name: 'Explorer', desc: 'Treasure chests hold 50% more coins.' },
   champion: { name: 'Champion', desc: 'Your starter begins at level 10.' },
   coinpurse: { name: 'Coin Purse', desc: 'Start each run with 50 coins.' },
-  trainer: { name: 'Personal Trainer', desc: 'Level Up nodes give one extra level.' },
+  trainer: { name: 'Personal Trainer', desc: 'Level Up nodes give 50% more levels.' },
   sage: { name: 'Sage', desc: 'Skill Shrines offer 4 choices instead of 3.' },
   ascendant: { name: 'Ascendant', desc: 'Prestige Altars need no sacrifice.' },
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },

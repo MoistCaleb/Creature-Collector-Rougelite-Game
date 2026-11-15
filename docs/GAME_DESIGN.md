@@ -35,7 +35,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 |---|---|
 | Battle | Wild trainer/creature fight. Win → rewards **or** catch |
 | Elite | Harder fight, better rewards (evolution items) |
-| Level Up | Level up a creature |
+| Level Up | Focus: one creature +6/+9/+12 levels (by floor) · Team drills: everyone incl. bench +3/+4/+5 · Catch-up camp: raise everyone to within 5 levels of your strongest |
 | Prestige (star) | Prestige a creature |
 | Skill | Choose 1 of 3 skill buffs |
 | Heal | Restore HP |
@@ -185,7 +185,7 @@ Runs unlock:
   | Wanderer | Resolve 20 events | Explorer: treasure +50% coins |
   | Champion | Win a run | Champion: starter begins at Lv 10 |
   | Prospector | Earn 2,000 coins | Coin Purse: start with ◉50 |
-  | Drill Master | Train at 15 Level Up nodes | Personal Trainer: +1 level from Level Up nodes |
+  | Drill Master | Train at 15 Level Up nodes | Personal Trainer: Level Up nodes give 50% more levels |
   | Scholar | Upgrade 15 moves | Sage: Skill Shrines offer 4 choices |
   | Ascension | Earn 10 prestige stars | Ascendant: Prestige Altars need no sacrifice |
   | Second Wind | Survive 3 team wipes | Bodyguard: bench steps in fully healed |

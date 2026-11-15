@@ -1,3 +1,4 @@
+import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { MAX_TIER, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
@@ -14,7 +15,7 @@ import {
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, type MapNode } from '../logic/map';
-import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
+import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
@@ -367,25 +368,49 @@ export class MapScene extends Phaser.Scene {
 
   private doLevelUp() {
     const run = state.run!;
-    const extra = run.passive === 'trainer' ? 1 : 0;
+    const boost = run.passive === 'trainer' ? 1.5 : 1;
+    const focus = Math.round(BALANCE.levelUpFocus[run.floor] * boost);
+    const drill = Math.round(BALANCE.levelUpTeam[run.floor] * boost);
+    const gap = BALANCE.levelUpCatchUpGap;
+    const top = highestLevel(run);
+    const behind = allCreatures(run).filter((c) => c.level < top - gap && c.level < levelCap(c));
+    const report = (title: string, rows: { c: Creature; before: number }[]) =>
+      showMessage(
+        this,
+        title,
+        rows.map(({ c, before }) => `${creatureName(c)}: ${c.level > before ? `Lv ${before} → ${c.level}` : 'at level cap'}`).join('\n'),
+        this.done,
+      );
     openPicker(this, {
       title: 'Training Grounds',
       subtitle: 'How do you want to train?',
       options: [
-        { label: 'Focus training', sub: `One creature gains ${3 + extra} levels` },
-        { label: 'Team drills', sub: `Every creature on your team gains ${1 + extra} level${extra ? 's' : ''}` },
+        { label: 'Focus training', sub: `One creature gains ${focus} levels` },
+        { label: 'Team drills', sub: `Every creature, bench included, gains ${drill} levels` },
+        {
+          label: 'Catch-up camp',
+          sub: behind.length
+            ? `${behind.length} creature${behind.length === 1 ? ' rises' : 's rise'} to within ${gap} levels of your strongest (Lv ${top})`
+            : `Everyone is already within ${gap} levels of your strongest`,
+          disabled: behind.length === 0,
+        },
       ],
       onPick: (i) => {
+        trackStat(run, 'levelups');
         if (i === 1) {
-          trackStat(run, 'levelups');
-          const lines = run.team.map((c) => `${creatureName(c)}: ${addLevels(c, extra + 1) ? `Lv ${c.level}` : 'at level cap'}`);
-          showMessage(this, 'Team drills', lines.join('\n'), this.done);
-          return;
+          const rows = allCreatures(run).map((c) => ({ c, before: c.level }));
+          for (const { c } of rows) addLevels(c, drill);
+          return report('Team drills', rows);
         }
-        this.pickCreature('Focus training', `Choose a creature (+${3 + extra} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
-          trackStat(run, 'levelups');
-          const gained = addLevels(c, extra + 3);
-          showMessage(this, 'Focus training', `${creatureName(c)} gained ${gained} level${gained === 1 ? '' : 's'}! Now Lv ${c.level}.`, this.done);
+        if (i === 2) {
+          const rows = behind.map((c) => ({ c, before: c.level }));
+          for (const { c } of rows) addLevels(c, top - gap - c.level);
+          return report('Catch-up camp', rows);
+        }
+        this.pickCreature('Focus training', `Choose a creature (+${focus} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
+          const before = c.level;
+          addLevels(c, focus);
+          report('Focus training', [{ c, before }]);
         }, true);
       },
     });

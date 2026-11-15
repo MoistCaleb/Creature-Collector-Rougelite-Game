@@ -27,6 +27,11 @@ export const BALANCE = {
   catchUpMax: 2,
   coinsBase: 10,
   coinsPerEnemyLevel: 0.8,
+  /** Level Up node: levels for Focus (one creature) and Team drills (everyone), per floor. */
+  levelUpFocus: [6, 9, 12],
+  levelUpTeam: [3, 4, 5],
+  /** Catch-up camp raises creatures to within this many levels of your strongest. */
+  levelUpCatchUpGap: 5,
   /** Shop prices multiply by 1 + this x floor index. */
   shopFloorMarkup: 1.0,
 };
