@@ -5,7 +5,8 @@ import { Battle } from '../src/logic/battle';
 import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
 import { elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
-import { catchCreature, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { EVENTS } from '../src/logic/events';
+import { catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -157,6 +158,9 @@ describe('shop', () => {
     wins: 0,
     dex: emptyDex(),
     coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands',
   });
   it('stocks 5 distinct items with floor-scaled, haggler-discounted prices', () => {
     const run = startRun(mkMeta(), 'emberkit', 11);
@@ -191,6 +195,9 @@ describe('acquiring creatures', () => {
     wins: 0,
     dex: emptyDex(),
     coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands',
   });
   it('first catch of a species arrives prestiged; repeats do not', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
@@ -248,6 +255,9 @@ describe('early fairness', () => {
     wins: 0,
     dex: emptyDex(),
     coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands',
   });
   it('first battle is neutral both ways', () => {
     for (const starter of SPECIES) {
@@ -332,5 +342,65 @@ describe('double knockout', () => {
     const b = new Battle([p], [e], new Rng(1));
     for (let i = 0; i < 10 && b.outcome() === 'ongoing'; i++) b.takeTurn({ kind: 'move', index: 0 });
     if (p.hp === 0) expect(b.outcome()).toBe('lose');
+  });
+});
+
+describe('saving runs, maps and events', () => {
+  const store: Record<string, string> = {};
+  (globalThis as unknown as { localStorage: Storage }).localStorage = {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => void (store[k] = v),
+    removeItem: (k: string) => void delete store[k],
+  } as Storage;
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands',
+  });
+  it('a saved run reloads identically, including the RNG', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', 99, 'volcanic');
+    run.coins = 77;
+    run.team[0].hp = 5;
+    saveRun(run);
+    const back = loadRun(meta)!;
+    expect(back.coins).toBe(77);
+    expect(back.team[0].hp).toBe(5);
+    expect(back.biomes).toEqual(['Fire', 'Earth', 'Dragon']);
+    expect(back.rng.next()).toBe(run.rng.next());
+    clearSavedRun();
+    expect(hasSavedRun()).toBe(false);
+  });
+  it('maps unlock with boss kills', () => {
+    const meta = mkMeta();
+    expect(unlockedMaps(meta).map((m) => m.id)).toEqual(['wildlands', 'verdant']);
+    meta.bossesDefeated = 4;
+    expect(unlockedMaps(meta).map((m) => m.id)).toContain('volcanic');
+  });
+  it('every event option runs without errors and does what it says', () => {
+    for (const ev of EVENTS) {
+      for (const o of ev.options) {
+        const run = startRun(mkMeta(), 'emberkit', 3);
+        run.coins = 500;
+        run.team[0].hp = Math.round(run.team[0].hp * 0.8);
+        const target = run.team[0];
+        if (o.blocked?.(run)) continue;
+        if (o.target && !(o.eligible?.(run, target) ?? true)) continue;
+        const res = o.run(run, o.target ? target : undefined);
+        expect(res.text.length).toBeGreaterThan(0);
+      }
+    }
+    const run = startRun(mkMeta(), 'emberkit', 4);
+    run.coins = 100;
+    const egg = EVENTS.find((e) => e.id === 'egg')!;
+    egg.options[0].run(run);
+    expect(run.team.length).toBe(2);
   });
 });

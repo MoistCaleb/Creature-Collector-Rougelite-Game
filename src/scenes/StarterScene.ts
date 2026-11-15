@@ -14,7 +14,10 @@ export class StarterScene extends Phaser.Scene {
     super('Starter');
   }
 
-  create() {
+  private mapId = 'wildlands';
+
+  create(data: { mapId?: string } = {}) {
+    this.mapId = data.mapId ?? state.meta.lastMap ?? 'wildlands';
     background(this);
     text(this, W / 2 + 20, 34, 'Choose your starter', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2 + 20, 64, 'Three picked at random from your unlocked pool', 14, COLORS.textDim).setOrigin(0.5);
@@ -42,11 +45,11 @@ export class StarterScene extends Phaser.Scene {
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 
-    button(this, 40, 28, 64, 36, '◀', () => this.scene.start('Title'), { fontSize: 15 });
+    button(this, 40, 28, 64, 36, '◀', () => this.scene.start('MapSelect'), { fontSize: 15 });
   }
 
   private pick(id: string) {
-    state.run = startRun(state.meta, id);
+    state.run = startRun(state.meta, id, Date.now(), this.mapId);
     this.scene.start('Map');
   }
 }

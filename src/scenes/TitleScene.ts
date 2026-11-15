@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { PASSIVES, saveMeta, type PassiveId } from '../logic/run';
+import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, saveMeta, type PassiveId } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -30,7 +30,12 @@ export class TitleScene extends Phaser.Scene {
     text(this, W / 2, 270, `Runs: ${meta.runs}   Wins: ${meta.wins}`, 16, COLORS.textDim).setOrigin(0.5);
     text(this, W / 2, 294, `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
 
-    button(this, W / 2, 380, 280, 70, 'START RUN', () => this.scene.start('Starter'), { color: 0x3b6d4a, fontSize: 26 });
+    if (hasSavedRun()) {
+      button(this, W / 2, 360, 280, 64, 'CONTINUE RUN', () => this.continueRun(), { color: 0x3b6d4a, fontSize: 24 });
+      button(this, W / 2, 420, 200, 40, 'New run', () => this.confirmNewRun(), { fontSize: 15 });
+    } else {
+      button(this, W / 2, 380, 280, 70, 'START RUN', () => this.scene.start('MapSelect'), { color: 0x3b6d4a, fontSize: 26 });
+    }
 
     const passiveLabel = () => {
       const p = meta.equippedPassive;
@@ -39,7 +44,7 @@ export class TitleScene extends Phaser.Scene {
     button(
       this,
       W / 2,
-      470,
+      480,
       320,
       58,
       passiveLabel(),
@@ -58,6 +63,30 @@ export class TitleScene extends Phaser.Scene {
       COLORS.textDim,
       { align: 'center', lineSpacing: 6 },
     ).setOrigin(0.5);
+  }
+
+  private continueRun() {
+    const run = loadRun(state.meta);
+    if (!run) {
+      clearSavedRun();
+      this.scene.restart();
+      return;
+    }
+    state.run = run;
+    this.scene.start('Map');
+  }
+
+  private confirmNewRun() {
+    openPicker(this, {
+      title: 'Abandon your run?',
+      subtitle: 'Your current run will be lost.',
+      options: [{ label: 'Abandon and start fresh', color: 0x8a2c2c }],
+      onPick: () => {
+        clearSavedRun();
+        this.scene.start('MapSelect');
+      },
+      onCancel: () => {},
+    });
   }
 
   private choosePassive() {

@@ -7,6 +7,18 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - Can be wrapped for app stores later (Capacitor).
 - Art: procedural pixel creatures generated from parts (body, head, limbs, palette by type).
 
+## Saving
+- The run in progress saves after every map step, battle turn and choice (localStorage).
+- "Continue run" resumes exactly: mid-battle with current HP, open shops, unresolved node choices, events
+  and treasure (contents are fixed once rolled, so reloading can't re-roll them).
+
+## Maps
+- Picked before the starter. Each map fixes the element of floors 1-3:
+  Wildlands (random), Verdant Hollow (Nature/Toxic/Earth), Tidal Depths (Water/Frost/Storm),
+  Volcanic Rift (Fire/Earth/Dragon), Ironworks (Metal/Storm/Fire), Haunted Spires (Shadow/Spirit/Toxic),
+  Frozen Wastes (Frost/Spirit/Water), Celestial Peaks (Light/Storm/Dragon).
+- Unlock by total floor bosses defeated across runs (0, 0, 2, 4, 7, 10, 14, 19). Winning marks a map ✓.
+
 ## Run structure
 - A run = **3 floors**. Clearing the boss of floor 3 = win.
 - Each floor is a **hex-lattice map** climbed bottom → top:
@@ -29,7 +41,8 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Heal | Restore HP |
 | Treasure | Item |
 | Shop | Spend coins: 5 random items, reroll for a rising fee. At least one per floor |
-| Event (?) | Random risk/reward |
+| Treasure | Choose: coins or a free item |
+| Event (?) | One of 10 risk/reward events (Blood Bargain, Mysterious Egg, Gambler, Training Dummy, Ancient Tome, Healing Spring, Ambush, Shrine of Fate, Lost Hatchling, Cursed Idol) |
 | Boss | End of floor |
 
 ## Team
@@ -152,4 +165,3 @@ Runs unlock:
 - Trainer upgrades — **only 1 can be equipped** as your trainer passive per run.
 
 ## Open questions
-- **[OPEN]** Multiple maps to choose between (biomes are currently random per floor).

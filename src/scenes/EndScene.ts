@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { allCreatures } from '../logic/run';
+import { allCreatures, clearSavedRun } from '../logic/run';
 import { state } from '../state';
 import { background, button, COLORS, creatureRow, text, W } from '../ui/widgets';
 
@@ -11,6 +11,7 @@ export class EndScene extends Phaser.Scene {
   create(data: { won: boolean }) {
     background(this);
     const run = state.run!;
+    clearSavedRun();
     text(this, W / 2, 70, data.won ? 'VICTORY!' : 'RUN OVER', 42, data.won ? '#ffc94d' : '#e0524a', {
       fontStyle: 'bold',
     }).setOrigin(0.5);
@@ -28,7 +29,7 @@ export class EndScene extends Phaser.Scene {
       `Creatures caught: ${run.log.caught}`,
       `Creatures lost: ${run.log.lost}`,
     ];
-    if (run.unlockedThisRun.length) lines.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
+    if (run.unlockedThisRun.length) lines.push(`Unlocked: ${run.unlockedThisRun.join(', ')}`);
     text(this, W / 2, 160, lines.join('\n'), 17, COLORS.text, { align: 'center', lineSpacing: 6 }).setOrigin(0.5, 0);
 
     const survivors = allCreatures(run);

@@ -32,7 +32,7 @@ import {
   type EncounterKind,
   type XpResult,
 } from '../logic/run';
-import { dex, state } from '../state';
+import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, HpBar, stars, text, typeChip, W } from '../ui/widgets';
@@ -70,7 +70,15 @@ export class BattleScene extends Phaser.Scene {
     const run = state.run!;
     this.kind = data.kind;
     this.busy = false;
-    this.enemies = makeEncounter(run, run.map.nodes[run.currentId]);
+    const resuming = !!run.activeBattle;
+    if (run.activeBattle) {
+      this.kind = run.activeBattle.kind;
+      this.enemies = run.activeBattle.enemies;
+    } else {
+      this.enemies = makeEncounter(run, run.map.nodes[run.currentId]);
+      run.activeBattle = { kind: this.kind, enemies: this.enemies, settled: false, summary: '' };
+      persist();
+    }
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: run.passive === 'drill' ? 1.1 : 1,
       enemyRandomness: this.kind === 'battle' ? 0.5 : this.kind === 'elite' ? 0.25 : 0.1,
@@ -98,14 +106,22 @@ export class BattleScene extends Phaser.Scene {
 
     this.refreshEnemy();
     this.refreshPlayer();
-    const intro =
-      this.kind === 'battle'
+    const intro = resuming
+      ? 'The battle resumes!'
+      : this.kind === 'battle'
         ? `A wild ${this.enemies.map(creatureName).join(' and a wild ')} appeared!`
         : this.kind === 'elite'
           ? 'An elite trainer challenges you!'
           : 'The floor guardian blocks your way!';
     this.msg.setText(intro);
     this.showActions();
+    // Resuming after a reload: pick up wherever the battle was left.
+    if (resuming) {
+      const o = this.battle.outcome();
+      if (o === 'win') this.onWin();
+      else if (o === 'lose') this.onLose();
+      else if (o === 'needSwitch') this.openSwitch(true);
+    }
   }
 
   // ------------------------------------------------------------ panels
@@ -268,6 +284,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private afterTurn() {
+    persist();
     switch (this.battle.outcome()) {
       case 'ongoing':
         this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
@@ -287,6 +304,7 @@ export class BattleScene extends Phaser.Scene {
   // ------------------------------------------------------------ results
 
   private toMap(banner?: string) {
+    state.run!.activeBattle = null;
     this.scene.start('Map', banner ? { banner } : {});
   }
 
@@ -301,11 +319,28 @@ export class BattleScene extends Phaser.Scene {
 
   private onWin() {
     const run = state.run!;
-    run.log.battlesWon += 1;
-    const fallen = this.fallenNote();
-    postBattleRecover(run);
+    const ab = run.activeBattle!;
     const xp = battleXp(this.enemies, this.kind);
     const coins = battleCoins(this.enemies, this.kind);
+    // Bookkeeping happens once, even if the page reloads before the reward choice.
+    if (!ab.settled) {
+      run.log.battlesWon += 1;
+      const fallen = this.fallenNote();
+      postBattleRecover(run);
+      ab.summary = fallen;
+      if (this.kind === 'elite') {
+        run.evoStones += 1;
+        run.coins += coins;
+        ab.summary = `You found an Evolution Stone ◆ and ◉ ${coins} coins\n\n${this.xpLines(grantXp(run, xp))}${fallen}`;
+      } else if (this.kind === 'boss') {
+        run.bossPending = false;
+        run.coins += coins;
+        ab.summary = `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}${fallen}`;
+      }
+      ab.settled = true;
+      persist();
+    }
+    const fallen = ab.summary;
 
     if (this.kind === 'battle') {
       const full = rosterFull(run);
@@ -342,18 +377,12 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (this.kind === 'elite') {
-      run.evoStones += 1;
-      run.coins += coins;
-      const lines = this.xpLines(grantXp(run, xp));
-      showMessage(this, 'Elite defeated!', `You found an Evolution Stone ◆ and ◉ ${coins} coins\n\n${lines}${fallen}`, () => this.toMap());
+      showMessage(this, 'Elite defeated!', ab.summary, () => this.toMap());
       return;
     }
 
     // boss
-    run.bossPending = false;
-    run.coins += coins;
-    const lines = this.xpLines(grantXp(run, xp));
-    showMessage(this, 'Guardian defeated!', `◉ +${coins} coins\n\n${lines}${fallen}`, () => this.bossReward());
+    showMessage(this, 'Guardian defeated!', ab.summary, () => this.bossReward());
   }
 
   private bossReward() {
@@ -420,8 +449,9 @@ export class BattleScene extends Phaser.Scene {
 
   private finishFloor(note: string) {
     const run = state.run!;
+    run.activeBattle = null;
     const won = clearFloor(run);
-    const unlock = run.unlockedThisRun.length ? `\nNew starter unlocked: ${run.unlockedThisRun[run.unlockedThisRun.length - 1]}` : '';
+    const unlock = run.unlockedThisRun.length ? `\nUnlocked: ${run.unlockedThisRun.join(", ")}` : '';
     if (won) {
       this.scene.start('End', { won: true });
       return;
@@ -432,11 +462,13 @@ export class BattleScene extends Phaser.Scene {
   private onLose() {
     const run = state.run!;
     const fallen = run.team.filter((c) => !isAlive(c)).map(creatureName);
+    run.activeBattle = null;
     if (!promoteBench(run)) {
       this.scene.start('End', { won: false });
       return;
     }
     if (this.kind === 'boss') run.bossPending = true;
+    persist();
     showMessage(
       this,
       'Your team has fallen',

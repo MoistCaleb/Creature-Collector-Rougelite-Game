@@ -53,6 +53,7 @@ export class Battle {
     this.player = playerTeam.map(fresh);
     this.enemy = enemyTeam.map(fresh);
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
+    this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
     this.rng = rng;
   }
 

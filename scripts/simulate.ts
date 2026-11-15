@@ -73,7 +73,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
 }
 
 function simulate(seed: number): { floor: number; won: boolean; diedAt?: string } {
-  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0 };
+  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' };
   meta.dex.caught = process.env.VET ? SPECIES.map((s) => s.id) : [];
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);
@@ -111,6 +111,8 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
         break;
       }
       case 'heal': allCreatures(run).forEach((c) => healFraction(c, 0.5)); break;
+      case 'treasure': run.coins += 30 * (1 + run.floor); break;
+      case 'event': break;
       case 'shop': {
         // Greedy: buy whatever helps most that we can afford, in priority order.
         const pre = run.floor === 0 && n.next.includes(run.map.bossId);

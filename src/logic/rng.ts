@@ -6,6 +6,15 @@ export class Rng {
     this.state = seed >>> 0;
   }
 
+  /** Internal state, for saving and restoring a run mid-way. */
+  getState(): number {
+    return this.state;
+  }
+
+  setState(s: number) {
+    this.state = s >>> 0;
+  }
+
   next(): number {
     this.state = (this.state + 0x6d2b79f5) >>> 0;
     let t = this.state;

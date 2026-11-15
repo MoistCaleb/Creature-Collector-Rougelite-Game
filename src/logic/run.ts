@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
 import {
@@ -6,6 +7,7 @@ import {
   catchUpMultiplier,
   createCreature,
   creatureName,
+  setNextUid,
   creatureTypes,
   isAlive,
   stats,
@@ -13,7 +15,7 @@ import {
 } from './creature';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
-import { generateFloor, type FloorMap, type MapNode } from './map';
+import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
 import { Rng } from './rng';
 
 export const TEAM_MAX = 4;
@@ -45,6 +47,9 @@ export interface Meta {
   wins: number;
   dex: Dex;
   coinsSpent: number;
+  bossesDefeated: number;
+  clearedMaps: string[];
+  lastMap: string;
 }
 
 const META_KEY = 'ccr-meta-v1';
@@ -58,6 +63,9 @@ export function loadMeta(): Meta {
     wins: 0,
     dex: emptyDex(),
     coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands',
   };
   try {
     const raw = localStorage.getItem(META_KEY);
@@ -101,15 +109,34 @@ export interface Run {
   bossPending: boolean;
   log: { battlesWon: number; caught: number; lost: number; fights: number };
   unlockedThisRun: string[];
+  mapId: string;
+  /** A node whose choice hasn't been made yet (so a reload re-offers it). */
+  pendingNode: NodeKind | null;
+  /** The battle in progress (or awaiting its reward choice). */
+  activeBattle: ActiveBattle | null;
+  /** The event on offer at the current node, if any. */
+  eventId: string | null;
+  /** The open treasure chest's contents, fixed once rolled. */
+  treasure: { coins: number; item: import('./shop').ItemId } | null;
+}
+
+export interface ActiveBattle {
+  kind: EncounterKind;
+  enemies: Creature[];
+  /** Win bookkeeping (XP, coins, burials) already done; only the reward choice remains. */
+  settled: boolean;
+  summary: string;
 }
 
 export function rollStarterChoices(meta: Meta, rng: Rng): string[] {
   return rng.shuffle([...meta.unlockedStarters]).slice(0, 3);
 }
 
-export function startRun(meta: Meta, starterId: string, seed = Date.now()): Run {
+export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands'): Run {
   const rng = new Rng(seed);
-  const biomes = rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
+  const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
+  const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
+  meta.lastMap = def.id;
   const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31));
   meta.runs += 1;
   saveMeta(meta);
@@ -132,7 +159,64 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now()): Run 
     bossPending: false,
     log: { battlesWon: 0, caught: 0, lost: 0, fights: 0 },
     unlockedThisRun: [],
+    mapId: def.id,
+    pendingNode: null,
+    activeBattle: null,
+    eventId: null,
+    treasure: null,
   };
+}
+
+// ---------------------------------------------------------------- saving a run in progress
+
+const RUN_KEY = 'ccr-run-v1';
+
+/** Persist the run so a reload resumes exactly here. */
+export function saveRun(run: Run) {
+  try {
+    const { meta: _m, rng, ...rest } = run;
+    void _m;
+    localStorage.setItem(RUN_KEY, JSON.stringify({ ...rest, rngState: rng.getState() }));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function hasSavedRun(): boolean {
+  try {
+    return !!localStorage.getItem(RUN_KEY);
+  } catch {
+    return false;
+  }
+}
+
+export function loadRun(meta: Meta): Run | null {
+  try {
+    const raw = localStorage.getItem(RUN_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const rng = new Rng(0);
+    rng.setState(data.rngState);
+    delete data.rngState;
+    const run = { ...data, rng, meta } as Run;
+    const all = [...run.team, ...run.bench, ...(run.activeBattle?.enemies ?? [])];
+    setNextUid(Math.max(0, ...all.map((c) => c.uid)) + 1);
+    return run;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSavedRun() {
+  try {
+    localStorage.removeItem(RUN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function unlockedMaps(meta: Meta) {
+  return MAPS.filter((m) => mapUnlocked(m, meta.bossesDefeated));
 }
 
 export function currentNode(run: Run): MapNode {
@@ -347,6 +431,9 @@ export function registerJoin(run: Run, c: Creature) {
 /** Called after a floor boss is defeated. Returns true if the run is won. */
 export function clearFloor(run: Run): boolean {
   const meta = run.meta;
+  const before = unlockedMaps(meta).length;
+  meta.bossesDefeated += 1;
+  for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
   const passive = PASSIVE_BY_FLOOR[run.floor];
   if (run.floor < 2 && !meta.unlockedPassives.includes(passive)) meta.unlockedPassives.push(passive);
   const locked = SPECIES.filter((s) => !meta.unlockedStarters.includes(s.id));
@@ -357,6 +444,7 @@ export function clearFloor(run: Run): boolean {
   }
   if (run.floor === FLOORS - 1) {
     meta.wins += 1;
+    if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);
     if (!meta.unlockedPassives.includes('drill')) meta.unlockedPassives.push('drill');
     saveMeta(meta);
     return true;

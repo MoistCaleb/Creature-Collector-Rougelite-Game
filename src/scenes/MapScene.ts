@@ -18,7 +18,8 @@ import { NODE_INFO, type MapNode } from '../logic/map';
 import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, registerJoin } from '../logic/run';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
-import { dex, state } from '../state';
+import { dex, persist, state } from '../state';
+import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
@@ -45,6 +46,11 @@ export class MapScene extends Phaser.Scene {
 
   create(data: { banner?: string } = {}) {
     const run = state.run!;
+    if (run.activeBattle) {
+      // A battle was in progress when the game was closed.
+      this.scene.start('Battle', { kind: run.activeBattle.kind });
+      return;
+    }
     const map = run.map;
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color);
 
@@ -133,7 +139,9 @@ export class MapScene extends Phaser.Scene {
     this.drawBottomBar();
 
     for (const c of allCreatures(run)) dex.creature(c, true);
-    const next = () => (run.shop ? this.openShop() : this.promptPendingMoves());
+    persist();
+    const next = () =>
+      run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
     if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner, next);
     else next();
   }
@@ -199,6 +207,12 @@ export class MapScene extends Phaser.Scene {
     }
     if (!canMoveTo(run, n.id)) return;
     moveTo(run, n.id);
+    if (['levelup', 'skill', 'prestige', 'treasure', 'event'].includes(n.kind)) {
+      // Remember the unresolved choice so a reload offers it again.
+      run.pendingNode = n.kind;
+      persist();
+      return this.resumeNode(n.kind);
+    }
     switch (n.kind) {
       case 'battle':
       case 'elite':
@@ -216,13 +230,114 @@ export class MapScene extends Phaser.Scene {
       case 'shop':
         // The shop right before the floor 1 boss always stocks healing.
         run.shop = rollShop(run, 0, run.floor === 0 && n.next.includes(run.map.bossId) ? ['potion', 'restore'] : []);
+        persist();
         return this.openShop();
       default:
         this.scene.restart();
     }
   }
 
-  private done = () => this.scene.restart();
+  private resumeNode(kind: string) {
+    switch (kind) {
+      case 'levelup':
+        return this.doLevelUp();
+      case 'skill':
+        return this.doSkill();
+      case 'prestige':
+        return this.doPrestige();
+      case 'treasure':
+        return this.doTreasure();
+      case 'event':
+        return this.doEvent();
+    }
+  }
+
+  // ------------------------------------------------------------ treasure & events
+
+  private doTreasure() {
+    const run = state.run!;
+    if (!run.treasure) {
+      run.treasure = rollTreasure(run);
+      persist();
+    }
+    const offer = run.treasure;
+    const slot: ShopSlot = { item: offer.item, price: 0, sold: false };
+    const reason = unusableReason(run, slot);
+    openPicker(this, {
+      title: 'Treasure',
+      subtitle: 'The chest holds two things. You can only carry one.',
+      options: [
+        { label: `◉ ${offer.coins} coins`, color: 0x6b5a1c },
+        { label: ITEMS[offer.item].name, sub: reason ?? ITEMS[offer.item].desc, disabled: !!reason, color: 0x4a3a1c },
+      ],
+      onPick: (i) => {
+        if (i === 0) {
+          run.coins += offer.coins;
+          return showMessage(this, 'Treasure', `You take ◉ ${offer.coins}.`, this.done);
+        }
+        this.buy(slot, () => this.doTreasure());
+      },
+    });
+  }
+
+  private doEvent() {
+    const run = state.run!;
+    if (!run.eventId) {
+      run.eventId = rollEvent(run).id;
+      persist();
+    }
+    const ev = EVENT_BY_ID[run.eventId];
+    const opts = ev.options;
+    openPicker(this, {
+      title: ev.title,
+      subtitle: ev.text,
+      options: [
+        ...opts.map((o) => {
+          const blocked = o.blocked?.(run) ?? (o.target && !allCreatures(run).some((c) => o.eligible?.(run, c) ?? true) ? 'No creature can do this' : null);
+          return { label: o.label, sub: blocked ?? o.sub(run), disabled: !!blocked, color: 0x2f4a6b };
+        }),
+        { label: ev.leave ?? 'Walk away', color: 0x3a3450 },
+      ],
+      onPick: (i) => {
+        if (i === opts.length) return showMessage(this, ev.title, leaveEvent(run, ev), this.done);
+        const o = opts[i];
+        if (!o.target) return this.resolveEvent(o);
+        const list = allCreatures(run);
+        openPicker(this, {
+          title: o.label,
+          subtitle: o.sub(run),
+          options: list.map((c) => ({ creature: c, disabled: !(o.eligible?.(run, c) ?? true) })),
+          onPick: (k) => this.resolveEvent(o, list[k]),
+          onCancel: () => this.doEvent(),
+          cancelLabel: 'Back',
+        });
+      },
+    });
+  }
+
+  private resolveEvent(o: EventOption, target?: Creature) {
+    const run = state.run!;
+    const ev = EVENT_BY_ID[run.eventId!];
+    const res = o.run(run, target);
+    if (res.joined) dex.creature(res.joined, true);
+    if (res.battle) {
+      run.pendingNode = null;
+      run.eventId = null;
+      persist();
+      return this.scene.start('Battle', { kind: res.battle });
+    }
+    showMessage(this, ev.title, res.text, this.done);
+  }
+
+  /** Finish the current node's choice and redraw the map. */
+  private done = () => {
+    const run = state.run!;
+    run.pendingNode = null;
+    run.eventId = null;
+    run.treasure = null;
+    persist();
+    this.scene.restart();
+  };
 
   private doHeal() {
     const run = state.run!;
@@ -369,7 +484,7 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
-  private buy(slot: ShopSlot) {
+  private buy(slot: ShopSlot, back: () => void = () => this.openShop()) {
     const run = state.run!;
     const finish = (target?: Creature, moveIndex?: number) => {
       pay(run, slot.price);
@@ -380,7 +495,7 @@ export class MapScene extends Phaser.Scene {
         registerJoin(run, slot.recruit!);
       }
       const who = target ? `${creatureName(target)}: ` : '';
-      showMessage(this, ITEMS[slot.item].name, who + result, () => this.scene.restart());
+      showMessage(this, ITEMS[slot.item].name, who + result, this.done);
     };
     const def = ITEMS[slot.item];
     if (def.target === 'none') return finish();
@@ -400,11 +515,11 @@ export class MapScene extends Phaser.Scene {
             return { label: `${d.name}  T${m.tier} → T${m.tier + 1}`, sub: tierUpgradeText(d, m.tier + 1) };
           }),
           onPick: (j) => finish(c, moves[j].idx),
-          onCancel: () => this.openShop(),
+          onCancel: back,
           cancelLabel: 'Back',
         });
       },
-      onCancel: () => this.openShop(),
+      onCancel: back,
       cancelLabel: 'Back',
     });
   }

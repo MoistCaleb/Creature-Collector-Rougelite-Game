@@ -1,6 +1,6 @@
 import type { Creature } from './logic/creature';
 import { seeCreature, seeForm, seeMove } from './logic/dex';
-import { loadMeta, saveMeta, type Meta, type Run } from './logic/run';
+import { loadMeta, saveMeta, saveRun, type Meta, type Run } from './logic/run';
 
 /** Global game state shared between scenes. */
 export const state: { meta: Meta; run: Run | null } = {
@@ -20,3 +20,8 @@ export const dex = {
     if (seeMove(state.meta.dex, id)) saveMeta(state.meta);
   },
 };
+
+/** Save the run in progress (call after anything changes it). */
+export function persist() {
+  if (state.run) saveRun(state.run);
+}
