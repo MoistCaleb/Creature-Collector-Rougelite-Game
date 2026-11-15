@@ -41,6 +41,11 @@ Working doc. Items marked **[OPEN]** still need a decision.
     (no rewards) and the bench becomes your team (max 3 creatures, no bench left).
 - **Permadeath:** a creature that faints is gone for the run.
 
+### Early fairness (floor 1)
+- First battle of a run: the matchup with your lead creature is neutral both ways. For the few dual types
+  with no neutral opponent in the roster, it falls back to an enemy with no advantage over you.
+- Other battles in the first ~third of floor 1: enemies never have a type advantage over your lead.
+
 ### Catching
 - After winning a battle against a wild creature you choose:
   - **Take the rewards** (XP, currency, items), or

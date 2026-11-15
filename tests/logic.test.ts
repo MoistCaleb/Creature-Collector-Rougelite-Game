@@ -5,7 +5,8 @@ import { Battle } from '../src/logic/battle';
 import { addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
 import { MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
-import { catchCreature, claimGuardian, startRun, type Meta } from '../src/logic/run';
+import { catchCreature, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
 import { Rng } from '../src/logic/rng';
@@ -230,6 +231,38 @@ describe('acquiring creatures', () => {
       expect(items).toContain('potion');
       expect(items).toContain('restore');
       shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
+    }
+  });
+});
+
+describe('early fairness', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...SPECIES.map((s) => s.id)],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+  });
+  it('first battle is neutral both ways, and early floor 1 enemies never have an advantage', () => {
+    for (const starter of SPECIES) {
+      for (let seed = 1; seed <= 25; seed++) {
+        const run = startRun(mkMeta(), starter.id, seed * 31 + starter.id.length);
+        const lead = SPECIES_BY_ID[starter.id].types;
+        const first = run.map.nodes[run.map.nodes[run.currentId].next[0]];
+        moveTo(run, first.id);
+        const neutralExists = SPECIES.some((o) => neutralMatchup(o, lead));
+        for (const e of makeEncounter(run, first)) {
+          const sp = SPECIES_BY_ID[e.speciesId];
+          expect(noAdvantageOver(sp, lead)).toBe(true); // never super effective on you
+          if (neutralExists) expect(neutralMatchup(sp, lead)).toBe(true);
+        }
+        const second = run.map.nodes[first.next[0]];
+        moveTo(run, second.id);
+        if (second.progress < 0.35 && ['battle', 'elite'].includes(second.kind))
+          for (const e of makeEncounter(run, second)) expect(noAdvantageOver(SPECIES_BY_ID[e.speciesId], lead)).toBe(true);
+      }
     }
   });
 });

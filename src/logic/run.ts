@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/balance';
-import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement } from '../data/species';
-import { ELEMENTS, typeMultiplier, type Element } from '../data/types';
+import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
+import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
 import {
   addXp,
   catchUpMultiplier,
@@ -99,7 +99,7 @@ export interface Run {
   claimedTypes: Element[];
   /** Lost to a boss but survived via the bench: must re-fight it. */
   bossPending: boolean;
-  log: { battlesWon: number; caught: number; lost: number };
+  log: { battlesWon: number; caught: number; lost: number; fights: number };
   unlockedThisRun: string[];
 }
 
@@ -130,7 +130,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now()): Run 
     shop: null,
     claimedTypes: [],
     bossPending: false,
-    log: { battlesWon: 0, caught: 0, lost: 0 },
+    log: { battlesWon: 0, caught: 0, lost: 0, fights: 0 },
     unlockedThisRun: [],
   };
 }
@@ -193,11 +193,11 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const enemies: Creature[] = [];
   for (let i = 0; i < count; i++) {
     let pool = rng.chance(0.7) ? speciesWithElement(biome) : SPECIES;
-    // Early on floor 1, don't throw hard counters at your lone starter.
-    if (f === 0 && node.progress < 0.35 && run.team[0]) {
+    if (f === 0 && run.team[0]) {
       const lead = creatureTypes(run.team[0]);
-      const fair = pool.filter((s) => Math.max(...s.types.map((t) => typeMultiplier(t, lead))) <= 1.5);
-      pool = fair.length ? fair : SPECIES.filter((s) => Math.max(...s.types.map((t) => typeMultiplier(t, lead))) <= 1.5);
+      const firstFight = run.log.fights === 0;
+      if (firstFight) pool = fairPool(pool, lead, neutralMatchup);
+      else if (node.progress < 0.35) pool = fairPool(pool, lead, noAdvantageOver);
     }
     const sp = rng.pick(pool);
     let level = BALANCE.floorBaseLevel[f] + Math.round(node.progress * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
@@ -215,7 +215,31 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     c.hp = stats(c).hp;
     enemies.push(c);
   }
+  run.log.fights += 1;
   return enemies;
+}
+
+// Early-game fairness filters (lead = types of your first creature).
+const near1 = (m: number) => Math.abs(m - 1) < 0.02;
+
+/** Enemy has no type advantage over your lead. */
+export function noAdvantageOver(sp: Species, lead: TypePair): boolean {
+  return sp.types.every((t) => typeMultiplier(t, lead) <= 1.01);
+}
+
+/** Neither side has an advantage or disadvantage: enemy attacks neutral on your lead, and yours neutral on it. */
+export function neutralMatchup(sp: Species, lead: TypePair): boolean {
+  return sp.types.every((t) => near1(typeMultiplier(t, lead))) && lead.every((t) => near1(typeMultiplier(t, sp.types)));
+}
+
+/** Filter a spawn pool, widening to every species (then to "no advantage") if nothing fits. */
+function fairPool(pool: Species[], lead: TypePair, test: (sp: Species, lead: TypePair) => boolean): Species[] {
+  const a = pool.filter((sp) => test(sp, lead));
+  if (a.length) return a;
+  const b = SPECIES.filter((sp) => test(sp, lead));
+  if (b.length) return b;
+  const c = SPECIES.filter((sp) => noAdvantageOver(sp, lead));
+  return c.length ? c : pool;
 }
 
 // ---------------------------------------------------------------- rewards
