@@ -49,7 +49,10 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - **Bench XP:** benched creatures earn a share of battle XP.
 
 ## Battle
-- **1v1 with swapping**, turn-based.
+- **1v1 with swapping**, turn-based. Switching uses your turn (the incoming creature takes the hit).
+- **Moves:** each species learns moves from its two types: 2 at start, 3rd at Lv 6, 4th at Lv 12.
+  Evolving upgrades every move one rank (e.g. Ember → Flame Lash).
+- Survivors recover 30% HP after a win (tunable in `src/data/balance.ts`).
 - Each creature has **2 types** (can be the same, e.g. Fire/Fire).
 - Type advantages apply (see Types).
 
@@ -92,7 +95,6 @@ Runs unlock:
 - Trainer upgrades — **only 1 can be equipped** as your trainer passive per run.
 
 ## Open questions
-- **[OPEN]** Does swapping during battle cost your turn?
-- **[OPEN]** How are moves defined — fixed per species, or learned/chosen?
-- **[OPEN]** Run currency + what shops sell.
+- **[OPEN]** Shops + run currency (not in the first playable).
+- **[OPEN]** Multiple maps to choose between (biomes are currently random per floor).
 - **[OPEN]** Final type list and chart.

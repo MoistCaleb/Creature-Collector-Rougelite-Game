@@ -1,0 +1,303 @@
+import Phaser from 'phaser';
+import { MAX_TIER, TIER3_EFFECT } from '../data/moves';
+import { ELEMENT_COLORS } from '../data/types';
+import {
+  addLevels,
+  canPrestige,
+  creatureName,
+  healFraction,
+  levelCap,
+  moveDef,
+  prestige,
+  sharesType,
+  stats,
+  type Creature,
+} from '../logic/creature';
+import { NODE_INFO, type MapNode } from '../logic/map';
+import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS } from '../logic/run';
+import { state } from '../state';
+import { openPicker, showMessage } from '../ui/picker';
+import { ensureCreatureTexture } from '../ui/sprites';
+import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
+
+const TOP_BAR = 64;
+const BOTTOM_BAR = 96;
+
+function hexPoints(w: number, h: number): number[] {
+  // flat-top hex in a w x h box
+  return [w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2];
+}
+
+export class MapScene extends Phaser.Scene {
+  private layer!: Phaser.GameObjects.Container;
+  private minScroll = 0;
+  private maxScroll = 0;
+  private dragStartY = 0;
+  private layerStartY = 0;
+  private dragging = false;
+
+  constructor() {
+    super('Map');
+  }
+
+  create(data: { banner?: string } = {}) {
+    const run = state.run!;
+    const map = run.map;
+    background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color);
+
+    // ---- map layer
+    this.layer = this.add.container(0, 0);
+    const cols = map.cols;
+    const hexW = Math.min(112, (W - 30) / ((cols - 1) * 0.75 + 1));
+    const hexH = hexW * 0.866;
+    const nodes = Object.values(map.nodes);
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const gridW = (cols - 1) * 0.75 * hexW;
+    const pos = (n: MapNode) => ({
+      x: W / 2 - gridW / 2 + n.col * 0.75 * hexW,
+      y: 40 + (n.y - minY) * (hexH / 2),
+    });
+
+    const reachableIds = new Set<string>();
+    if (run.bossPending) reachableIds.add(run.currentId);
+    else for (const id of currentNode(run).next) reachableIds.add(id);
+
+    // edges
+    const g = this.add.graphics();
+    this.layer.add(g);
+    for (const n of nodes) {
+      const a = pos(n);
+      for (const nx of n.next) {
+        const b = pos(map.nodes[nx]);
+        const onPath = run.visited.includes(n.id) && run.visited.includes(nx);
+        const fromCurrent = n.id === run.currentId && reachableIds.has(nx);
+        g.lineStyle(fromCurrent ? 5 : 3, onPath ? 0xffc94d : fromCurrent ? 0xffffff : 0x000000, onPath || fromCurrent ? 0.9 : 0.35);
+        g.lineBetween(a.x, a.y, b.x, b.y);
+      }
+    }
+
+    // nodes
+    for (const n of nodes) {
+      const p = pos(n);
+      const info = NODE_INFO[n.kind];
+      const visited = run.visited.includes(n.id);
+      const isCurrent = n.id === run.currentId;
+      const canGo = reachableIds.has(n.id);
+      const size = n.kind === 'boss' ? 1.25 : 1;
+      const hw = (hexW - 6) * size;
+      const hh = (hexH - 5) * size;
+      const hex = this.add.polygon(p.x, p.y, hexPoints(hw, hh), info.color).setStrokeStyle(
+        isCurrent ? 4 : canGo ? 3 : 2,
+        isCurrent ? 0xffc94d : canGo ? 0xffffff : 0x000000,
+        isCurrent || canGo ? 1 : 0.5,
+      );
+      const icon = text(this, p.x, p.y - 8, info.icon, n.kind === 'boss' ? 34 : 26, '#ffffff').setOrigin(0.5);
+      const label = text(this, p.x, p.y + hh * 0.26, info.label, 11, '#ffffff').setOrigin(0.5);
+      this.layer.add([hex, icon, label]);
+      if (!canGo && !isCurrent) {
+        hex.setAlpha(visited ? 0.35 : 0.6);
+        icon.setAlpha(visited ? 0.35 : 0.75);
+        label.setAlpha(visited ? 0.35 : 0.75);
+      }
+      if (canGo) {
+        this.tweens.add({ targets: [hex], scale: 1.07, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+        hex.setInteractive(new Phaser.Geom.Polygon(hexPoints(hw, hh)), Phaser.Geom.Polygon.Contains);
+        hex.on('pointerup', () => {
+          if (!this.dragging) this.enterNode(n);
+        });
+      }
+    }
+
+    // scrolling
+    const mapH = 40 + (map.maxY - minY) * (hexH / 2) + hexH;
+    const viewH = H - TOP_BAR - BOTTOM_BAR;
+    this.minScroll = Math.min(TOP_BAR, TOP_BAR + viewH - mapH);
+    this.maxScroll = TOP_BAR;
+    const cur = pos(currentNode(run));
+    this.layer.y = Phaser.Math.Clamp(TOP_BAR + viewH * 0.7 - cur.y, this.minScroll, this.maxScroll);
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      this.dragStartY = ptr.y;
+      this.layerStartY = this.layer.y;
+      this.dragging = false;
+    });
+    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
+      if (!ptr.isDown) return;
+      if (Math.abs(ptr.y - this.dragStartY) > 8) this.dragging = true;
+      if (this.dragging) this.layer.y = Phaser.Math.Clamp(this.layerStartY + ptr.y - this.dragStartY, this.minScroll, this.maxScroll);
+    });
+
+    this.drawTopBar();
+    this.drawBottomBar();
+
+    if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner);
+  }
+
+  private drawTopBar() {
+    const run = state.run!;
+    this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
+    text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
+    text(this, 190, 22, `◆ Evo stones: ${run.evoStones}`, 14, COLORS.textDim);
+    button(this, W - 52, TOP_BAR / 2, 88, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
+  }
+
+  private drawBottomBar() {
+    const run = state.run!;
+    const y0 = H - BOTTOM_BAR;
+    this.add.rectangle(0, y0, W, BOTTOM_BAR, 0x0b0912, 0.92).setOrigin(0);
+    const slotW = W / 4;
+    run.team.forEach((c, i) => {
+      const x = slotW * i + slotW / 2;
+      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6);
+      img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team'));
+      text(this, x, y0 + 64, `Lv ${c.level}`, 12, COLORS.textDim).setOrigin(0.5);
+      new HpBar(this, x - 36, y0 + 84, 72, 7, false).set(c.hp, stats(c).hp);
+    });
+    if (run.bench.length) text(this, W - 6, y0 + 4, `Bench: ${run.bench.length}`, 11, COLORS.textDim).setOrigin(1, 0);
+  }
+
+  // ------------------------------------------------------------ nodes
+
+  private enterNode(n: MapNode) {
+    const run = state.run!;
+    if (run.bossPending) {
+      this.scene.start('Battle', { kind: 'boss' });
+      return;
+    }
+    if (!canMoveTo(run, n.id)) return;
+    moveTo(run, n.id);
+    switch (n.kind) {
+      case 'battle':
+      case 'elite':
+      case 'boss':
+        this.scene.start('Battle', { kind: n.kind });
+        return;
+      case 'heal':
+        return this.doHeal();
+      case 'levelup':
+        return this.doLevelUp();
+      case 'skill':
+        return this.doSkill();
+      case 'prestige':
+        return this.doPrestige();
+      default:
+        this.scene.restart();
+    }
+  }
+
+  private done = () => this.scene.restart();
+
+  private doHeal() {
+    const run = state.run!;
+    const frac = run.passive === 'medic' ? 1 : 0.5;
+    for (const c of allCreatures(run)) healFraction(c, frac);
+    showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP.`, this.done);
+  }
+
+  private doLevelUp() {
+    const run = state.run!;
+    openPicker(this, {
+      title: 'Training Grounds',
+      subtitle: 'How do you want to train?',
+      options: [
+        { label: 'Focus training', sub: 'One creature gains 3 levels' },
+        { label: 'Team drills', sub: 'Every creature on your team gains 1 level' },
+      ],
+      onPick: (i) => {
+        if (i === 1) {
+          const lines = run.team.map((c) => `${creatureName(c)}: ${addLevels(c, 1) ? `Lv ${c.level}` : 'at level cap'}`);
+          showMessage(this, 'Team drills', lines.join('\n'), this.done);
+          return;
+        }
+        this.pickCreature('Focus training', 'Choose a creature (+3 levels)', allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
+          const gained = addLevels(c, 3);
+          showMessage(this, 'Focus training', `${creatureName(c)} gained ${gained} level${gained === 1 ? '' : 's'}! Now Lv ${c.level}.`, this.done);
+        }, true);
+      },
+    });
+  }
+
+  private doSkill() {
+    const run = state.run!;
+    const offers: { c: Creature; i: number }[] = [];
+    for (const c of allCreatures(run)) c.moves.forEach((m, i) => m.tier < MAX_TIER && offers.push({ c, i }));
+    if (offers.length === 0) {
+      showMessage(this, 'Skill Shrine', 'All of your moves are fully upgraded!', this.done);
+      return;
+    }
+    const picks = run.rng.shuffle(offers).slice(0, 3);
+    openPicker(this, {
+      title: 'Skill Shrine',
+      subtitle: 'Choose one move to upgrade',
+      options: picks.map(({ c, i }) => {
+        const m = c.moves[i];
+        const d = moveDef(m);
+        return {
+          label: `${creatureName(c)}: ${d.name}  T${m.tier} → T${m.tier + 1}`,
+          sub: m.tier + 1 === 3 ? `+50% power total, ${TIER3_EFFECT[d.element]}` : '+25% power',
+        };
+      }),
+      onPick: (k) => {
+        const { c, i } = picks[k];
+        c.moves[i].tier += 1;
+        this.done();
+      },
+    });
+  }
+
+  private doPrestige() {
+    const run = state.run!;
+    const targets = allCreatures(run).filter(
+      (t) => canPrestige(t) && run.bench.some((b) => b !== t && sharesType(b, t)),
+    );
+    if (targets.length === 0) {
+      showMessage(
+        this,
+        'Prestige Altar',
+        'Prestige requires sacrificing a bench creature that shares a type with the one you empower.\n\nYou have no valid pair. The altar stays silent.',
+        this.done,
+      );
+      return;
+    }
+    this.pickCreature(
+      'Prestige Altar',
+      'Choose a creature to empower (+15% stats, +3 level cap)',
+      allCreatures(run),
+      (c) => !targets.includes(c),
+      (target) => {
+        const fodder = run.bench.filter((b) => b !== target && sharesType(b, target));
+        this.pickCreature(
+          'Choose a sacrifice',
+          `This bench creature will be gone forever to empower ${creatureName(target)}.`,
+          fodder,
+          () => false,
+          (sac) => {
+            run.bench = run.bench.filter((b) => b !== sac);
+            prestige(target);
+            showMessage(this, 'Prestige!', `${creatureName(sac)} was sacrificed.\n${creatureName(target)} is now ${'★'.repeat(target.stars)}`, this.done);
+          },
+          true,
+        );
+      },
+      true,
+    );
+  }
+
+  private pickCreature(
+    title: string,
+    subtitle: string,
+    list: Creature[],
+    disabled: (c: Creature) => boolean,
+    onPick: (c: Creature) => void,
+    cancellable = false,
+  ) {
+    openPicker(this, {
+      title,
+      subtitle,
+      options: list.map((c) => ({ creature: c, disabled: disabled(c), note: disabled(c) ? 'Not eligible' : undefined })),
+      onPick: (i) => onPick(list[i]),
+      onCancel: cancellable ? this.done : undefined,
+      cancelLabel: 'Skip',
+    });
+  }
+}
