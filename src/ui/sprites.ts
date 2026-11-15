@@ -3,393 +3,784 @@ import { SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 
-export const SPRITE_SIZE = 32;
+export const SPRITE_SIZE = 40;
+/** Multiply display scales by this so sprites keep their on-screen size if SPRITE_SIZE changes. */
+export const SPRITE_FIT = 32 / SPRITE_SIZE;
 
 /**
- * Pixel roles. Body shading/outline are computed at paint time.
- * 0 empty, 1 body, 2 secondary (markings/wings), 3 belly/plates, 4 eye white, 5 pupil,
- * 6 horn/spike, 7 glow (fierce eyes), 8 claw/fang, 9 dark (brow/mouth)
+ * Pixel roles (shading and outline are computed when painting):
+ * 0 empty, 1 body, 2 secondary (markings, wings, fins), 3 belly / plates, 4 eye white, 5 pupil,
+ * 6 horn / bone, 7 glow, 8 claw / fang, 9 dark (brow, mouth), 10 signature (element feature), 11 signature highlight
  */
-type Px = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+type Px = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
-type Archetype = 'biped' | 'brute' | 'floater' | 'slime' | 'serpent' | 'avian';
+type Loco = 'biped' | 'quad' | 'insect' | 'floater' | 'slime' | 'serpent' | 'avian';
+type BodyShape = 'round' | 'pear' | 'drop' | 'oval' | 'vtorso' | 'boxy' | 'wide' | 'segmented' | 'tall' | 'hulk';
+type HeadShape = 'merged' | 'round' | 'wide' | 'long' | 'skull' | 'flat' | 'beak';
+type Arms = 'none' | 'stub' | 'claws' | 'long' | 'fists' | 'blades' | 'tentacles' | 'pincers';
+type Back = 'none' | 'batwings' | 'featherwings' | 'bugwings' | 'spines' | 'shell' | 'mane' | 'fins';
+type Top = 'none' | 'ears' | 'longears' | 'antennae' | 'horns-swept' | 'horns-ram' | 'antlers' | 'unihorn' | 'crest' | 'crown';
+type Mouth = 'none' | 'smile' | 'fangs' | 'tusks' | 'mandibles' | 'jaw' | 'beak';
+type Pattern = 'spots' | 'hstripes' | 'vstripes' | 'belly' | 'chevrons' | 'core' | 'rings';
+type Tail = 'none' | 'thin' | 'spiked' | 'club' | 'flame';
 
-interface Plan {
-  arch: Archetype;
-  bodyW: number;
-  bodyH: number;
-  headR: number;
-  earKind: number; // 0 none, 1 pointy, 2 round, 3 antenna
-  legs: 2 | 4;
-  wings: boolean;
-  pattern: 'spots' | 'stripes' | 'patch';
-  hornKind: number; // 0 swept, 1 straight, 2 curling, 3 none (crest instead)
-  eyeSpread: number;
+interface Family {
+  loco: Loco;
+  eyes: 1 | 2 | 3 | 4;
+  pattern: Pattern;
+  tail: Tail;
+  tailSide: 1 | -1;
+  hueJitter: number;
 }
 
-/** Body archetype odds, biased by the species' primary element. */
-const ARCH_BIAS: Partial<Record<Element, Partial<Record<Archetype, number>>>> = {
-  Toxic: { slime: 6, biped: 2, brute: 1 },
-  Spirit: { floater: 7, avian: 1, biped: 1 },
-  Water: { serpent: 4, biped: 3, slime: 1 },
-  Dragon: { biped: 4, serpent: 3, brute: 2 },
-  Metal: { brute: 6, biped: 2 },
-  Earth: { brute: 5, biped: 3 },
-  Storm: { avian: 5, biped: 3 },
-  Light: { avian: 4, floater: 2, biped: 2 },
-  Shadow: { biped: 4, floater: 2, avian: 1 },
-  Frost: { biped: 3, brute: 2, avian: 1, serpent: 1 },
-  Nature: { biped: 4, brute: 2, slime: 1 },
-  Fire: { biped: 5, brute: 2, avian: 1 },
+interface StagePlan {
+  body: BodyShape;
+  head: HeadShape;
+  arms: Arms;
+  back: Back;
+  top: Top;
+  mouth: Mouth;
+}
+
+const pickW = <T extends string>(rng: Rng, w: Partial<Record<T, number>>): T => rng.weighted<T>(w);
+
+const LOCO_BIAS: Partial<Record<Element, Partial<Record<Loco, number>>>> = {
+  Toxic: { slime: 5, insect: 3, biped: 1 },
+  Spirit: { floater: 6, serpent: 1, avian: 1 },
+  Water: { serpent: 4, biped: 2, slime: 1, quad: 1 },
+  Dragon: { biped: 3, quad: 3, serpent: 2 },
+  Metal: { biped: 3, quad: 2, insect: 2 },
+  Earth: { quad: 4, biped: 3, insect: 1 },
+  Storm: { avian: 5, biped: 2, insect: 1 },
+  Light: { avian: 3, floater: 3, biped: 2 },
+  Shadow: { biped: 3, quad: 2, floater: 2, insect: 1 },
+  Frost: { quad: 3, biped: 3, avian: 1, serpent: 1 },
+  Nature: { biped: 3, insect: 3, quad: 2, slime: 1 },
+  Fire: { biped: 4, quad: 3, avian: 1 },
 };
 
-function makePlan(rng: Rng, types: readonly Element[]): Plan {
-  const arch = rng.weighted<Archetype>(ARCH_BIAS[types[0]] ?? { biped: 1 });
-  const wingy = types.some((t) => t === 'Dragon' || t === 'Storm' || t === 'Light');
+function familyPlan(id: string, types: readonly Element[]): Family {
+  const r = new Rng(hashString(id + ':family'));
+  const eyeRoll = pickW<'one' | 'two' | 'three' | 'four'>(r, { two: 7, one: 1.5, three: 1, four: 1.5 });
   return {
-    arch,
-    bodyW: 5 + rng.int(0, 2) + (arch === 'brute' ? 2 : arch === 'slime' ? 1 : arch === 'serpent' ? -1 : 0),
-    bodyH: 4 + rng.int(0, 2) + (arch === 'serpent' ? 2 : arch === 'brute' ? -1 : 0),
-    headR: 3 + rng.int(0, 1),
-    earKind: rng.int(0, 3),
-    legs: rng.chance(0.3) ? 4 : 2,
-    wings: arch === 'avian' || (arch !== 'slime' && (wingy ? rng.chance(0.45) : rng.chance(0.06))),
-    pattern: rng.pick(['spots', 'stripes', 'patch'] as const),
-    hornKind: rng.int(0, 3),
-    eyeSpread: 1 + rng.int(0, 1),
+    loco: pickW<Loco>(r, LOCO_BIAS[types[0]] ?? { biped: 1 }),
+    eyes: ({ one: 1, two: 2, three: 3, four: 4 } as const)[eyeRoll],
+    pattern: r.pick(['spots', 'hstripes', 'vstripes', 'belly', 'chevrons', 'core', 'rings'] as const),
+    tail: pickW<Tail>(r, { none: 3, thin: 2, spiked: 2, club: 1, flame: types.includes('Fire') ? 3 : 0 }),
+    tailSide: r.chance(0.5) ? 1 : -1,
+    hueJitter: r.next() * 0.2 - 0.1,
   };
 }
 
-/** Per-stage body plan: base forms are round and big-eyed, finals are broad, armored and armed. */
-const STAGE = [
-  { scale: 0.8, head: 1.22, taper: 0.0, leg: 2, arm: 0 },
-  { scale: 0.94, head: 1.0, taper: 0.28, leg: 3, arm: 3 },
-  { scale: 1.1, head: 0.86, taper: 0.5, leg: 4, arm: 5 },
-];
-
-export function archetypeOf(speciesId: string): Archetype {
-  return makePlan(new Rng(hashString(speciesId)), SPECIES_BY_ID[speciesId].types).arch;
+/** Each evolution re-rolls the silhouette from its own seed; the family keeps palette, eyes and signature. */
+function stagePlan(id: string, stage: number, fam: Family, types: readonly Element[]): StagePlan {
+  const r = new Rng(hashString(`${id}:stage${stage}`));
+  const has = (e: Element) => types.includes(e);
+  const L = fam.loco;
+  if (stage === 0) {
+    return {
+      body: L === 'serpent' ? 'tall' : r.pick(['round', 'pear', 'drop', 'round'] as const),
+      head: L === 'slime' || r.chance(0.3) ? 'merged' : L === 'avian' ? 'beak' : 'round',
+      arms: L === 'avian' || L === 'slime' || L === 'serpent' ? 'none' : r.pick(['none', 'stub', 'stub'] as const),
+      back: L === 'avian' ? 'featherwings' : r.chance(0.15) ? 'fins' : 'none',
+      top: r.pick(['none', 'ears', 'longears', 'antennae', 'ears'] as const),
+      mouth: L === 'avian' ? 'beak' : L === 'insect' ? 'mandibles' : r.pick(['smile', 'none', 'smile'] as const),
+    };
+  }
+  const mid = stage === 1;
+  return {
+    body: pickW<BodyShape>(r, {
+      oval: mid ? 3 : 1,
+      pear: mid ? 2 : 1,
+      vtorso: mid ? 2 : 4,
+      boxy: has('Metal') || has('Earth') ? 4 : 1,
+      wide: L === 'quad' ? 4 : 1,
+      segmented: L === 'insect' ? 6 : 0,
+      tall: L === 'serpent' || L === 'floater' ? 4 : 1,
+      hulk: mid ? 0 : L === 'biped' || L === 'quad' ? 3 : 1,
+    }),
+    head:
+      L === 'avian'
+        ? 'beak'
+        : L === 'slime'
+          ? r.pick(['merged', 'round', 'skull'] as const)
+          : pickW<HeadShape>(r, { round: 2, wide: 2, long: 2, skull: mid ? 1 : 3, flat: 1, merged: L === 'quad' ? 2 : 0.5 }),
+    arms:
+      L === 'avian'
+        ? 'none'
+        : pickW<Arms>(r, {
+            claws: mid ? 3 : 1,
+            long: 2,
+            fists: has('Earth') || has('Metal') ? 3 : mid ? 0.5 : 1.5,
+            blades: L === 'insect' ? 4 : has('Shadow') || has('Metal') ? 2 : 1,
+            tentacles: has('Water') || has('Spirit') || has('Toxic') ? 3 : 0.3,
+            pincers: L === 'insect' || has('Water') ? 2 : 0.3,
+            stub: mid ? 1 : 0,
+            none: L === 'serpent' || L === 'slime' ? 3 : 0.3,
+          }),
+    back:
+      L === 'avian'
+        ? 'featherwings'
+        : pickW<Back>(r, {
+            none: mid ? 4 : 1,
+            batwings: has('Dragon') || has('Shadow') ? 4 : 0.6,
+            featherwings: has('Light') || has('Storm') ? 3 : 0.3,
+            bugwings: L === 'insect' || has('Nature') ? 3 : 0.3,
+            spines: has('Frost') || has('Earth') || has('Dragon') ? 2.5 : 1,
+            shell: has('Earth') || has('Metal') || has('Water') ? 2.5 : 0.4,
+            mane: has('Fire') || has('Light') ? 2.5 : 0.6,
+            fins: has('Water') ? 3 : 0.4,
+          }),
+    top: pickW<Top>(r, {
+      ears: mid ? 2 : 0.5,
+      longears: mid ? 1 : 0.5,
+      antennae: L === 'insect' || has('Storm') ? 3 : 0.5,
+      'horns-swept': 2,
+      'horns-ram': mid ? 1 : 2,
+      antlers: has('Nature') || has('Frost') ? 3 : 0.5,
+      unihorn: has('Light') ? 3 : 0.8,
+      crest: has('Dragon') || has('Water') ? 2.5 : 1,
+      crown: mid ? 0 : 1.5,
+      none: 0.5,
+    }),
+    mouth:
+      L === 'avian'
+        ? 'beak'
+        : L === 'insect'
+          ? 'mandibles'
+          : pickW<Mouth>(r, { fangs: mid ? 4 : 2, tusks: 1.5, jaw: mid ? 0.5 : 4, mandibles: 0.4, none: 0.3 }),
+  };
 }
 
-export function buildGrid(speciesId: string, stage: number): Px[][] {
-  const sp = SPECIES_BY_ID[speciesId];
-  const plan = makePlan(new Rng(hashString(speciesId)), sp.types);
-  const A = plan.arch;
-  const st = STAGE[stage];
-  const S = SPRITE_SIZE;
-  const g: Px[][] = Array.from({ length: S }, () => Array<Px>(S).fill(0));
-  const cx = S / 2 - 0.5;
+interface Draw {
+  put: (x: number, y: number, v: Px, onlyOver?: Px[], mirror?: boolean) => void;
+  blob: (ex: number, ey: number, rx: number, ry: number, v: Px, o?: { taper?: number; p?: number; over?: Px[] }) => void;
+  line: (x0: number, y0: number, x1: number, y1: number, v: Px, thick?: number, mirror?: boolean) => void;
+  tri: (ax: number, ay: number, bx: number, by: number, qx: number, qy: number, v: Px) => void;
+}
 
-  const set = (x: number, y: number, v: Px, onlyOver?: Px[]) => {
+function makeDraw(g: Px[][], S: number, cx: number): Draw {
+  const put: Draw['put'] = (x, y, v, onlyOver, mirror = true) => {
     const xi = Math.round(x);
     const yi = Math.round(y);
     if (xi < 0 || yi < 0 || xi >= S || yi >= S) return;
     if (onlyOver && !onlyOver.includes(g[yi][xi])) return;
     g[yi][xi] = v;
-    g[yi][S - 1 - xi] = v;
+    if (mirror) g[yi][S - 1 - xi] = v;
   };
-  /** Filled (optionally tapered) ellipse; taper > 0 makes the top wider than the bottom. */
-  const blob = (ex: number, ey: number, rx: number, ry: number, v: Px, taper = 0, onlyOver?: Px[]) => {
+  const blob: Draw['blob'] = (ex, ey, rx, ry, v, o = {}) => {
+    const p = o.p ?? 2;
+    const taper = o.taper ?? 0;
     for (let y = Math.floor(ey - ry); y <= Math.ceil(ey + ry); y++) {
       const dy = (y - ey) / ry;
       if (Math.abs(dy) > 1) continue;
-      const hw = rx * Math.sqrt(1 - dy * dy) * (1 - taper * dy);
-      for (let x = Math.floor(ex - hw); x <= cx; x++) if (x >= ex - hw - 0.01) set(x, y, v, onlyOver);
+      const hw = rx * Math.pow(1 - Math.pow(Math.abs(dy), p), 1 / p) * (1 - taper * dy);
+      for (let x = Math.floor(ex - hw); x <= Math.max(ex, cx); x++) if (x >= ex - hw - 0.01 && x <= ex + hw) put(x, y, v, o.over);
     }
   };
-  const line = (x0: number, y0: number, x1: number, y1: number, v: Px, thick = 1) => {
-    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2;
+  const line: Draw['line'] = (x0, y0, x1, y1, v, thick = 1, mirror = true) => {
+    const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2);
     for (let i = 0; i <= n; i++) {
       const x = x0 + ((x1 - x0) * i) / n;
       const y = y0 + ((y1 - y0) * i) / n;
-      for (let t = 0; t < thick; t++) set(x - t, y, v);
+      for (let t = 0; t < thick; t++) put(x - t, y, v, undefined, mirror);
     }
   };
+  const tri: Draw['tri'] = (ax, ay, bx, by, qx, qy, v) => {
+    const sign = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => (x1 - x3) * (y2 - y3) - (x2 - x3) * (y1 - y3);
+    for (let y = Math.floor(Math.min(ay, by, qy)); y <= Math.ceil(Math.max(ay, by, qy)); y++)
+      for (let x = Math.floor(Math.min(ax, bx, qx)); x <= Math.ceil(Math.max(ax, bx, qx)); x++) {
+        const d1 = sign(x, y, ax, ay, bx, by);
+        const d2 = sign(x, y, bx, by, qx, qy);
+        const d3 = sign(x, y, qx, qy, ax, ay);
+        if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) put(x, y, v);
+      }
+  };
+  return { put, blob, line, tri };
+}
 
-  // ---- layout per archetype
-  const scale = st.scale;
-  let rx = plan.bodyW * scale;
-  let ry = plan.bodyH * scale;
-  let hr = plan.headR * scale * st.head;
-  let taper = st.taper;
-  let legLen = st.leg;
-  let headMerged = false;
-  let arm = st.arm;
-  let armThick = stage === 2 ? 2 : 1;
-  switch (A) {
-    case 'brute':
-      taper = st.taper + 0.15;
-      legLen = Math.max(1, st.leg - 1);
-      hr *= 0.85;
-      arm = st.arm + (stage > 0 ? 2 : 0);
-      armThick = stage === 0 ? 1 : stage + 1;
+const SHAPES: Record<BodyShape, { rx: number; ry: number; taper: number; p: number }> = {
+  round: { rx: 7, ry: 7, taper: 0, p: 2 },
+  pear: { rx: 7, ry: 7, taper: -0.35, p: 2 },
+  drop: { rx: 6.5, ry: 7.5, taper: -0.6, p: 2 },
+  oval: { rx: 6, ry: 8, taper: 0.05, p: 2 },
+  vtorso: { rx: 7.5, ry: 8, taper: 0.45, p: 2.2 },
+  boxy: { rx: 7.5, ry: 7, taper: 0.1, p: 4 },
+  wide: { rx: 10, ry: 6, taper: 0.05, p: 2.4 },
+  segmented: { rx: 6, ry: 5, taper: 0, p: 2 },
+  tall: { rx: 5, ry: 9.5, taper: 0.1, p: 2.2 },
+  hulk: { rx: 10, ry: 8.5, taper: 0.55, p: 2.6 },
+};
+
+export function buildGrid(speciesId: string, stage: number): Px[][] {
+  const types = SPECIES_BY_ID[speciesId].types;
+  const fam = familyPlan(speciesId, types);
+  const P = stagePlan(speciesId, stage, fam, types);
+  const S = SPRITE_SIZE;
+  const g: Px[][] = Array.from({ length: S }, () => Array<Px>(S).fill(0));
+  const cx = S / 2 - 0.5;
+  const ground = S - 2;
+  const r = new Rng(hashString(`${speciesId}:detail${stage}`));
+  const D = makeDraw(g, S, cx);
+  const { put, blob, line, tri } = D;
+
+  // ---------------------------------------------------------------- body metrics
+  const size = [0.7, 0.85, 1.0][stage];
+  const shape = SHAPES[P.body];
+  const rx = shape.rx * size;
+  const ry = shape.ry * size;
+  const L = fam.loco;
+  const LEG: Record<Loco, number[]> = {
+    biped: [2, 4, 5],
+    quad: [2, 3, 4],
+    insect: [2, 3, 4],
+    avian: [2, 3, 5],
+    floater: [0, 0, 0],
+    slime: [0, 0, 0],
+    serpent: [0, 0, 0],
+  };
+  const legLen = LEG[L][stage];
+  const lift = L === 'floater' ? [4, 6, 7][stage] : L === 'serpent' ? [3, 5, 6][stage] : 0;
+  const by = ground - legLen - lift - ry + (L === 'slime' ? 1 : 0);
+  const bodyTop = P.body === 'segmented' ? by - ry * 2.1 : by - ry;
+  const hw = (y: number) => {
+    const dy = (y - by) / ry;
+    if (Math.abs(dy) > 1) return rx * 0.6;
+    return rx * Math.pow(1 - Math.pow(Math.abs(dy), shape.p), 1 / shape.p) * (1 - shape.taper * dy);
+  };
+  const shoulderY = P.body === 'segmented' ? by - ry * 1.4 : by - ry * 0.5;
+  const shoulderX = cx - (P.body === 'segmented' ? rx * 0.8 : hw(shoulderY));
+
+  const hBase = [4.6, 4.2, 4.4][stage];
+  const HEADS: Record<HeadShape, { rx: number; ry: number; taper: number; p: number }> = {
+    merged: { rx: 0, ry: 0, taper: 0, p: 2 },
+    round: { rx: hBase * 1.1, ry: hBase, taper: 0, p: 2 },
+    wide: { rx: hBase * 1.5, ry: hBase * 0.8, taper: 0, p: 2.5 },
+    long: { rx: hBase * 0.85, ry: hBase * 1.3, taper: 0.2, p: 2 },
+    skull: { rx: hBase * 1.15, ry: hBase * 1.05, taper: -0.3, p: 2.2 },
+    flat: { rx: hBase * 1.3, ry: hBase * 0.7, taper: 0.15, p: 3 },
+    beak: { rx: hBase, ry: hBase * 0.95, taper: 0.1, p: 2 },
+  };
+  const H = HEADS[P.head];
+  const merged = P.head === 'merged';
+  const hy = merged ? by - ry * 0.4 : bodyTop - H.ry * 0.55;
+  const headTop = merged ? bodyTop : hy - H.ry;
+  const faceY = merged ? by - ry * 0.35 : hy;
+  const faceR = merged ? Math.min(rx, ry) * 0.7 : Math.min(H.rx, H.ry);
+
+  // ---------------------------------------------------------------- back parts (behind the body)
+  const wingY = shoulderY - 1;
+  const wingX = shoulderX + 1;
+  const ws = [5, 8, 11][stage];
+  switch (P.back) {
+    case 'batwings':
+      tri(wingX, wingY, wingX - ws, wingY - ws * 0.8, wingX - ws * 0.6, wingY + ws * 0.6, 2);
+      tri(wingX - ws * 0.4, wingY, wingX - ws, wingY - ws * 0.8, wingX - ws * 1.05, wingY + ws * 0.3, 2);
+      line(wingX, wingY, wingX - ws, wingY - ws * 0.8, 6);
+      for (let k = 1; k <= 2; k++) line(wingX - ws, wingY - ws * 0.8, wingX - ws * (0.4 + 0.25 * k), wingY + ws * (0.6 - 0.2 * k), 6);
+      put(wingX - ws - 1, wingY - ws * 0.8 - 1, 8);
       break;
-    case 'slime':
-      taper = -0.35 - stage * 0.1; // wide, sagging base
-      legLen = 0;
-      headMerged = true;
-      ry += stage;
-      arm = stage === 2 ? 3 : 0;
+    case 'featherwings': {
+      const span = L === 'avian' ? ws + 2 : ws;
+      for (let i = 0; i <= span; i++) {
+        const top = wingY - (span - i) * 0.15 - i * 0.55;
+        const len = 3 + (span - i) * 0.35 + (i % 2);
+        for (let y = top; y <= top + len; y++) put(wingX - i, y, i % 3 === 0 ? 11 : 2);
+      }
       break;
-    case 'floater':
-      taper = 0.35 + stage * 0.15;
-      legLen = 0;
-      arm = Math.max(0, st.arm - 1);
+    }
+    case 'bugwings':
+      blob(wingX - ws * 0.55, wingY - ws * 0.35, ws * 0.55, ws * 0.38, 2, { over: [0] });
+      blob(wingX - ws * 0.45, wingY + ws * 0.35, ws * 0.42, ws * 0.28, 11, { over: [0] });
       break;
-    case 'serpent':
-      legLen = 0;
-      rx = Math.max(3, rx * 0.8);
-      ry += stage;
-      arm = stage === 2 ? 2 : 0;
+    case 'spines':
+      for (let k = 0; k < 2 + stage; k++) {
+        const sy = shoulderY - 1 + k * 2.5;
+        const sx = cx - hw(sy) + 1;
+        tri(sx, sy, sx + 2, sy + 1, sx - 3 - stage, sy - 2 - stage * 0.5, 6);
+      }
       break;
-    case 'avian':
-      hr *= 0.95;
-      arm = 0; // wings are the arms
+    case 'shell':
+      blob(cx, by - ry * 0.1, rx + 2.5, ry + 1.5, 3, { p: 2.5 });
+      for (let k = -1; k <= 1; k++) line(cx - rx - 2, by + k * 3, cx - rx + 1, by + k * 3, 9);
+      break;
+    case 'mane':
+      blob(cx, hy + 1, (merged ? rx : H.rx) + 3, (merged ? ry * 0.6 : H.ry) + 3, 10);
+      for (let k = 0; k < 5; k++) put(cx - (merged ? rx : H.rx) - 3 + k * 0.3, hy - 2 + k * 2, 11);
+      break;
+    case 'fins':
+      tri(shoulderX + 1, shoulderY, shoulderX - 3 - stage * 2, shoulderY - 3 - stage, shoulderX - 1, shoulderY + 4, 2);
+      break;
+    case 'none':
       break;
   }
-  const bottomPad = A === 'floater' ? 5 + stage : A === 'serpent' ? 3 + stage : 1;
-  const by = S - 1 - bottomPad - legLen - ry;
-  const hy = headMerged ? by - ry * 0.55 : by - ry * 0.75 - hr * 0.55;
-  const shoulderY = by - ry * 0.45;
-  const shoulderX = cx - rx * (1 + Math.max(0, taper) * 0.45);
 
-  // ---- wings (behind everything)
-  if (plan.wings) {
-    const span = (A === 'avian' ? 4 : 3) + stage * 3;
-    const lift = 2 + stage * 2;
-    const wy = A === 'avian' ? shoulderY + 1 : shoulderY;
-    for (let i = 0; i <= span; i++) {
-      const x = shoulderX - i;
-      const top = wy - lift * (i / span) - 1;
-      const bottom = wy + (span - i) * (A === 'avian' ? 0.7 : 0.5) + 1;
-      for (let y = top; y <= bottom; y++) set(x, y, 2);
-    }
-    if (stage >= 1) {
-      // feather/membrane notches
-      for (let i = 1; i <= span; i += 2) set(shoulderX - i, wy + (span - i) * 0.5 + 1, 0);
-    }
-    if (stage === 2) {
-      line(shoulderX, wy, shoulderX - span, wy - lift - 1, 6);
-      set(shoulderX - span - 1, wy - lift - 2, 6);
+  // tail: asymmetric, sticks out to one side
+  if (fam.tail !== 'none' && L !== 'slime') {
+    const side = fam.tailSide;
+    const tx0 = cx + side * (rx * 0.6);
+    const ty0 = by + ry * 0.6;
+    const len = [4, 6, 8][stage];
+    const tipX = tx0 + side * len;
+    const tipY = ty0 - len * 0.6;
+    line(tx0, ty0, tipX, tipY, 1, stage === 2 ? 2 : 1, false);
+    if (fam.tail === 'spiked') for (let k = 1; k < len; k += 2) put(tx0 + side * k, ty0 - k * 0.6 - 1, 6, [0], false);
+    if (fam.tail === 'club') for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) put(tipX + dx, tipY + dy, 6, undefined, false);
+    if (fam.tail === 'flame') {
+      put(tipX, tipY - 1, 10, undefined, false);
+      put(tipX + side, tipY - 2, 11, undefined, false);
+      put(tipX, tipY - 2, 10, undefined, false);
+      put(tipX - side, tipY - 1, 10, undefined, false);
     }
   }
 
-  // ---- lower body: legs / coil / wisps
-  if (legLen > 0) {
-    const legW = A === 'brute' || stage === 2 ? 3 : 2;
-    const legXs = plan.legs === 4 && A !== 'avian' ? [cx - rx * 0.85, cx - rx * 0.35] : [cx - rx * 0.55];
-    for (const lx of legXs) {
-      const w = A === 'avian' ? 1 : legW;
-      for (let y = 0; y < legLen + 1; y++) for (let k = 0; k < w; k++) set(lx + k, by + ry - 1 + y, A === 'avian' ? 6 : 1);
+  // ---------------------------------------------------------------- locomotion
+  if (L === 'biped' || L === 'quad') {
+    const legW = stage === 2 ? 3 : 2;
+    const xs = L === 'quad' ? [cx - rx * 0.85, cx - rx * 0.35] : [cx - rx * 0.5];
+    for (const lx of xs) {
+      for (let y = by + ry - 2; y <= ground; y++) for (let k = 0; k < legW; k++) put(lx + k, y, 1);
       if (stage >= 1) {
-        set(lx - 1, S - 2, 8);
-        if (stage === 2 || A === 'avian') set(lx + w, S - 2, 8);
+        put(lx - 1, ground, 8);
+        if (stage === 2) put(lx + legW, ground, 8);
       }
     }
-  }
-  if (A === 'serpent') {
-    // coiled tail as a wide ring under the body
-    blob(cx, S - 2 - bottomPad / 2, rx + 2 + stage, bottomPad / 2 + 1, 1);
-    blob(cx, S - 2 - bottomPad / 2, rx * 0.5, bottomPad / 4 + 0.5, 3, 0, [1]);
-  }
-  if (A === 'floater') {
-    // ragged wisps trailing below
+  } else if (L === 'insect') {
+    for (let k = 0; k < 3; k++) {
+      const sy = by - ry * 0.3 + k * ry * 0.45;
+      const sx = cx - hw(sy) + 1;
+      const kx = sx - 3 - stage;
+      line(sx, sy, kx, sy - 1 - (k === 0 ? 1 : 0), 1);
+      line(kx, sy - 1, kx - 1 + k, ground, 1);
+      if (stage >= 1) put(kx - 1 + k, ground, 8);
+    }
+  } else if (L === 'avian') {
+    const lx = cx - rx * 0.35;
+    line(lx, by + ry - 1, lx, ground, 6);
+    put(lx - 1, ground, 6);
+    put(lx + 1, ground, 6);
+    if (stage >= 1) put(lx - 2, ground, 8);
+  } else if (L === 'floater') {
     const n = 2 + stage;
     for (let k = 0; k < n; k++) {
-      const wx = cx - rx * 0.9 + (k * rx * 0.9) / n;
-      for (let y = 0; y < bottomPad - (k % 2); y++) set(wx + y * 0.25, by + ry - 1 + y, 1);
+      const wx = cx - rx * 0.85 + (k * rx * 0.85) / n;
+      const len = lift + 1 - (k % 2) * 2;
+      for (let y = 0; y < len; y++) put(wx + Math.sin(y * 0.9 + k) * 0.8, by + ry - 1 + y, 1);
     }
+  } else if (L === 'serpent') {
+    blob(cx, ground - lift / 2, rx + 3 + stage, lift / 2 + 1.2, 1);
+    blob(cx, ground - lift / 2, (rx + 3 + stage) * 0.55, lift / 4 + 0.4, 3, { over: [1] });
   }
 
-  // ---- body
-  blob(cx, by, rx, ry, 1, taper);
-  if (A === 'slime') {
-    // drips
-    for (let k = 0; k < 2 + stage; k++) {
-      const dx = cx - rx * (0.3 + 0.25 * k);
-      for (let y = 0; y < 2 + (k % 2); y++) set(dx, by + ry + y, 1);
-    }
-  }
-  // belly / armour plates
-  if (stage === 2 && A !== 'slime') {
-    for (let k = 0; k < 4; k++) {
-      const py = by - ry * 0.35 + k * 2;
-      const pw = rx * (0.62 - k * 0.08);
-      for (let x = cx - pw; x <= cx; x++) set(x, py, 3, [1]);
-    }
-  } else if (A !== 'slime') {
-    blob(cx, by + ry * 0.25, rx * 0.5, ry * 0.55, 3, 0, [1]);
-  }
-
-  // ---- arms
-  if (arm > 0) {
-    const ax = shoulderX + 1;
-    const ex = ax - arm;
-    const ey = shoulderY + (A === 'brute' ? arm + 1 : arm);
-    line(ax, shoulderY, ex, ey, 1, armThick);
-    set(ex - 1, ey + 1, 8);
-    set(ex, ey + 1, 8);
-    if (stage === 2) set(ex - 2, ey, 8);
-  }
-
-  // ---- shoulder spikes (final form)
-  if (stage === 2 && A !== 'slime') {
-    for (let i = 0; i < 3; i++) set(shoulderX + 1 - i, shoulderY - ry * 0.35 - i - 1, 6);
-    set(shoulderX + 2, shoulderY - ry * 0.35 - 1, 6);
-  }
-  if (stage >= 1 && A === 'slime') {
-    // crystalline toxic spines on top
-    for (let k = 0; k < stage + 1; k++) {
-      const sx = cx - 1 - k * 2;
-      for (let i = 0; i < 2 + stage - (k % 2); i++) set(sx - i * 0.3, by - ry - i, 6);
-    }
-  }
-
-  // ---- head
-  if (!headMerged) blob(cx, hy, hr * (A === 'serpent' ? 1.0 : 1.1), hr, 1, stage === 2 ? -0.25 : 0);
-
-  // ---- markings
-  const mr = new Rng(hashString(speciesId + ':mark'));
-  if (plan.pattern === 'spots' || stage === 0) {
-    for (let i = 0; i < 3 + stage * 2; i++) {
-      const sx = cx - rx * (0.3 + mr.next() * 0.6);
-      const sy = by - ry * 0.6 + mr.next() * ry * 1.1;
-      set(sx, sy, 2, [1]);
-    }
-  } else if (plan.pattern === 'stripes') {
-    for (let k = 0; k < 2 + stage; k++) {
-      const sy = by - ry * 0.7 + k * 2.2;
-      for (let i = 0; i <= 4; i++) set(cx - rx * 1.2 + i, sy + i * 0.4, 2, [1]);
-    }
+  // ---------------------------------------------------------------- body
+  if (P.body === 'segmented') {
+    blob(cx, by, rx, ry, 1);
+    blob(cx, by - ry * 1.35, rx * 0.8, ry * 0.75, 1);
   } else {
-    blob(cx - rx * 0.55, by - ry * 0.3, rx * 0.35, ry * 0.35, 2, 0, [1]);
+    blob(cx, by, rx, ry, 1, { taper: shape.taper, p: shape.p });
   }
-  if (stage >= 1 && !headMerged) for (let y = hy - hr; y < hy - hr * 0.3; y++) set(cx - 0.5, y, 2, [1]);
+  if (L === 'slime') for (let k = 0; k < 2 + stage; k++) for (let y = 0; y < 2 + (k % 2); y++) put(cx - rx * (0.25 + 0.22 * k), by + ry + y, 1);
 
-  // ---- ears (base & middle), horns (middle & final)
-  const topY = headMerged ? by - ry : hy - hr;
-  const earX = cx - (headMerged ? rx * 0.6 : hr * 0.75);
-  const earY = topY + (headMerged ? 1 : hr * 0.3);
-  if (stage < 2 && A !== 'slime') {
-    if (plan.earKind === 1) for (let i = 0; i < 3 + stage; i++) set(earX - i * 0.45, earY - i, 1);
-    if (plan.earKind === 2) blob(earX - 0.5, earY - 1, 1.4, 1.4, 2);
-    if (plan.earKind === 3) {
-      for (let i = 0; i < 3 + stage; i++) set(earX + 1 - i * 0.5, earY - i, 2);
-      set(earX + 1 - (3 + stage) * 0.5, earY - (3 + stage), 6);
-    }
+  const over: Px[] = [1];
+  switch (fam.pattern) {
+    case 'spots':
+      for (let i = 0; i < 3 + stage * 2; i++) put(cx - rx * (0.25 + r.next() * 0.6), by - ry * 0.6 + r.next() * ry * 1.2, 2, over);
+      break;
+    case 'hstripes':
+      for (let k = 0; k < 2 + stage; k++) for (let x = cx - rx; x < cx - rx * 0.45; x++) put(x, by - ry * 0.55 + k * 3, 2, over);
+      break;
+    case 'vstripes':
+      for (let y = by - ry; y < by + ry; y++) if (Math.floor(y) % 3 !== 0) put(cx - rx * 0.62, y, 2, over);
+      break;
+    case 'belly':
+      blob(cx, by + ry * 0.2, rx * 0.55, ry * 0.65, 3, { over });
+      break;
+    case 'chevrons':
+      for (let k = 0; k < 2 + stage; k++) for (let i = 0; i < 4; i++) put(cx - i, by - ry * 0.4 + k * 3 + i * 0.6, 2, over);
+      break;
+    case 'core':
+      blob(cx, by - ry * 0.1, 1.6 + stage * 0.6, 1.6 + stage * 0.6, 7, { over });
+      blob(cx, by - ry * 0.1, 0.8 + stage * 0.4, 0.8 + stage * 0.4, 11, { over: [7] });
+      break;
+    case 'rings':
+      for (let k = 0; k < 3 + stage; k++) for (let x = cx - rx; x <= cx; x++) put(x, by - ry + 1 + k * 3.2, 3, over);
+      break;
   }
-  if (stage >= 1 && A !== 'slime') {
-    const len = stage === 1 ? 3 : 6;
-    const hx = cx - (headMerged ? rx * 0.4 : hr * 0.55);
-    const hTop = topY + 0.5;
-    if (plan.hornKind === 3) {
-      // fin/crest down the middle instead of horns
-      for (let i = 0; i < len; i++) set(cx - 0.5 - (i % 2), hTop - i * 0.8, i < 2 ? 2 : 6);
-    } else
-      for (let i = 0; i < len; i++) {
-        const t = i / len;
-        let x = hx;
-        let y = hTop - i;
-        if (plan.hornKind === 0) x = hx - i * 0.75;
-        else if (plan.hornKind === 1) x = hx - i * 0.25;
-        else {
-          x = hx - Math.sin(t * Math.PI) * 2.5 - i * 0.2;
-          y = hTop - i * 0.9;
-        }
-        set(x, y, 6);
-        if (stage === 2 && i < len / 2) set(x + 1, y, 6);
+
+  // ---------------------------------------------------------------- arms
+  const ax = shoulderX + 1;
+  const ay = shoulderY + 0.5;
+  const reach = [2, 4, 6][stage];
+  switch (P.arms) {
+    case 'stub':
+      line(ax, ay, ax - 2, ay + 2, 1, 2);
+      break;
+    case 'claws':
+      line(ax, ay, ax - reach, ay + reach * 0.7, 1, 2);
+      put(ax - reach - 1, ay + reach * 0.7 + 1, 8);
+      put(ax - reach + 1, ay + reach * 0.7 + 1.5, 8);
+      break;
+    case 'long':
+      line(ax, ay, ax - reach * 0.6, ay + reach, 1, 2);
+      line(ax - reach * 0.6, ay + reach, ax - reach * 0.4, ay + reach * 2, 1, 2);
+      put(ax - reach * 0.4 - 1, ay + reach * 2 + 1, 8);
+      break;
+    case 'fists':
+      line(ax, ay, ax - reach, ay + reach * 0.5, 1, 3);
+      blob(ax - reach - 1, ay + reach * 0.5 + 2, 2 + stage * 0.5, 2 + stage * 0.5, 1);
+      put(ax - reach - 2, ay + reach * 0.5 + 2, 9);
+      break;
+    case 'blades':
+      line(ax, ay, ax - reach * 0.7, ay - reach * 0.3, 1, 2);
+      tri(ax - reach * 0.7, ay - reach * 0.3, ax - reach * 0.7 + 1, ay - reach * 0.3 + 1, ax - reach * 0.7 - 2, ay + reach * 1.6, 8);
+      break;
+    case 'tentacles':
+      for (let k = 0; k < 2; k++) {
+        const sy = ay + k * 2.5;
+        for (let i = 0; i < reach + 3; i++) put(ax - i, sy + Math.sin(i * 0.9 + k * 2) * 1.3 + i * 0.35, k === 0 ? 1 : 2);
       }
-    if (stage === 2 && plan.hornKind !== 3) for (let k = 0; k < 2; k++) set(cx - 1.5 - k * 1.5, topY - 0.5 - (1 - k), 6);
+      break;
+    case 'pincers': {
+      const px = ax - reach;
+      const py = ay + reach * 0.4;
+      line(ax, ay, px, py, 1, 2);
+      tri(px, py - 1, px - 3 - stage, py - 3 - stage, px - 1, py + 1, 6);
+      tri(px, py + 1, px - 3 - stage, py + 1, px - 1, py + 2, 6);
+      break;
+    }
+    case 'none':
+      break;
   }
 
-  // ---- face
-  const faceY = headMerged ? by - ry * 0.45 : hy;
-  const faceR = headMerged ? ry * 0.5 : hr;
-  const eyeY = Math.round(faceY - (stage === 0 ? 0 : faceR * 0.15));
-  const ex = Math.round(cx - plan.eyeSpread - 1 - (stage === 0 ? 0.5 : 0));
-  if (stage === 0) {
-    for (let dx = 0; dx < 2; dx++) for (let dy = -1; dy < 2; dy++) set(ex + dx, eyeY + dy, 4);
-    set(ex + 1, eyeY, 5);
-    set(ex + 1, eyeY + 1, 5);
-    set(ex, eyeY + 1, 5);
-  } else if (stage === 1) {
-    set(ex, eyeY, 4);
-    set(ex + 1, eyeY, 5);
-    set(ex, eyeY + 1, 4);
-    set(ex + 1, eyeY + 1, 5);
-    set(ex - 1, eyeY - 2, 9);
-    set(ex, eyeY - 1, 9);
-    set(ex + 1, eyeY - 1, 9);
-    set(ex + 2, eyeY, 9);
-  } else {
-    set(ex - 1, eyeY, 7);
-    set(ex, eyeY, 7);
-    set(ex + 1, eyeY + 1, 7);
-    for (let k = -2; k <= 2; k++) set(ex + k, eyeY - 1 - (k < 0 ? 1 : 0) + (k > 1 ? 1 : 0), 9);
-    if (A === 'slime' || A === 'floater') {
-      // extra eyes
-      set(ex - 2, eyeY + 2, 7);
+  // ---------------------------------------------------------------- head
+  if (!merged) blob(cx, hy, H.rx, H.ry, 1, { taper: H.taper, p: H.p });
+  if (P.head === 'long') blob(cx, hy + H.ry * 0.45, H.rx * 0.55, H.ry * 0.4, 3, { over: [1] });
+
+  const tY = headTop + 0.5;
+  const tX = cx - (merged ? rx : H.rx) * 0.6;
+  const big = [0.6, 1, 1.5][stage];
+  switch (P.top) {
+    case 'ears':
+      tri(tX, tY + 1, tX + 2.5, tY + 1, tX - 1, tY - 3 * big, 1);
+      put(tX, tY - 0.5, 2);
+      break;
+    case 'longears':
+      for (let i = 0; i < 6 * big + 2; i++) {
+        put(tX - i * 0.35, tY - i, 1);
+        put(tX - i * 0.35 + 1, tY - i, i > 1 ? 2 : 1);
+      }
+      break;
+    case 'antennae': {
+      const len = 3 + 3 * big;
+      line(tX + 1, tY, tX - len * 0.5, tY - len, 9);
+      blob(tX - len * 0.5, tY - len - 0.5, 1, 1, 11);
+      break;
     }
+    case 'horns-swept':
+      for (let i = 0; i < 4 * big + 1; i++) {
+        put(tX - i * 0.8, tY - i * 0.7, 6);
+        if (i < 2 * big) put(tX - i * 0.8 + 1, tY - i * 0.7, 6);
+      }
+      break;
+    case 'horns-ram':
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 8) * Math.PI * 1.3;
+        put(tX - 1 - Math.sin(a) * 2.5 * big, tY + 1 - Math.cos(a) * 2.2 * big + i * 0.25, 6);
+      }
+      break;
+    case 'antlers': {
+      const len = 4 * big + 1;
+      line(tX, tY, tX - len * 0.4, tY - len, 6);
+      line(tX - len * 0.2, tY - len * 0.5, tX - len * 0.7, tY - len * 0.6, 6);
+      line(tX - len * 0.4, tY - len, tX - len * 0.8, tY - len * 1.1, 6);
+      if (stage === 2) line(tX - len * 0.3, tY - len * 0.75, tX - len * 0.1, tY - len * 1.15, 6);
+      break;
+    }
+    case 'unihorn':
+      tri(cx - 1, tY + 1, cx + 0.5, tY + 1, cx, tY - 5 * big - 1, 6);
+      break;
+    case 'crest':
+      for (let i = 0; i < 4 * big + 2; i++) put(cx - (i % 2), tY - i * 0.8, i % 3 === 0 ? 11 : 2);
+      tri(tX + 1, tY + 1, tX + 3, tY + 2, tX - 2 * big, tY - 2 * big, 2);
+      break;
+    case 'crown':
+      for (let k = 0; k < 3; k++) tri(cx - k * 2.2 - 1, tY + 1, cx - k * 2.2 + 0.5, tY + 1, cx - k * 2.2 - 0.3, tY - 3 - (k === 0 ? 2 : 0), 6);
+      break;
+    case 'none':
+      break;
   }
-  // mouth: beak for birds, fangs for others
-  const mouthY = Math.round(faceY + faceR * (stage === 2 ? 0.55 : 0.5));
-  if (A === 'avian') {
-    set(cx - 0.5, mouthY - 1, 6);
-    set(cx - 1.5, mouthY - 1, 6);
-    set(cx - 0.5, mouthY, 6);
-    if (stage === 2) set(cx - 0.5, mouthY + 1, 6);
-  } else if (stage === 1) {
-    set(cx - 1.5, mouthY, 9);
-    set(cx - 0.5, mouthY, 9);
-    set(cx - 1.5, mouthY + 1, 8);
-  } else if (stage === 2) {
-    for (let x = cx - 3; x <= cx; x++) set(x, mouthY, 9);
-    set(cx - 3, mouthY - 1, 8);
-    set(cx - 1, mouthY + 1, 8);
-    set(cx - 2.5, mouthY + 1, 8);
+
+  drawSignature(types[0], D, { cx, headTop, hy, shoulderX, shoulderY, by, rx, ry, stage, hrx: merged ? rx : H.rx });
+
+  // ---------------------------------------------------------------- face
+  const visor = types[0] === 'Metal' && stage > 0;
+  const hollow = (types[0] === 'Spirit' || types[0] === 'Shadow') && stage > 0;
+  const eyeY = Math.round(faceY - faceR * (stage === 0 ? 0 : 0.15));
+  const spread = Math.max(1.5, faceR * 0.42);
+  const eyeAt = (x: number, y: number) => {
+    if (hollow) {
+      put(x, y, 9);
+      put(x + 1, y, 9);
+      put(x, y + 1, 9);
+      put(x + 1, y + 1, 7);
+      put(x - 1, y - 1, 9);
+      return;
+    }
+    if (stage === 0) {
+      for (let dx = 0; dx < 2; dx++) for (let dy = -1; dy < 2; dy++) put(x + dx, y + dy, 4);
+      put(x + 1, y, 5);
+      put(x + 1, y + 1, 5);
+      put(x, y + 1, 5);
+    } else if (stage === 1) {
+      put(x, y, 4);
+      put(x + 1, y, 5);
+      put(x, y + 1, 4);
+      put(x + 1, y + 1, 5);
+      put(x - 1, y - 2, 9);
+      put(x, y - 1, 9);
+      put(x + 1, y - 1, 9);
+    } else {
+      put(x - 1, y, 7);
+      put(x, y, 7);
+      put(x + 1, y + 1, 7);
+      put(x - 2, y - 2, 9);
+      put(x - 1, y - 1, 9);
+      put(x, y - 1, 9);
+      put(x + 1, y, 9);
+    }
+  };
+  if (visor) {
+    for (let x = cx - faceR * 0.8; x <= cx; x++) {
+      put(x, eyeY, 7);
+      put(x, eyeY - 1, 9);
+    }
+  } else if (fam.eyes === 1) {
+    const ex = cx - 1;
+    for (let dx = 0; dx < 2; dx++) for (let dy = -1; dy <= 1; dy++) put(ex + dx, eyeY + dy, stage === 2 ? 7 : 4);
+    put(cx - 0.5, eyeY, 5);
+    if (stage > 0) for (let dx = -1; dx < 2; dx++) put(ex + dx, eyeY - 2, 9);
+  } else {
+    eyeAt(cx - spread - 1, eyeY);
+    if (fam.eyes === 3) {
+      put(cx - 0.5, eyeY - 3, stage === 2 ? 7 : 4);
+      put(cx - 0.5, eyeY - 2, 5);
+    }
+    if (fam.eyes === 4) eyeAt(cx - spread * 0.6, eyeY + 2.5);
+  }
+
+  const my = Math.round(faceY + faceR * 0.55);
+  switch (P.mouth) {
+    case 'smile':
+      put(cx - 1.5, my, 9);
+      put(cx - 0.5, my + 0.5, 9);
+      break;
+    case 'fangs':
+      put(cx - 1.5, my, 9);
+      put(cx - 0.5, my, 9);
+      put(cx - 1.5, my + 1, 8);
+      break;
+    case 'tusks':
+      put(cx - 1.5, my, 9);
+      put(cx - 0.5, my, 9);
+      line(cx - 2.5, my, cx - 3.5, my - 2 - stage, 8);
+      break;
+    case 'mandibles':
+      line(cx - 1.5, my, cx - 3, my + 1.5 + stage * 0.5, 6);
+      put(cx - 1.5, my + 2 + stage * 0.5, 6);
+      break;
+    case 'jaw':
+      for (let x = cx - 3.5; x <= cx; x++) put(x, my, 9);
+      put(cx - 3.5, my - 1, 8);
+      put(cx - 1.5, my + 1, 8);
+      put(cx - 2.5, my + 1, 8);
+      put(cx - 0.5, my - 1, 8);
+      break;
+    case 'beak':
+      tri(cx - 2, my - 2, cx + 0.5, my - 2, cx - 0.5, my + 1 + stage, 6);
+      break;
+    case 'none':
+      break;
   }
   return g;
 }
 
+interface Anchors {
+  cx: number;
+  headTop: number;
+  hy: number;
+  shoulderX: number;
+  shoulderY: number;
+  by: number;
+  rx: number;
+  ry: number;
+  stage: number;
+  hrx: number;
+}
+
+/** The family's primary element shows up as a feature that grows with each evolution. */
+function drawSignature(el: Element, d: Draw, c: Anchors) {
+  const s = c.stage;
+  const k = [1, 1.6, 2.3][s];
+  const top = c.headTop;
+  switch (el) {
+    case 'Fire':
+      for (let i = 0; i < 2 + s; i++) {
+        const fx = c.cx - i * 1.6;
+        const h = (3 - i * 0.6) * k;
+        d.tri(fx - 1, top + 1, fx + 1, top + 1, fx - 0.3, top - h, 10);
+        d.put(fx - 0.2, top - h * 0.4, 11);
+      }
+      break;
+    case 'Frost':
+      for (let i = 0; i < 1 + s; i++) {
+        const x = c.shoulderX + 1 + i * 2;
+        d.tri(x - 1, c.shoulderY, x + 1, c.shoulderY, x - 0.5 - i * 0.5, c.shoulderY - 2.5 * k + i, 10);
+        d.put(x - 0.3, c.shoulderY - 1, 11);
+      }
+      if (s === 2) d.tri(c.cx - 1, top, c.cx + 0.5, top, c.cx - 0.3, top - 4, 10);
+      break;
+    case 'Nature': {
+      const lx = c.cx - c.hrx * 0.3;
+      d.line(lx, top + 0.5, lx - 1 * k, top - 2 * k, 10);
+      d.blob(lx - 1.5 * k, top - 2 * k, 1.2 * k, 0.8 * k, 10);
+      if (s >= 1) d.blob(c.shoulderX + 1, c.shoulderY - 1, 1.5 * k * 0.7, 1 * k * 0.7, 10);
+      if (s === 2) d.blob(c.cx - c.rx * 0.7, c.by + c.ry * 0.6, 1.6, 1, 11);
+      break;
+    }
+    case 'Earth':
+      // pebbles → craggy rock pauldrons
+      d.blob(c.shoulderX + 1, c.shoulderY - 0.5, 1 + s * 0.8, 0.8 + s * 0.6, 10, { taper: 0.3 });
+      d.put(c.shoulderX + 0.5, c.shoulderY - 1, 11);
+      if (s === 2) d.tri(c.shoulderX - 0.5, c.shoulderY - 1, c.shoulderX + 2, c.shoulderY - 1, c.shoulderX + 0.5, c.shoulderY - 4, 10);
+      break;
+    case 'Storm': {
+      const x = c.cx - c.hrx * 0.4;
+      const h = 3 * k;
+      d.line(x, top + 1, x - 1.2, top - h * 0.45, 10);
+      d.line(x - 1.2, top - h * 0.45, x + 0.3, top - h * 0.55, 10);
+      d.line(x + 0.3, top - h * 0.55, x - 1, top - h, 10);
+      d.put(x - 1, top - h - 0.5, 11);
+      break;
+    }
+    case 'Water': {
+      const fy = c.hy;
+      const fx = c.cx - c.hrx - 0.5;
+      d.tri(fx + 1, fy - 1, fx + 1, fy + 2, fx - 2 * k, fy - 1.5 * k, 10);
+      if (s === 2) d.tri(fx + 1, fy + 1, fx + 1, fy + 3, fx - 2.5 * k, fy + 2.5, 11);
+      break;
+    }
+    case 'Metal':
+      d.put(c.shoulderX + 1.5, c.shoulderY, 11);
+      d.put(c.cx - c.rx * 0.5, c.by + c.ry * 0.3, 11);
+      if (s >= 1) {
+        d.line(c.cx - 0.5, top + 1, c.cx - 0.5, top - 2 * k, 6);
+        d.put(c.cx - 0.5, top - 2 * k - 1, 7);
+      }
+      break;
+    case 'Toxic':
+      for (let i = 0; i < 1 + s * 2; i++) {
+        const bx = c.cx - 2 - i * 1.7;
+        const byy = top - 1.5 - (i % 2) * 2 - i * 0.6;
+        d.blob(bx, byy, 0.7 + (i % 2) * 0.5, 0.7 + (i % 2) * 0.5, i % 2 ? 11 : 10);
+      }
+      break;
+    case 'Shadow':
+      for (let i = 0; i < 1 + s; i++) {
+        const sx = c.cx - 1 - i * 2.5;
+        for (let y = 0; y < 2 + s * 1.5; y++) d.put(sx + Math.sin(y + i) * 0.8, top - y, y % 2 ? 11 : 10);
+      }
+      break;
+    case 'Light': {
+      const hy = top - 2 - s;
+      const w = 2 + s * 1.2;
+      for (let x = c.cx - w; x <= c.cx; x++) d.put(x, hy, 10);
+      d.put(c.cx - w - 1, hy + 1, 10);
+      d.put(c.cx - w * 0.5, hy - 1, 11);
+      break;
+    }
+    case 'Spirit':
+      for (let i = 0; i < 1 + s; i++) {
+        const ox = c.cx - c.rx - 2 - i * 1.5;
+        const oy = c.shoulderY - 2 + i * 3;
+        d.blob(ox, oy, 0.8, 0.8, 10);
+        d.put(ox, oy, 11);
+      }
+      break;
+    case 'Dragon': {
+      const fx = c.cx - c.hrx - 0.3;
+      const fy = c.hy - 1;
+      for (let i = 0; i < 1 + s; i++) d.tri(fx + 1, fy + i * 1.5, fx + 1, fy + i * 1.5 + 2, fx - 2 * k + i, fy - 1 * k + i * 1.8, 10);
+      break;
+    }
+  }
+}
+
+// ------------------------------------------------------------------ painting
+
 function shade(color: number, f: number): number {
   const r = (color >> 16) & 255;
-  const gg = (color >> 8) & 255;
+  const g = (color >> 8) & 255;
   const b = color & 255;
   const m = (v: number) => Math.max(0, Math.min(255, Math.round(f >= 1 ? v + (255 - v) * (f - 1) : v * f)));
-  return (m(r) << 16) | (m(gg) << 8) | m(b);
+  return (m(r) << 16) | (m(g) << 8) | m(b);
+}
+
+/** Small per-family colour shift so families of the same element aren't identical. */
+function jitter(color: number, j: number): number {
+  const r = (color >> 16) & 255;
+  const g = (color >> 8) & 255;
+  const b = color & 255;
+  const mix = (v1: number, v2: number) => Math.max(0, Math.min(255, Math.round(v1 + (v2 - v1) * Math.abs(j))));
+  return j >= 0 ? (mix(r, g) << 16) | (mix(g, b) << 8) | mix(b, r) : (mix(r, b) << 16) | (mix(g, r) << 8) | mix(b, g);
 }
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 
+const SIGNATURE_COLOR: Record<Element, number> = {
+  Fire: 0xffb02e,
+  Frost: 0xd8f6ff,
+  Nature: 0x3fae4a,
+  Earth: 0x8a6a48,
+  Storm: 0xfff27a,
+  Water: 0x7fd4ff,
+  Metal: 0xdfe6ee,
+  Toxic: 0x7dff6a,
+  Shadow: 0x9a7dff,
+  Light: 0xffe680,
+  Spirit: 0xb8f4ff,
+  Dragon: 0xff8a3d,
+};
+
 function paletteFor(speciesId: string, stage: number) {
-  const [t1, t2] = SPECIES_BY_ID[speciesId].types;
-  // Evolutions get deeper, more saturated bodies with brighter markings.
+  const types = SPECIES_BY_ID[speciesId].types;
+  const [t1, t2] = types;
+  const fam = familyPlan(speciesId, types);
   const dark = t1 === 'Shadow';
-  const base = shade(ELEMENT_COLORS[t1], dark ? [1.25, 1.15, 1.05][stage] : [0.95, 0.85, 0.72][stage]);
+  const base = jitter(shade(ELEMENT_COLORS[t1], dark ? [1.25, 1.15, 1.05][stage] : [0.97, 0.86, 0.74][stage]), fam.hueJitter);
   let sec = ELEMENT_COLORS[t2];
-  if (t1 === t2) sec = stage === 2 ? shade(ELEMENT_COLORS[t1], 1.35) : shade(ELEMENT_COLORS[t1], 0.6);
+  if (t1 === t2) sec = stage === 2 ? shade(ELEMENT_COLORS[t1], 1.4) : shade(ELEMENT_COLORS[t1], 0.6);
   else if (stage === 2) sec = shade(sec, 1.1);
-  const glow = t1 === 'Light' || t2 === 'Light' ? 0xff4d6d : stage === 2 ? 0xfff07a : 0xffffff;
-  return {
+  const sig = SIGNATURE_COLOR[t1];
+  const pal: Record<number, number> = {
     1: base,
     2: sec,
-    3: stage === 2 ? shade(sec, 0.75) : shade(base, 1.45),
+    3: stage === 2 ? shade(sec, 0.78) : shade(base, 1.45),
     4: 0xffffff,
     5: 0x1a1428,
     6: stage === 2 ? 0xf3ead2 : 0xd8d0c0,
-    7: glow,
+    7: t1 === 'Light' || t2 === 'Light' ? 0xff4d6d : stage === 2 ? 0xfff07a : 0xffe08a,
     8: 0xffffff,
-    9: shade(base, 0.25),
-    outline: shade(base, stage === 2 ? 0.18 : 0.3),
-    shadow: shade(base, 0.72),
-    light: shade(base, 1.25),
+    9: shade(base, 0.22),
+    10: sig,
+    11: shade(sig, 1.4),
   };
+  return { pal, outline: shade(base, stage === 2 ? 0.18 : 0.3), shadow: shade(base, 0.72), light: shade(base, 1.25) };
 }
 
 /** Paints a creature onto any 2D canvas context at (ox, oy), one canvas pixel per sprite pixel. */
 export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox = 0, oy = 0) {
   const grid = buildGrid(speciesId, stage);
-  const pal = paletteFor(speciesId, stage);
+  const { pal, outline, shadow, light } = paletteFor(speciesId, stage);
   const S = SPRITE_SIZE;
   const filled = (x: number, y: number) => x >= 0 && y >= 0 && x < S && y < S && grid[y][x] !== 0;
   for (let y = 0; y < S; y++)
@@ -397,15 +788,15 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
       const v = grid[y][x];
       if (v === 0) {
         if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) {
-          ctx.fillStyle = hex(pal.outline);
+          ctx.fillStyle = hex(outline);
           ctx.fillRect(ox + x, oy + y, 1, 1);
         }
         continue;
       }
       let col = pal[v];
       if (v === 1) {
-        if (!filled(x, y + 1) || !filled(x + 1, y + 1)) col = pal.shadow;
-        else if (!filled(x, y - 1) || !filled(x - 1, y - 1)) col = pal.light;
+        if (!filled(x, y + 1) || !filled(x + 1, y + 1)) col = shadow;
+        else if (!filled(x, y - 1) || !filled(x - 1, y - 1)) col = light;
       }
       ctx.fillStyle = hex(col);
       ctx.fillRect(ox + x, oy + y, 1, 1);

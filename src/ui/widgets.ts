@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
-import { ensureCreatureTexture } from './sprites';
+import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
 
 export const W = 450;
 export const H = 800;
@@ -121,7 +121,7 @@ export class HpBar {
 
 export function creatureSprite(scene: Phaser.Scene, x: number, y: number, c: Creature, scale = 3): Phaser.GameObjects.Image {
   const key = ensureCreatureTexture(scene, c.speciesId, c.stage);
-  return scene.add.image(x, y, key).setScale(scale);
+  return scene.add.image(x, y, key).setScale(scale * SPRITE_FIT);
 }
 
 export function stars(n: number): string {
@@ -144,7 +144,7 @@ export function creatureRow(
     .setOrigin(0)
     .setStrokeStyle(2, opts.highlight ? COLORS.accent : COLORS.stroke);
   cont.add(bg);
-  cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage)).setScale(1.8));
+  cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage)).setScale(1.8 * SPRITE_FIT));
   cont.add(text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16));
   const cap = levelCap(c);
   cont.add(text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));

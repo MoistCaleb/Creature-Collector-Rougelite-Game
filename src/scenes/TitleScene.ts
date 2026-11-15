@@ -3,7 +3,7 @@ import { SPECIES } from '../data/species';
 import { PASSIVES, saveMeta, type PassiveId } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
-import { ensureCreatureTexture } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
@@ -20,7 +20,7 @@ export class TitleScene extends Phaser.Scene {
     ids.forEach((id, i) => {
       const key = ensureCreatureTexture(this, id, 0);
       const x = 55 + i * 68;
-      const img = this.add.image(x, 190, key).setScale(2.2);
+      const img = this.add.image(x, 190, key).setScale(2.2 * SPRITE_FIT);
       this.tweens.add({ targets: img, y: 180, yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
     });
 

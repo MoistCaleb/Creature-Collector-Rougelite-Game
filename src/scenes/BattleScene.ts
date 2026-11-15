@@ -34,7 +34,7 @@ import {
 } from '../logic/run';
 import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
-import { ensureCreatureTexture } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, HpBar, stars, text, typeChip, W } from '../ui/widgets';
 
 interface SidePanel {
@@ -84,7 +84,7 @@ export class BattleScene extends Phaser.Scene {
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
-    this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5).setFlipX(true);
+    this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
 
     this.enemyPanel = this.makePanel(16, 16);
     this.playerPanel = this.makePanel(W - 16 - 270, 446);
@@ -132,7 +132,7 @@ export class BattleScene extends Phaser.Scene {
     const e = this.battle.e.c;
     dex.creature(e);
     this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
-    this.enemySprite.setScale(this.kind === 'boss' ? 6 : 5);
+    this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
     this.fillPanel(this.enemyPanel, e);
     const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
     this.pips.setText('●'.repeat(alive) + '○'.repeat(this.battle.enemy.length - alive));

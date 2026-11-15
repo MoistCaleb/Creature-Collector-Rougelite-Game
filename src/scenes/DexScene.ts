@@ -4,7 +4,7 @@ import { SPECIES } from '../data/species';
 import { ELEMENT_COLORS, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
-import { ensureCreatureTexture } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
 
 type Tab = 'creatures' | 'moves' | 'elements';
@@ -98,7 +98,7 @@ export class DexScene extends Phaser.Scene {
         const cx = 70 + s * 130;
         const cy = y + 54;
         if (hasSeenForm(dex, sp.id, s)) {
-          this.content.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s)).setScale(1.7));
+          this.content.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s)).setScale(1.7 * SPRITE_FIT));
         } else {
           this.content.add(this.add.rectangle(cx, cy, 52, 52, 0x15111f).setStrokeStyle(1, COLORS.stroke));
           this.content.add(text(this, cx, cy, '?', 24, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));

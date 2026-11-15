@@ -20,7 +20,7 @@ import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollSho
 import { hasSeenForm } from '../logic/dex';
 import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
-import { ensureCreatureTexture } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
 
 const TOP_BAR = 64;
@@ -181,7 +181,7 @@ export class MapScene extends Phaser.Scene {
     const slotW = W / 4;
     run.team.forEach((c, i) => {
       const x = slotW * i + slotW / 2;
-      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6);
+      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6 * SPRITE_FIT);
       img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team'));
       text(this, x, y0 + 64, `Lv ${c.level}`, 12, COLORS.textDim).setOrigin(0.5);
       new HpBar(this, x - 36, y0 + 84, 72, 7, false).set(c.hp, stats(c).hp);

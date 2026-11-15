@@ -128,10 +128,16 @@ Proposed math:
 
 ## Creatures & sprites
 - 39 families (3 forms each). Every element has at least 4 families.
-- Procedural pixel art with body archetypes biased by element: biped, brute, floater (ghost),
-  slime, serpent, avian. Base forms are small and big-eyed; middle forms get brows, horns, claws, fangs;
-  finals are large, armored, spiked, with glowing slit eyes. See `docs/creature-sheet.png`
-  (regenerate via `npm run dev` → `/tools/sheet.html`).
+- Procedural 40x40 pixel art from a parts library. Per family (kept across evolutions): locomotion
+  (biped, quad, insect, floater, slime, serpent, avian; biased by element), eye count (1-4), pattern,
+  tail, palette, and an element signature that grows each stage (flame crown, ice crystals, leaves,
+  rock pauldrons, lightning antenna, fins, rivets/antenna, bubbles, smoke, halo, soul orbs, frills).
+- Per stage (re-rolled at each evolution so silhouettes change): body shape, head shape, arms
+  (claws, fists, blades, tentacles, pincers...), back (bat/feather/bug wings, spines, shell, mane, fins),
+  head-top (ears, horns, antlers, unihorn, crest, crown) and mouth (fangs, tusks, jaw, mandibles, beak).
+- Base forms are small with big round eyes; middle forms get brows and fangs; finals are biggest with
+  glowing slit eyes and heavy jaws. See `docs/creature-sheet.png` (regenerate via `npm run dev` →
+  `/tools/sheet.html`).
 
 ## Meta progression (between runs)
 Runs unlock:

@@ -6,7 +6,7 @@ import { Rng } from '../logic/rng';
 import { rollStarterChoices, startRun } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
-import { ensureCreatureTexture } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, text, typeChips, W } from '../ui/widgets';
 
 export class StarterScene extends Phaser.Scene {
@@ -30,7 +30,7 @@ export class StarterScene extends Phaser.Scene {
       card.setInteractive({ useHandCursor: true });
       card.on('pointerup', () => this.pick(id));
 
-      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0)).setScale(4);
+      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0)).setScale(4 * SPRITE_FIT);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
       text(this, 175, y + 16, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
       typeChips(this, 175, y + 56, sp.types);
