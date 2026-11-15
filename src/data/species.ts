@@ -49,6 +49,28 @@ export const SPECIES: Species[] = [
   sp('frostfern', ['Frostfern', 'Iceblossom', 'Winterbloom'], 'Frost', 'Nature', 62, 60, 58, 55),
   sp('cragice', ['Cragice', 'Permafang', 'Tundrosaur'], 'Frost', 'Earth', 68, 64, 66, 37),
   sp('cinderwisp', ['Cinderwisp', 'Ashveil', 'Pyrewraith'], 'Fire', 'Nature', 54, 68, 48, 65),
+  // New pure types
+  sp('cogling', ['Cogling', 'Rivetusk', 'Ironmaw'], 'Metal', 'Metal', 70, 60, 82, 28),
+  sp('sludgit', ['Sludgit', 'Venomire', 'Blightmaw'], 'Toxic', 'Toxic', 64, 62, 58, 52),
+  sp('gloomkit', ['Gloomkit', 'Duskfang', 'Nightreaver'], 'Shadow', 'Shadow', 52, 72, 42, 74),
+  sp('glimmer', ['Glimmer', 'Radiantail', 'Solarch'], 'Light', 'Light', 60, 62, 55, 63),
+  sp('wispling', ['Wispling', 'Spectrail', 'Revenarch'], 'Spirit', 'Spirit', 56, 60, 62, 62),
+  sp('drakelet', ['Drakelet', 'Scalewyrm', 'Dracolord'], 'Dragon', 'Dragon', 66, 76, 58, 50),
+  // New dual types
+  sp('pyrling', ['Pyrling', 'Scorchwing', 'Infernadrake'], 'Fire', 'Dragon', 58, 74, 48, 60),
+  sp('rippling', ['Rippling', 'Serpentide', 'Leviathorn'], 'Water', 'Dragon', 68, 66, 58, 48),
+  sp('dunedrake', ['Dunedrake', 'Quakewyrm', 'Terradrax'], 'Earth', 'Dragon', 72, 70, 66, 32),
+  sp('oreback', ['Oreback', 'Ironhide', 'Bastionox'], 'Metal', 'Earth', 74, 58, 80, 28),
+  sp('voltcog', ['Voltcog', 'Dynamaul', 'Teslarch'], 'Metal', 'Storm', 58, 66, 60, 56),
+  sp('sporebud', ['Sporebud', 'Blightbloom', 'Rotgrove'], 'Toxic', 'Nature', 68, 58, 62, 42),
+  sp('bogmite', ['Bogmite', 'Sludgeray', 'Miasmaw'], 'Toxic', 'Water', 66, 60, 60, 46),
+  sp('murkling', ['Murkling', 'Venomshade', 'Plagueborne'], 'Toxic', 'Shadow', 54, 68, 46, 66),
+  sp('shadewisp', ['Shadewisp', 'Gloomwraith', 'Umbrage'], 'Shadow', 'Spirit', 52, 70, 46, 68),
+  sp('ashcat', ['Ashcat', 'Smoldershade', 'Hellprowl'], 'Shadow', 'Fire', 54, 72, 44, 68),
+  sp('halofly', ['Halofly', 'Seraphyx', 'Sanctaur'], 'Light', 'Spirit', 60, 60, 60, 60),
+  sp('flashfinch', ['Flashfinch', 'Prismhawk', 'Auroros'], 'Light', 'Storm', 50, 66, 42, 78),
+  sp('gleamshell', ['Gleamshell', 'Mirrorback', 'Prismaton'], 'Light', 'Metal', 66, 56, 76, 34),
+  sp('chillwisp', ['Chillwisp', 'Frostshade', 'Banshrime'], 'Spirit', 'Frost', 56, 64, 56, 62),
 ];
 
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((s) => [s.id, s]));

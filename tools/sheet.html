@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Creature Sheet</title>
+    <style>
+      body { margin: 0; background: #12101c; color: #f2eefc; font: 13px "Trebuchet MS", system-ui, sans-serif; }
+      #sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px; }
+      .fam { background: #221d33; border: 1px solid #4a4068; padding: 8px 10px; }
+      .fam h3 { margin: 0 0 4px; font-size: 13px; color: #ffc94d; display: flex; gap: 6px; align-items: center; }
+      .chip { font-size: 9px; font-weight: bold; padding: 1px 4px; }
+      .row { display: flex; align-items: flex-end; gap: 4px; }
+      .stage { text-align: center; font-size: 11px; color: #a49cc0; }
+      canvas { image-rendering: pixelated; display: block; }
+      .arrow { color: #4a4068; font-size: 18px; padding-bottom: 30px; }
+    </style>
+  </head>
+  <body>
+    <div id="sheet"></div>
+    <script type="module" src="/src/tools/sheet.ts"></script>
+  </body>
+</html>

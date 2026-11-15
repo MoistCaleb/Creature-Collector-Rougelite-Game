@@ -11,7 +11,8 @@ export interface Combatant {
   atkStage: number;
   defStage: number;
   spdStage: number;
-  burn: number; // turns remaining
+  burn: number; // damage-over-time turns remaining
+  dot: 'burn' | 'poison';
 }
 
 export type PlayerAction = { kind: 'move'; index: number } | { kind: 'swap'; index: number };
@@ -230,6 +231,7 @@ export class Battle {
       case 'Fire':
         if (isAlive(target.c) && target.burn === 0) {
           target.burn = 3;
+          target.dot = 'burn';
           ev.push({ kind: 'text', text: `${creatureName(target.c)} was burned!` });
         }
         break;
@@ -262,8 +264,38 @@ export class Battle {
         }
         break;
       case 'Storm':
-        break; // handled as double strike
+      case 'Dragon':
+        break; // handled in damage (double strike / bonus damage)
+      case 'Toxic':
+        if (isAlive(target.c) && target.burn === 0) {
+          target.burn = 3;
+          target.dot = 'poison';
+          ev.push({ kind: 'text', text: `${creatureName(target.c)} was poisoned!` });
+        }
+        break;
+      case 'Metal':
+        this.bump(user, side, 'atk', 1, ev);
+        break;
+      case 'Light':
+        this.bump(user, side, 'spd', 1, ev);
+        break;
+      case 'Shadow':
+        if (isAlive(target.c)) this.bump(target, side === 'player' ? 'enemy' : 'player', 'atk', -1, ev);
+        break;
+      case 'Spirit':
+        if (isAlive(target.c)) this.bump(target, side === 'player' ? 'enemy' : 'player', 'def', -1, ev);
+        break;
     }
+  }
+
+  /** Change one stat stage on a combatant, with messaging. */
+  private bump(x: Combatant, side: Side, stat: StatKey, by: number, ev: BattleEvent[]) {
+    const key = stageKey(stat);
+    const before = x[key];
+    x[key] = Math.max(-MAX_STAGE, Math.min(MAX_STAGE, before + by));
+    if (x[key] === before) return;
+    ev.push({ kind: 'stat', side, up: by > 0 });
+    ev.push({ kind: 'text', text: `${creatureName(x.c)}'s ${STAT_LABEL[stat]} ${by > 0 ? 'rose' : 'fell'}!` });
   }
 
   private handleFaint(side: Side, ev: BattleEvent[]) {
@@ -294,7 +326,7 @@ export class Battle {
         x.c.hp = Math.max(0, x.c.hp - dmg);
         x.burn -= 1;
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
-        ev.push({ kind: 'text', text: `${creatureName(x.c)} is hurt by its burn!` });
+        ev.push({ kind: 'text', text: `${creatureName(x.c)} is hurt by its ${x.dot}!` });
         if (!isAlive(x.c)) this.handleFaint(side, ev);
       }
     }
@@ -306,7 +338,7 @@ function stageKey(stat: StatKey): 'atkStage' | 'defStage' | 'spdStage' {
 }
 
 function fresh(c: Creature): Combatant {
-  return { c, atkStage: 0, defStage: 0, spdStage: 0, burn: 0 };
+  return { c, atkStage: 0, defStage: 0, spdStage: 0, burn: 0, dot: 'burn' };
 }
 
 function resetStages(x: Combatant) {
@@ -329,7 +361,7 @@ export function computeDamage(
   const dfn = ts.def * stageMult(target.defStage);
   const mult = typeMultiplier(def.element, creatureTypes(target.c));
   const stab = stabMultiplier(def.element, creatureTypes(user.c));
-  const power = def.power * TIER_POWER[tier];
+  const power = def.power * TIER_POWER[tier] * (tier >= 3 && def.element === 'Dragon' ? 1.2 : 1);
   const base = power * (atk / dfn) * levelFactor(user.c.level) * BALANCE.damageScale;
   const roll = 0.85 + rng.next() * 0.15;
   return { dmg: Math.max(1, Math.round(base * mult * stab * roll)), mult };

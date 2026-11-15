@@ -91,16 +91,23 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - Biomes favor elements: fire lands spawn mostly Fire-type creatures, etc.
 - Each creature has 2 type slots; same-type pairs (Fire/Fire) are "pure".
 
-Draft chart (6 types, each strong vs 2, weak vs 2, neutral vs 1):
+12 elements. Each is strong against 3 and weak to 3. Light/Shadow and Spirit/Shadow are mutual rivalries
+(both sides hit x1.5).
 
-| Attacker → strong vs | |
+| Element | Strong against |
 |---|---|
-| Fire | Frost, Nature |
-| Frost | Nature, Earth |
-| Nature | Earth, Storm |
-| Earth | Storm, Water |
-| Storm | Water, Fire |
-| Water | Fire, Frost |
+| Fire | Frost, Nature, Metal |
+| Frost | Nature, Earth, Dragon |
+| Nature | Water, Earth, Storm |
+| Earth | Fire, Storm, Toxic |
+| Storm | Water, Metal, Spirit |
+| Water | Fire, Earth, Toxic |
+| Metal | Frost, Light, Toxic |
+| Toxic | Nature, Spirit, Dragon |
+| Shadow | Spirit, Light, Water |
+| Light | Shadow, Frost, Dragon |
+| Spirit | Shadow, Metal, Light |
+| Dragon | Fire, Storm, Shadow |
 
 Proposed math:
 - Super effective ×1.5, resisted ×0.67, per defending type → dual weakness = ×2.25.
@@ -119,6 +126,13 @@ Proposed math:
 - Evolutions show as ??? until you've seen that form (starter cards, team screen, dex).
 - Elements tab reveals matchups once encountered.
 
+## Creatures & sprites
+- 39 families (3 forms each). Every element has at least 4 families.
+- Procedural pixel art with body archetypes biased by element: biped, brute, floater (ghost),
+  slime, serpent, avian. Base forms are small and big-eyed; middle forms get brows, horns, claws, fangs;
+  finals are large, armored, spiked, with glowing slit eyes. See `docs/creature-sheet.png`
+  (regenerate via `npm run dev` → `/tools/sheet.html`).
+
 ## Meta progression (between runs)
 Runs unlock:
 - New starters (added to the starter pool)
@@ -127,4 +141,3 @@ Runs unlock:
 
 ## Open questions
 - **[OPEN]** Multiple maps to choose between (biomes are currently random per floor).
-- **[OPEN]** Final type list and chart.

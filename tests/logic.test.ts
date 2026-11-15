@@ -13,17 +13,21 @@ import { Rng } from '../src/logic/rng';
 import { SPECIES } from '../src/data/species';
 
 describe('types', () => {
-  it('each element is strong vs 2 and weak vs 2', () => {
+  it('each element is strong vs 3 and weak to 3', () => {
     for (const e of ELEMENTS) {
-      expect(STRONG_AGAINST[e]).toHaveLength(2);
+      expect(STRONG_AGAINST[e]).toHaveLength(3);
+      expect(STRONG_AGAINST[e]).not.toContain(e);
       const weakTo = ELEMENTS.filter((a) => STRONG_AGAINST[a].includes(e));
-      expect(weakTo).toHaveLength(2);
+      expect(weakTo).toHaveLength(3);
     }
   });
+  it('every element has at least 4 creature families', () => {
+    for (const e of ELEMENTS) expect(SPECIES.filter((s) => s.types.includes(e)).length).toBeGreaterThanOrEqual(4);
+  });
   it('stacks dual types and counts pure types once', () => {
-    expect(typeMultiplier('Water', ['Fire', 'Frost'])).toBeCloseTo(2.25);
+    expect(typeMultiplier('Water', ['Fire', 'Earth'])).toBeCloseTo(2.25);
     expect(typeMultiplier('Water', ['Fire', 'Fire'])).toBeCloseTo(1.5);
-    expect(typeMultiplier('Water', ['Fire', 'Earth'])).toBeCloseTo(1.005, 2);
+    expect(typeMultiplier('Nature', ['Water', 'Fire'])).toBeCloseTo(1.005, 2);
   });
   it('gives pure types a bigger same-type bonus', () => {
     expect(stabMultiplier('Fire', ['Fire', 'Fire'])).toBe(1.5);

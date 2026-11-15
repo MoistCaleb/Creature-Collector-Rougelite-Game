@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ELEMENT_COLORS, type Element } from '../data/types';
+import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
 import { ensureCreatureTexture } from './sprites';
 
@@ -78,7 +78,7 @@ export function typeChip(scene: Phaser.Scene, x: number, y: number, el: Element,
   const h = small ? 16 : 20;
   const c = scene.add.container(x, y);
   c.add(scene.add.rectangle(0, 0, w, h, ELEMENT_COLORS[el]).setOrigin(0, 0.5));
-  c.add(text(scene, w / 2, 0, el.toUpperCase(), small ? 10 : 11, '#1a1428', { fontStyle: 'bold' }).setOrigin(0.5));
+  c.add(text(scene, w / 2, 0, el.toUpperCase(), small ? 10 : 11, elementTextColor(el), { fontStyle: 'bold' }).setOrigin(0.5));
   return c;
 }
 

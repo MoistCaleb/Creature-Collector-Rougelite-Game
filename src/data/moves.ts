@@ -30,6 +30,12 @@ const ATTACK_NAMES: Record<Element, [string, string, string, string]> = {
   Earth: ['Pebble Toss', 'Rock Slam', 'Quake', 'Landslide'],
   Storm: ['Spark', 'Gust', 'Thunderclap', 'Tempest'],
   Water: ['Splash Jet', 'Tide Strike', 'Riptide', 'Tsunami'],
+  Metal: ['Rivet Shot', 'Steel Claw', 'Gear Grind', 'Meteor Hammer'],
+  Toxic: ['Acid Spit', 'Venom Fang', 'Sludge Bomb', 'Plague Wave'],
+  Shadow: ['Shade Claw', 'Night Slash', 'Umbral Burst', 'Eclipse'],
+  Light: ['Glint', 'Radiant Beam', 'Prism Lance', 'Solar Flare'],
+  Spirit: ['Wisp Touch', 'Soul Lash', 'Phantom Rend', 'Spirit Storm'],
+  Dragon: ['Drake Bite', 'Scale Slash', 'Wyrm Breath', 'Cataclysm'],
 };
 
 const STATUS: Record<Element, { buff: [string, StatEffect[]]; debuff: [string, StatEffect[]] }> = {
@@ -56,6 +62,30 @@ const STATUS: Record<Element, { buff: [string, StatEffect[]]; debuff: [string, S
   Water: {
     buff: ['Focus Tide', [{ stat: 'atk', stages: 1 }, { stat: 'spd', stages: 1 }]],
     debuff: ['Soak', [{ stat: 'atk', stages: -1 }, { stat: 'def', stages: -1 }]],
+  },
+  Metal: {
+    buff: ['Reinforce', [{ stat: 'def', stages: 2 }, { stat: 'atk', stages: 1 }]],
+    debuff: ['Magnetize', [{ stat: 'spd', stages: -2 }, { stat: 'def', stages: -1 }]],
+  },
+  Toxic: {
+    buff: ['Toxic Coat', [{ stat: 'def', stages: 1 }, { stat: 'spd', stages: 1 }]],
+    debuff: ['Noxious Fumes', [{ stat: 'def', stages: -1 }, { stat: 'atk', stages: -1 }, { stat: 'spd', stages: -1 }]],
+  },
+  Shadow: {
+    buff: ['Lurk', [{ stat: 'spd', stages: 2 }, { stat: 'atk', stages: 1 }]],
+    debuff: ['Dread Gaze', [{ stat: 'atk', stages: -2 }, { stat: 'spd', stages: -1 }]],
+  },
+  Light: {
+    buff: ['Halo', [{ stat: 'def', stages: 1 }, { stat: 'spd', stages: 1 }, { stat: 'atk', stages: 1 }]],
+    debuff: ['Blinding Flash', [{ stat: 'spd', stages: -1 }, { stat: 'atk', stages: -1 }]],
+  },
+  Spirit: {
+    buff: ['Commune', [{ stat: 'atk', stages: 1 }, { stat: 'def', stages: 1 }]],
+    debuff: ['Haunt', [{ stat: 'def', stages: -2 }, { stat: 'spd', stages: -1 }]],
+  },
+  Dragon: {
+    buff: ['Roar of Kings', [{ stat: 'atk', stages: 3 }, { stat: 'def', stages: -1 }]],
+    debuff: ['Terrify', [{ stat: 'atk', stages: -1 }, { stat: 'spd', stages: -2 }]],
   },
 };
 
@@ -84,6 +114,12 @@ export const TIER3_EFFECT: Record<Element, string> = {
   Earth: "Raises user's Defense",
   Storm: '35% chance to strike twice',
   Water: 'Heals user 15% max HP',
+  Metal: "Raises user's Attack",
+  Toxic: 'Poisons the target',
+  Shadow: "Lowers target's Attack",
+  Light: "Raises user's Speed",
+  Spirit: "Lowers target's Defense",
+  Dragon: 'Deals 20% bonus damage',
 };
 
 export const TIER_POWER = [1, 1, 1.25, 1.5]; // index by tier (1..3)
