@@ -399,7 +399,9 @@ describe('saving runs, maps and events', () => {
   it('maps unlock with boss kills', () => {
     const meta = mkMeta();
     expect(unlockedMaps(meta).map((m) => m.id)).toEqual(['wildlands', 'verdant']);
-    meta.bossesDefeated = 4;
+    meta.bossesDefeated = 20; // bosses alone don't unlock maps
+    expect(unlockedMaps(meta).map((m) => m.id)).toEqual(['wildlands', 'verdant']);
+    meta.wins = 2;
     expect(unlockedMaps(meta).map((m) => m.id)).toContain('volcanic');
   });
   it('every event option runs without errors and does what it says', () => {
@@ -444,5 +446,16 @@ describe('passive unlocks', () => {
     expect(meta.unlockedPassives).toEqual(['mentor']);
     expect(clearFloor(run)).toBe(true); // win
     expect(meta.unlockedPassives).toEqual(['mentor', 'medic']);
+  });
+});
+
+describe('starter unlocks', () => {
+  it('catching a species unlocks it as a starter immediately; bosses do not', () => {
+    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' };
+    const run = startRun(meta, 'emberkit', 8);
+    clearFloor(run);
+    expect(meta.unlockedStarters).toEqual(DEFAULT_STARTERS);
+    catchCreature(run, createCreature('gloomkit', 3));
+    expect(meta.unlockedStarters).toContain('gloomkit');
   });
 });

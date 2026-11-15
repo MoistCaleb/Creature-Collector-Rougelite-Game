@@ -30,12 +30,14 @@ export class EndScene extends Phaser.Scene {
       `Creatures lost: ${run.log.lost}`,
     ];
     if (run.unlockedThisRun.length) lines.push(`Unlocked: ${run.unlockedThisRun.join(', ')}`);
-    text(this, W / 2, 160, lines.join('\n'), 17, COLORS.text, { align: 'center', lineSpacing: 6 }).setOrigin(0.5, 0);
+    const summary = text(this, W / 2, 160, lines.join('\n'), 16, COLORS.text, { align: 'center', lineSpacing: 6, wordWrap: { width: W - 40 } }).setOrigin(0.5, 0);
 
     const survivors = allCreatures(run);
     if (survivors.length) {
-      text(this, 30, 290, 'Survivors', 18, '#ffc94d');
-      survivors.slice(0, 5).forEach((c, i) => creatureRow(this, 30, 320 + i * 70, W - 60, c));
+      const top = Math.max(290, 160 + summary.height + 20);
+      text(this, 30, top, 'Survivors', 18, '#ffc94d');
+      const room = Math.max(1, Math.floor((700 - top - 30) / 70));
+      survivors.slice(0, Math.min(5, room)).forEach((c, i) => creatureRow(this, 30, top + 30 + i * 70, W - 60, c));
     }
 
     button(this, W / 2, 740, 260, 60, 'Back to title', () => {

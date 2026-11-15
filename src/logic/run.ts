@@ -218,7 +218,7 @@ export function clearSavedRun() {
 }
 
 export function unlockedMaps(meta: Meta) {
-  return MAPS.filter((m) => mapUnlocked(m, meta.bossesDefeated));
+  return MAPS.filter((m) => mapUnlocked(m, meta.wins));
 }
 
 export function currentNode(run: Run): MapNode {
@@ -369,8 +369,7 @@ export function rosterFull(run: Run): boolean {
 function addToParty(run: Run, c: Creature) {
   if (run.team.length < TEAM_MAX) run.team.push(c);
   else run.bench.push(c);
-  if (!run.meta.dex.caught.includes(c.speciesId)) run.meta.dex.caught.push(c.speciesId);
-  saveMeta(run.meta);
+  registerJoin(run, c);
 }
 
 export function dexComplete(run: Run): boolean {
@@ -428,27 +427,37 @@ export function claimGuardian(run: Run, boss: Creature): Creature | null {
 }
 
 /** Mark a creature that joined some other way (shop recruit) as caught in the dex. */
-export function registerJoin(run: Run, c: Creature) {
-  if (!run.meta.dex.caught.includes(c.speciesId)) {
-    run.meta.dex.caught.push(c.speciesId);
-    saveMeta(run.meta);
+/**
+ * A creature joined your party (caught, claimed, recruited or hatched): record it in the Dex and
+ * unlock its species as a starter right away, whether or not this run is won.
+ * Returns true if it's a newly unlocked starter.
+ */
+export function registerJoin(run: Run, c: Creature): boolean {
+  const meta = run.meta;
+  if (!meta.dex.caught.includes(c.speciesId)) meta.dex.caught.push(c.speciesId);
+  let fresh = false;
+  if (!meta.unlockedStarters.includes(c.speciesId)) {
+    meta.unlockedStarters.push(c.speciesId);
+    run.unlockedThisRun.push(`Starter: ${SPECIES_BY_ID[c.speciesId].names[0]}`);
+    fresh = true;
   }
+  saveMeta(meta);
+  return fresh;
+}
+
+export function isUnlockedStarter(run: Run, speciesId: string): boolean {
+  return run.meta.unlockedStarters.includes(speciesId);
 }
 
 /** Called after a floor boss is defeated. Returns true if the run is won. */
 export function clearFloor(run: Run): boolean {
   const meta = run.meta;
-  const before = unlockedMaps(meta).length;
   meta.bossesDefeated += 1;
-  for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
-  const locked = SPECIES.filter((s) => !meta.unlockedStarters.includes(s.id));
-  if (locked.length) {
-    const s = run.rng.pick(locked);
-    meta.unlockedStarters.push(s.id);
-    run.unlockedThisRun.push(s.names[0]);
-  }
   if (run.floor === FLOORS - 1) {
+    // Winning a run unlocks the next map and the next passive.
+    const before = unlockedMaps(meta).length;
     meta.wins += 1;
+    for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);
     const next = PASSIVE_BY_WIN.find((p) => !meta.unlockedPassives.includes(p));
     if (next) {

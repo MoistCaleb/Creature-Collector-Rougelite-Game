@@ -17,7 +17,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
   Wildlands (random), Verdant Hollow (Nature/Toxic/Earth), Tidal Depths (Water/Frost/Storm),
   Volcanic Rift (Fire/Earth/Dragon), Ironworks (Metal/Storm/Fire), Haunted Spires (Shadow/Spirit/Toxic),
   Frozen Wastes (Frost/Spirit/Water), Celestial Peaks (Light/Storm/Dragon).
-- Unlock by total floor bosses defeated across runs (0, 0, 2, 4, 7, 10, 14, 19). Winning marks a map ✓.
+- Unlock by runs won: Wildlands and Verdant Hollow from the start, then one more map per win. Winning marks a map ✓.
 
 ## Run structure
 - A run = **3 floors**. Clearing the boss of floor 3 = win.
@@ -168,8 +168,9 @@ Proposed math:
 
 ## Meta progression (between runs)
 Runs unlock:
-- New starters (added to the starter pool)
-- New maps (each favoring different elements)
+- New starters: any species that joins your party (caught, claimed, recruited, hatched) unlocks as a
+  starter immediately, even if the run is lost
+- New maps (one per run won)
 - Trainer passives — unlocked one per run **won** (Field Medic, Scout, Drill Sergeant, Haggler);
   **only 1 can be equipped** per run.
 

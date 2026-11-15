@@ -12,6 +12,7 @@ import {
   isAlive,
   moveDef,
   prestige,
+  species,
   stats,
   type Creature,
 } from '../logic/creature';
@@ -27,6 +28,7 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
+  isUnlockedStarter,
   catchBonus,
   rosterFull,
   type EncounterKind,
@@ -363,6 +365,7 @@ export class BattleScene extends Phaser.Scene {
             run.coins += coins;
             showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}`, () => this.toMap());
           } else {
+            const wasStarter = isUnlockedStarter(run, this.enemies[i - 1].speciesId);
             const { c, bonus: kind, newlyClaimed } = catchCreature(run, this.enemies[i - 1])!;
             const where = run.team.includes(c) ? 'team' : 'bench';
             const bonus =
@@ -371,7 +374,8 @@ export class BattleScene extends Phaser.Scene {
                 : kind === 'type'
                   ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
                   : '';
-            showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}`, () => this.toMap());
+            const starterNote = wasStarter ? '' : `\n\nNew starter unlocked: ${species(c).names[0]}!`;
+            showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}`, () => this.toMap());
           }
         },
       });
@@ -453,12 +457,11 @@ export class BattleScene extends Phaser.Scene {
     const run = state.run!;
     run.activeBattle = null;
     const won = clearFloor(run);
-    const unlock = run.unlockedThisRun.length ? `\nUnlocked: ${run.unlockedThisRun.join(", ")}` : '';
     if (won) {
       this.scene.start('End', { won: true });
       return;
     }
-    this.toMap(`${note}${unlock}\n\nYou climb to the ${run.map.biome} lands.`);
+    this.toMap(`${note}\n\nYou climb to the ${run.map.biome} lands.`);
   }
 
   private onLose() {
