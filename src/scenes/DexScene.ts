@@ -48,7 +48,7 @@ export class DexScene extends Phaser.Scene {
       this,
       16,
       48,
-      `Forms ${dex.forms.length}/${totalForms}   Moves ${dex.moves.length}/${ALL_MOVE_IDS.length}   Elements ${dex.elements.length}/${ELEMENTS.length}`,
+      `Forms ${dex.forms.length}/${totalForms}   Caught ${dex.caught.length}/${SPECIES.length}   Moves ${dex.moves.length}/${ALL_MOVE_IDS.length}   Elements ${dex.elements.length}/${ELEMENTS.length}`,
       13,
       COLORS.textDim,
     );
@@ -89,6 +89,7 @@ export class DexScene extends Phaser.Scene {
       const anySeen = [0, 1, 2].some((s) => hasSeenForm(dex, sp.id, s));
       this.content.add(this.add.rectangle(12, y, W - 24, rowH - 8, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       this.content.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
+      if (dex.caught.includes(sp.id)) this.content.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
       if (anySeen) {
         const t = sp.types;
         (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => this.content.add(typeChip(this, 70 + k * 54, y + 14, el, true)));

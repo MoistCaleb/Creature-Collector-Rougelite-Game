@@ -27,7 +27,7 @@ export interface ItemDef {
 }
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  potion: { name: 'Potion', desc: 'Heal one creature 50%', basePrice: 25, weight: 10, target: 'creature' },
+  potion: { name: 'Potion', desc: 'Heal one creature 50%', basePrice: 15, weight: 10, target: 'creature' },
   restore: { name: 'Full Restore', desc: 'Heal every creature to full', basePrice: 70, weight: 6, target: 'none' },
   manual: { name: 'Training Manual', desc: 'One creature gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
   scroll: { name: 'Skill Scroll', desc: 'Upgrade one move a tier', basePrice: 55, weight: 8, target: 'move' },
@@ -47,6 +47,8 @@ export interface ShopSlot {
 export interface Shop {
   slots: ShopSlot[];
   rerolls: number;
+  /** Items this shop always stocks (kept through rerolls). */
+  guaranteed: ItemId[];
 }
 
 export function priceFor(run: Run, base: number): number {
@@ -59,9 +61,9 @@ export function rerollPrice(run: Run, shop: Shop): number {
   return priceFor(run, 10 + shop.rerolls * 10);
 }
 
-export function rollShop(run: Run, rerolls = 0): Shop {
+export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop {
   const ids = Object.keys(ITEMS) as ItemId[];
-  const chosen: ItemId[] = [];
+  const chosen: ItemId[] = [...guaranteed];
   while (chosen.length < 5) {
     const weights: Partial<Record<ItemId, number>> = {};
     for (const id of ids) if (!chosen.includes(id)) weights[id] = ITEMS[id].weight;
@@ -76,7 +78,7 @@ export function rollShop(run: Run, rerolls = 0): Shop {
     }
     return slot;
   });
-  return { slots, rerolls };
+  return { slots, rerolls, guaranteed };
 }
 
 export function canAfford(run: Run, price: number): boolean {

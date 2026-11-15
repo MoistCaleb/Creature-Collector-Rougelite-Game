@@ -8,9 +8,10 @@ export interface Dex {
   forms: string[]; // `${speciesId}:${stage}`
   moves: string[]; // move ids
   elements: Element[];
+  caught: string[]; // species ids you've ever caught
 }
 
-export const emptyDex = (): Dex => ({ forms: [], moves: [], elements: [] });
+export const emptyDex = (): Dex => ({ forms: [], moves: [], elements: [], caught: [] });
 
 export const formKey = (speciesId: string, stage: number) => `${speciesId}:${stage}`;
 

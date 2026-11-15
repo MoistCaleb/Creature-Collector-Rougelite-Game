@@ -26,7 +26,8 @@ import {
   makeEncounter,
   postBattleRecover,
   promoteBench,
-  refillBench,
+  claimGuardian,
+  isFirstCatch,
   rosterFull,
   type EncounterKind,
   type XpResult,
@@ -315,7 +316,7 @@ export class BattleScene extends Phaser.Scene {
           { label: 'Take rewards', sub: `+${xp} XP for the team · +${coins} coins`, color: 0x3b6d4a },
           ...this.enemies.map((e) => ({
             label: `Catch ${creatureName(e)}`,
-            sub: `Forfeit XP and coins · get a raw Lv 1 ${state.run!.passive === 'scout' ? '(Lv 5) ' : ''}copy`,
+            sub: `Forfeit XP and coins · raw Lv ${run.passive === 'scout' ? 5 : 1} copy${isFirstCatch(run, e.speciesId) ? ' · ★ first catch!' : ''}`,
             disabled: full,
             color: 0x3a4f7a,
           })),
@@ -325,9 +326,10 @@ export class BattleScene extends Phaser.Scene {
             run.coins += coins;
             showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}`, () => this.toMap());
           } else {
-            const c = catchCreature(run, this.enemies[i - 1])!;
+            const { c, firstCatch } = catchCreature(run, this.enemies[i - 1])!;
             const where = run.team.includes(c) ? 'team' : 'bench';
-            showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.`, () => this.toMap());
+            const bonus = firstCatch ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.` : '';
+            showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}`, () => this.toMap());
           }
         },
       });
@@ -352,23 +354,29 @@ export class BattleScene extends Phaser.Scene {
   private bossReward() {
     const run = state.run!;
     const evolvable = allCreatures(run).filter(canEvolve);
+    const full = rosterFull(run);
     openPicker(this, {
       title: 'Choose a boon',
-      subtitle: 'The guardian’s power is yours to claim.',
+      subtitle: 'The guardian\u2019s power is yours to claim.',
       options: [
-        { label: 'Full heal', sub: 'Heal everyone to full and refill your bench', color: 0x16614f },
+        { label: 'Full heal', sub: 'Heal your team and bench to full', color: 0x16614f },
         { label: 'Team prestige', sub: 'Every creature on your main team gains ★', color: 0x7a2a5a },
         { label: 'Evolve one', sub: 'Evolve any single creature now', color: 0x4a2f7a, disabled: evolvable.length === 0 },
+        {
+          label: 'Claim a guardian',
+          sub: full ? 'Your party is full' : 'One of its creatures joins you at Lv 1, already evolved',
+          color: 0x2f4a7a,
+          disabled: full,
+        },
       ],
       onPick: (i) => {
         if (i === 0) {
           for (const c of allCreatures(run)) healFraction(c, 1);
-          const added = refillBench(run);
-          this.finishFloor(added.length ? `Bench refilled: ${added.map(creatureName).join(', ')}` : 'Team fully healed.');
+          this.finishFloor('Your creatures are fully healed.');
         } else if (i === 1) {
           run.team.forEach((c) => canPrestige(c) && prestige(c));
           this.finishFloor('Your team glows with prestige!');
-        } else {
+        } else if (i === 2) {
           openPicker(this, {
             title: 'Evolve which creature?',
             options: allCreatures(run).map((c) => ({ creature: c, disabled: !canEvolve(c) })),
@@ -378,6 +386,26 @@ export class BattleScene extends Phaser.Scene {
               evolve(c);
               dex.creature(c, true);
               this.finishFloor(`${from} evolved into ${creatureName(c)}!`);
+            },
+          });
+        } else {
+          // Preview each guardian as it would join: Lv 1, same form, full HP.
+          const top = Math.max(...this.enemies.map((e) => e.stage));
+          const guardians = this.enemies.filter((e) => e.stage === top);
+          const previews = guardians.map((e) => {
+            const p = { ...e, level: 1, hp: 1 };
+            p.hp = stats(p).hp;
+            return p;
+          });
+          openPicker(this, {
+            title: 'Claim a guardian',
+            subtitle: 'It joins at Lv 1 but keeps its evolved form and higher level cap.',
+            options: previews.map((p) => ({ creature: p })),
+            onPick: (k) => {
+              const c = claimGuardian(run, guardians[k])!;
+              dex.creature(c, true);
+              const where = run.team.includes(c) ? 'team' : 'bench';
+              this.finishFloor(`${creatureName(c)} joined your ${where}!`);
             },
           });
         }

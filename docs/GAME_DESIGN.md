@@ -45,6 +45,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - After winning a battle against a wild creature you choose:
   - **Take the rewards** (XP, currency, items), or
   - **Catch it** — forfeit all rewards, gain a **raw level 1** copy of that creature.
+- **First catch:** the first time you ever catch a species (tracked in the Dex) it arrives with a free ★.
 - **Catch-up XP:** XP bonus scales with the level gap to your highest-level creature,
   so it's fast when far behind and tapers off as the gap closes.
   Draft: XP multiplier = 1 + 0.25 × (highest level − this creature's level).
@@ -69,9 +70,14 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Skill Buff | Sideways | Upgrades a skill's tier (numbers → added effect) |
 
 ### Boss reward (after each floor boss), choose 1
-- Full team heal (also refills the bench with a random biome catch)
+- Full heal (team + bench)
 - Full team prestige
 - Single creature evolution
+- Claim a guardian: one of the boss's most-evolved creatures joins at Lv 1, keeping its form and level cap
+
+### Floor 1 approach
+- The row before the floor 1 boss is all shops (every route passes one), always stocking Potion + Full Restore.
+  Floor 1's rests move one row down. Later floors keep a rest row before the boss.
 
 ## Types
 - Biomes favor elements: fire lands spawn mostly Fire-type creatures, etc.

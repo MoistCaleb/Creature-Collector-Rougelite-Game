@@ -119,11 +119,11 @@ function tryFloor(floor: number, biome: Element, rng: Rng, forceDensity?: number
   nodes[bossKey] = { id: bossKey, col: bossCol, y: bossY, kind: 'boss', next: [], progress: 1 };
   if (nodes[startKey].next.length < 2) return null;
 
-  assignKinds(nodes, startKey, topY, rng);
+  assignKinds(nodes, startKey, topY, rng, floor);
   return { floor, biome, cols, maxY, nodes, startId: startKey, bossId: bossKey };
 }
 
-function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: number, rng: Rng) {
+function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: number, rng: Rng, floor: number) {
   for (const n of Object.values(nodes)) {
     if (n.kind === 'boss') continue;
     if (n.id === startKey) {
@@ -131,7 +131,12 @@ function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: num
       continue;
     }
     if (n.y <= topY + 1) {
-      n.kind = 'heal'; // always a rest before the boss
+      // Every route passes this row. Floor 1: a guaranteed shop; later floors: a rest.
+      n.kind = floor === 0 ? 'shop' : 'heal';
+      continue;
+    }
+    if (floor === 0 && n.y <= topY + 3) {
+      n.kind = 'heal'; // floor 1's rest moves down a row to make room for the shop
       continue;
     }
     if (n.progress < 0.2) {

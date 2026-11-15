@@ -252,26 +252,48 @@ export function rosterFull(run: Run): boolean {
   return run.team.length >= TEAM_MAX && run.bench.length >= BENCH_MAX;
 }
 
-/** Catch: forfeit rewards, add a raw copy of the species. */
-export function catchCreature(run: Run, enemy: Creature): Creature | null {
-  if (rosterFull(run)) return null;
-  const c = createCreature(enemy.speciesId, run.passive === 'scout' ? 5 : 1);
+function addToParty(run: Run, c: Creature) {
   if (run.team.length < TEAM_MAX) run.team.push(c);
   else run.bench.push(c);
+  if (!run.meta.dex.caught.includes(c.speciesId)) run.meta.dex.caught.push(c.speciesId);
+  saveMeta(run.meta);
+}
+
+export function isFirstCatch(run: Run, speciesId: string): boolean {
+  return !run.meta.dex.caught.includes(speciesId);
+}
+
+/**
+ * Catch: forfeit rewards, add a raw copy of the species.
+ * The first time you ever catch a species it arrives with a free prestige star.
+ */
+export function catchCreature(run: Run, enemy: Creature): { c: Creature; firstCatch: boolean } | null {
+  if (rosterFull(run)) return null;
+  const c = createCreature(enemy.speciesId, run.passive === 'scout' ? 5 : 1);
+  const firstCatch = isFirstCatch(run, c.speciesId);
+  if (firstCatch) {
+    c.stars = 1;
+    c.hp = stats(c).hp;
+  }
+  addToParty(run, c);
   run.log.caught += 1;
+  return { c, firstCatch };
+}
+
+/** Boss boon: one of the guardian's creatures joins at Lv 1, keeping its evolved form. */
+export function claimGuardian(run: Run, boss: Creature): Creature | null {
+  if (rosterFull(run)) return null;
+  const c = createCreature(boss.speciesId, 1, boss.stage);
+  addToParty(run, c);
   return c;
 }
 
-export function refillBench(run: Run): Creature[] {
-  const added: Creature[] = [];
-  const level = Math.max(1, Math.floor(highestLevel(run) / 2));
-  while (run.bench.length < BENCH_MAX) {
-    const pool = speciesWithElement(run.biomes[run.floor]);
-    const c = createCreature(run.rng.pick(pool).id, level);
-    run.bench.push(c);
-    added.push(c);
+/** Mark a creature that joined some other way (shop recruit) as caught in the dex. */
+export function registerJoin(run: Run, c: Creature) {
+  if (!run.meta.dex.caught.includes(c.speciesId)) {
+    run.meta.dex.caught.push(c.speciesId);
+    saveMeta(run.meta);
   }
-  return added;
 }
 
 /** Called after a floor boss is defeated. Returns true if the run is won. */

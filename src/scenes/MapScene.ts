@@ -15,7 +15,7 @@ import {
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, type MapNode } from '../logic/map';
-import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS } from '../logic/run';
+import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, registerJoin } from '../logic/run';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, state } from '../state';
@@ -214,7 +214,8 @@ export class MapScene extends Phaser.Scene {
       case 'prestige':
         return this.doPrestige();
       case 'shop':
-        run.shop = rollShop(run);
+        // The shop right before the floor 1 boss always stocks healing.
+        run.shop = rollShop(run, 0, run.floor === 0 && n.next.includes(run.map.bossId) ? ['potion', 'restore'] : []);
         return this.openShop();
       default:
         this.scene.restart();
@@ -355,7 +356,7 @@ export class MapScene extends Phaser.Scene {
       onPick: (i) => {
         if (i === shop.slots.length) {
           pay(run, reroll);
-          run.shop = rollShop(run, shop.rerolls + 1);
+          run.shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
           return this.scene.restart();
         }
         this.buy(shop.slots[i]);
@@ -374,7 +375,10 @@ export class MapScene extends Phaser.Scene {
       pay(run, slot.price);
       slot.sold = true;
       const result = applyItem(run, slot, target, moveIndex);
-      if (slot.item === 'recruit') dex.creature(slot.recruit!, true);
+      if (slot.item === 'recruit') {
+        dex.creature(slot.recruit!, true);
+        registerJoin(run, slot.recruit!);
+      }
       const who = target ? `${creatureName(target)}: ` : '';
       showMessage(this, ITEMS[slot.item].name, who + result, () => this.scene.restart());
     };

@@ -5,7 +5,7 @@ import { Battle } from '../src/logic/battle';
 import { addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
 import { MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
-import { startRun, type Meta } from '../src/logic/run';
+import { catchCreature, claimGuardian, startRun, type Meta } from '../src/logic/run';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
 import { Rng } from '../src/logic/rng';
@@ -44,6 +44,9 @@ describe('map', () => {
           for (const nx of n.next) expect(m.nodes[nx].y).toBeLessThan(n.y); // always forward
         }
         expect(branchiness(m)).toBeGreaterThanOrEqual(1.7);
+        // Every route into the boss passes the pre-boss row: shops on floor 1, rests later.
+        const preBoss = Object.values(m.nodes).filter((n) => n.next.includes(m.bossId));
+        for (const n of preBoss) expect(n.kind).toBe(f === 0 ? 'shop' : 'heal');
       }
     }
   });
@@ -171,5 +174,46 @@ describe('shop', () => {
     expect(run.team[0].level).toBe(lvl + 2);
     applyItem(run, { item: 'stone', price: 0, sold: false });
     expect(run.evoStones).toBe(1);
+  });
+});
+
+describe('acquiring creatures', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+  });
+  it('first catch of a species arrives prestiged; repeats do not', () => {
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    const wild = createCreature('mossling', 4);
+    const a = catchCreature(run, wild)!;
+    expect(a.firstCatch).toBe(true);
+    expect(a.c.stars).toBe(1);
+    expect(a.c.level).toBe(1);
+    const b = catchCreature(run, wild)!;
+    expect(b.firstCatch).toBe(false);
+    expect(b.c.stars).toBe(0);
+  });
+  it('claimed guardians join at Lv 1 in their evolved form', () => {
+    const run = startRun(mkMeta(), 'emberkit', 6);
+    const boss = createCreature('cragice', 20, 1);
+    const c = claimGuardian(run, boss)!;
+    expect(c.level).toBe(1);
+    expect(c.stage).toBe(1);
+    expect(levelCap(c)).toBeGreaterThan(12);
+  });
+  it('pre-boss shops always stock healing, even after rerolls', () => {
+    const run = startRun(mkMeta(), 'emberkit', 7);
+    let shop = rollShop(run, 0, ['potion', 'restore']);
+    for (let i = 0; i < 5; i++) {
+      const items = shop.slots.map((s) => s.item);
+      expect(items).toContain('potion');
+      expect(items).toContain('restore');
+      shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
+    }
   });
 });
