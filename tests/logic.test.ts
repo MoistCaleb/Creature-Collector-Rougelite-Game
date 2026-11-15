@@ -4,6 +4,9 @@ import { branchiness, generateFloor, reachable } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
 import { addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
 import { MOVES } from '../src/data/moves';
+import { DEFAULT_STARTERS } from '../src/data/species';
+import { startRun, type Meta } from '../src/logic/run';
+import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
 import { Rng } from '../src/logic/rng';
 import { SPECIES } from '../src/data/species';
@@ -134,5 +137,39 @@ describe('battle', () => {
       }
       expect(['win', 'lose']).toContain(b.outcome());
     }
+  });
+});
+
+describe('shop', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+  });
+  it('stocks 5 distinct items with floor-scaled, haggler-discounted prices', () => {
+    const run = startRun(mkMeta(), 'emberkit', 11);
+    const shop = rollShop(run);
+    expect(new Set(shop.slots.map((s) => s.item)).size).toBe(5);
+    const f1 = priceFor(run, 100);
+    run.floor = 2;
+    expect(priceFor(run, 100)).toBeGreaterThan(f1);
+    run.passive = 'haggler';
+    expect(priceFor(run, 100)).toBeLessThan(priceFor({ ...run, passive: null }, 100));
+  });
+  it('charges coins, unlocks Haggler, and applies items', () => {
+    const run = startRun(mkMeta(), 'emberkit', 12);
+    run.coins = 1000;
+    pay(run, 600);
+    expect(run.coins).toBe(400);
+    expect(run.meta.unlockedPassives).toContain('haggler');
+    const lvl = run.team[0].level;
+    applyItem(run, { item: 'manual', price: 0, sold: false }, run.team[0]);
+    expect(run.team[0].level).toBe(lvl + 2);
+    applyItem(run, { item: 'stone', price: 0, sold: false });
+    expect(run.evoStones).toBe(1);
   });
 });

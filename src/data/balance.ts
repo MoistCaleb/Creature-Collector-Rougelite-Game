@@ -12,4 +12,8 @@ export const BALANCE = {
   eliteLevelBonus: 1,
   xpPerEnemyLevel: 15,
   benchXpShare: 0.5,
+  coinsBase: 6,
+  coinsPerEnemyLevel: 2,
+  /** Shop prices multiply by 1 + this x floor index. */
+  shopFloorMarkup: 1.0,
 };

@@ -17,6 +17,7 @@ import {
 } from '../logic/creature';
 import {
   allCreatures,
+  battleCoins,
   battleXp,
   buryFallen,
   catchCreature,
@@ -303,6 +304,7 @@ export class BattleScene extends Phaser.Scene {
     const fallen = this.fallenNote();
     postBattleRecover(run);
     const xp = battleXp(this.enemies, this.kind);
+    const coins = battleCoins(this.enemies, this.kind);
 
     if (this.kind === 'battle') {
       const full = rosterFull(run);
@@ -310,17 +312,18 @@ export class BattleScene extends Phaser.Scene {
         title: 'Victory!',
         subtitle: `Take the spoils, or catch a creature and forfeit them.${full ? '\n(Your roster is full: release one to catch.)' : ''}${fallen}`,
         options: [
-          { label: 'Take rewards', sub: `+${xp} XP for the team (bench earns a share)`, color: 0x3b6d4a },
+          { label: 'Take rewards', sub: `+${xp} XP for the team · +${coins} coins`, color: 0x3b6d4a },
           ...this.enemies.map((e) => ({
             label: `Catch ${creatureName(e)}`,
-            sub: `Forfeit rewards · get a raw Lv 1 ${state.run!.passive === 'scout' ? '(Lv 5) ' : ''}copy`,
+            sub: `Forfeit XP and coins · get a raw Lv 1 ${state.run!.passive === 'scout' ? '(Lv 5) ' : ''}copy`,
             disabled: full,
             color: 0x3a4f7a,
           })),
         ],
         onPick: (i) => {
           if (i === 0) {
-            showMessage(this, 'Rewards', this.xpLines(grantXp(run, xp)), () => this.toMap());
+            run.coins += coins;
+            showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}`, () => this.toMap());
           } else {
             const c = catchCreature(run, this.enemies[i - 1])!;
             const where = run.team.includes(c) ? 'team' : 'bench';
@@ -333,15 +336,17 @@ export class BattleScene extends Phaser.Scene {
 
     if (this.kind === 'elite') {
       run.evoStones += 1;
+      run.coins += coins;
       const lines = this.xpLines(grantXp(run, xp));
-      showMessage(this, 'Elite defeated!', `You found an Evolution Stone ◆\n\n${lines}${fallen}`, () => this.toMap());
+      showMessage(this, 'Elite defeated!', `You found an Evolution Stone ◆ and ◉ ${coins} coins\n\n${lines}${fallen}`, () => this.toMap());
       return;
     }
 
     // boss
     run.bossPending = false;
+    run.coins += coins;
     const lines = this.xpLines(grantXp(run, xp));
-    showMessage(this, 'Guardian defeated!', lines + fallen, () => this.bossReward());
+    showMessage(this, 'Guardian defeated!', `◉ +${coins} coins\n\n${lines}${fallen}`, () => this.bossReward());
   }
 
   private bossReward() {

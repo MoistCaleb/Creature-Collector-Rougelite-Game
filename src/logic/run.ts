@@ -12,6 +12,7 @@ import {
   type Creature,
 } from './creature';
 import { emptyDex, type Dex } from './dex';
+import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode } from './map';
 import { Rng } from './rng';
 
@@ -21,13 +22,16 @@ export const FLOORS = 3;
 
 // ---------------------------------------------------------------- passives
 
-export type PassiveId = 'mentor' | 'medic' | 'scout' | 'drill';
+export const HAGGLER_UNLOCK = 500;
+
+export type PassiveId = 'mentor' | 'medic' | 'scout' | 'drill' | 'haggler';
 
 export const PASSIVES: Record<PassiveId, { name: string; desc: string; unlock: string }> = {
   mentor: { name: 'Mentor', desc: 'Bench creatures earn full XP instead of half.', unlock: 'Unlocked by default' },
   medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.', unlock: 'Defeat the floor 1 boss' },
   scout: { name: 'Scout', desc: 'Caught creatures start at level 5.', unlock: 'Defeat the floor 2 boss' },
   drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.', unlock: 'Win a run' },
+  haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.', unlock: `Spend ${HAGGLER_UNLOCK} coins across your runs` },
 };
 const PASSIVE_BY_FLOOR: PassiveId[] = ['medic', 'scout', 'drill'];
 
@@ -40,6 +44,7 @@ export interface Meta {
   runs: number;
   wins: number;
   dex: Dex;
+  coinsSpent: number;
 }
 
 const META_KEY = 'ccr-meta-v1';
@@ -52,6 +57,7 @@ export function loadMeta(): Meta {
     runs: 0,
     wins: 0,
     dex: emptyDex(),
+    coinsSpent: 0,
   };
   try {
     const raw = localStorage.getItem(META_KEY);
@@ -86,6 +92,9 @@ export interface Run {
   team: Creature[];
   bench: Creature[];
   evoStones: number;
+  coins: number;
+  /** Open shop at the current node, if any. */
+  shop: Shop | null;
   /** Lost to a boss but survived via the bench: must re-fight it. */
   bossPending: boolean;
   log: { battlesWon: number; caught: number; lost: number };
@@ -115,6 +124,8 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now()): Run 
     team: [createCreature(starterId, BALANCE.starterLevel)],
     bench: [],
     evoStones: 0,
+    coins: 0,
+    shop: null,
     bossPending: false,
     log: { battlesWon: 0, caught: 0, lost: 0 },
     unlockedThisRun: [],
@@ -210,6 +221,11 @@ export interface XpResult {
   name: string;
   xp: number;
   levels: number;
+}
+
+export function battleCoins(enemies: Creature[], kind: EncounterKind): number {
+  const mult = kind === 'boss' ? 3 : kind === 'elite' ? 2 : 1;
+  return Math.round(enemies.reduce((s, e) => s + BALANCE.coinsBase + e.level * BALANCE.coinsPerEnemyLevel, 0) * mult);
 }
 
 export function battleXp(enemies: Creature[], kind: EncounterKind): number {

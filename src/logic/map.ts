@@ -1,7 +1,7 @@
 import type { Element } from '../data/types';
 import { Rng } from './rng';
 
-export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'boss';
+export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'boss';
 
 export interface MapNode {
   id: string;
@@ -145,7 +145,13 @@ function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: num
       skill: 11,
       prestige: 9,
       heal: 10,
+      shop: n.progress > 0.3 ? 8 : 0,
     });
+  }
+  // Guarantee at least one shop per floor, somewhere in the middle.
+  if (!Object.values(nodes).some((n) => n.kind === 'shop')) {
+    const mid = Object.values(nodes).filter((n) => n.kind !== 'boss' && n.kind !== 'start' && n.progress > 0.35 && n.progress < 0.75);
+    if (mid.length) rng.pick(mid).kind = 'shop';
   }
 }
 
@@ -173,5 +179,6 @@ export const NODE_INFO: Record<NodeKind, { label: string; icon: string; color: n
   prestige: { label: 'Prestige', icon: '★', color: 0xe84393, desc: 'Sacrifice a bench creature to prestige another.' },
   skill: { label: 'Skill', icon: '✦', color: 0x8e6bff, desc: 'Buff one of your moves.' },
   heal: { label: 'Rest', icon: '✚', color: 0x16a085, desc: 'Heal your team 50%.' },
+  shop: { label: 'Shop', icon: '◉', color: 0xb8862b, desc: 'Spend coins on items and recruits.' },
   boss: { label: 'Boss', icon: '☠', color: 0x5b2c6f, desc: 'Defeat it to clear the floor.' },
 };

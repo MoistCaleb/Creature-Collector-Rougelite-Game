@@ -11,10 +11,11 @@ import {
   addLevels, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
-  allCreatures, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
+  allCreatures, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
   moveTo, postBattleRecover, promoteBench, refillBench, type Meta, type Run, startRun,
 } from '../src/logic/run';
 import { Rng } from '../src/logic/rng';
+import { applyItem, eligibleTargets, pay, rollShop, unusableReason, type ItemId } from '../src/logic/shop';
 
 if (process.env.BAL) Object.assign(BALANCE, JSON.parse(process.env.BAL));
 const SMART = process.env.NAIVE ? false : true;
@@ -63,15 +64,16 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
     postBattleRecover(run);
     const xp = battleXp(enemies, kind);
     if (kind === 'battle' && allCreatures(run).length < 5 && run.rng.chance(0.5)) catchCreature(run, enemies[0]);
-    else grantXp(run, xp);
+    else { grantXp(run, xp); run.coins += battleCoins(enemies, kind); }
     if (kind === 'elite') run.evoStones++;
+    if (kind !== 'battle') run.coins += battleCoins(enemies, kind);
     return 'win';
   }
   return 'lose';
 }
 
 function simulate(seed: number): { floor: number; won: boolean; diedAt?: string } {
-  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [] } };
+  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [] }, coinsSpent: 0 };
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);
   for (let step = 0; step < 200; step++) {
@@ -108,6 +110,21 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
         break;
       }
       case 'heal': allCreatures(run).forEach((c) => healFraction(c, 0.5)); break;
+      case 'shop': {
+        // Greedy: buy whatever helps most that we can afford, in priority order.
+        const shop = rollShop(run);
+        const prio: ItemId[] = ['restore', 'stone', 'sigil', 'manual', 'scroll', 'potion', 'recruit'];
+        for (const id of prio) {
+          const sl = shop.slots.find((x) => x.item === id && !x.sold);
+          if (!sl || run.coins < sl.price || unusableReason(run, sl)) continue;
+          if (id === 'restore' && run.team.every((c) => c.hp / stats(c).hp > 0.6)) continue;
+          const tgt = eligibleTargets(run, id).sort((a, b) => b.level - a.level)[0];
+          const mi = tgt ? tgt.moves.findIndex((m) => m.tier < 3) : -1;
+          pay(run, sl.price); sl.sold = true;
+          applyItem(run, sl, tgt, mi >= 0 ? mi : undefined);
+        }
+        break;
+      }
       case 'levelup': run.team.forEach((c) => addLevels(c, 1)); break;
       case 'skill': { const c = run.team[0]; const m = c.moves.find((m) => m.tier < 3); if (m) m.tier++; break; }
     }

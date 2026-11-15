@@ -16,6 +16,8 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, type MapNode } from '../logic/map';
 import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS } from '../logic/run';
+import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
+import { hasSeenForm } from '../logic/dex';
 import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture } from '../ui/sprites';
@@ -131,7 +133,7 @@ export class MapScene extends Phaser.Scene {
     this.drawBottomBar();
 
     for (const c of allCreatures(run)) dex.creature(c, true);
-    const next = () => this.promptPendingMoves();
+    const next = () => (run.shop ? this.openShop() : this.promptPendingMoves());
     if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner, next);
     else next();
   }
@@ -166,7 +168,8 @@ export class MapScene extends Phaser.Scene {
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
-    text(this, 150, 22, `◆ ${run.evoStones}`, 15, COLORS.textDim);
+    text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 150, 36, `◆ ${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, COLORS.textDim);
     button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
     button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
   }
@@ -210,6 +213,9 @@ export class MapScene extends Phaser.Scene {
         return this.doSkill();
       case 'prestige':
         return this.doPrestige();
+      case 'shop':
+        run.shop = rollShop(run);
+        return this.openShop();
       default:
         this.scene.restart();
     }
@@ -316,6 +322,87 @@ export class MapScene extends Phaser.Scene {
       },
       true,
     );
+  }
+
+  // ------------------------------------------------------------ shop
+
+  private openShop() {
+    const run = state.run!;
+    const shop = run.shop!;
+    const label = (sl: ShopSlot) => {
+      if (sl.item !== 'recruit') return ITEMS[sl.item].name;
+      const c = sl.recruit!;
+      const name = hasSeenForm(state.meta.dex, c.speciesId, c.stage) ? creatureName(c) : 'Mystery creature';
+      return `Recruit: ${name} Lv ${c.level}`;
+    };
+    const reroll = rerollPrice(run, shop);
+    openPicker(this, {
+      title: `Shop   ◉ ${run.coins}`,
+      subtitle: 'Items take effect right away.',
+      options: [
+        ...shop.slots.map((sl) => {
+          const reason = sl.sold ? 'Sold' : unusableReason(run, sl);
+          const poor = !canAfford(run, sl.price);
+          return {
+            label: `${label(sl)}   ◉ ${sl.price}`,
+            sub: reason ?? (poor ? `${ITEMS[sl.item].desc} · not enough coins` : ITEMS[sl.item].desc),
+            disabled: sl.sold || !!reason || poor,
+            color: 0x4a3a1c,
+          };
+        }),
+        { label: `Reroll stock   ◉ ${reroll}`, sub: 'New items, same shop', disabled: !canAfford(run, reroll) },
+      ],
+      onPick: (i) => {
+        if (i === shop.slots.length) {
+          pay(run, reroll);
+          run.shop = rollShop(run, shop.rerolls + 1);
+          return this.scene.restart();
+        }
+        this.buy(shop.slots[i]);
+      },
+      cancelLabel: 'Leave shop',
+      onCancel: () => {
+        run.shop = null;
+        this.scene.restart();
+      },
+    });
+  }
+
+  private buy(slot: ShopSlot) {
+    const run = state.run!;
+    const finish = (target?: Creature, moveIndex?: number) => {
+      pay(run, slot.price);
+      slot.sold = true;
+      const result = applyItem(run, slot, target, moveIndex);
+      if (slot.item === 'recruit') dex.creature(slot.recruit!, true);
+      const who = target ? `${creatureName(target)}: ` : '';
+      showMessage(this, ITEMS[slot.item].name, who + result, () => this.scene.restart());
+    };
+    const def = ITEMS[slot.item];
+    if (def.target === 'none') return finish();
+    const eligible = eligibleTargets(run, slot.item);
+    openPicker(this, {
+      title: def.name,
+      subtitle: `${def.desc}. Choose a creature.`,
+      options: allCreatures(run).map((c) => ({ creature: c, disabled: !eligible.includes(c) })),
+      onPick: (k) => {
+        const c = allCreatures(run)[k];
+        if (def.target !== 'move') return finish(c);
+        const moves = c.moves.map((m, idx) => ({ m, idx })).filter(({ m }) => m.tier < MAX_TIER);
+        openPicker(this, {
+          title: 'Upgrade which move?',
+          options: moves.map(({ m }) => {
+            const d = moveDef(m);
+            return { label: `${d.name}  T${m.tier} → T${m.tier + 1}`, sub: tierUpgradeText(d, m.tier + 1) };
+          }),
+          onPick: (j) => finish(c, moves[j].idx),
+          onCancel: () => this.openShop(),
+          cancelLabel: 'Back',
+        });
+      },
+      onCancel: () => this.openShop(),
+      cancelLabel: 'Back',
+    });
   }
 
   private pickCreature(

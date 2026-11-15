@@ -19,7 +19,9 @@ npx vite-node scripts/simulate.ts 500   # balance simulator: plays 500 runs head
 
 - **Starter pick** — 3 random from your unlocked pool.
 - **Hex map** — 3 floors, climb bottom → top, move to any connected hex above you. Floors widen as you go.
-- **Nodes** — Battle, Elite (drops Evolution Stone), Level Up, Skill, Prestige, Rest, Boss.
+- **Nodes** — Battle, Elite (drops Evolution Stone), Level Up, Skill, Prestige, Rest, Shop, Boss.
+- **Coins & shops** — earn coins from fights, spend them on heals, training, scrolls, stones, sigils and recruits.
+- **Creature Dex** — forms, moves and elements you've seen; evolutions stay hidden until encountered.
 - **Battles** — 1v1 with switching (costs your turn), 6 elements, dual types, pure-type STAB bonus.
 - **Catching** — after a wild win: take XP *or* catch a raw Lv 1 copy (catch-up XP helps it grow).
 - **Team 4 + bench 3** — bench gets 50% XP, is your second life if the team wipes, and is prestige fuel.

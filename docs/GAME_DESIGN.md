@@ -28,7 +28,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Skill | Choose 1 of 3 skill buffs |
 | Heal | Restore HP |
 | Treasure | Item |
-| Shop | Spend run currency |
+| Shop | Spend coins: 5 random items, reroll for a rising fee. At least one per floor |
 | Event (?) | Random risk/reward |
 | Boss | End of floor |
 
@@ -92,6 +92,14 @@ Proposed math:
 - Super effective ×1.5, resisted ×0.67, per defending type → dual weakness = ×2.25.
 - Pure types count their type once (no ×2.25 weakness possible) but get a bigger same-type-attack bonus.
 
+## Coins & shops
+- **Coins** are per-run. Earned from battles (6 + 2 x enemy level each; elites x2, bosses x3).
+  Catching forfeits coins along with XP.
+- **Shop stock** (5 of): Potion, Full Restore, Training Manual (+2 lv), Skill Scroll (+1 tier),
+  Evolution Stone, Prestige Sigil (no sacrifice), Recruit (biome creature at ~60% of your top level;
+  name hidden unless it's in your Dex). Items apply on purchase.
+- Prices scale +100% per floor. **Haggler** passive (-25%) unlocks after spending 500 coins total.
+
 ## Creature Dex
 - Persistent across runs: forms seen (per evolution stage), moves seen, elements seen.
 - Evolutions show as ??? until you've seen that form (starter cards, team screen, dex).
@@ -104,6 +112,5 @@ Runs unlock:
 - Trainer upgrades — **only 1 can be equipped** as your trainer passive per run.
 
 ## Open questions
-- **[OPEN]** Shops + run currency (not in the first playable).
 - **[OPEN]** Multiple maps to choose between (biomes are currently random per floor).
 - **[OPEN]** Final type list and chart.
