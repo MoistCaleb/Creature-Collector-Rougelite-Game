@@ -7,7 +7,6 @@ import {
   canPrestige,
   creatureName,
   creatureTypes,
-  evolve,
   healFraction,
   isAlive,
   moveDef,
@@ -28,6 +27,8 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
+  evolveTracked,
+  trackStat,
   isUnlockedStarter,
   catchBonus,
   rosterFull,
@@ -329,6 +330,7 @@ export class BattleScene extends Phaser.Scene {
     // Bookkeeping happens once, even if the page reloads before the reward choice.
     if (!ab.settled) {
       run.log.battlesWon += 1;
+      trackStat(run, 'battlesWon');
       const fallen = this.fallenNote();
       postBattleRecover(run);
       ab.summary = fallen;
@@ -423,7 +425,7 @@ export class BattleScene extends Phaser.Scene {
             onPick: (k) => {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
-              evolve(c);
+              evolveTracked(run, c);
               dex.creature(c, true);
               this.finishFloor(`${from} evolved into ${creatureName(c)}!`);
             },

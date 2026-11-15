@@ -7,6 +7,7 @@ import {
   catchUpMultiplier,
   createCreature,
   creatureName,
+  evolve,
   setNextUid,
   xpToNext,
   creatureTypes,
@@ -14,6 +15,7 @@ import {
   stats,
   type Creature,
 } from './creature';
+import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
@@ -25,17 +27,19 @@ export const FLOORS = 3;
 
 // ---------------------------------------------------------------- passives
 
-export type PassiveId = 'mentor' | 'medic' | 'scout' | 'drill' | 'haggler';
+export type PassiveId = 'mentor' | 'medic' | 'scout' | 'drill' | 'haggler' | 'evolutionist' | 'explorer' | 'champion';
 
-export const PASSIVES: Record<PassiveId, { name: string; desc: string; unlock: string }> = {
-  mentor: { name: 'Mentor', desc: 'Bench creatures earn full XP instead of half.', unlock: 'Unlocked by default' },
-  medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.', unlock: 'Win 1 run' },
-  scout: { name: 'Scout', desc: 'Caught creatures start at level 5.', unlock: 'Win 2 runs' },
-  drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.', unlock: 'Win 3 runs' },
-  haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.', unlock: 'Win 4 runs' },
+/** Trainer passives. All but Mentor unlock through achievements (see achievements.ts). */
+export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
+  mentor: { name: 'Mentor', desc: 'Bench creatures earn full XP instead of half.' },
+  medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.' },
+  scout: { name: 'Scout', desc: 'Caught creatures start at level 5.' },
+  drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.' },
+  haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.' },
+  evolutionist: { name: 'Evolutionist', desc: 'Start each run with an Evolution Stone.' },
+  explorer: { name: 'Explorer', desc: 'Treasure chests hold 50% more coins.' },
+  champion: { name: 'Champion', desc: 'Your starter begins at level 10.' },
 };
-/** Passives unlock one per run won, in this order. */
-const PASSIVE_BY_WIN: PassiveId[] = ['medic', 'scout', 'drill', 'haggler'];
 
 // ---------------------------------------------------------------- meta save
 
@@ -50,6 +54,10 @@ export interface Meta {
   bossesDefeated: number;
   clearedMaps: string[];
   lastMap: string;
+  stats: MetaStats;
+  achievements: string[];
+  /** Achievements earned but not yet announced. */
+  newAchievements: string[];
 }
 
 const META_KEY = 'ccr-meta-v1';
@@ -66,12 +74,18 @@ export function loadMeta(): Meta {
     bossesDefeated: 0,
     clearedMaps: [],
     lastMap: 'wildlands',
+    stats: emptyStats(),
+    achievements: [],
+    newAchievements: [],
   };
   try {
     const raw = localStorage.getItem(META_KEY);
     if (!raw) return fallback;
     const saved = JSON.parse(raw);
-    return { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) } };
+    const meta: Meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
+    if (!saved.stats) meta.stats.caught = meta.dex.caught.length; // older saves: count known catches
+    checkAchievements(meta);
+    return meta;
   } catch {
     return fallback;
   }
@@ -152,9 +166,9 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     map,
     currentId: map.startId,
     visited: [map.startId],
-    team: [createCreature(starterId, BALANCE.starterLevel)],
+    team: [createCreature(starterId, meta.equippedPassive === 'champion' ? 10 : BALANCE.starterLevel)],
     bench: [],
-    evoStones: 0,
+    evoStones: meta.equippedPassive === 'evolutionist' ? 1 : 0,
     coins: 0,
     shop: null,
     claimedTypes: [],
@@ -415,6 +429,8 @@ export function catchCreature(
       }
   addToParty(run, c);
   run.log.caught += 1;
+  track(run.meta, 'caught');
+  saveMeta(run.meta);
   return { c, bonus, newlyClaimed };
 }
 
@@ -449,6 +465,20 @@ export function isUnlockedStarter(run: Run, speciesId: string): boolean {
   return run.meta.unlockedStarters.includes(speciesId);
 }
 
+/** Evolve a creature and count it toward achievements. */
+export function evolveTracked(run: Run, c: Creature): boolean {
+  if (!evolve(c)) return false;
+  track(run.meta, 'evolutions');
+  saveMeta(run.meta);
+  return true;
+}
+
+/** Bump a lifetime counter for this run's player and save. */
+export function trackStat(run: Run, stat: keyof MetaStats, by = 1) {
+  track(run.meta, stat, by);
+  saveMeta(run.meta);
+}
+
 /** Called after a floor boss is defeated. Returns true if the run is won. */
 export function clearFloor(run: Run): boolean {
   const meta = run.meta;
@@ -459,11 +489,7 @@ export function clearFloor(run: Run): boolean {
     meta.wins += 1;
     for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);
-    const next = PASSIVE_BY_WIN.find((p) => !meta.unlockedPassives.includes(p));
-    if (next) {
-      meta.unlockedPassives.push(next);
-      run.unlockedThisRun.push(`Passive: ${PASSIVES[next].name}`);
-    }
+    for (const a of checkAchievements(meta)) run.unlockedThisRun.push(`Passive: ${PASSIVES[a.passive].name}`);
     saveMeta(meta);
     return true;
   }

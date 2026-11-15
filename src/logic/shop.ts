@@ -11,6 +11,7 @@ import {
   stats,
   type Creature,
 } from './creature';
+import { checkAchievements } from './achievements';
 import { allCreatures, BENCH_MAX, highestLevel, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit';
@@ -115,6 +116,7 @@ export function unusableReason(run: Run, slot: ShopSlot): string | null {
 export function pay(run: Run, price: number) {
   run.coins -= price;
   run.meta.coinsSpent += price;
+  checkAchievements(run.meta);
   saveMeta(run.meta);
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, reachable } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
@@ -105,7 +106,7 @@ describe('creature growth', () => {
   });
   it('a creature that sat out never earns more XP than the one that fought', () => {
     const run = startRun(
-      { unlockedStarters: ['emberkit'], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' },
+      { unlockedStarters: ['emberkit'], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] },
       'emberkit',
       1,
     );
@@ -178,7 +179,7 @@ describe('shop', () => {
     coinsSpent: 0,
     bossesDefeated: 0,
     clearedMaps: [],
-    lastMap: 'wildlands',
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
   it('stocks 5 distinct items with floor-scaled, haggler-discounted prices', () => {
     const run = startRun(mkMeta(), 'emberkit', 11);
@@ -195,7 +196,7 @@ describe('shop', () => {
     run.coins = 1000;
     pay(run, 600);
     expect(run.coins).toBe(400);
-    expect(run.meta.unlockedPassives).not.toContain('haggler'); // passives only unlock from wins
+    expect(run.meta.unlockedPassives).toContain('haggler'); // Big Spender achievement
     const lvl = run.team[0].level;
     applyItem(run, { item: 'manual', price: 0, sold: false }, run.team[0]);
     expect(run.team[0].level).toBe(lvl + 2);
@@ -215,7 +216,7 @@ describe('acquiring creatures', () => {
     coinsSpent: 0,
     bossesDefeated: 0,
     clearedMaps: [],
-    lastMap: 'wildlands',
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
   it('first catch of a species arrives prestiged; repeats do not', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
@@ -275,7 +276,7 @@ describe('early fairness', () => {
     coinsSpent: 0,
     bossesDefeated: 0,
     clearedMaps: [],
-    lastMap: 'wildlands',
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
   it('first battle is neutral both ways', () => {
     for (const starter of SPECIES) {
@@ -380,7 +381,7 @@ describe('saving runs, maps and events', () => {
     coinsSpent: 0,
     bossesDefeated: 0,
     clearedMaps: [],
-    lastMap: 'wildlands',
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
   it('a saved run reloads identically, including the RNG', () => {
     const meta = mkMeta();
@@ -438,20 +439,32 @@ describe('starting moves', () => {
 });
 
 describe('passive unlocks', () => {
-  it('only unlock from winning a full run, one per win', () => {
-    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' };
+  const fresh = (): Meta => ({ unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] });
+  it('come from achievements, earnable without winning', () => {
+    const meta = fresh();
     const run = startRun(meta, 'emberkit', 2);
-    clearFloor(run); // floor 1
-    clearFloor(run); // floor 2
-    expect(meta.unlockedPassives).toEqual(['mentor']);
-    expect(clearFloor(run)).toBe(true); // win
-    expect(meta.unlockedPassives).toEqual(['mentor', 'medic']);
+    clearFloor(run);
+    clearFloor(run);
+    expect(meta.unlockedPassives).toEqual(['mentor']); // bosses alone unlock nothing
+    for (let i = 0; i < 10; i++) catchCreature(run, createCreature('mossling', 2)) && run.bench.splice(0) && run.team.splice(1);
+    expect(meta.unlockedPassives).toContain('scout'); // Collector: 10 catches, no win needed
+    expect(meta.newAchievements).toContain('collector');
+    expect(clearFloor(run)).toBe(true);
+    expect(meta.unlockedPassives).toContain('champion');
+  });
+  it('new passives take effect at run start', () => {
+    const meta = fresh();
+    meta.unlockedPassives.push('champion', 'evolutionist');
+    meta.equippedPassive = 'champion';
+    expect(startRun(meta, 'emberkit', 1).team[0].level).toBe(10);
+    meta.equippedPassive = 'evolutionist';
+    expect(startRun(meta, 'emberkit', 1).evoStones).toBe(1);
   });
 });
 
 describe('starter unlocks', () => {
   it('catching a species unlocks it as a starter immediately; bosses do not', () => {
-    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' };
+    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] };
     const run = startRun(meta, 'emberkit', 8);
     clearFloor(run);
     expect(meta.unlockedStarters).toEqual(DEFAULT_STARTERS);

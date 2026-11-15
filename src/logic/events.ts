@@ -275,5 +275,6 @@ export interface TreasureOffer {
 
 export function rollTreasure(run: Run): TreasureOffer {
   const items: import('./shop').ItemId[] = ['potion', 'manual', 'scroll', 'stone', 'restore', 'sigil'];
-  return { coins: scale(run, 30) + run.rng.int(0, 15), item: run.rng.pick(items) };
+  const coins = scale(run, 30) + run.rng.int(0, 15);
+  return { coins: Math.round(coins * (run.passive === 'explorer' ? 1.5 : 1)), item: run.rng.pick(items) };
 }

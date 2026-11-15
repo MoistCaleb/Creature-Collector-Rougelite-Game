@@ -15,7 +15,8 @@ import {
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, type MapNode } from '../logic/map';
-import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, registerJoin } from '../logic/run';
+import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, registerJoin, trackStat } from '../logic/run';
+import { ACHIEVEMENTS } from '../logic/achievements';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
@@ -140,8 +141,20 @@ export class MapScene extends Phaser.Scene {
 
     for (const c of allCreatures(run)) dex.creature(c, true);
     persist();
-    const next = () =>
+    const after = () =>
       run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
+    // Announce any achievements earned since the last time the map was shown.
+    const next = () => {
+      const meta = state.meta;
+      const ids = meta.newAchievements.splice(0);
+      if (!ids.length) return after();
+      persist();
+      const lines = ids.map((id) => {
+        const a = ACHIEVEMENTS.find((x) => x.id === id)!;
+        return `${a.name}: ${a.desc}\nUnlocked passive: ${PASSIVES[a.passive].name}`;
+      });
+      showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', after);
+    };
     if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner, next);
     else next();
   }
@@ -299,7 +312,10 @@ export class MapScene extends Phaser.Scene {
         { label: ev.leave ?? 'Walk away', color: 0x3a3450 },
       ],
       onPick: (i) => {
-        if (i === opts.length) return showMessage(this, ev.title, leaveEvent(run, ev), this.done);
+        if (i === opts.length) {
+          trackStat(run, 'events');
+          return showMessage(this, ev.title, leaveEvent(run, ev), this.done);
+        }
         const o = opts[i];
         if (!o.target) return this.resolveEvent(o);
         const list = allCreatures(run);
@@ -319,6 +335,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     const ev = EVENT_BY_ID[run.eventId!];
     const res = o.run(run, target);
+    trackStat(run, 'events');
     if (res.joined) dex.creature(res.joined, true);
     if (res.battle) {
       run.pendingNode = null;
@@ -342,6 +359,7 @@ export class MapScene extends Phaser.Scene {
   private doHeal() {
     const run = state.run!;
     const frac = run.passive === 'medic' ? 1 : 0.5;
+    trackStat(run, 'rests');
     for (const c of allCreatures(run)) healFraction(c, frac);
     showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP.`, this.done);
   }

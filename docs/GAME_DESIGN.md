@@ -172,7 +172,17 @@ Runs unlock:
 - New starters: any species that joins your party (caught, claimed, recruited, hatched) unlocks as a
   starter immediately, even if the run is lost
 - New maps (one per run won)
-- Trainer passives — unlocked one per run **won** (Field Medic, Scout, Drill Sergeant, Haggler);
-  **only 1 can be equipped** per run.
+- Trainer passives — unlocked by **achievements** with lifetime progress (won or lost runs);
+  **only 1 can be equipped** per run:
+  | Achievement | Goal | Passive |
+  |---|---|---|
+  | — | — | Mentor: bench earns full XP (default) |
+  | First Aid | Rest at 10 Rest nodes | Field Medic: Rest heals fully |
+  | Collector | Catch 10 creatures | Scout: catches start at Lv 5 |
+  | Veteran | Win 50 battles | Drill Sergeant: +10% damage |
+  | Big Spender | Spend 500 coins | Haggler: 25% off shops |
+  | Metamorphosis | Evolve 5 creatures | Evolutionist: start with an Evolution Stone |
+  | Wanderer | Resolve 20 events | Explorer: treasure +50% coins |
+  | Champion | Win a run | Champion: starter begins at Lv 10 |
 
 ## Open questions

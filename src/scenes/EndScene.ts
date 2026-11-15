@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { allCreatures, clearSavedRun } from '../logic/run';
+import { ACHIEVEMENTS } from '../logic/achievements';
+import { allCreatures, clearSavedRun, saveMeta } from '../logic/run';
 import { state } from '../state';
 import { background, button, COLORS, creatureRow, text, W } from '../ui/widgets';
 
@@ -30,6 +31,11 @@ export class EndScene extends Phaser.Scene {
       `Creatures lost: ${run.log.lost}`,
     ];
     if (run.unlockedThisRun.length) lines.push(`Unlocked: ${run.unlockedThisRun.join(', ')}`);
+    const earned = state.meta.newAchievements.splice(0);
+    if (earned.length) {
+      saveMeta(state.meta);
+      lines.push(`Achievements: ${earned.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name).join(', ')}`);
+    }
     const summary = text(this, W / 2, 160, lines.join('\n'), 16, COLORS.text, { align: 'center', lineSpacing: 6, wordWrap: { width: W - 40 } }).setOrigin(0.5, 0);
 
     const survivors = allCreatures(run);

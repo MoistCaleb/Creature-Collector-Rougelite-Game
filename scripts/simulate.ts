@@ -3,6 +3,7 @@
  * Usage: npx vite-node scripts/simulate.ts [runs]
  */
 import { BALANCE } from '../src/data/balance';
+import { emptyStats } from '../src/logic/achievements';
 import { TIER_POWER } from '../src/data/moves';
 import { DEFAULT_STARTERS, SPECIES } from '../src/data/species';
 import { stabMultiplier, typeMultiplier } from '../src/data/types';
@@ -75,7 +76,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
 }
 
 function simulate(seed: number): { floor: number; won: boolean; diedAt?: string } {
-  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' };
+  const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] };
   meta.dex.caught = process.env.VET ? SPECIES.map((s) => s.id) : [];
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);

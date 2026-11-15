@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
-import { canEvolve, creatureName, evolve, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
-import { allCreatures, BENCH_MAX, dexComplete, TEAM_MAX, unclaimedTypes } from '../logic/run';
+import { canEvolve, creatureName, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { allCreatures, BENCH_MAX, dexComplete, evolveTracked, TEAM_MAX, unclaimedTypes } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -106,7 +106,7 @@ export class TeamScene extends Phaser.Scene {
       () => {
         run.evoStones -= 1;
         const from = creatureName(c);
-        evolve(c);
+        evolveTracked(run, c);
         dex.creature(c, true);
         showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected }));
       },

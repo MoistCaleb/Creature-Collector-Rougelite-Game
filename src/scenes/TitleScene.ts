@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, saveMeta, type PassiveId } from '../logic/run';
+import { clearSavedRun, hasSavedRun, loadRun, PASSIVES } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -48,8 +48,8 @@ export class TitleScene extends Phaser.Scene {
       320,
       58,
       passiveLabel(),
-      () => this.choosePassive(),
-      { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Tap to equip one', fontSize: 16 },
+      () => this.scene.start('Passives'),
+      { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Passives & achievements', fontSize: 16 },
     );
 
     button(this, W / 2, 550, 200, 50, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 17 });
@@ -89,29 +89,5 @@ export class TitleScene extends Phaser.Scene {
     });
   }
 
-  private choosePassive() {
-    const meta = state.meta;
-    const all = Object.keys(PASSIVES) as PassiveId[];
-    openPicker(this, {
-      title: 'Trainer Passive',
-      subtitle: 'Equip one passive for your runs.',
-      options: [
-        { label: 'None', sub: 'No passive' },
-        ...all.map((id) => {
-          const unlocked = meta.unlockedPassives.includes(id);
-          return {
-            label: PASSIVES[id].name + (meta.equippedPassive === id ? '  (equipped)' : ''),
-            sub: unlocked ? PASSIVES[id].desc : `Locked: ${PASSIVES[id].unlock}`,
-            disabled: !unlocked,
-          };
-        }),
-      ],
-      onPick: (i) => {
-        meta.equippedPassive = i === 0 ? null : all[i - 1];
-        saveMeta(meta);
-        this.scene.restart();
-      },
-      onCancel: () => {},
-    });
-  }
+
 }
