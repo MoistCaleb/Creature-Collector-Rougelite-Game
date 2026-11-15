@@ -45,6 +45,8 @@ function bestSwitch(b: Battle): number {
 }
 
 let enemyLevels: number[] = [];
+const bossLevels: number[][] = [[], [], []];
+const nodesPerFloor: number[][] = [[], [], []];
 function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   const enemies = makeEncounter(run, currentNode(run));
   enemyLevels = enemies.map((e) => e.level);
@@ -63,10 +65,10 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
     buryFallen(run);
     postBattleRecover(run);
     const xp = battleXp(enemies, kind);
-    if (kind === 'battle' && allCreatures(run).length < 5 && run.rng.chance(0.5)) catchCreature(run, enemies[0]);
-    else { grantXp(run, xp); run.coins += battleCoins(enemies, kind); }
+    if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
+    else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind); }
     if (kind === 'elite') run.evoStones++;
-    if (kind !== 'battle') run.coins += battleCoins(enemies, kind);
+    if (kind !== 'battle') { run.coins += battleCoins(enemies, kind); grantXp(run, xp, [...b.fought]); }
     return 'win';
   }
   return 'lose';
@@ -77,7 +79,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
   meta.dex.caught = process.env.VET ? SPECIES.map((s) => s.id) : [];
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);
-  for (let step = 0; step < 200; step++) {
+  for (let step = 0; step < 600; step++) {
     const node = currentNode(run);
     let nextId: string;
     if (run.bossPending) nextId = run.currentId;
@@ -96,6 +98,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
     switch (n.kind) {
       case 'battle': case 'elite': case 'boss': {
         const lastTeam = run.team.map((c) => c.level).join('/');
+        if (n.kind === 'boss' && !run.bossPending) bossLevels[run.floor].push(Math.max(...run.team.map((c) => c.level)));
         const r = fight(run, n.kind);
         if (r === 'lose') {
           if (!promoteBench(run)) return { floor: run.floor, won: false, diedAt: `${n.kind}@${n.progress.toFixed(1)} L${Math.max(...enemyLevels)}vs${lastTeam}` };
@@ -106,6 +109,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
           run.bossPending = false;
           const evo = allCreatures(run).filter(canEvolve).sort((a, b) => b.level - a.level)[0];
           if (evo) evolve(evo); else allCreatures(run).forEach((c) => healFraction(c, 1));
+          nodesPerFloor[run.floor].push(run.visited.length);
           if (clearFloor(run)) return { floor: 3, won: true };
         }
         break;
@@ -152,4 +156,7 @@ for (let i = 1; i <= N; i++) {
 }
 console.log(`runs ${N}  wins ${wins} (${((wins / N) * 100).toFixed(1)}%)`);
 console.log('ended on floor:', floors.slice(0, 3).map((n, i) => `F${i + 1}: ${n}`).join('  '));
+const med = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0);
+console.log('median top level arriving at boss:', bossLevels.map((a, i) => `F${i + 1}: ${med(a)} (n=${a.length})`).join('  '));
+console.log('median nodes walked per floor:', nodesPerFloor.map((a, i) => `F${i + 1}: ${med(a)}`).join('  '));
 console.log('deaths:', Object.entries(deaths).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join('  '));

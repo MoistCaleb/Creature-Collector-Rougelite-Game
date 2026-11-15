@@ -1,3 +1,4 @@
+import { BALANCE } from '../data/balance';
 import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, MOVES, specialId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
@@ -48,12 +49,14 @@ export function creatureTypes(c: Creature): TypePair {
   return species(c).types;
 }
 
+/** Level caps per evolution stage; each prestige star adds 5. */
+export const STAGE_CAPS = [30, 65, 100];
 export function levelCap(c: Pick<Creature, 'stage' | 'stars'>): number {
-  return 12 + c.stage * 10 + c.stars * 3;
+  return STAGE_CAPS[c.stage] + c.stars * 5;
 }
 
 export function xpToNext(level: number): number {
-  return 8 + level * 5;
+  return Math.round(10 + level * BALANCE.xpPerLevelNeeded + level * level * BALANCE.xpQuad);
 }
 
 export interface LearnEntry {
@@ -63,7 +66,7 @@ export interface LearnEntry {
 
 /**
  * Ordered list of moves a species learns, each at a level. Every family draws its own mix from its
- * elements' pools (seeded by species id) and learns its signature move at level 11.
+ * elements' pools (seeded by species id) and learns its signature move at level 20.
  * Line attacks are listed at base rank and shift up on evolved creatures.
  */
 export function learnset(sp: Species): LearnEntry[] {
@@ -83,15 +86,17 @@ export function learnset(sp: Species): LearnEntry[] {
   const used = new Set<string>();
   const statusPool = pure ? statusOf(a) : [...statusOf(a), ...statusOf(b)];
   const specialPool = pure ? specialsOf(a) : [...specialsOf(a), ...specialsOf(b)];
+  // Starting moves stay light: no heavy hits or flurries at level 1.
+  const light = specialPool.filter((id) => !MOVES[id].hits && !MOVES[id].recoil);
   const out: LearnEntry[] = [
     { id: attackId(a, 0), level: 1 },
-    { id: pure ? pickFrom(specialPool, used) : attackId(b, 0), level: 1 },
-    { id: pickFrom(statusPool, used), level: 5 },
-    { id: pickFrom(specialPool, used), level: 8 },
-    { id: sp.signature, level: 11 },
-    { id: attackId(pure ? a : r.pick([a, b]), 2), level: 14 },
-    { id: pickFrom(r.chance(0.5) ? statusPool : specialPool, used), level: 18 },
-    { id: attackId(a, 3), level: 22 },
+    { id: pure ? pickFrom(light.length ? light : [attackId(a, 1)], used) : attackId(b, 0), level: 1 },
+    { id: pickFrom(statusPool, used), level: 6 },
+    { id: pickFrom(specialPool, used), level: 12 },
+    { id: sp.signature, level: 20 },
+    { id: attackId(pure ? a : r.pick([a, b]), 2), level: 32 },
+    { id: pickFrom(r.chance(0.5) ? statusPool : specialPool, used), level: 45 },
+    { id: attackId(a, 3), level: 60 },
   ];
   LEARNSET_CACHE.set(sp.id, out);
   return out;
@@ -284,5 +289,5 @@ export function healFraction(c: Creature, frac: number) {
 
 /** Catch-up XP: bonus grows with the level gap to the highest level creature you own. */
 export function catchUpMultiplier(level: number, highestLevel: number): number {
-  return 1 + 0.25 * Math.max(0, highestLevel - level);
+  return Math.min(BALANCE.catchUpMax, 1 + BALANCE.catchUpPerLevel * Math.max(0, highestLevel - level));
 }

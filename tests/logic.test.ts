@@ -6,7 +6,7 @@ import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, 
 import { elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS } from '../src/logic/events';
-import { catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -97,10 +97,28 @@ describe('creature growth', () => {
       }
     }
   });
-  it('catch-up XP tapers as the gap closes', () => {
-    expect(catchUpMultiplier(1, 11)).toBe(3.5);
-    expect(catchUpMultiplier(10, 11)).toBe(1.25);
+  it('catch-up XP tapers as the gap closes and is capped at x2', () => {
+    expect(catchUpMultiplier(1, 11)).toBeCloseTo(1.8);
+    expect(catchUpMultiplier(10, 11)).toBeCloseTo(1.08);
     expect(catchUpMultiplier(11, 11)).toBe(1);
+    expect(catchUpMultiplier(1, 80)).toBe(2);
+  });
+  it('a creature that sat out never earns more XP than the one that fought', () => {
+    const run = startRun(
+      { unlockedStarters: ['emberkit'], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' },
+      'emberkit',
+      1,
+    );
+    run.team[0].level = 40;
+    const sitter = createCreature('mossling', 1);
+    run.team.push(sitter);
+    const res = grantXp(run, 500, [run.team[0].uid]);
+    expect(res[1].xp).toBeLessThanOrEqual(res[0].xp);
+  });
+  it('levels reach 100 only at the final evolution stage', () => {
+    expect(levelCap({ stage: 0, stars: 0 })).toBe(30);
+    expect(levelCap({ stage: 1, stars: 0 })).toBe(65);
+    expect(levelCap({ stage: 2, stars: 0 })).toBe(100);
   });
 });
 
@@ -177,7 +195,7 @@ describe('shop', () => {
     run.coins = 1000;
     pay(run, 600);
     expect(run.coins).toBe(400);
-    expect(run.meta.unlockedPassives).toContain('haggler');
+    expect(run.meta.unlockedPassives).not.toContain('haggler'); // passives only unlock from wins
     const lvl = run.team[0].level;
     applyItem(run, { item: 'manual', price: 0, sold: false }, run.team[0]);
     expect(run.team[0].level).toBe(lvl + 2);
@@ -402,5 +420,29 @@ describe('saving runs, maps and events', () => {
     const egg = EVENTS.find((e) => e.id === 'egg')!;
     egg.options[0].run(run);
     expect(run.team.length).toBe(2);
+  });
+});
+
+describe('starting moves', () => {
+  it('no creature starts with a heavy or multi-hit special', () => {
+    for (const sp of SPECIES) {
+      const c = createCreature(sp.id, 1);
+      for (const m of c.moves) {
+        expect(MOVES[m.id].recoil ?? 0).toBe(0);
+        expect(MOVES[m.id].hits ?? 1).toBe(1);
+      }
+    }
+  });
+});
+
+describe('passive unlocks', () => {
+  it('only unlock from winning a full run, one per win', () => {
+    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands' };
+    const run = startRun(meta, 'emberkit', 2);
+    clearFloor(run); // floor 1
+    clearFloor(run); // floor 2
+    expect(meta.unlockedPassives).toEqual(['mentor']);
+    expect(clearFloor(run)).toBe(true); // win
+    expect(meta.unlockedPassives).toEqual(['mentor', 'medic']);
   });
 });

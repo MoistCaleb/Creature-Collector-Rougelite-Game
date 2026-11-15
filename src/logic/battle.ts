@@ -36,6 +36,8 @@ export class Battle {
   readonly player: Combatant[];
   readonly enemy: Combatant[];
   pActive: number;
+  /** uids of player creatures that have been sent out (they earn full XP). */
+  readonly fought = new Set<number>();
   eActive = 0;
   private rng: Rng;
   private playerDamageMult: number;
@@ -54,6 +56,7 @@ export class Battle {
     this.enemy = enemyTeam.map(fresh);
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
     this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
+    if (this.player[this.pActive]) this.fought.add(this.player[this.pActive].c.uid);
     this.rng = rng;
   }
 
@@ -81,6 +84,7 @@ export class Battle {
   forcedSwitch(index: number): BattleEvent[] {
     if (!this.canSwapTo(index)) return [];
     this.pActive = index;
+    this.fought.add(this.p.c.uid);
     resetStages(this.p);
     return [
       { kind: 'swap', side: 'player', index },
@@ -96,6 +100,7 @@ export class Battle {
       if (!this.canSwapTo(action.index)) return ev;
       ev.push({ kind: 'text', text: `${creatureName(this.p.c)}, come back!` });
       this.pActive = action.index;
+      this.fought.add(this.p.c.uid);
       resetStages(this.p);
       ev.push({ kind: 'swap', side: 'player', index: action.index });
       ev.push({ kind: 'text', text: `Go, ${creatureName(this.p.c)}!` });

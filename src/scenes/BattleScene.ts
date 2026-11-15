@@ -284,6 +284,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private afterTurn() {
+    const ab = state.run!.activeBattle;
+    if (ab) ab.fought = [...new Set([...(ab.fought ?? []), ...this.battle.fought])];
     persist();
     switch (this.battle.outcome()) {
       case 'ongoing':
@@ -331,11 +333,11 @@ export class BattleScene extends Phaser.Scene {
       if (this.kind === 'elite') {
         run.evoStones += 1;
         run.coins += coins;
-        ab.summary = `You found an Evolution Stone ◆ and ◉ ${coins} coins\n\n${this.xpLines(grantXp(run, xp))}${fallen}`;
+        ab.summary = `You found an Evolution Stone ◆ and ◉ ${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         run.coins += coins;
-        ab.summary = `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}${fallen}`;
+        ab.summary = `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       }
       ab.settled = true;
       persist();
@@ -359,7 +361,7 @@ export class BattleScene extends Phaser.Scene {
         onPick: (i) => {
           if (i === 0) {
             run.coins += coins;
-            showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}`, () => this.toMap());
+            showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}`, () => this.toMap());
           } else {
             const { c, bonus: kind, newlyClaimed } = catchCreature(run, this.enemies[i - 1])!;
             const where = run.team.includes(c) ? 'team' : 'bench';

@@ -158,10 +158,19 @@ Proposed math:
   glowing slit eyes and heavy jaws. See `docs/creature-sheet-1.png` to `-3.png` (regenerate via `npm run dev` →
   `/tools/sheet.html`).
 
+## Level curve (target)
+- Level caps: 30 / 65 / 100 by evolution stage, +5 per ★.
+- Floors are ~25-35 nodes per route. Enemy levels ease in then ramp: floor 1 ~1-23 (boss 25),
+  floor 2 ~30-60 (boss 63), floor 3 ~63-95 (final boss 96-98). Teams reach ~100 by the final boss.
+- XP per enemy = 2.2 x that enemy's own level-up cost (steady pacing at any level). Creatures that
+  fought get full XP; teammates who sat out and the bench get 50%. Catch-up bonus: +8% per level
+  behind the top creature, capped at x2.
+
 ## Meta progression (between runs)
 Runs unlock:
 - New starters (added to the starter pool)
 - New maps (each favoring different elements)
-- Trainer upgrades — **only 1 can be equipped** as your trainer passive per run.
+- Trainer passives — unlocked one per run **won** (Field Medic, Scout, Drill Sergeant, Haggler);
+  **only 1 can be equipped** per run.
 
 ## Open questions

@@ -11,7 +11,7 @@ import {
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, HAGGLER_UNLOCK, highestLevel, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, highestLevel, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit';
 
@@ -115,7 +115,6 @@ export function unusableReason(run: Run, slot: ShopSlot): string | null {
 export function pay(run: Run, price: number) {
   run.coins -= price;
   run.meta.coinsSpent += price;
-  if (run.meta.coinsSpent >= HAGGLER_UNLOCK && !run.meta.unlockedPassives.includes('haggler')) run.meta.unlockedPassives.push('haggler');
   saveMeta(run.meta);
 }
 

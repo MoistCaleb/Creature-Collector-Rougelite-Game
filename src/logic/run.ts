@@ -8,6 +8,7 @@ import {
   createCreature,
   creatureName,
   setNextUid,
+  xpToNext,
   creatureTypes,
   isAlive,
   stats,
@@ -24,18 +25,17 @@ export const FLOORS = 3;
 
 // ---------------------------------------------------------------- passives
 
-export const HAGGLER_UNLOCK = 500;
-
 export type PassiveId = 'mentor' | 'medic' | 'scout' | 'drill' | 'haggler';
 
 export const PASSIVES: Record<PassiveId, { name: string; desc: string; unlock: string }> = {
   mentor: { name: 'Mentor', desc: 'Bench creatures earn full XP instead of half.', unlock: 'Unlocked by default' },
-  medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.', unlock: 'Defeat the floor 1 boss' },
-  scout: { name: 'Scout', desc: 'Caught creatures start at level 5.', unlock: 'Defeat the floor 2 boss' },
-  drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.', unlock: 'Win a run' },
-  haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.', unlock: `Spend ${HAGGLER_UNLOCK} coins across your runs` },
+  medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.', unlock: 'Win 1 run' },
+  scout: { name: 'Scout', desc: 'Caught creatures start at level 5.', unlock: 'Win 2 runs' },
+  drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.', unlock: 'Win 3 runs' },
+  haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.', unlock: 'Win 4 runs' },
 };
-const PASSIVE_BY_FLOOR: PassiveId[] = ['medic', 'scout', 'drill'];
+/** Passives unlock one per run won, in this order. */
+const PASSIVE_BY_WIN: PassiveId[] = ['medic', 'scout', 'drill', 'haggler'];
 
 // ---------------------------------------------------------------- meta save
 
@@ -125,6 +125,8 @@ export interface ActiveBattle {
   enemies: Creature[];
   /** Win bookkeeping (XP, coins, burials) already done; only the reward choice remains. */
   settled: boolean;
+  /** uids of your creatures that took part (full XP). */
+  fought?: number[];
   summary: string;
 }
 
@@ -280,12 +282,12 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     // The run's first battle is always a neutral matchup with your starter.
     if (run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup);
     const sp = rng.pick(pool);
-    let level = BALANCE.floorBaseLevel[f] + Math.round(node.progress * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
+    let level = BALANCE.floorBaseLevel[f] + Math.round(Math.pow(node.progress, BALANCE.rampCurve) * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
     let stage = f;
     if (kind === 'elite') level += BALANCE.eliteLevelBonus;
     if (kind === 'boss') {
-      level = BALANCE.floorBaseLevel[f] + BALANCE.bossLevelBonus[f] + (i === count - 1 ? 2 : 0);
-      stage = Math.min(2, f + (i === count - 1 ? 1 : 0));
+      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0);
+      stage = Math.min(2, f + (i === count - 1 && BALANCE.bossLeadEvolves[f] ? 1 : 0));
     }
     const c = createCreature(sp.id, Math.max(1, level), stage);
     if (kind !== 'battle' && f > 0) {
@@ -337,15 +339,20 @@ export function battleCoins(enemies: Creature[], kind: EncounterKind): number {
 
 export function battleXp(enemies: Creature[], kind: EncounterKind): number {
   const mult = kind === 'boss' ? 2 : kind === 'elite' ? 1.5 : 1;
-  return Math.round(enemies.reduce((s, e) => s + e.level * BALANCE.xpPerEnemyLevel, 0) * mult);
+  return Math.round(enemies.reduce((s, e) => s + xpToNext(e.level) * BALANCE.xpYield, 0) * mult);
 }
 
-export function grantXp(run: Run, amount: number): XpResult[] {
+/**
+ * Creatures that fought (uids in `fought`) get full XP; teammates who sat out and the bench get a share.
+ * Catch-up is capped at x2, so a creature that sat out can at most match the fighters.
+ */
+export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[] {
   const top = highestLevel(run);
   const benchShare = run.passive === 'mentor' ? 1 : BALANCE.benchXpShare;
   const out: XpResult[] = [];
   for (const c of run.team) {
-    const xp = Math.round(amount * catchUpMultiplier(c.level, top));
+    const share = !fought || fought.includes(c.uid) ? 1 : BALANCE.sideXpShare;
+    const xp = Math.round(amount * share * catchUpMultiplier(c.level, top));
     out.push({ name: creatureName(c), xp, levels: addXp(c, xp) });
   }
   for (const c of run.bench) {
@@ -434,8 +441,6 @@ export function clearFloor(run: Run): boolean {
   const before = unlockedMaps(meta).length;
   meta.bossesDefeated += 1;
   for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
-  const passive = PASSIVE_BY_FLOOR[run.floor];
-  if (run.floor < 2 && !meta.unlockedPassives.includes(passive)) meta.unlockedPassives.push(passive);
   const locked = SPECIES.filter((s) => !meta.unlockedStarters.includes(s.id));
   if (locked.length) {
     const s = run.rng.pick(locked);
@@ -445,7 +450,11 @@ export function clearFloor(run: Run): boolean {
   if (run.floor === FLOORS - 1) {
     meta.wins += 1;
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);
-    if (!meta.unlockedPassives.includes('drill')) meta.unlockedPassives.push('drill');
+    const next = PASSIVE_BY_WIN.find((p) => !meta.unlockedPassives.includes(p));
+    if (next) {
+      meta.unlockedPassives.push(next);
+      run.unlockedThisRun.push(`Passive: ${PASSIVES[next].name}`);
+    }
     saveMeta(meta);
     return true;
   }

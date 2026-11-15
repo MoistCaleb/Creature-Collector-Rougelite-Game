@@ -26,9 +26,9 @@ export interface FloorMap {
 }
 
 const FLOOR_SHAPES = [
-  { cols: 5, steps: 9, density: 0.65 },
-  { cols: 6, steps: 10, density: 0.65 },
-  { cols: 7, steps: 11, density: 0.65 },
+  { cols: 5, steps: 18, density: 0.65 },
+  { cols: 6, steps: 20, density: 0.65 },
+  { cols: 7, steps: 22, density: 0.65 },
 ];
 
 const nid = (col: number, y: number) => `${col},${y}`;
