@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { DEFAULT_STARTERS, SPECIES, speciesWithElement } from '../data/species';
+import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement } from '../data/species';
 import { ELEMENTS, typeMultiplier, type Element } from '../data/types';
 import {
   addXp,
@@ -95,6 +95,8 @@ export interface Run {
   coins: number;
   /** Open shop at the current node, if any. */
   shop: Shop | null;
+  /** Elements that already earned the post-Dex catch bonus this run. */
+  claimedTypes: Element[];
   /** Lost to a boss but survived via the bench: must re-fight it. */
   bossPending: boolean;
   log: { battlesWon: number; caught: number; lost: number };
@@ -126,6 +128,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now()): Run 
     evoStones: 0,
     coins: 0,
     shop: null,
+    claimedTypes: [],
     bossPending: false,
     log: { battlesWon: 0, caught: 0, lost: 0 },
     unlockedThisRun: [],
@@ -259,25 +262,41 @@ function addToParty(run: Run, c: Creature) {
   saveMeta(run.meta);
 }
 
-export function isFirstCatch(run: Run, speciesId: string): boolean {
-  return !run.meta.dex.caught.includes(speciesId);
+export function dexComplete(run: Run): boolean {
+  return SPECIES.every((s) => run.meta.dex.caught.includes(s.id));
 }
 
 /**
- * Catch: forfeit rewards, add a raw copy of the species.
- * The first time you ever catch a species it arrives with a free prestige star.
+ * Which catch bonus (a free ★) this species would earn right now:
+ * - 'species': first time ever catching it (while the Dex is incomplete)
+ * - 'type': Dex complete, and none of its elements have earned the bonus yet this run
  */
-export function catchCreature(run: Run, enemy: Creature): { c: Creature; firstCatch: boolean } | null {
+export type CatchBonus = 'species' | 'type' | null;
+
+export function catchBonus(run: Run, speciesId: string): CatchBonus {
+  if (!dexComplete(run)) return run.meta.dex.caught.includes(speciesId) ? null : 'species';
+  const types = SPECIES_BY_ID[speciesId].types;
+  return types.some((t) => run.claimedTypes.includes(t)) ? null : 'type';
+}
+
+/** Elements that can still earn the type bonus this run (only meaningful once the Dex is complete). */
+export function unclaimedTypes(run: Run): Element[] {
+  return ELEMENTS.filter((e) => !run.claimedTypes.includes(e));
+}
+
+/** Catch: forfeit rewards, add a raw copy of the species. May arrive with a free ★ (see catchBonus). */
+export function catchCreature(run: Run, enemy: Creature): { c: Creature; bonus: CatchBonus } | null {
   if (rosterFull(run)) return null;
   const c = createCreature(enemy.speciesId, run.passive === 'scout' ? 5 : 1);
-  const firstCatch = isFirstCatch(run, c.speciesId);
-  if (firstCatch) {
+  const bonus = catchBonus(run, c.speciesId);
+  if (bonus) {
     c.stars = 1;
     c.hp = stats(c).hp;
   }
+  if (bonus === 'type') for (const t of creatureTypes(c)) if (!run.claimedTypes.includes(t)) run.claimedTypes.push(t);
   addToParty(run, c);
   run.log.caught += 1;
-  return { c, firstCatch };
+  return { c, bonus };
 }
 
 /** Boss boon: one of the guardian's creatures joins at Lv 1, keeping its evolved form. */

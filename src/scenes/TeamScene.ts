@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import { canEvolve, creatureName, evolve, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
-import { allCreatures, BENCH_MAX, TEAM_MAX } from '../logic/run';
+import { allCreatures, BENCH_MAX, dexComplete, TEAM_MAX, unclaimedTypes } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -26,7 +26,10 @@ export class TeamScene extends Phaser.Scene {
     background(this);
     text(this, 16, 14, 'Your Creatures', 24, '#ffc94d', { fontStyle: 'bold' });
     button(this, W - 60, 30, 100, 42, 'Map ▶', () => this.scene.start('Map'), { color: 0x3b6d4a, fontSize: 17 });
-    text(this, 16, 50, 'Tap one creature, then another to swap them.', 12, COLORS.textDim);
+    const hint = dexComplete(run)
+      ? `★ Type bonus left: ${unclaimedTypes(run).join(', ') || 'none'}`
+      : 'Tap one creature, then another to swap them.';
+    text(this, 16, 50, hint, 12, dexComplete(run) ? '#ffc94d' : COLORS.textDim);
 
     const rowW = W - 32;
     text(this, 16, 70, `Main team  ${run.team.length}/${TEAM_MAX}`, 15, COLORS.text);

@@ -191,12 +191,25 @@ describe('acquiring creatures', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
     const wild = createCreature('mossling', 4);
     const a = catchCreature(run, wild)!;
-    expect(a.firstCatch).toBe(true);
+    expect(a.bonus).toBe('species');
     expect(a.c.stars).toBe(1);
     expect(a.c.level).toBe(1);
     const b = catchCreature(run, wild)!;
-    expect(b.firstCatch).toBe(false);
+    expect(b.bonus).toBe(null);
     expect(b.c.stars).toBe(0);
+  });
+  it('after the Dex is complete, the bonus goes per element, once per run', () => {
+    const meta = mkMeta();
+    meta.dex.caught = SPECIES.map((s) => s.id);
+    const run = startRun(meta, 'emberkit', 8);
+    const fw = catchCreature(run, createCreature('steamle', 3))!; // Fire/Water
+    expect(fw.bonus).toBe('type');
+    expect(fw.c.stars).toBe(1);
+    expect(catchCreature(run, createCreature('coralite', 3))!.bonus).toBe(null); // Water/Earth: water used
+    expect(catchCreature(run, createCreature('emberkit', 3))!.bonus).toBe(null); // Fire/Fire: fire used
+    expect(catchCreature(run, createCreature('rimehawk', 3))!.bonus).toBe('type'); // Frost/Storm: fresh
+    const next = startRun(meta, 'emberkit', 9);
+    expect(next.claimedTypes).toEqual([]); // resets each run
   });
   it('claimed guardians join at Lv 1 in their evolved form', () => {
     const run = startRun(mkMeta(), 'emberkit', 6);

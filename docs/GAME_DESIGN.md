@@ -46,6 +46,9 @@ Working doc. Items marked **[OPEN]** still need a decision.
   - **Take the rewards** (XP, currency, items), or
   - **Catch it** — forfeit all rewards, gain a **raw level 1** copy of that creature.
 - **First catch:** the first time you ever catch a species (tracked in the Dex) it arrives with a free ★.
+- **After the Dex is complete:** the bonus goes per element, per run. A catch earns ★ only if none of its
+  elements have earned it yet this run; that catch then uses up both its elements (e.g. a Fire/Water catch
+  means no Fire or Water creature earns it again this run). Resets every run. Starters don't use up elements.
 - **Catch-up XP:** XP bonus scales with the level gap to your highest-level creature,
   so it's fast when far behind and tapers off as the gap closes.
   Draft: XP multiplier = 1 + 0.25 × (highest level − this creature's level).

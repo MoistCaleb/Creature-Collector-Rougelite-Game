@@ -27,7 +27,7 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
-  isFirstCatch,
+  catchBonus,
   rosterFull,
   type EncounterKind,
   type XpResult,
@@ -316,7 +316,7 @@ export class BattleScene extends Phaser.Scene {
           { label: 'Take rewards', sub: `+${xp} XP for the team · +${coins} coins`, color: 0x3b6d4a },
           ...this.enemies.map((e) => ({
             label: `Catch ${creatureName(e)}`,
-            sub: `Forfeit XP and coins · raw Lv ${run.passive === 'scout' ? 5 : 1} copy${isFirstCatch(run, e.speciesId) ? ' · ★ first catch!' : ''}`,
+            sub: `Forfeit XP and coins · raw Lv ${run.passive === 'scout' ? 5 : 1} copy${{ species: ' · ★ first catch!', type: ' · ★ new type bonus!', none: '' }[catchBonus(run, e.speciesId) ?? 'none']}`,
             disabled: full,
             color: 0x3a4f7a,
           })),
@@ -326,9 +326,14 @@ export class BattleScene extends Phaser.Scene {
             run.coins += coins;
             showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}`, () => this.toMap());
           } else {
-            const { c, firstCatch } = catchCreature(run, this.enemies[i - 1])!;
+            const { c, bonus: kind } = catchCreature(run, this.enemies[i - 1])!;
             const where = run.team.includes(c) ? 'team' : 'bench';
-            const bonus = firstCatch ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.` : '';
+            const bonus =
+              kind === 'species'
+                ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.`
+                : kind === 'type'
+                  ? `\n\n★ Type bonus! It arrives prestiged. ${creatureTypes(c)[0] === creatureTypes(c)[1] ? creatureTypes(c)[0] : creatureTypes(c).join(' and ')} catches won't earn it again this run.`
+                  : '';
             showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}`, () => this.toMap());
           }
         },
