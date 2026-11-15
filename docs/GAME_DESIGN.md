@@ -142,7 +142,7 @@ Proposed math:
   (claws, fists, blades, tentacles, pincers...), back (bat/feather/bug wings, spines, shell, mane, fins),
   head-top (ears, horns, antlers, unihorn, crest, crown) and mouth (fangs, tusks, jaw, mandibles, beak).
 - Base forms are small with big round eyes; middle forms get brows and fangs; finals are biggest with
-  glowing slit eyes and heavy jaws. See `docs/creature-sheet.png` (regenerate via `npm run dev` →
+  glowing slit eyes and heavy jaws. See `docs/creature-sheet-1.png` to `-3.png` (regenerate via `npm run dev` →
   `/tools/sheet.html`).
 
 ## Meta progression (between runs)
