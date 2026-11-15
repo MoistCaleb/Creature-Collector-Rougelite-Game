@@ -245,7 +245,7 @@ describe('early fairness', () => {
     dex: emptyDex(),
     coinsSpent: 0,
   });
-  it('first battle is neutral both ways, and early floor 1 enemies never have an advantage', () => {
+  it('first battle is neutral both ways', () => {
     for (const starter of SPECIES) {
       for (let seed = 1; seed <= 25; seed++) {
         const run = startRun(mkMeta(), starter.id, seed * 31 + starter.id.length);
@@ -258,10 +258,6 @@ describe('early fairness', () => {
           expect(noAdvantageOver(sp, lead)).toBe(true); // never super effective on you
           if (neutralExists) expect(neutralMatchup(sp, lead)).toBe(true);
         }
-        const second = run.map.nodes[first.next[0]];
-        moveTo(run, second.id);
-        if (second.progress < 0.35 && ['battle', 'elite'].includes(second.kind))
-          for (const e of makeEncounter(run, second)) expect(noAdvantageOver(SPECIES_BY_ID[e.speciesId], lead)).toBe(true);
       }
     }
   });

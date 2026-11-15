@@ -193,12 +193,8 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const enemies: Creature[] = [];
   for (let i = 0; i < count; i++) {
     let pool = rng.chance(0.7) ? speciesWithElement(biome) : SPECIES;
-    if (f === 0 && run.team[0]) {
-      const lead = creatureTypes(run.team[0]);
-      const firstFight = run.log.fights === 0;
-      if (firstFight) pool = fairPool(pool, lead, neutralMatchup);
-      else if (node.progress < 0.35) pool = fairPool(pool, lead, noAdvantageOver);
-    }
+    // The run's first battle is always a neutral matchup with your starter.
+    if (run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup);
     const sp = rng.pick(pool);
     let level = BALANCE.floorBaseLevel[f] + Math.round(node.progress * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
     let stage = f;
