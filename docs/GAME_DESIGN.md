@@ -35,13 +35,18 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - **Main team:** up to 4 creatures.
 - **Bench:** up to 3 backups.
   - Can be swapped with the main team **before a battle**.
-  - Act as a **second life**: if the whole main team dies, the bench steps in.
+  - Act as a **second life**: if the whole main team dies, you lose that battle
+    (no rewards) and the bench becomes your team (max 3 creatures, no bench left).
 - **Permadeath:** a creature that faints is gone for the run.
 
 ### Catching
 - After winning a battle against a wild creature you choose:
   - **Take the rewards** (XP, currency, items), or
   - **Catch it** — forfeit all rewards, gain a **raw level 1** copy of that creature.
+- **Catch-up XP:** XP bonus scales with the level gap to your highest-level creature,
+  so it's fast when far behind and tapers off as the gap closes.
+  Draft: XP multiplier = 1 + 0.25 × (highest level − this creature's level).
+- **Bench XP:** benched creatures earn a share of battle XP.
 
 ## Battle
 - **1v1 with swapping**, turn-based.
@@ -52,12 +57,12 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Upgrade | Power | Notes |
 |---|---|---|
 | Evolve | Largest | New form/sprite, big stat jump, new passive/skill slot |
-| Prestige | 2nd largest | Multiplicative stat boost per star, raises level cap |
+| Prestige | 2nd largest | Multiplicative stat boost per star, raises level cap. At star nodes, costs a sacrificed bench creature sharing a type (weakens your second life) |
 | Level Up | Small | Flat stat buff |
 | Skill Buff | Sideways | Upgrades a skill's tier (numbers → added effect) |
 
 ### Boss reward (after each floor boss), choose 1
-- Full team heal
+- Full team heal (also refills the bench with a random biome catch)
 - Full team prestige
 - Single creature evolution
 
@@ -87,8 +92,6 @@ Runs unlock:
 - Trainer upgrades — **only 1 can be equipped** as your trainer passive per run.
 
 ## Open questions
-- **[OPEN]** Caught creatures are level 1: how do they catch up late in a run? (Bench/team XP share? Level scales to floor on evolution?)
-- **[OPEN]** Second life: does the bench enter mid-battle, or only after a wipe ends the battle?
 - **[OPEN]** Does swapping during battle cost your turn?
 - **[OPEN]** How are moves defined — fixed per species, or learned/chosen?
 - **[OPEN]** Run currency + what shops sell.
