@@ -4,19 +4,19 @@ export const BALANCE = {
   /** Damage = power x (atk/def) x levelFactor x this. */
   damageScale: 0.45,
   /** Fraction of max HP survivors recover after winning a battle. */
-  postBattleHeal: 0.6,
+  postBattleHeal: 0.7,
   /** Enemy level = floorBase + progress x floorRamp (+ small random). */
   floorBaseLevel: [1, 30, 63],
   floorRamp: [22, 30, 32],
   /** >1 keeps early nodes of each floor gentle and ramps up later. */
-  rampCurve: 1.8,
+  rampCurve: 1.2,
   /** Floor boss levels (the lead creature is +2). */
   bossLevel: [25, 63, 96],
   /** Whether each floor boss's lead creature is one evolution ahead. */
   bossLeadEvolves: [false, true, true],
   eliteLevelBonus: 1,
-  /** Each defeated enemy is worth this many of ITS OWN level-ups in XP (so pacing is steady at any level). */
-  xpYield: 2.2,
+  /** Per floor: each defeated enemy is worth this many of ITS OWN level-ups in XP (steady pacing at any level). */
+  xpYield: [3.2, 1.1, 1.4],
   /** XP to next level = 10 + level x xpPerLevelNeeded + level² x xpQuad. */
   xpPerLevelNeeded: 5,
   xpQuad: 0.08,

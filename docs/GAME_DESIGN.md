@@ -162,7 +162,8 @@ Proposed math:
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★.
 - Floors are ~25-35 nodes per route. Enemy levels ease in then ramp: floor 1 ~1-23 (boss 25),
   floor 2 ~30-60 (boss 63), floor 3 ~63-95 (final boss 96-98). Teams reach ~100 by the final boss.
-- XP per enemy = 2.2 x that enemy's own level-up cost (steady pacing at any level). Creatures that
+- XP per enemy = (3.2 / 1.1 / 1.4 by floor) x that enemy's own level-up cost. Floor 1 is generous so
+  teams reach its boss at or above its level even with a few skipped fights. Creatures that
   fought get full XP; teammates who sat out and the bench get 50%. Catch-up bonus: +8% per level
   behind the top creature, capped at x2.
 

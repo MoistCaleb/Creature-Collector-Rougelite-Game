@@ -64,7 +64,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   if (o === 'win') {
     buryFallen(run);
     postBattleRecover(run);
-    const xp = battleXp(enemies, kind);
+    const xp = battleXp(enemies, kind, run.floor);
     if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
     else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind); }
     if (kind === 'elite') run.evoStones++;
@@ -157,6 +157,7 @@ for (let i = 1; i <= N; i++) {
 console.log(`runs ${N}  wins ${wins} (${((wins / N) * 100).toFixed(1)}%)`);
 console.log('ended on floor:', floors.slice(0, 3).map((n, i) => `F${i + 1}: ${n}`).join('  '));
 const med = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0);
-console.log('median top level arriving at boss:', bossLevels.map((a, i) => `F${i + 1}: ${med(a)} (n=${a.length})`).join('  '));
+const pct = (a: number[], q: number) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length * q)] : 0);
+console.log('top level arriving at boss (p25 / median / p75):', bossLevels.map((a, i) => `F${i + 1}: ${pct(a, 0.25)}/${med(a)}/${pct(a, 0.75)} (n=${a.length})`).join('  '));
 console.log('median nodes walked per floor:', nodesPerFloor.map((a, i) => `F${i + 1}: ${med(a)}`).join('  '));
 console.log('deaths:', Object.entries(deaths).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join('  '));

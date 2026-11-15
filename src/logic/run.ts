@@ -337,9 +337,9 @@ export function battleCoins(enemies: Creature[], kind: EncounterKind): number {
   return Math.round(enemies.reduce((s, e) => s + BALANCE.coinsBase + e.level * BALANCE.coinsPerEnemyLevel, 0) * mult);
 }
 
-export function battleXp(enemies: Creature[], kind: EncounterKind): number {
+export function battleXp(enemies: Creature[], kind: EncounterKind, floor = 0): number {
   const mult = kind === 'boss' ? 2 : kind === 'elite' ? 1.5 : 1;
-  return Math.round(enemies.reduce((s, e) => s + xpToNext(e.level) * BALANCE.xpYield, 0) * mult);
+  return Math.round(enemies.reduce((s, e) => s + xpToNext(e.level) * BALANCE.xpYield[floor], 0) * mult);
 }
 
 /**
