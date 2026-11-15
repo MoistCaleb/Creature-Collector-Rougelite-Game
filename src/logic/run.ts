@@ -269,14 +269,14 @@ export function dexComplete(run: Run): boolean {
 /**
  * Which catch bonus (a free ★) this species would earn right now:
  * - 'species': first time ever catching it (while the Dex is incomplete)
- * - 'type': Dex complete, and none of its elements have earned the bonus yet this run
+ * - 'type': Dex complete, and at least one of its elements hasn't earned the bonus yet this run
  */
 export type CatchBonus = 'species' | 'type' | null;
 
 export function catchBonus(run: Run, speciesId: string): CatchBonus {
   if (!dexComplete(run)) return run.meta.dex.caught.includes(speciesId) ? null : 'species';
   const types = SPECIES_BY_ID[speciesId].types;
-  return types.some((t) => run.claimedTypes.includes(t)) ? null : 'type';
+  return types.every((t) => run.claimedTypes.includes(t)) ? null : 'type';
 }
 
 /** Elements that can still earn the type bonus this run (only meaningful once the Dex is complete). */
@@ -285,7 +285,10 @@ export function unclaimedTypes(run: Run): Element[] {
 }
 
 /** Catch: forfeit rewards, add a raw copy of the species. May arrive with a free ★ (see catchBonus). */
-export function catchCreature(run: Run, enemy: Creature): { c: Creature; bonus: CatchBonus } | null {
+export function catchCreature(
+  run: Run,
+  enemy: Creature,
+): { c: Creature; bonus: CatchBonus; newlyClaimed: Element[] } | null {
   if (rosterFull(run)) return null;
   const c = createCreature(enemy.speciesId, run.passive === 'scout' ? 5 : 1);
   const bonus = catchBonus(run, c.speciesId);
@@ -293,10 +296,16 @@ export function catchCreature(run: Run, enemy: Creature): { c: Creature; bonus: 
     c.stars = 1;
     c.hp = stats(c).hp;
   }
-  if (bonus === 'type') for (const t of creatureTypes(c)) if (!run.claimedTypes.includes(t)) run.claimedTypes.push(t);
+  const newlyClaimed: Element[] = [];
+  if (bonus === 'type')
+    for (const t of creatureTypes(c))
+      if (!run.claimedTypes.includes(t)) {
+        run.claimedTypes.push(t);
+        newlyClaimed.push(t);
+      }
   addToParty(run, c);
   run.log.caught += 1;
-  return { c, bonus };
+  return { c, bonus, newlyClaimed };
 }
 
 /** Boss boon: one of the guardian's creatures joins at Lv 1, keeping its evolved form. */

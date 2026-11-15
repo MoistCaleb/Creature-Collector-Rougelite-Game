@@ -205,8 +205,11 @@ describe('acquiring creatures', () => {
     const fw = catchCreature(run, createCreature('steamle', 3))!; // Fire/Water
     expect(fw.bonus).toBe('type');
     expect(fw.c.stars).toBe(1);
-    expect(catchCreature(run, createCreature('coralite', 3))!.bonus).toBe(null); // Water/Earth: water used
+    const we = catchCreature(run, createCreature('coralite', 3))!; // Water/Earth: Earth is still fresh
+    expect(we.bonus).toBe('type');
+    expect(we.newlyClaimed).toEqual(['Earth']);
     expect(catchCreature(run, createCreature('emberkit', 3))!.bonus).toBe(null); // Fire/Fire: fire used
+    expect(catchCreature(run, createCreature('magmole', 3))!.bonus).toBe(null); // Fire/Earth: both used
     expect(catchCreature(run, createCreature('rimehawk', 3))!.bonus).toBe('type'); // Frost/Storm: fresh
     const next = startRun(meta, 'emberkit', 9);
     expect(next.claimedTypes).toEqual([]); // resets each run

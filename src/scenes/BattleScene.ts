@@ -326,13 +326,13 @@ export class BattleScene extends Phaser.Scene {
             run.coins += coins;
             showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp))}`, () => this.toMap());
           } else {
-            const { c, bonus: kind } = catchCreature(run, this.enemies[i - 1])!;
+            const { c, bonus: kind, newlyClaimed } = catchCreature(run, this.enemies[i - 1])!;
             const where = run.team.includes(c) ? 'team' : 'bench';
             const bonus =
               kind === 'species'
                 ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.`
                 : kind === 'type'
-                  ? `\n\n★ Type bonus! It arrives prestiged. ${creatureTypes(c)[0] === creatureTypes(c)[1] ? creatureTypes(c)[0] : creatureTypes(c).join(' and ')} catches won't earn it again this run.`
+                  ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
                   : '';
             showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}`, () => this.toMap());
           }
