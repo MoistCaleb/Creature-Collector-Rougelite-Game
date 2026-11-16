@@ -7,10 +7,17 @@ import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
+import { createCreature, stats } from '../logic/creature';
+import { cry } from '../ui/cries';
+import { icon } from '../ui/icons';
 
 type Tab = 'creatures' | 'moves' | 'elements';
 /** Content starts below the header, tabs and the jump-to-element bar. */
 const TOP = 196;
+/** Creature rows: collapsed, and expanded into a big card. */
+const ROW_H = 124;
+const CARD_H = 478;
+const STAGE_LABEL = ['Base form', 'First evolution', 'Final form'];
 
 export class DexScene extends Phaser.Scene {
   private from = 'Title';
@@ -23,6 +30,8 @@ export class DexScene extends Phaser.Scene {
   /** Every row of the current tab: where it sits and how to draw it. Only rows near the screen exist. */
   private rows: { y: number; h: number; build: (c: Phaser.GameObjects.Container) => void }[] = [];
   private live = new Map<number, Phaser.GameObjects.Container>();
+  /** The creature row shown as a big card, if any. */
+  private expanded: number | null = null;
 
   constructor() {
     super('Dex');
@@ -31,6 +40,7 @@ export class DexScene extends Phaser.Scene {
   init(data: { from?: string; tab?: Tab }) {
     this.from = data.from ?? this.from;
     this.tab = data.tab ?? 'creatures';
+    this.expanded = null;
   }
 
   create() {
@@ -49,8 +59,8 @@ export class DexScene extends Phaser.Scene {
     else this.drawElements();
     this.refreshRows();
 
-    // Header drawn last so it sits on top.
-    this.add.rectangle(0, 0, W, TOP, COLORS.bg).setOrigin(0);
+    // Header drawn last so it sits on top (and catches taps meant for it, not rows scrolled under it).
+    this.add.rectangle(0, 0, W, TOP, COLORS.bg).setOrigin(0).setInteractive();
     text(this, 16, 14, 'Creature Dex', 24, '#ffc94d', { fontStyle: 'bold' });
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
     const totalForms = SPECIES.length * 3;
@@ -144,20 +154,86 @@ export class DexScene extends Phaser.Scene {
   }
 
   private drawCreatures() {
-    const rowH = 124;
+    this.rows = [];
+    this.anchors = {};
+    let y = 8;
     SPECIES.forEach((sp, i) => {
-      const y = i * rowH + 8;
-      this.addRow(y, rowH, (row) => this.drawCreatureRow(row, sp, i, y, rowH));
-      for (const el of new Set(sp.types)) this.anchor(el, y);
+      const h = this.expanded === i ? CARD_H : ROW_H;
+      const yy = y;
+      this.addRow(yy, h, (row) => (this.expanded === i ? this.drawCreatureCard(row, sp, i, yy, h) : this.drawCreatureRow(row, sp, i, yy, h)));
+      for (const el of new Set(sp.types)) this.anchor(el, yy);
+      y += h;
     });
-    this.contentH = SPECIES.length * rowH + 16;
+    this.contentH = y + 8;
+  }
+
+  /** Tap a creature to open it as a big card (tap again to close). Keeps the row where it was on screen. */
+  private toggle(i: number) {
+    if (this.scroller.moved) return;
+    const screenY = this.content.y + this.rows[i].y;
+    this.expanded = this.expanded === i ? null : i;
+    for (const c of this.live.values()) c.destroy();
+    this.live.clear();
+    this.drawCreatures();
+    const min = Math.min(TOP, H - this.contentH - 20);
+    this.content.y = Phaser.Math.Clamp(screenY - this.rows[i].y, min, TOP);
+    // An opened card should be fully visible if it fits.
+    if (this.expanded === i) {
+      const bottom = this.content.y + this.rows[i].y + CARD_H;
+      if (bottom > H - 10) this.content.y = Phaser.Math.Clamp(this.content.y - (bottom - (H - 10)), min, TOP);
+    }
+    this.refreshRows();
+  }
+
+  /** Row background that opens/closes the card when tapped (but not when dragged). */
+  private tapArea(row: Phaser.GameObjects.Container, y: number, h: number, i: number, enabled: boolean) {
+    const bg = this.add.rectangle(12, y, W - 24, h - 8, COLORS.panel).setOrigin(0).setStrokeStyle(1, this.expanded === i ? COLORS.accent : COLORS.stroke);
+    if (enabled) bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.toggle(i));
+    row.add(bg);
+  }
+
+  /** An opened creature: every form large, with its stats at Lv 50 and its cry. */
+  private drawCreatureCard(row: Phaser.GameObjects.Container, sp: (typeof SPECIES)[number], i: number, y: number, h: number) {
+    const dex = state.meta.dex;
+    this.tapArea(row, y, h, i, true);
+    row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
+    const t = sp.types;
+    (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
+    if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 8, '● Caught', 12, '#8fe08a').setOrigin(1, 0));
+    for (let s = 0; s < 3; s++) {
+      const sy = y + 38 + s * 136;
+      const seen = hasSeenForm(dex, sp.id, s);
+      row.add(this.add.rectangle(24, sy, 112, 124, 0x15111f).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+      if (seen) {
+        row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s)).setScale(3.4 * SPRITE_FIT));
+        const c = createCreature(sp.id, 50, s);
+        const st = stats(c);
+        row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
+        row.add(text(this, 150, sy + 34, STAGE_LABEL[s], 12, '#8e86ad'));
+        row.add(text(this, 150, sy + 54, `At Lv 50:\nHP ${st.hp}   ATK ${st.atk}\nDEF ${st.def}   SPD ${st.spd}`, 13, COLORS.textDim, { lineSpacing: 2 }));
+        row.add(button(this, W - 70, sy + 18, 80, 30, 'Cry', () => cry(sp.id, s), { fontSize: 13, glyph: 'sound', color: 0x2f4a6b }));
+      } else {
+        row.add(text(this, 80, sy + 62, '?', 40, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
+        row.add(text(this, 150, sy + 6, '???', 20, '#4a4068', { fontStyle: 'bold' }));
+        row.add(text(this, 150, sy + 34, `${STAGE_LABEL[s]} · not yet seen`, 12, '#4a4068'));
+      }
+      if (s < 2) row.add(icon(this, 80, sy + 130, 'arrowUp', 12).setAngle(180).setAlpha(0.5));
+    }
+    const sig = MOVES[sp.signature];
+    const seenSig = dex.moves.includes(sig.id);
+    row.add(
+      text(this, 22, y + h - 32, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)}` : 'Signature: ???', 12, seenSig ? '#ffc94d' : '#4a4068', {
+        wordWrap: { width: W - 50 },
+      }),
+    );
   }
 
   private drawCreatureRow(row: Phaser.GameObjects.Container, sp: (typeof SPECIES)[number], i: number, y: number, rowH: number) {
     const dex = state.meta.dex;
     {
       const anySeen = [0, 1, 2].some((s) => hasSeenForm(dex, sp.id, s));
-      row.add(this.add.rectangle(12, y, W - 24, rowH - 8, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+      this.tapArea(row, y, rowH, i, anySeen);
+      if (anySeen) row.add(icon(this, W - 30, y + rowH - 22, 'arrowUp', 12).setAngle(180).setAlpha(0.45));
       row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
       if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
       if (anySeen) {

@@ -74,7 +74,7 @@ function sparks(scene: Phaser.Scene, x: number, ground: number, color: number, d
 }
 
 /** Release a creature from a hexagon. The sprite should already show the creature at its home spot. */
-export async function releaseFromHex(scene: Phaser.Scene, s: Phaser.GameObjects.Image, color: number) {
+export async function releaseFromHex(scene: Phaser.Scene, s: Phaser.GameObjects.Image, color: number, onAppear?: () => void) {
   const home: Home = { x: s.x, y: s.y, scale: s.scale };
   const ground = groundOf(s, home);
   const depth = s.depth;
@@ -88,6 +88,7 @@ export async function releaseFromHex(scene: Phaser.Scene, s: Phaser.GameObjects.
   sparks(scene, home.x, ground - 8, color, depth);
   // The creature forms inside the light, growing up out of the hexagon.
   s.setVisible(true).setAlpha(1).setScale(home.scale * 0.15).setPosition(home.x, ground - 10).setTintFill(0xffffff);
+  onAppear?.();
   await tween(scene, { targets: s, scale: home.scale, y: home.y, duration: 280, ease: 'Back.easeOut' });
   s.clearTint();
   scene.cameras.main.flash(90, 255, 255, 255, true);
@@ -119,8 +120,9 @@ export async function recallToHex(scene: Phaser.Scene, s: Phaser.GameObjects.Ima
 // ------------------------------------------------------------ wild creatures
 
 /** The creature springs up from its feet: origin at the bottom, growing taller with a bounce. */
-async function sprout(scene: Phaser.Scene, s: Phaser.GameObjects.Image, home: Home, ground: number, ms: number) {
+async function sprout(scene: Phaser.Scene, s: Phaser.GameObjects.Image, home: Home, ground: number, ms: number, onAppear?: () => void) {
   s.setVisible(true).setAlpha(1).setOrigin(0.5, 1).setPosition(home.x, ground).setScale(home.scale * 0.8, 0.01);
+  onAppear?.();
   await tween(scene, { targets: s, scaleY: home.scale, scaleX: home.scale, duration: ms, ease: 'Back.easeOut' });
   // Back to a centered origin at the same visual spot.
   s.setOrigin(0.5, 0.5).setPosition(home.x, home.y);
@@ -228,7 +230,7 @@ const LOOKS: Record<Element, Look> = {
 };
 
 /** A wild creature bursts out of something that matches its main element. */
-export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Image, el: Element) {
+export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Image, el: Element, onAppear?: () => void) {
   const home: Home = { x: s.x, y: s.y, scale: s.scale };
   const ground = groundOf(s, home);
   const front = s.depth;
@@ -242,7 +244,7 @@ export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Imag
     else await tween(scene, { targets: c, x: home.x + 5, yoyo: true, repeat: 2, duration: 70 });
     sfx[look.sound]();
     debris(scene, home.x, ground, look.bits, 14, front, [3, 6], 90, el === 'Fire');
-    await sprout(scene, s, home, ground, 320);
+    await sprout(scene, s, home, ground, 320, onAppear);
     await tween(scene, { targets: c, alpha: 0, y: ground + 14, scaleY: el === 'Fire' ? 0.2 : 1, duration: 350 });
     c.destroy();
     return;
@@ -261,7 +263,7 @@ export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Imag
         .then(() => r.destroy());
     });
     debris(scene, home.x, ground, look.bits, 12, front, [3, 7]);
-    await sprout(scene, s, home, ground, 300);
+    await sprout(scene, s, home, ground, 300, onAppear);
     return;
   }
 
@@ -286,7 +288,7 @@ export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Imag
       const splash = scene.add.ellipse(home.x, ground, 120, 34, look.colors[1], 0.7).setDepth(front);
       void tween(scene, { targets: splash, scaleY: 0.2, alpha: 0, duration: 420 }).then(() => splash.destroy());
     }
-    await sprout(scene, s, home, ground, 340);
+    await sprout(scene, s, home, ground, 340, onAppear);
     await tween(scene, { targets: pool, alpha: 0, scaleX: 1.2, duration: 380 });
     pool.destroy();
     return;
@@ -308,7 +310,7 @@ export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Imag
     sfx.rocks();
     scene.cameras.main.flash(120, 255, 240, 160, true);
     debris(scene, home.x, ground, look.bits, 12, front, [2, 4], 80, true);
-    await sprout(scene, s, home, ground, 240);
+    await sprout(scene, s, home, ground, 240, onAppear);
     void tween(scene, { targets: [bolt, cloud], alpha: 0, duration: 300 }).then(() => {
       bolt.destroy();
       cloud.destroy();
@@ -327,7 +329,7 @@ export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Imag
     sfx.release();
     await tween(scene, { targets: rays, scale: 1, angle: 30, duration: 260, ease: 'Quad.easeOut' });
     debris(scene, home.x, ground, look.bits, 12, front, [2, 5], 90, true);
-    await sprout(scene, s, home, ground, 280);
+    await sprout(scene, s, home, ground, 280, onAppear);
     await tween(scene, { targets: rays, alpha: 0, scale: 1.3, angle: 60, duration: 300 });
     rays.destroy();
     return;
@@ -343,5 +345,6 @@ export async function emergeFrom(scene: Phaser.Scene, s: Phaser.GameObjects.Imag
   await tween(scene, { targets: wisps, x: home.x, y: home.y, scale: 0.3, duration: 420, ease: 'Sine.easeIn' });
   wisps.forEach((w) => w.destroy());
   s.setVisible(true).setAlpha(0).setScale(home.scale * 1.15).setPosition(home.x, home.y);
+  onAppear?.();
   await tween(scene, { targets: s, alpha: 1, scale: home.scale, duration: 320, ease: 'Sine.easeOut' });
 }
