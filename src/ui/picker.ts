@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Creature } from '../logic/creature';
-import { button, COLORS, creatureRow, H, text, W } from './widgets';
+import { button, COLORS, creatureRow, creatureSprite, H, text, W } from './widgets';
 
 export interface PickOption {
   label?: string;
@@ -9,11 +9,20 @@ export interface PickOption {
   note?: string;
   disabled?: boolean;
   color?: number;
+  /** Creature sprite shown at the left of a plain option. */
+  icon?: Creature;
+}
+
+/** A read-only line with a creature sprite, listed above the options. */
+export interface PickRow {
+  creature: Creature;
+  text: string;
 }
 
 export interface PickConfig {
   title: string;
   subtitle?: string;
+  rows?: PickRow[];
   options: PickOption[];
   onPick: (index: number) => void;
   cancelLabel?: string;
@@ -29,7 +38,9 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   const close = () => root.destroy();
 
   const rowH = cfg.options.some((o) => o.creature) ? 72 : 76;
-  const listH = cfg.options.length * rowH;
+  const infoRowH = 48;
+  const infoH = (cfg.rows?.length ?? 0) * infoRowH + (cfg.rows?.length ? 10 : 0);
+  const listH = cfg.options.length * rowH + infoH;
   const title = text(scene, W / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
   const sub = cfg.subtitle
     ? text(scene, W / 2, 0, cfg.subtitle, 15, COLORS.text, { align: 'center', wordWrap: { width: W - 70 }, lineSpacing: 4 }).setOrigin(0.5, 0)
@@ -48,6 +59,13 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   }
 
   let y = top + headerH;
+  for (const r of cfg.rows ?? []) {
+    root.add(scene.add.rectangle(30, y, W - 60, infoRowH - 6, COLORS.panelLight).setOrigin(0));
+    root.add(creatureSprite(scene, 58, y + (infoRowH - 6) / 2 - 7, r.creature, 1.3));
+    root.add(text(scene, 88, y + (infoRowH - 6) / 2, r.text, 15, COLORS.text, { wordWrap: { width: W - 130 } }).setOrigin(0, 0.5));
+    y += infoRowH;
+  }
+  if (cfg.rows?.length) y += 10;
   cfg.options.forEach((o, i) => {
     const pick = () => {
       close();
@@ -68,6 +86,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
           enabled: !o.disabled,
           color: o.color,
           fontSize: 17,
+          icon: o.icon,
         }),
       );
     }

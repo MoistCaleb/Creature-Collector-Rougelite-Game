@@ -37,6 +37,8 @@ export interface ButtonOpts {
   fontSize?: number;
   sub?: string;
   textColor?: string;
+  /** A creature sprite drawn at the left edge; text shifts right to make room. */
+  icon?: Creature;
 }
 
 export function button(
@@ -53,12 +55,15 @@ export function button(
   const color = opts.color ?? COLORS.panelLight;
   const c = scene.add.container(x, y);
   const bg = scene.add.rectangle(0, 0, w, h, color).setStrokeStyle(2, enabled ? 0xffffff : COLORS.stroke, enabled ? 0.35 : 0.6);
-  const t = text(scene, 0, opts.sub ? -9 : 0, label, opts.fontSize ?? 18, opts.textColor ?? COLORS.text, {
+  const iconW = opts.icon ? 64 : 0;
+  const tx = iconW / 2;
+  const t = text(scene, tx, opts.sub ? -9 : 0, label, opts.fontSize ?? 18, opts.textColor ?? COLORS.text, {
     align: 'center',
-    wordWrap: { width: w - 12 },
+    wordWrap: { width: w - 12 - iconW },
   }).setOrigin(0.5);
   c.add([bg, t]);
-  if (opts.sub) c.add(text(scene, 0, 12, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5));
+  if (opts.icon) c.add(creatureSprite(scene, -w / 2 + 32, -8, opts.icon, 1.6));
+  if (opts.sub) c.add(text(scene, tx, 12, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 - iconW } }).setOrigin(0.5));
   c.setSize(w, h);
   if (!enabled) c.setAlpha(0.45);
   else {

@@ -375,12 +375,15 @@ export class MapScene extends Phaser.Scene {
     const top = highestLevel(run);
     const behind = allCreatures(run).filter((c) => c.level < top - gap && c.level < levelCap(c));
     const report = (title: string, rows: { c: Creature; before: number }[]) =>
-      showMessage(
-        this,
+      openPicker(this, {
         title,
-        rows.map(({ c, before }) => `${creatureName(c)}: ${c.level > before ? `Lv ${before} → ${c.level}` : 'at level cap'}`).join('\n'),
-        this.done,
-      );
+        rows: rows.map(({ c, before }) => ({
+          creature: c,
+          text: `${creatureName(c)}: ${c.level > before ? `Lv ${before} → ${c.level}` : 'at level cap'}`,
+        })),
+        options: [{ label: 'Continue', color: 0x3b6d4a }],
+        onPick: this.done,
+      });
     openPicker(this, {
       title: 'Training Grounds',
       subtitle: 'How do you want to train?',
@@ -440,6 +443,7 @@ export class MapScene extends Phaser.Scene {
         return {
           label: `${creatureName(c)}: ${d.name}  T${m.tier} → T${m.tier + 1}`,
           sub: tierUpgradeText(d, m.tier + 1),
+          icon: c,
         };
       }),
       onPick: (k) => {
