@@ -58,6 +58,7 @@ export class Battle {
   private playerDamageMult: number;
   private playerStatusMult: number;
   private playerImmune: StatusId[];
+  private reserve: Creature[];
   /** Chance the enemy picks a random move instead of its best one. */
   private enemyRandomness: number;
   /** A floor boss's special rule, if any. */
@@ -87,6 +88,8 @@ export class Battle {
       playerStatusMult?: number;
       /** Statuses the player's creatures can't get (Tempered). */
       playerStatusImmune?: StatusId[];
+      /** The player's bench: not in this battle, but their status timers still run. */
+      reserve?: Creature[];
     } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
@@ -99,6 +102,7 @@ export class Battle {
     if (opts.synergy) for (const x of this.player) x.syn = opts.synergy;
     this.playerStatusMult = opts.playerStatusMult ?? 1;
     this.playerImmune = opts.playerStatusImmune ?? [];
+    this.reserve = opts.reserve ?? [];
     this.enemy = enemyTeam.map(fresh);
     if (opts.enemySynergy) for (const x of this.enemy) x.syn = opts.enemySynergy;
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
@@ -644,6 +648,27 @@ export class Battle {
       }
       // Burn, poison and paralysis wear off with time (the others count down when it tries to act).
       if ((x.status === 'burn' || x.status === 'poison' || x.status === 'para') && --x.statusTurns <= 0) this.cure(x, side, ev);
+    }
+    this.sidelines(ev);
+  }
+
+  /**
+   * Your creatures that aren't fighting keep suffering their status: burn and poison still hurt
+   * (never below 1 HP off the field) and every timer keeps counting down.
+   */
+  private sidelines(ev: BattleEvent[]) {
+    const waiting = [...this.player.filter((x) => x !== this.p).map((x) => x.c), ...this.reserve];
+    for (const c of waiting) {
+      if (!isAlive(c) || !c.status) continue;
+      const id = c.status.id;
+      if (id === 'burn' || id === 'poison') {
+        const max = stats(c).hp;
+        c.hp = Math.max(1, c.hp - Math.max(1, Math.floor(max / (id === 'burn' ? 12 : 8))));
+      }
+      if (--c.status.turns <= 0) {
+        c.status = undefined;
+        ev.push({ kind: 'text', text: `On the sidelines, ${creatureName(c)} ${STATUS[id].ends}.` });
+      }
     }
   }
 

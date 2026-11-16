@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
-import { emergeFrom, recallToHex, releaseFromHex, terrainFor } from '../ui/entrance';
+import { emergeFrom, recallToHex, releaseFromHex } from '../ui/entrance';
 import { SYNERGY_LABEL, synergyMults, teamSynergy } from '../logic/synergy';
 import { ensureIcon, icon } from '../ui/icons';
 import { STATUS, type StatusId } from '../data/status';
@@ -123,6 +123,7 @@ export class BattleScene extends Phaser.Scene {
       enemySynergy: boss ? synergyMults(this.enemies) : undefined,
       playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
       playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
+      reserve: run.bench,
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -222,7 +223,7 @@ export class BattleScene extends Phaser.Scene {
   private enterEnemy() {
     const c = this.battle.e.c;
     const el = creatureTypes(c)[0];
-    if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, terrainFor(el));
+    if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, el);
     return releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el]);
   }
 
