@@ -19,7 +19,8 @@ import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
 import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotName, unusableReason, type ShopSlot } from '../logic/shop';
+import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
+import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
@@ -110,7 +111,7 @@ export class MapScene extends Phaser.Scene {
         isCurrent || canGo ? 1 : 0.5,
       );
       const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
-      const icon = text(this, p.x, p.y - (pointy ? 6 : 8), info.icon, iconSize, '#ffffff').setOrigin(0.5);
+      const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
       const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? BOSSES[map.biome].name : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
       if (!canGo && !isCurrent) {
@@ -197,12 +198,21 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
-    text(this, 14, 38, `${run.map.biome} lands${run.heat ? `  🔥${run.heat}` : ''}${run.daily ? '  📅' : ''}`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
+    const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
+    // Heat and daily markers after the land name.
+    let mx = 14 + biome.width + 12;
+    if (run.heat) {
+      pixelIcon(this, mx, 46, 'flame', 16);
+      const t = text(this, mx + 10, 38, String(run.heat), 14, '#ff8a3a', { fontStyle: 'bold' });
+      mx += 22 + t.width;
+    }
+    if (run.daily) pixelIcon(this, mx, 46, 'calendar', 16);
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     text(this, 150, 36, `◆ ${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, COLORS.textDim);
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
-      text(this, 14, 60, steps === 1 ? 'Boss is next' : `☠ Boss in ${steps} steps`, 12, '#c9a3dd');
+      pixelIcon(this, 21, 67, 'skull', 14);
+      text(this, 32, 60, steps === 1 ? 'Boss is next' : `Boss in ${steps} steps`, 12, '#c9a3dd');
     }
     muteButton(this, W - 192, TOP_BAR / 2, 36);
     button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
@@ -294,8 +304,8 @@ export class MapScene extends Phaser.Scene {
       title: 'Treasure',
       subtitle: 'The chest holds two things. You can only carry one.',
       options: [
-        { label: `◉ ${offer.coins} coins`, color: 0x6b5a1c },
-        { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c },
+        { label: `${offer.coins} coins`, color: 0x6b5a1c, glyph: 'coin' },
+        { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c, glyph: slotGlyph(slot) },
       ],
       onPick: (i) => {
         if (i === 0) {
@@ -548,6 +558,7 @@ export class MapScene extends Phaser.Scene {
             sub: reason ?? (poor ? `${slotDesc(sl)} · not enough coins` : slotDesc(sl)),
             disabled: sl.sold || !!reason || poor,
             color: 0x4a3a1c,
+            glyph: slotGlyph(sl),
           };
         }),
         { label: `Reroll stock   ◉ ${reroll}`, sub: 'New items, same shop', disabled: !canAfford(run, reroll) },

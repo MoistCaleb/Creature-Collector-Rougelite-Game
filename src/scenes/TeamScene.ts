@@ -28,7 +28,7 @@ export class TeamScene extends Phaser.Scene {
     const run = state.run!;
     background(this);
     text(this, 16, 14, 'Your Creatures', 24, '#ffc94d', { fontStyle: 'bold' });
-    button(this, W - 60, 30, 100, 42, 'Map ▶', () => this.scene.start('Map'), { color: 0x3b6d4a, fontSize: 17 });
+    button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map'), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
     const hint = dexComplete(run)
       ? `★ Type bonus left: ${unclaimedTypes(run).join(', ') || 'none'}`
       : 'Tap one creature, then another to swap them.';
@@ -104,9 +104,9 @@ export class TeamScene extends Phaser.Scene {
       y0 + 126,
       196,
       32,
-      c.held ? heldName(c.held) : bag.length ? `🎒 Give item (${bag.length})` : '🎒 No items',
+      c.held ? heldName(c.held) : bag.length ? `Give item (${bag.length})` : 'No items',
       () => this.itemPicker(c),
-      { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a },
+      { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a, glyph: c.held ? HELD[c.held].icon : 'bag' },
     );
 
     const by = y0 + 168;
@@ -177,13 +177,13 @@ export class TeamScene extends Phaser.Scene {
       by,
       100,
       36,
-      `✚ Potion ${potions}`,
+      `Potion ${potions}`,
       () => {
         usePotion(run, c);
         persist();
         this.scene.restart({ selected: this.selected });
       },
-      { enabled: potions > 0 && c.hp < s.hp, fontSize: 14, color: 0x2f5a4a },
+      { enabled: potions > 0 && c.hp < s.hp, fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
     );
     if (!stoneOk && run.evoStones > 0 && canEvolve(c))
       text(this, 18, y0 + 136, 'Reach the level cap to use a stone.', 11, '#ffc94d');
@@ -204,8 +204,9 @@ export class TeamScene extends Phaser.Scene {
           label: `${heldName(id)}${count(id) > 1 ? ` ×${count(id)}` : ''}`,
           sub: HELD[id].desc,
           color: 0x2f4a6b,
+          glyph: HELD[id].icon,
         })),
-        ...(c.held ? [{ label: 'Take it off', sub: 'Put it back in the bag', color: 0x3a3450 }] : []),
+        ...(c.held ? [{ label: 'Take it off', sub: 'Put it back in the bag', color: 0x3a3450, glyph: 'bag' as const }] : []),
       ],
       onPick: (i) => {
         if (i < bag.length) equipHeld(run, c, bag[i]);

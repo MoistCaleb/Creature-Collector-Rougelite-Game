@@ -44,6 +44,13 @@ export function slotName(slot: { item: ItemId; held?: HeldId }): string {
   return slot.item === 'held' && slot.held ? heldName(slot.held) : ITEMS[slot.item].name;
 }
 
+/** Pixel icon for a slot, if it has one. */
+export function slotGlyph(slot: { item: ItemId; held?: HeldId }): import('../ui/icons').IconId | undefined {
+  if (slot.item === 'held' && slot.held) return HELD[slot.held].icon;
+  const map: Partial<Record<ItemId, import('../ui/icons').IconId>> = { potion: 'potion', restore: 'cross', stone: 'gem', sigil: 'star', manual: 'arrowUp', scroll: 'sparkle' };
+  return map[slot.item];
+}
+
 /** Description of a slot. */
 export function slotDesc(slot: { item: ItemId; held?: HeldId }): string {
   return slot.item === 'held' && slot.held ? `${HELD[slot.held].desc} · equip from the Team screen` : ITEMS[slot.item].desc;

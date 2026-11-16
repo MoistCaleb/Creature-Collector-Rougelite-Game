@@ -13,6 +13,8 @@ export interface PickOption {
   icon?: Creature;
   /** Small gold tag on the option, e.g. "RECOMMENDED". */
   badge?: string;
+  /** Pixel icon next to the label. */
+  glyph?: import('./icons').IconId;
 }
 
 /** A read-only line with a creature sprite, listed above the options. */
@@ -43,16 +45,25 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
 
   const close = () => root.destroy();
 
-  const rowH = cfg.rowHeight ?? (cfg.options.some((o) => o.creature) ? 72 : 76);
   const rowHeight = (r: PickRow) => (r.big ? 84 : 48);
   const infoH = (cfg.rows ?? []).reduce((h, r) => h + rowHeight(r), 0) + (cfg.rows?.length ? 10 : 0);
-  const listH = cfg.options.length * rowH + infoH;
   const title = text(scene, W / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
   const sub = cfg.subtitle
     ? text(scene, W / 2, 0, cfg.subtitle, 15, COLORS.text, { align: 'center', wordWrap: { width: W - 70 }, lineSpacing: 4 }).setOrigin(0.5, 0)
     : null;
   const headerH = 18 + title.height + 12 + (sub ? sub.height + 18 : 0);
-  const footerH = cfg.onCancel ? 70 : 10;
+
+  // Long lists: shrink rows a little, then split into pages.
+  const n = cfg.options.length;
+  const hasCreatures = cfg.options.some((o) => o.creature);
+  let rowH = cfg.rowHeight ?? (hasCreatures ? 72 : 76);
+  const room = (footer: number) => H - 40 - headerH - infoH - footer - 10;
+  if (!cfg.rowHeight && !hasCreatures && n * rowH > room(cfg.onCancel ? 70 : 10)) rowH = Math.max(60, Math.floor(room(70) / n));
+  const paged = n * rowH > room(cfg.onCancel ? 70 : 10);
+  const footerH = cfg.onCancel || paged ? 70 : 10;
+  const perPage = paged ? Math.max(1, Math.floor(room(footerH) / rowH)) : n;
+  const pages = Math.ceil(n / perPage);
+  const listH = Math.min(n, perPage) * rowH + infoH;
   const panelH = Math.min(H - 40, headerH + listH + footerH + 10);
   const top = Math.max(20, (H - panelH) / 2);
 
@@ -75,37 +86,55 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
     y += rowHeight(r);
   }
   if (cfg.rows?.length) y += 10;
-  cfg.options.forEach((o, i) => {
-    const pick = () => {
-      close();
-      cfg.onPick(i);
-    };
-    if (o.creature) {
-      root.add(
-        creatureRow(scene, 30, y, W - 60, o.creature, {
-          onClick: o.disabled ? undefined : pick,
-          dim: o.disabled,
-          note: o.note,
-        }),
-      );
-    } else {
-      root.add(
-        button(scene, W / 2, y + (rowH - 8) / 2, W - 60, rowH - 10, o.label ?? '', pick, {
-          sub: o.sub,
-          enabled: !o.disabled,
-          color: o.color,
-          fontSize: rowH < 70 ? 15 : 17,
-          icon: o.icon,
-          badge: o.badge,
-        }),
-      );
-    }
-    y += rowH;
-  });
+  const listTop = y;
+  const list = scene.add.container(0, 0);
+  root.add(list);
 
+  let page = 0;
+  const pageLabel = paged ? text(scene, W / 2, top + panelH - 76, '', 12, COLORS.textDim).setOrigin(0.5) : null;
+  if (pageLabel) root.add(pageLabel);
+  const drawPage = () => {
+    list.removeAll(true);
+    let yy = listTop;
+    for (let i = page * perPage; i < Math.min(n, (page + 1) * perPage); i++) {
+      const o = cfg.options[i];
+      const pick = () => {
+        close();
+        cfg.onPick(i);
+      };
+      if (o.creature) {
+        list.add(creatureRow(scene, 30, yy, W - 60, o.creature, { onClick: o.disabled ? undefined : pick, dim: o.disabled, note: o.note }));
+      } else {
+        list.add(
+          button(scene, W / 2, yy + (rowH - 8) / 2, W - 60, rowH - 10, o.label ?? '', pick, {
+            sub: o.sub,
+            enabled: !o.disabled,
+            color: o.color,
+            fontSize: rowH < 70 ? 15 : 17,
+            icon: o.icon,
+            badge: o.badge,
+            glyph: o.glyph,
+          }),
+        );
+      }
+      yy += rowH;
+    }
+    pageLabel?.setText(`Page ${page + 1} of ${pages}`);
+  };
+  drawPage();
+
+  const fy = top + panelH - 40;
+  if (paged) {
+    const turn = (d: number) => {
+      page = (page + d + pages) % pages;
+      drawPage();
+    };
+    root.add(button(scene, 66, fy, 76, 46, '', () => turn(-1), { glyph: 'back', fontSize: 16 }));
+    root.add(button(scene, W - 66, fy, 76, 46, '', () => turn(1), { glyph: 'play', fontSize: 16 }));
+  }
   if (cfg.onCancel) {
     root.add(
-      button(scene, W / 2, top + panelH - 40, 200, 46, cfg.cancelLabel ?? 'Cancel', () => {
+      button(scene, W / 2, fy, paged ? 180 : 200, 46, cfg.cancelLabel ?? 'Cancel', () => {
         close();
         cfg.onCancel!();
       }),

@@ -728,7 +728,7 @@ export function clearFloor(run: Run): boolean {
     const heat = run.heat ?? 0;
     if (heat >= (meta.heatUnlocked ?? 0) && heat < MAX_HEAT) {
       meta.heatUnlocked = heat + 1;
-      run.unlockedThisRun.push(`🔥 Heat ${heat + 1}`);
+      run.unlockedThisRun.push(`Heat ${heat + 1}`);
     }
     for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);

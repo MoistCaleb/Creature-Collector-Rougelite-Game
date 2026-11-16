@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
+import { ensureIcon, icon } from '../ui/icons';
 import { STATUS, type StatusId } from '../data/status';
 import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
@@ -60,6 +61,8 @@ interface SidePanel {
   bar: HpBar;
   /** Status tag (BRN, PSN...) at the top right. */
   status: Phaser.GameObjects.Container;
+  /** Held item icon, just after the name. */
+  held: Phaser.GameObjects.Image;
 }
 
 const ENEMY_POS = { x: 320, y: 200 };
@@ -131,7 +134,8 @@ export class BattleScene extends Phaser.Scene {
     if (boss) {
       // The boss's rule stays on screen for the whole fight.
       this.add.rectangle(16, 96, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
-      text(this, 24, 101, `☠ ${boss.ruleName}`, 13, '#ff8a7a', { fontStyle: 'bold' });
+      icon(this, 32, 109, 'skull', 15);
+      text(this, 44, 101, boss.ruleName, 13, '#ff8a7a', { fontStyle: 'bold' });
       text(this, 24, 119, boss.ruleDesc, 10, COLORS.text, { wordWrap: { width: 200 } });
     } else if (this.kind === 'elite') {
       text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' });
@@ -174,7 +178,7 @@ export class BattleScene extends Phaser.Scene {
     } else if (boss) {
       openPicker(this, {
         title: `${boss.name}, ${boss.title}`,
-        subtitle: `"${boss.quote}"\n\n☠ ${boss.ruleName}\n${boss.ruleDesc}`,
+        subtitle: `"${boss.quote}"\n\n${boss.ruleName}\n${boss.ruleDesc}`,
         options: [{ label: 'Fight!', color: 0x8a2c2c }],
         onPick: begin,
       });
@@ -190,8 +194,9 @@ export class BattleScene extends Phaser.Scene {
     const chips = this.add.container(12, 40);
     const bar = new HpBar(this, 140, 40, 118, 10, true);
     const status = this.add.container(262, 9);
-    root.add([name, chips, ...bar.objects(), status]);
-    return { root, name, chips, bar, status };
+    const held = icon(this, 0, 18, 'bag', 18).setVisible(false);
+    root.add([name, chips, ...bar.objects(), status, held]);
+    return { root, name, chips, bar, status, held };
   }
 
   private setStatus(p: SidePanel, id: StatusId | null) {
@@ -204,7 +209,9 @@ export class BattleScene extends Phaser.Scene {
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
     this.setStatus(p, null);
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}${c.held ? ` ${HELD[c.held].icon}` : ''}`);
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.held.setVisible(!!c.held);
+    if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.width + 12);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
@@ -280,8 +287,9 @@ export class BattleScene extends Phaser.Scene {
     const potions = state.run!.potions ?? 0;
     const hurt = this.battle.player.some((x) => isAlive(x.c) && x.c.hp < stats(x.c).hp);
     this.actions.add(
-      button(this, W / 2 + 56, 768, 106, 44, `✚ Potion ${potions}`, () => this.openPotion(), {
+      button(this, W / 2 + 56, 768, 106, 44, `Potion ${potions}`, () => this.openPotion(), {
         enabled: potions > 0 && hurt,
+        glyph: 'potion',
         fontSize: 15,
         color: 0x2f5a4a,
       }),
@@ -293,21 +301,21 @@ export class BattleScene extends Phaser.Scene {
     this.controls.removeAll(true);
     const auto = prefs.autoBattle;
     this.controls.add(
-      button(this, 62, 768, 100, 44, auto ? '▶ Auto ON' : '▶ Auto', () => {
+      button(this, 62, 768, 100, 44, auto ? 'Auto ON' : 'Auto', () => {
         prefs.autoBattle = !prefs.autoBattle;
         this.drawControls();
         if (prefs.autoBattle) this.maybeAuto();
         else this.cancelAuto();
-      }, { fontSize: 15, color: auto ? 0x3b6d4a : undefined }),
+      }, { fontSize: 15, color: auto ? 0x3b6d4a : undefined, glyph: 'play' }),
     );
     const speed = prefs.battleSpeed;
     this.controls.add(
-      button(this, W - 62, 768, 100, 44, `⏩ ${speed}×`, () => {
+      button(this, W - 62, 768, 100, 44, `${speed}×`, () => {
         const i = BATTLE_SPEEDS.indexOf(speed as (typeof BATTLE_SPEEDS)[number]);
         prefs.battleSpeed = BATTLE_SPEEDS[(i + 1) % BATTLE_SPEEDS.length];
         this.drawControls();
         this.setSpeed();
-      }, { fontSize: 15, color: speed > 1 ? 0x3a4f7a : undefined }),
+      }, { fontSize: 15, color: speed > 1 ? 0x3a4f7a : undefined, glyph: 'fast' }),
     );
   }
 
@@ -633,24 +641,25 @@ export class BattleScene extends Phaser.Scene {
     let chosen = false;
     if (wild) {
       this.actions.add(
-        button(this, W / 2, 652, W - 24, 72, `◈ Catch ${creatureName(wild)}`, () => {
+        button(this, W / 2, 652, W - 24, 72, `Catch ${creatureName(wild)}`, () => {
           if (chosen) return;
           chosen = true;
           this.doCatch(wild, fallen);
         }, {
           color: 0x3a4f7a,
           fontSize: 20,
+          glyph: 'crystal',
           sub: full ? 'Your party is full (release one from the Team screen first)' : `Forfeit the rewards · joins at Lv ${level}${bonusTag}`,
           enabled: !full,
         }),
       );
     }
     this.actions.add(
-      button(this, W / 2, wild ? 738 : 690, W - 24, 72, wild ? '⚔ Continue' : 'Take rewards', () => {
+      button(this, W / 2, wild ? 738 : 690, W - 24, 72, wild ? 'Continue' : 'Take rewards', () => {
         if (chosen) return;
         chosen = true;
         this.finishWild(wild, xp, coins, fallen);
-      }, { color: 0x3b6d4a, fontSize: 20, sub: `${wild ? 'Finish it · ' : ''}+${xp} XP for the team · +${coins} coins` }),
+      }, { color: 0x3b6d4a, fontSize: 20, sub: `${wild ? 'Finish it · ' : ''}+${xp} XP for the team · +${coins} coins`, glyph: wild ? 'swords' : 'coin' }),
     );
   }
 

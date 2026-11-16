@@ -895,3 +895,10 @@ describe('potions', () => {
     expect(unusableReason(run, slot)).toMatch(/full/);
   });
 });
+
+describe('pixel icons', () => {
+  it('every icon grid fits its canvas and uses palette colors', async () => {
+    const { iconProblems } = await import('../src/ui/icons');
+    expect(iconProblems()).toEqual([]);
+  });
+});

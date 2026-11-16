@@ -19,12 +19,12 @@ export class MapSelectScene extends Phaser.Scene {
     const meta = state.meta;
     text(this, W / 2 + 20, 30, 'Choose a map', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2 + 20, 60, `Runs won: ${meta.wins}`, 14, COLORS.textDim).setOrigin(0.5);
-    button(this, 40, 28, 64, 36, '◀', () => this.scene.start('Title'), { fontSize: 15 });
+    button(this, 40, 28, 64, 36, '', () => this.scene.start('Title'), { fontSize: 15, glyph: 'back' });
     // Heat (difficulty) picker, once the first run is won.
     const unlocked = meta.heatUnlocked ?? 0;
     if (unlocked > 0) {
       const heat = Math.min(meta.heat ?? 0, unlocked);
-      button(this, W - 50, 28, 84, 36, `🔥 ${heat}`, () => this.pickHeat(), { fontSize: 16, color: heat > 0 ? 0x7a2a1c : undefined });
+      button(this, W - 50, 28, 84, 36, String(heat), () => this.pickHeat(), { fontSize: 16, color: heat > 0 ? 0x7a2a1c : undefined, glyph: 'flame' });
     }
 
     const cardH = 80;
@@ -62,10 +62,12 @@ export class MapSelectScene extends Phaser.Scene {
     const meta = state.meta;
     const unlocked = meta.heatUnlocked ?? 0;
     openPicker(this, {
-      title: '🔥 Heat',
+      title: 'Heat',
       subtitle: `Each level adds its rule on top of every level below it. Win at your highest Heat to unlock the next.`,
       options: HEAT_LEVELS.map((h, i) => ({
-        label: `${i === (meta.heat ?? 0) ? '▶ ' : ''}${h.name}${i > unlocked ? '  🔒' : ''}`,
+        label: h.name,
+        glyph: i > unlocked ? ('lock' as const) : i > 0 ? ('flame' as const) : undefined,
+        badge: i === (meta.heat ?? 0) ? 'SELECTED' : undefined,
         sub: i > unlocked ? 'Win a run at the Heat below to unlock' : h.desc,
         disabled: i > unlocked,
         color: i === 0 ? 0x2f4a3a : 0x5a2a1c,
