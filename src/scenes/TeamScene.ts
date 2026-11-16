@@ -4,6 +4,7 @@ import { ELEMENT_COLORS, elementTextColor } from '../data/types';
 import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
 import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
+import { cry } from '../ui/cries';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { allCreatures, BENCH_MAX, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
 import { HELD, heldName, type HeldId } from '../data/held';
@@ -139,9 +140,10 @@ export class TeamScene extends Phaser.Scene {
         evolveTracked(run, c);
         dex.creature(c, true);
         const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
-        playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () =>
-          showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected })),
-        );
+        playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
+          cry(c.speciesId, c.stage);
+          showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected }));
+        });
       },
       { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a },
     );

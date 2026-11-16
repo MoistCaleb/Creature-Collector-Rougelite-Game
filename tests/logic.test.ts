@@ -1008,3 +1008,20 @@ describe('statuses off the field', () => {
     expect(benched.status?.turns).toBe(7);
   });
 });
+
+describe('creature cries', () => {
+  it('every form has its own deterministic cry, and evolutions are deeper and longer', async () => {
+    const { voiceFor, voiceLength, faintVoice } = await import('../src/data/cries');
+    const sigs = new Set<string>();
+    for (const sp of SPECIES) {
+      const v0 = voiceFor(sp.id, sp.types, 0);
+      expect(voiceFor(sp.id, sp.types, 0)).toEqual(v0);
+      const v2 = voiceFor(sp.id, sp.types, 2);
+      expect(v2.syllables[0].f[0]).toBeLessThan(v0.syllables[0].f[0]);
+      expect(voiceLength(v2)).toBeGreaterThan(voiceLength(v0));
+      expect(voiceLength(faintVoice(v0))).toBeGreaterThan(voiceLength(v0));
+      sigs.add(JSON.stringify(v0.syllables));
+    }
+    expect(sigs.size).toBe(SPECIES.length);
+  });
+});

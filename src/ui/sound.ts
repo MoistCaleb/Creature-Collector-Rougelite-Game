@@ -1,4 +1,5 @@
 import type { Element } from '../data/types';
+import type { Voice } from '../data/cries';
 
 /**
  * Retro sound: every effect and music loop is synthesized with Web Audio, no files.
@@ -112,6 +113,54 @@ function noise(dur: number, opts: { vol?: number; freq?: number; to?: number; ty
 }
 
 const note = (semi: number, base = 440) => base * Math.pow(2, semi / 12);
+
+/** Sing a creature's voice (see data/cries.ts). */
+export function playVoice(v: Voice) {
+  if (!ctx || muted || !sfxBus) return;
+  let t = ctx.currentTime + 0.02;
+  const filter = ctx.createBiquadFilter();
+  filter.type = v.filter.type;
+  filter.frequency.value = v.filter.freq;
+  filter.Q.value = v.filter.q;
+  const out = ctx.createGain();
+  out.gain.value = v.vol;
+  filter.connect(out).connect(sfxBus);
+  const end = t + v.syllables.reduce((n, s) => n + s.dur + s.gap, 0) + 0.1;
+  for (const syl of v.syllables) {
+    const layers: [number, number][] = [[1, 1]];
+    if (v.harmony) layers.push([1.5, 0.35]);
+    if (v.sub) layers.push([0.5, 0.45]);
+    for (const [mult, gain] of layers) {
+      const o = ctx.createOscillator();
+      o.type = v.wave;
+      const [a, b, c] = syl.f.map((f) => Math.max(30, f * mult));
+      o.frequency.setValueAtTime(a, t);
+      o.frequency.linearRampToValueAtTime(b, t + syl.dur * 0.45);
+      o.frequency.linearRampToValueAtTime(c, t + syl.dur);
+      if (v.vibrato) {
+        const lfo = ctx.createOscillator();
+        const depth = ctx.createGain();
+        lfo.frequency.value = v.vibrato.rate;
+        depth.gain.value = b * v.vibrato.depth;
+        lfo.connect(depth).connect(o.frequency);
+        lfo.start(t);
+        lfo.stop(t + syl.dur + 0.02);
+      }
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.03, syl.dur * 0.25));
+      g.gain.setValueAtTime(gain * 0.8, t + syl.dur * 0.7);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + syl.dur);
+      o.connect(g).connect(filter);
+      o.start(t);
+      o.stop(t + syl.dur + 0.02);
+    }
+    if (v.noise) noise(syl.dur, { type: v.noise.type, freq: v.noise.freq, vol: v.noise.vol, delay: t - ctx.currentTime });
+    t += syl.dur + syl.gap;
+  }
+  // Let the shared filter go once the cry is over.
+  setTimeout(() => out.disconnect(), (end - ctx.currentTime) * 1000 + 200);
+}
 
 // ------------------------------------------------------------ effects
 

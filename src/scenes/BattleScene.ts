@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
+import { cry } from '../ui/cries';
 import { emergeFrom, recallToHex, releaseFromHex } from '../ui/entrance';
 import { SYNERGY_LABEL, synergyMults, teamSynergy } from '../logic/synergy';
 import { ensureIcon, icon } from '../ui/icons';
@@ -223,12 +224,14 @@ export class BattleScene extends Phaser.Scene {
   private enterEnemy() {
     const c = this.battle.e.c;
     const el = creatureTypes(c)[0];
-    if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, el);
-    return releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el]);
+    const voice = () => cry(c.speciesId, c.stage);
+    if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, el, voice);
+    return releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el], voice);
   }
 
   private enterPlayer() {
-    return releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(this.battle.p.c)[0]]);
+    const c = this.battle.p.c;
+    return releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(c)[0]], () => cry(c.speciesId, c.stage));
   }
 
   // ------------------------------------------------------------ panels
@@ -523,6 +526,7 @@ export class BattleScene extends Phaser.Scene {
           const s = this.spriteOf(ev.side);
           const c = ev.side === 'player' ? this.battle.player[ev.index].c : this.battle.enemy[ev.index].c;
           sfx.faint();
+          cry(c.speciesId, c.stage, true);
           s.setTintFill(0xffffff);
           faintFx(this, s, ELEMENT_COLORS[creatureTypes(c)[0]]);
           this.tweens.add({ targets: s, alpha: 0, y: s.y + 40, scaleY: s.scaleY * 0.2, duration: 450, onComplete: () => s.clearTint() });
@@ -738,7 +742,10 @@ export class BattleScene extends Phaser.Scene {
       ENEMY_POS,
       ELEMENT_COLORS[creatureTypes(wild)[0]],
       kind === 'species' || kind === 'type',
-      () => showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}${fallen}`, () => this.toMap()),
+      () => {
+        cry(c.speciesId, c.stage);
+        showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}${fallen}`, () => this.toMap());
+      },
     );
   }
 
@@ -809,9 +816,10 @@ export class BattleScene extends Phaser.Scene {
               evolveTracked(run, c);
               dex.creature(c, true);
               const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
-              playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () =>
-                this.finishFloor(`${from} evolved into ${creatureName(c)}!`),
-              );
+              playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
+                cry(c.speciesId, c.stage);
+                this.finishFloor(`${from} evolved into ${creatureName(c)}!`);
+              });
             },
           });
         } else {
