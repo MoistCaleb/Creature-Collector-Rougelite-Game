@@ -13,7 +13,7 @@ import {
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, maxPotions, BENCH_MAX, highestLevel, prestigeTracked, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, maxPotions, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held';
 
@@ -162,8 +162,9 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       run.evoStones += 1;
       return 'Evolution Stone added. Use it from the Team screen on a creature at its level cap.';
     case 'sigil':
+      const lv = target!.level;
       prestigeTracked(run, target!);
-      return `Prestiged to ${'★'.repeat(target!.stars)}.`;
+      return `Prestiged to ${'★'.repeat(target!.stars)}.${releaseNote(target!, lv)}`;
     case 'held':
       stash(run, slot.held ?? rollHeld(run.rng));
       return 'Added to your bag. Give it to a creature from the Team screen.';

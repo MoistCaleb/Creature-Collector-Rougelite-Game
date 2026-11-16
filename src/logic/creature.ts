@@ -29,6 +29,8 @@ export interface Creature {
   status?: { id: import('../data/status').StatusId; turns: number };
   /** The one item this creature carries. */
   held?: import('../data/held').HeldId;
+  /** XP earned while at the level cap, released when the cap rises (evolve or prestige). */
+  banked?: number;
 }
 
 export type Stats = BaseStats;
@@ -274,17 +276,74 @@ export function addLevels(c: Creature, n: number): number {
   return c.level - before;
 }
 
-/** Adds XP; returns levels gained. */
-export function addXp(c: Creature, amount: number): number {
-  if (c.level >= levelCap(c)) return 0;
-  c.xp += Math.round(amount);
-  let gained = 0;
-  while (c.level < levelCap(c) && c.xp >= xpToNext(c.level)) {
-    c.xp -= xpToNext(c.level);
-    gained += addLevels(c, 1);
+/** How many levels' worth of XP a capped creature can store. */
+export const BANK_LEVELS = 5;
+
+/** The most XP a creature can store at its cap: enough for the next BANK_LEVELS levels. */
+export function bankLimit(c: Pick<Creature, 'stage' | 'stars'>): number {
+  const cap = levelCap(c);
+  let t = 0;
+  for (let l = cap; l < cap + BANK_LEVELS; l++) t += xpToNext(l);
+  return t;
+}
+
+/** Stored XP measured in levels past the current cap (fractional, e.g. 2.4). */
+export function bankedLevels(c: Creature): number {
+  let left = c.banked ?? 0;
+  let n = 0;
+  for (let l = levelCap(c); left > 0; l++) {
+    if (left < xpToNext(l)) return n + left / xpToNext(l);
+    left -= xpToNext(l);
+    n++;
+  }
+  return n;
+}
+
+export interface XpGain {
+  levels: number;
+  /** XP that went into storage because the creature is at its cap. */
+  banked: number;
+  /** XP earned at the cap with the store already full. */
+  overflow: number;
+}
+
+/**
+ * Adds XP. Below the cap it levels up as usual; anything earned at the cap is stored (up to
+ * bankLimit) and whatever doesn't fit is reported as overflow.
+ */
+export function gainXp(c: Creature, amount: number): XpGain {
+  let left = Math.round(amount);
+  let levels = 0;
+  while (left > 0 && c.level < levelCap(c)) {
+    const need = xpToNext(c.level) - c.xp;
+    if (left < need) {
+      c.xp += left;
+      left = 0;
+    } else {
+      left -= need;
+      c.xp = 0;
+      levels += addLevels(c, 1);
+    }
   }
   if (c.level >= levelCap(c)) c.xp = 0;
-  return gained;
+  const room = Math.max(0, bankLimit(c) - (c.banked ?? 0));
+  const banked = Math.min(room, left);
+  if (banked > 0) c.banked = (c.banked ?? 0) + banked;
+  return { levels, banked, overflow: left - banked };
+}
+
+/** Adds XP; returns levels gained. */
+export function addXp(c: Creature, amount: number): number {
+  return gainXp(c, amount).levels;
+}
+
+/** Pour stored XP in after the cap rises. Returns levels gained. */
+export function releaseBanked(c: Creature): number {
+  const stored = c.banked ?? 0;
+  if (!stored) return 0;
+  c.banked = 0;
+  const g = gainXp(c, stored);
+  return g.levels;
 }
 
 export function canEvolve(c: Creature): boolean {
@@ -312,6 +371,7 @@ export function evolve(c: Creature): boolean {
   c.pendingMoves = c.pendingMoves.filter((p) => !knows(c, p));
   const newMax = stats(c).hp;
   c.hp = Math.min(newMax, c.hp + (newMax - oldMax));
+  releaseBanked(c);
   return true;
 }
 
@@ -325,6 +385,7 @@ export function prestige(c: Creature): boolean {
   c.stars += 1;
   const newMax = stats(c).hp;
   c.hp = Math.min(newMax, c.hp + (newMax - oldMax));
+  releaseBanked(c);
   return true;
 }
 

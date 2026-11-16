@@ -14,7 +14,7 @@ import {
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, earnCoins, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, prestigeTracked, registerJoin, rosterFull, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, earnCoins, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, prestigeTracked, registerJoin, releaseNote, rosterFull, TEAM_MAX, type Run } from './run';
 import { speciesWithElement } from '../data/species';
 
 export interface EventResult {
@@ -201,8 +201,9 @@ export const EVENTS: GameEvent[] = [
         eligible: (_r, c) => canPrestige(c),
         run: (run, c) => {
           if (run.rng.chance(luckyOdds(run))) {
+            const lv = c!.level;
             prestigeTracked(run, c!);
-            return { text: `The shrine glows. ${creatureName(c!)} is now ${'★'.repeat(c!.stars)}!` };
+            return { text: `The shrine glows. ${creatureName(c!)} is now ${'★'.repeat(c!.stars)}!${releaseNote(c!, lv)}` };
           }
           c!.hp = Math.max(1, c!.hp - Math.ceil(stats(c!).hp * 0.4));
           return { text: `The shrine lashes out. ${creatureName(c!)} is hurt.` };
@@ -299,8 +300,9 @@ export const EVENTS: GameEvent[] = [
           const t = circleTarget(run)!;
           unequipHeld(run, c!);
           run.bench = run.bench.filter((x) => x !== c);
+          const lv = t.level;
           prestigeTracked(run, t);
-          return { text: `${creatureName(c!)} walks into the stones and is gone. ${creatureName(t)} rises to ${'★'.repeat(t.stars)}.` };
+          return { text: `${creatureName(c!)} walks into the stones and is gone. ${creatureName(t)} rises to ${'★'.repeat(t.stars)}.${releaseNote(t, lv)}` };
         },
       },
     ],

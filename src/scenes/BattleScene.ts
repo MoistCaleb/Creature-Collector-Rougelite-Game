@@ -46,6 +46,7 @@ import {
   earnCoins,
   evolveTracked,
   prestigeTracked,
+  releaseNote,
   trackStat,
   isUnlockedStarter,
   catchBonus,
@@ -606,7 +607,15 @@ export class BattleScene extends Phaser.Scene {
 
   private xpLines(res: XpResult[]): string {
     if (res.some((r) => r.levels > 0)) this.time.delayedCall(250, () => sfx.levelUp());
-    return res.map((r) => `${r.name} +${r.xp} XP${r.levels ? `  ▲ ${r.levels} lv` : ''}`).join('\n');
+    const lines = res.map((r) => {
+      if (r.levels) return `${r.name} +${r.xp} XP  ▲ ${r.levels} lv`;
+      if (r.full) return r.banked ? `${r.name} +${r.xp} XP stored (now full)  ◉ +${r.coins}` : `${r.name} at cap, store full  ◉ +${r.coins}`;
+      if (r.banked || r.coins) return `${r.name} +${r.xp} XP stored  ◉ +${r.coins}`;
+      return `${r.name} +${r.xp} XP`;
+    });
+    const capCoins = res.reduce((t, r) => t + r.coins, 0);
+    if (capCoins) sfx.coin();
+    return lines.join('\n');
   }
 
   private fallenNote(): string {
@@ -803,8 +812,12 @@ export class BattleScene extends Phaser.Scene {
           for (const c of allCreatures(run)) healFraction(c, 1);
           this.finishFloor('Your creatures are fully healed.');
         } else if (i === 1) {
-          run.team.forEach((c) => canPrestige(c) && prestigeTracked(run, c));
-          this.finishFloor('Your team glows with prestige!');
+          let notes = '';
+          run.team.forEach((c) => {
+            const lv = c.level;
+            if (canPrestige(c) && prestigeTracked(run, c) && c.level > lv) notes += `\n${creatureName(c)}: stored XP +${c.level - lv} lv`;
+          });
+          this.finishFloor(`Your team glows with prestige!${notes}`);
         } else if (i === 2) {
           openPicker(this, {
             title: 'Evolve which creature?',
@@ -813,12 +826,14 @@ export class BattleScene extends Phaser.Scene {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
               const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+              const lv = c.level;
               evolveTracked(run, c);
+              const note = releaseNote(c, lv);
               dex.creature(c, true);
               const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
               playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
                 cry(c.speciesId, c.stage);
-                this.finishFloor(`${from} evolved into ${creatureName(c)}!`);
+                this.finishFloor(`${from} evolved into ${creatureName(c)}!${note}`);
               });
             },
           });
