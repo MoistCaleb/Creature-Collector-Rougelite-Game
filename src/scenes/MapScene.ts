@@ -386,9 +386,12 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     const frac = run.passive === 'medic' ? 1 : 0.5;
     trackStat(run, 'rests');
-    for (const c of allCreatures(run)) healFraction(c, frac);
+    for (const c of allCreatures(run)) {
+      healFraction(c, frac);
+      c.status = undefined;
+    }
     sfx.heal();
-    showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP.`, this.done);
+    showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP and shake off any status conditions.`, this.done);
   }
 
   private doLevelUp() {

@@ -5,7 +5,7 @@ import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
 import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { allCreatures, BENCH_MAX, dexComplete, equipHeld, usePotion, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
+import { allCreatures, BENCH_MAX, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
 import { dex, persist, state } from '../state';
@@ -197,7 +197,7 @@ export class TeamScene extends Phaser.Scene {
         persist();
         this.scene.restart({ selected: this.selected });
       },
-      { enabled: potions > 0 && c.hp < s.hp, fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
+      { enabled: potions > 0 && needsPotion(c), fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
     );
     if (!stoneOk && run.evoStones > 0 && canEvolve(c))
       text(this, 18, y0 + 136, 'Reach the level cap to use a stone.', 11, '#ffc94d');

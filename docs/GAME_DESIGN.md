@@ -227,7 +227,8 @@ Runs unlock:
 
 ## Battle systems (later additions)
 
-- **Status conditions** (one per creature; each lasts 3–5 turns, and clears on switching out or at battle end). Moves named for a
+- **Status conditions** (one per creature; each lasts 3–5 turns of that creature being in battle, and carries over
+  between battles until it runs out; potions, Full Restores, Rest nodes and full heals cure it). Moves named for a
   condition can inflict it (Spark → paralysis, Acid Spit → poison...): attacks 10–20%, debuff moves 40%.
   | Status | Effect | Immune |
   |---|---|---|
@@ -242,6 +243,8 @@ Runs unlock:
   Light, Spirit, Nature). Floor bosses' teams get synergy too; wild creatures and trainers don't.
 - **Potions** are carried (5, or 8 with Apothecary) and used from the battle screen (costs the turn) or the
   Team screen.
+- **Entrances**: your creatures and trainers'/guardians' are released from a glowing hexagon (and recalled into it
+  on a switch); wild creatures burst out of grass, rocks (Earth, Metal, Fire, Dragon) or water (Water, Frost).
 - **Evolution Stones** also drop from won wild battles: 5% / 7% / 9% by floor.
 
 ## Open questions

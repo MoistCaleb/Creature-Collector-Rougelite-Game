@@ -25,6 +25,8 @@ export interface Creature {
   /** Damage dealt and knockouts this run (for the run summary). */
   dealt?: number;
   kos?: number;
+  /** A status condition that lasts between battles until its timer runs out (or it's cured). */
+  status?: { id: import('../data/status').StatusId; turns: number };
   /** The one item this creature carries. */
   held?: import('../data/held').HeldId;
 }
@@ -339,6 +341,13 @@ export function canBuffMove(slot: MoveSlot): boolean {
 export function healFraction(c: Creature, frac: number) {
   const max = stats(c).hp;
   c.hp = Math.min(max, c.hp + Math.ceil(max * frac));
+  // A full heal also cures any status condition.
+  if (frac >= 1) c.status = undefined;
+}
+
+/** Clear a creature's status condition. */
+export function cureStatus(c: Creature) {
+  c.status = undefined;
 }
 
 /** Catch-up XP: bonus grows with the level gap to the highest level creature you own. */

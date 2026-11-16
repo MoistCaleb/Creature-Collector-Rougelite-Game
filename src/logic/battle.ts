@@ -197,10 +197,19 @@ export class Battle {
       const x = this.player[action.index];
       if (!x || !isAlive(x.c)) return ev;
       const max = stats(x.c).hp;
+      const hurt = x.c.hp < max;
       x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * action.heal));
       ev.push({ kind: 'text', text: `You use a Potion on ${creatureName(x.c)}.` });
-      if (x === this.p) ev.push({ kind: 'heal', side: 'player', hp: x.c.hp, maxHp: max });
-      ev.push({ kind: 'text', text: `${creatureName(x.c)} recovered health!` });
+      if (x === this.p && hurt) ev.push({ kind: 'heal', side: 'player', hp: x.c.hp, maxHp: max });
+      if (hurt) ev.push({ kind: 'text', text: `${creatureName(x.c)} recovered health!` });
+      // Potions also cure status conditions.
+      if (x.status) {
+        if (x === this.p) this.cure(x, 'player', ev);
+        else {
+          x.status = null;
+          ev.push({ kind: 'text', text: `${creatureName(x.c)} is cured!` });
+        }
+      }
       if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
     } else if (action.kind === 'swap') {
       if (!this.canSwapTo(action.index)) return ev;
@@ -566,6 +575,7 @@ export class Battle {
   private handleFaint(side: Side, ev: BattleEvent[]) {
     const idx = side === 'player' ? this.pActive : this.eActive;
     const c = side === 'player' ? this.p.c : this.e.c;
+    c.status = undefined;
     ev.push({ kind: 'faint', side, index: idx });
     ev.push({
       kind: 'text',
@@ -685,16 +695,32 @@ function stageKey(stat: StatKey): 'atkStage' | 'defStage' | 'spdStage' {
   return stat === 'atk' ? 'atkStage' : stat === 'def' ? 'defStage' : 'spdStage';
 }
 
+/** A creature entering battle. Its status lives on the creature, so it carries over between battles. */
 function fresh(c: Creature): Combatant {
-  return { c, atkStage: 0, defStage: 0, spdStage: 0, status: null, statusTurns: 0 };
+  return {
+    c,
+    atkStage: 0,
+    defStage: 0,
+    spdStage: 0,
+    get status() {
+      return c.status?.id ?? null;
+    },
+    set status(id: StatusId | null) {
+      c.status = id ? { id, turns: c.status?.turns ?? 0 } : undefined;
+    },
+    get statusTurns() {
+      return c.status?.turns ?? 0;
+    },
+    set statusTurns(n: number) {
+      if (c.status) c.status.turns = n;
+    },
+  };
 }
 
 function resetStages(x: Combatant) {
   x.atkStage = 0;
   x.defStage = 0;
   x.spdStage = 0;
-  x.status = null;
-  x.statusTurns = 0;
 }
 
 /** The element an attack actually hits with (bestType moves pick the user's most effective type). */

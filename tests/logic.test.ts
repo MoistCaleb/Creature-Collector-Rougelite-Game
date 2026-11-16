@@ -959,3 +959,30 @@ describe('boss synergy and status length', () => {
     for (const def of Object.values(STATUS)) expect(def.turns).toEqual([3, 5]);
   });
 });
+
+describe('lasting statuses', () => {
+  it('a status carries into the next battle and its timer keeps counting', () => {
+    const p = createCreature('mossling', 20);
+    p.status = { id: 'poison', turns: 3 };
+    const e = createCreature('emberkit', 5);
+    e.hp = 100000;
+    const b = new Battle([p], [e], new Rng(3));
+    expect(b.p.status).toBe('poison');
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(p.status?.turns).toBe(2);
+    b.takeTurn({ kind: 'move', index: 0 });
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(p.status).toBeUndefined();
+  });
+  it('switching out no longer cures; a potion does', () => {
+    const a = createCreature('mossling', 20);
+    const c2 = createCreature('mossling', 20);
+    a.status = { id: 'burn', turns: 5 };
+    const e = createCreature('emberkit', 5);
+    const b = new Battle([a, c2], [e], new Rng(3));
+    b.takeTurn({ kind: 'swap', index: 1 });
+    expect(a.status?.id).toBe('burn');
+    b.takeTurn({ kind: 'potion', index: 0, heal: 0.5 });
+    expect(a.status).toBeUndefined();
+  });
+});
