@@ -7,6 +7,7 @@ import { rollStarterChoices, startRun } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { playMusic } from '../ui/sound';
 import { background, button, COLORS, text, typeChips, W } from '../ui/widgets';
 
 export class StarterScene extends Phaser.Scene {
@@ -19,6 +20,7 @@ export class StarterScene extends Phaser.Scene {
   create(data: { mapId?: string } = {}) {
     this.mapId = data.mapId ?? state.meta.lastMap ?? 'wildlands';
     background(this);
+    playMusic('title');
     text(this, W / 2 + 20, 34, 'Choose your starter', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2 + 20, 64, 'Three picked at random from your unlocked pool', 14, COLORS.textDim).setOrigin(0.5);
 

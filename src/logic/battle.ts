@@ -24,7 +24,8 @@ export type BattleEvent =
   | { kind: 'swap'; side: Side; index: number }
   | { kind: 'attack'; side: Side; move: string; moveId: string }
   | { kind: 'stat'; side: Side; up: boolean }
-  | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number }
+  /** `mult` is the type multiplier for attack hits; absent for recoil, poison and field damage. */
+  | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number; mult?: number; element?: Element }
   | { kind: 'heal'; side: Side; hp: number; maxHp: number }
   | { kind: 'faint'; side: Side; index: number }
   | { kind: 'enemySend'; index: number };
@@ -297,7 +298,7 @@ export class Battle {
       target.c.hp = Math.max(0, target.c.hp - dmg);
       total += dmg;
       landed++;
-      ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg });
+      ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el });
       if (h === 0) {
         const label = effectivenessLabel(r.mult);
         if (label) ev.push({ kind: 'text', text: label });

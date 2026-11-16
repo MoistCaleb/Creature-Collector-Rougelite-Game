@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
-import { canEvolve, creatureName, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { playEvolution } from '../ui/fx';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { allCreatures, BENCH_MAX, dexComplete, evolveTracked, TEAM_MAX, unclaimedTypes } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
@@ -106,9 +108,13 @@ export class TeamScene extends Phaser.Scene {
       () => {
         run.evoStones -= 1;
         const from = creatureName(c);
+        const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
         evolveTracked(run, c);
         dex.creature(c, true);
-        showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected }));
+        const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+        playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () =>
+          showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected })),
+        );
       },
       { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a },
     );

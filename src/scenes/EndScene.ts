@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, saveMeta } from '../logic/run';
 import { state } from '../state';
+import { playMusic, sfx } from '../ui/sound';
 import { background, button, COLORS, creatureRow, text, W } from '../ui/widgets';
 
 export class EndScene extends Phaser.Scene {
@@ -11,6 +12,9 @@ export class EndScene extends Phaser.Scene {
 
   create(data: { won: boolean }) {
     background(this);
+    playMusic(data.won ? 'title' : null);
+    if (data.won) sfx.victory();
+    else sfx.defeat();
     const run = state.run!;
     clearSavedRun();
     text(this, W / 2, 70, data.won ? 'VICTORY!' : 'RUN OVER', 42, data.won ? '#ffc94d' : '#e0524a', {

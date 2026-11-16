@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MAPS, mapUnlocked } from '../data/maps';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
+import { playMusic } from '../ui/sound';
 import { background, button, COLORS, text, typeChip, W } from '../ui/widgets';
 
 /** Choose which map (set of floor elements) to run before picking a starter. */
@@ -12,6 +13,7 @@ export class MapSelectScene extends Phaser.Scene {
 
   create() {
     background(this);
+    playMusic('title');
     const meta = state.meta;
     text(this, W / 2 + 20, 30, 'Choose a map', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2 + 20, 60, `Runs won: ${meta.wins}`, 14, COLORS.textDim).setOrigin(0.5);

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
+import { isMuted, setMuted, sfx } from './sound';
 import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
 
 export const W = 450;
@@ -72,10 +73,21 @@ export function button(
     bg.on('pointerout', () => bg.setFillStyle(color));
     bg.on('pointerup', () => {
       bg.setFillStyle(color);
+      sfx.click();
       onClick();
     });
   }
   return c;
+}
+
+/** A small speaker toggle for sound and music. */
+export function muteButton(scene: Phaser.Scene, x: number, y: number, size = 40) {
+  const label = () => (isMuted() ? '🔇' : '🔊');
+  const b = button(scene, x, y, size, size, label(), () => {
+    setMuted(!isMuted());
+    (b.list[1] as Phaser.GameObjects.Text).setText(label());
+  }, { fontSize: Math.round(size * 0.45) });
+  return b;
 }
 
 export function typeChip(scene: Phaser.Scene, x: number, y: number, el: Element, small = false): Phaser.GameObjects.Container {

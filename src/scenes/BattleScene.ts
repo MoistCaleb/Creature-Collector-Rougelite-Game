@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
-import { moveSummary } from '../data/moves';
+import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
-import { ELEMENT_COLORS, typeMultiplier } from '../data/types';
+import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
+import { attackImpact, attackTravel, damageNumber, ensureFxTextures, faintFx, healFx, playEvolution, statusFx } from '../ui/fx';
+import { playMusic, sfx } from '../ui/sound';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
   canEvolve,
@@ -133,9 +135,13 @@ export class BattleScene extends Phaser.Scene {
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
     this.msg.setText(intro);
     this.showActions();
+    ensureFxTextures(this);
+    playMusic(boss ? 'boss' : 'battle');
+    if (!resuming) this.entrance(this.enemySprite, 'enemy');
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     const begin = () => {
+      if (boss && !resuming) this.bossEntrance();
       if (entry.length) this.play(entry);
     };
     // Resuming after a reload: pick up wherever the battle was left.
@@ -189,7 +195,31 @@ export class BattleScene extends Phaser.Scene {
     const p = this.battle.p.c;
     dex.creature(p, true);
     this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
+    this.playerSprite.setScale(5 * SPRITE_FIT);
     this.fillPanel(this.playerPanel, p);
+  }
+
+  /** A creature pops in from nothing with a little puff. */
+  private entrance(s: Phaser.GameObjects.Image, side: 'player' | 'enemy') {
+    const full = s.scale;
+    s.setScale(0.1).setAlpha(0.2);
+    this.tweens.add({ targets: s, scale: full, alpha: 1, duration: 280, ease: 'Back.easeOut' });
+    const c = side === 'player' ? this.battle.p.c : this.battle.e.c;
+    faintFx(this, { x: s.x, y: s.y + 30 }, ELEMENT_COLORS[creatureTypes(c)[0]]);
+  }
+
+  /** The guardian looms: it grows, the screen shakes, and it roars. */
+  private bossEntrance() {
+    const s = this.enemySprite;
+    const full = s.scale;
+    sfx.bossRoar();
+    this.cameras.main.shake(500, 0.012);
+    this.cameras.main.flash(250, 120, 0, 0);
+    this.tweens.add({ targets: s, scale: full * 1.25, yoyo: true, duration: 260, ease: 'Quad.easeOut' });
+  }
+
+  private spriteOf(side: 'player' | 'enemy') {
+    return side === 'player' ? this.playerSprite : this.enemySprite;
   }
 
   // ------------------------------------------------------------ input
@@ -243,22 +273,38 @@ export class BattleScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ playback
 
+  /** Waits on the scene clock, which runs faster while the player taps to skip. */
   private wait(ms: number) {
-    return new Promise<void>((res) => this.time.delayedCall(this.fast ? ms / 4 : ms, res));
+    return new Promise<void>((res) => this.time.delayedCall(ms, res));
+  }
+
+  private setSpeed() {
+    const k = this.fast ? 3 : 1;
+    this.time.timeScale = k;
+    this.tweens.timeScale = k;
   }
 
   private async play(events: BattleEvent[]) {
     this.busy = true;
     this.fast = false;
     this.actions.setVisible(false);
-    for (const ev of events) {
+    let lastEl: Element = 'Fire';
+    // "X used Y!" is shown as the attack starts, so the hit lands right as the effect arrives.
+    let shownEarly: BattleEvent | null = null;
+    for (let idx = 0; idx < events.length; idx++) {
+      const ev = events[idx];
+      this.setSpeed();
       switch (ev.kind) {
         case 'text':
+          if (ev === shownEarly) break;
           this.msg.setText(ev.text);
+          if (ev.text === 'It missed!') sfx.miss();
           await this.wait(620);
           break;
         case 'stat': {
-          const s = ev.side === 'player' ? this.playerSprite : this.enemySprite;
+          const s = this.spriteOf(ev.side);
+          ev.up ? sfx.statUp() : sfx.statDown();
+          statusFx(this, s, lastEl, ev.up);
           const arrow = text(this, s.x, s.y - 60, ev.up ? '▲▲' : '▼▼', 28, ev.up ? '#8fe08a' : '#f08a80', { fontStyle: 'bold' }).setOrigin(0.5);
           s.setTint(ev.up ? 0xaaffaa : 0xff9a9a);
           this.tweens.add({ targets: arrow, y: arrow.y + (ev.up ? -30 : 30), alpha: 0, duration: 500, onComplete: () => arrow.destroy() });
@@ -268,32 +314,71 @@ export class BattleScene extends Phaser.Scene {
         }
         case 'attack': {
           dex.move(ev.moveId);
-          const s = ev.side === 'player' ? this.playerSprite : this.enemySprite;
+          const def = MOVES[ev.moveId];
+          lastEl = def?.element ?? lastEl;
+          const s = this.spriteOf(ev.side);
+          const target = this.spriteOf(ev.side === 'player' ? 'enemy' : 'player');
           const dx = ev.side === 'player' ? 30 : -30;
-          this.tweens.add({ targets: s, x: s.x + dx, y: s.y + (ev.side === 'player' ? -12 : 12), yoyo: true, duration: 120 });
-          await this.wait(150);
+          const home = { x: s.x, y: s.y };
+          const next = events[idx + 1];
+          if (next?.kind === 'text') {
+            this.msg.setText(next.text);
+            shownEarly = next;
+          }
+          this.tweens.add({ targets: s, x: home.x + dx, y: home.y + (ev.side === 'player' ? -12 : 12), yoyo: true, duration: 120 });
+          await this.wait(130);
+          if (def?.kind === 'attack') await attackTravel(this, def.element, home, { x: target.x, y: target.y });
+          else if (def) {
+            // Buffs and heals glow on the user; debuffs reach out to the target.
+            sfx.attack(def.element);
+            if (def.kind === 'debuff') await attackTravel(this, def.element, home, { x: target.x, y: target.y });
+          }
+          // Status moves have no hit to follow, so keep their name up long enough to read.
+          if (def?.kind !== 'attack') await this.wait(320);
           break;
         }
         case 'damage': {
-          const s = ev.side === 'player' ? this.playerSprite : this.enemySprite;
+          const s = this.spriteOf(ev.side);
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
+          const at = { x: s.x, y: s.y };
+          if (ev.mult !== undefined) {
+            const big = ev.mult > 1.01;
+            const weak = ev.mult < 0.99;
+            attackImpact(this, ev.element ?? lastEl, at, big ? 1.7 : weak ? 0.6 : 1);
+            sfx.hit(ev.mult);
+            if (big) {
+              // Hit-stop, flash and a heavy shake sell a super-effective blow.
+              this.cameras.main.shake(260, 0.016);
+              this.cameras.main.flash(120, 255, 255, 255, true);
+              this.tweens.timeScale = 0.05;
+              await new Promise<void>((r) => setTimeout(r, this.fast ? 20 : 70));
+              this.setSpeed();
+            } else if (!weak) this.cameras.main.shake(120, 0.005);
+          } else sfx.dot();
+          damageNumber(this, at, ev.amount, ev.mult ?? 1);
           s.setTintFill(0xffffff);
-          this.tweens.add({ targets: s, x: s.x + 6, yoyo: true, repeat: 2, duration: 40 });
+          this.tweens.add({ targets: s, x: s.x + 6, yoyo: true, repeat: 2, duration: 40, onComplete: () => s.setX(at.x) });
           this.time.delayedCall(120, () => s.clearTint());
           panel.bar.set(ev.hp, ev.maxHp, true);
-          await this.wait(380);
+          await this.wait(420);
           break;
         }
         case 'heal': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
+          healFx(this, this.spriteOf(ev.side));
+          sfx.heal();
           panel.bar.set(ev.hp, ev.maxHp, true);
-          await this.wait(250);
+          await this.wait(300);
           break;
         }
         case 'faint': {
-          const s = ev.side === 'player' ? this.playerSprite : this.enemySprite;
-          this.tweens.add({ targets: s, alpha: 0, y: s.y + 40, duration: 450 });
-          await this.wait(500);
+          const s = this.spriteOf(ev.side);
+          const c = ev.side === 'player' ? this.battle.player[ev.index].c : this.battle.enemy[ev.index].c;
+          sfx.faint();
+          s.setTintFill(0xffffff);
+          faintFx(this, s, ELEMENT_COLORS[creatureTypes(c)[0]]);
+          this.tweens.add({ targets: s, alpha: 0, y: s.y + 40, scaleY: s.scaleY * 0.2, duration: 450, onComplete: () => s.clearTint() });
+          await this.wait(520);
           if (ev.side === 'enemy') {
             const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
             this.pips.setText('●'.repeat(alive) + '○'.repeat(this.battle.enemy.length - alive));
@@ -302,14 +387,18 @@ export class BattleScene extends Phaser.Scene {
         }
         case 'swap':
           this.refreshPlayer();
-          await this.wait(250);
+          this.entrance(this.playerSprite, 'player');
+          await this.wait(300);
           break;
         case 'enemySend':
           this.refreshEnemy();
-          await this.wait(250);
+          this.entrance(this.enemySprite, 'enemy');
+          await this.wait(300);
           break;
       }
     }
+    this.fast = false;
+    this.setSpeed();
     this.busy = false;
     this.afterTurn();
   }
@@ -342,6 +431,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private xpLines(res: XpResult[]): string {
+    if (res.some((r) => r.levels > 0)) this.time.delayedCall(250, () => sfx.levelUp());
     return res.map((r) => `${r.name} +${r.xp} XP${r.levels ? `  ▲ ${r.levels} lv` : ''}`).join('\n');
   }
 
@@ -355,6 +445,8 @@ export class BattleScene extends Phaser.Scene {
     const ab = run.activeBattle!;
     const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1));
     const coins = battleCoins(this.enemies, this.kind);
+    sfx.victory();
+    playMusic(null);
     // Bookkeeping happens once, even if the page reloads before the reward choice.
     if (!ab.settled) {
       run.log.battlesWon += 1;
@@ -395,6 +487,7 @@ export class BattleScene extends Phaser.Scene {
         onPick: (i) => {
           if (i === 0) {
             earnCoins(run, coins);
+            sfx.coin();
             showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}`, () => this.toMap());
           } else {
             const wasStarter = isUnlockedStarter(run, this.enemies[i - 1].speciesId);
@@ -407,6 +500,7 @@ export class BattleScene extends Phaser.Scene {
                   ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
                   : '';
             const starterNote = wasStarter ? '' : `\n\nNew starter unlocked: ${species(c).names[0]}!`;
+            sfx.catch();
             showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}`, () => this.toMap());
           }
         },
@@ -456,9 +550,13 @@ export class BattleScene extends Phaser.Scene {
             onPick: (k) => {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
+              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
               evolveTracked(run, c);
               dex.creature(c, true);
-              this.finishFloor(`${from} evolved into ${creatureName(c)}!`);
+              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+              playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () =>
+                this.finishFloor(`${from} evolved into ${creatureName(c)}!`),
+              );
             },
           });
         } else {
@@ -501,6 +599,8 @@ export class BattleScene extends Phaser.Scene {
     const run = state.run!;
     const fallen = run.team.filter((c) => !isAlive(c)).map(creatureName);
     run.activeBattle = null;
+    playMusic(null);
+    sfx.defeat();
     if (!promoteBench(run)) {
       this.scene.start('End', { won: false });
       return;

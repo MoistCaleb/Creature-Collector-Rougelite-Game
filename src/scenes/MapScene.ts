@@ -24,7 +24,8 @@ import { dex, persist, state } from '../state';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
+import { playMusic, sfx } from '../ui/sound';
+import { background, button, COLORS, H, HpBar, muteButton, text, W } from '../ui/widgets';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
@@ -56,6 +57,7 @@ export class MapScene extends Phaser.Scene {
     }
     const map = run.map;
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color);
+    playMusic('map');
 
     // ---- map layer
     this.layer = this.add.container(0, 0);
@@ -202,6 +204,7 @@ export class MapScene extends Phaser.Scene {
       const steps = stepsToBoss(run.map, run.currentId);
       text(this, 14, 60, steps === 1 ? 'Boss is next' : `☠ Boss in ${steps} steps`, 12, '#c9a3dd');
     }
+    muteButton(this, W - 192, TOP_BAR / 2, 36);
     button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
     button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
   }
@@ -374,6 +377,7 @@ export class MapScene extends Phaser.Scene {
     const frac = run.passive === 'medic' ? 1 : 0.5;
     trackStat(run, 'rests');
     for (const c of allCreatures(run)) healFraction(c, frac);
+    sfx.heal();
     showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP.`, this.done);
   }
 
@@ -411,6 +415,7 @@ export class MapScene extends Phaser.Scene {
       ],
       onPick: (i) => {
         trackStat(run, 'levelups');
+        if (i !== 0) sfx.levelUp();
         if (i === 1) {
           const rows = allCreatures(run).map((c) => ({ c, before: c.level }));
           for (const { c } of rows) addLevels(c, drill);
@@ -424,6 +429,7 @@ export class MapScene extends Phaser.Scene {
         this.pickCreature('Focus training', `Choose a creature (+${focus} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
           const before = c.level;
           addLevels(c, focus);
+          sfx.levelUp();
           report('Focus training', [{ c, before }]);
         }, true);
       },
@@ -461,6 +467,7 @@ export class MapScene extends Phaser.Scene {
         const { c, i } = picks[k];
         c.moves[i].tier += 1;
         trackStat(run, 'skillUps');
+        sfx.statUp();
         this.done();
       },
     });
@@ -565,6 +572,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     const finish = (target?: Creature, moveIndex?: number) => {
       pay(run, slot.price);
+      sfx.coin();
       slot.sold = true;
       const result = applyItem(run, slot, target, moveIndex);
       if (slot.item === 'recruit') {

@@ -4,7 +4,8 @@ import { clearSavedRun, hasSavedRun, loadRun, PASSIVES } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, H, text, W } from '../ui/widgets';
+import { playMusic } from '../ui/sound';
+import { background, button, COLORS, H, muteButton, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -13,6 +14,8 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     background(this);
+    playMusic('title');
+    muteButton(this, W - 30, 30);
     const meta = state.meta;
 
     // Parade of creatures you've unlocked as starters
