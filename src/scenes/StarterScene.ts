@@ -3,7 +3,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { rollStarterChoices, startRun } from '../logic/run';
+import { dailySeed, dailyStarters, rollStarterChoices, startRun } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -16,15 +16,24 @@ export class StarterScene extends Phaser.Scene {
   }
 
   private mapId = 'wildlands';
+  private daily: string | null = null;
 
-  create(data: { mapId?: string } = {}) {
-    this.mapId = data.mapId ?? state.meta.lastMap ?? 'wildlands';
+  create(data: { mapId?: string; daily?: string } = {}) {
+    this.daily = data.daily ?? null;
+    this.mapId = this.daily ? 'wildlands' : data.mapId ?? state.meta.lastMap ?? 'wildlands';
     background(this);
     playMusic('title');
-    text(this, W / 2 + 20, 34, 'Choose your starter', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
-    text(this, W / 2 + 20, 64, 'Three picked at random from your unlocked pool', 14, COLORS.textDim).setOrigin(0.5);
+    text(this, W / 2 + 20, 34, this.daily ? `📅 Daily run · ${this.daily}` : 'Choose your starter', this.daily ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    text(
+      this,
+      W / 2 + 20,
+      64,
+      this.daily ? 'Same starters and map for everyone today' : 'Three picked at random from your unlocked pool',
+      14,
+      COLORS.textDim,
+    ).setOrigin(0.5);
 
-    const choices = rollStarterChoices(state.meta, new Rng());
+    const choices = this.daily ? dailyStarters(this.daily) : rollStarterChoices(state.meta, new Rng());
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       dex.form(id, 0);
@@ -47,11 +56,13 @@ export class StarterScene extends Phaser.Scene {
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 
-    button(this, 40, 28, 64, 36, '◀', () => this.scene.start('MapSelect'), { fontSize: 15 });
+    button(this, 40, 28, 64, 36, '◀', () => this.scene.start(this.daily ? 'Title' : 'MapSelect'), { fontSize: 15 });
   }
 
   private pick(id: string) {
-    state.run = startRun(state.meta, id, Date.now(), this.mapId);
+    state.run = this.daily
+      ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
+      : startRun(state.meta, id, Date.now(), this.mapId);
     this.scene.start('Map');
   }
 }

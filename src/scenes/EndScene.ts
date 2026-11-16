@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, runMvp, saveMeta } from '../logic/run';
+import { allCreatures, clearSavedRun, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -27,7 +27,8 @@ export class EndScene extends Phaser.Scene {
       this,
       W / 2,
       86,
-      data.won ? `${run.map.biome} lands conquered. All three floors cleared.` : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`,
+      (data.won ? `${run.map.biome} lands conquered. All three floors cleared.` : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`) +
+        (run.heat ? `  🔥 Heat ${run.heat}` : ''),
       15,
       COLORS.textDim,
       { align: 'center', wordWrap: { width: W - 40 } },
@@ -99,6 +100,11 @@ export class EndScene extends Phaser.Scene {
     roster('Fallen', run.log.fallen ?? [], true);
 
     const extra: string[] = [];
+    if (run.daily) {
+      const best = recordDaily(run, data.won);
+      const rec = state.meta.daily!;
+      extra.push(`📅 Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
+    }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
     const earned = state.meta.newAchievements.splice(0);
     if (earned.length) {

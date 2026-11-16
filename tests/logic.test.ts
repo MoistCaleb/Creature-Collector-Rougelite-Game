@@ -11,7 +11,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { allCreatures, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -779,5 +779,96 @@ describe('held items', () => {
     b.held = 'egg';
     const res = grantXp(run, 100);
     expect(res[1].xp).toBeGreaterThan(res[0].xp);
+  });
+});
+
+describe('heat', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('a run never starts above the unlocked heat', () => {
+    const meta = mkMeta();
+    meta.heat = 5;
+    expect(startRun(meta, 'emberkit', 1).heat).toBe(0);
+    meta.heatUnlocked = 3;
+    expect(startRun(meta, 'emberkit', 1).heat).toBe(3);
+  });
+  it('winning at your top heat unlocks the next one', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', 2);
+    run.floor = 2;
+    expect(clearFloor(run)).toBe(true);
+    expect(meta.heatUnlocked).toBe(1);
+    const run2 = startRun(meta, 'emberkit', 3);
+    run2.floor = 2;
+    clearFloor(run2); // played at heat 0 again: no new unlock
+    expect(meta.heatUnlocked).toBe(1);
+  });
+  it('heat raises enemy levels and prices', () => {
+    const meta = mkMeta();
+    meta.heatUnlocked = 8;
+    const lv = (heat: number) => {
+      meta.heat = heat;
+      const run = startRun(meta, 'emberkit', 4);
+      const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
+      return { level: makeEncounter(run, node)[0].level, price: rollShop(run).slots[0].price };
+    };
+    const cold = lv(0);
+    const hot = lv(8);
+    expect(hot.level).toBe(cold.level + 2);
+    expect(hot.price).toBeGreaterThan(cold.price);
+  });
+});
+
+describe('daily run', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: 'champion',
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'tidal', stats: emptyStats(), achievements: [], newAchievements: [],
+    heatUnlocked: 4, heat: 4,
+  });
+  it('is the same for everyone on a given day, and differs between days', () => {
+    expect(dailyStarters('2026-11-16')).toEqual(dailyStarters('2026-11-16'));
+    expect(dailyStarters('2026-11-16')).not.toEqual(dailyStarters('2026-11-17'));
+    const a = startRun(mkMeta(), dailyStarters('2026-11-16')[0], dailySeed('2026-11-16'), 'wildlands', '2026-11-16');
+    const b = startRun(mkMeta(), dailyStarters('2026-11-16')[0], dailySeed('2026-11-16'), 'wildlands', '2026-11-16');
+    expect(a.biomes).toEqual(b.biomes);
+    expect(JSON.stringify(a.map)).toBe(JSON.stringify(b.map));
+  });
+  it('ignores passives, heat and the last map', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', dailySeed('2026-11-16'), 'wildlands', '2026-11-16');
+    expect(run.passive).toBeNull();
+    expect(run.heat).toBe(0);
+    expect(run.team[0].level).toBe(BALANCE.starterLevel);
+    expect(meta.lastMap).toBe('tidal');
+  });
+  it('keeps the best result of the day', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', dailySeed('2026-11-16'), 'wildlands', '2026-11-16');
+    run.floor = 1;
+    run.log.battlesWon = 9;
+    expect(recordDaily(run, false)).toBe(true);
+    const worse = startRun(meta, 'emberkit', dailySeed('2026-11-16'), 'wildlands', '2026-11-16');
+    worse.log.battlesWon = 30;
+    expect(recordDaily(worse, false)).toBe(false);
+    expect(meta.daily!.best!.floor).toBe(1);
+    expect(meta.daily!.attempts).toBe(2);
   });
 });
