@@ -9,6 +9,7 @@ import {
   creatureName,
   healFraction,
   levelCap,
+  restoreUses,
   moveDef,
   recommendForget,
   resolvePending,
@@ -397,9 +398,10 @@ export class MapScene extends Phaser.Scene {
     for (const c of allCreatures(run)) {
       healFraction(c, frac);
       c.status = undefined;
+      restoreUses(c);
     }
     sfx.heal();
-    showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP and shake off any status conditions.`, this.done);
+    showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`, this.done);
   }
 
   private doLevelUp() {

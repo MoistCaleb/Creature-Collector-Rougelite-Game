@@ -9,6 +9,8 @@ export const BALANCE = {
   /** Chance a trainer (elite) pays out an Evolution Stone (Stone Hunter: always, plus this chance of a second). */
   eliteStoneChance: 0.5,
   postBattleHeal: 0.4,
+  /** After each battle, bench creatures get back this share of each limited move's uses. */
+  benchUseRestore: 0.25,
   /** Iron Will passive's post-battle recovery instead. */
   ironWillHeal: 0.7,
   /** Fraction of max HP a caught creature joins with. */

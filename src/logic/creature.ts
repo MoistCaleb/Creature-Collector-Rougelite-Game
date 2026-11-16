@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, MOVES, specialId, type MoveDef } from '../data/moves';
+import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
 import { stabMultiplier, type Element, type TypePair } from '../data/types';
@@ -7,6 +7,8 @@ import { stabMultiplier, type Element, type TypePair } from '../data/types';
 export interface MoveSlot {
   id: string;
   tier: number; // 1..3 (skill buffs)
+  /** Uses spent (moves with a limit only; see maxUses). Carries between battles. */
+  used?: number;
 }
 
 export interface Creature {
@@ -274,6 +276,34 @@ export function stats(c: Creature): Stats {
   };
 }
 
+/** Uses left on a move, or Infinity when it's unlimited. */
+export function usesLeft(slot: MoveSlot): number {
+  const max = maxUses(MOVES[slot.id]);
+  return max === null ? Infinity : Math.max(0, max - (slot.used ?? 0));
+}
+export const hasUses = (slot: MoveSlot) => usesLeft(slot) > 0;
+
+/** Spend one use (no-op for unlimited moves). */
+export function spendUse(slot: MoveSlot) {
+  if (maxUses(MOVES[slot.id]) !== null) slot.used = (slot.used ?? 0) + 1;
+}
+
+/** Restore move uses: all of them, or `frac` of each move's maximum (rounded up). */
+export function restoreUses(c: Creature, frac = 1) {
+  for (const m of c.moves) {
+    const max = maxUses(MOVES[m.id]);
+    if (max === null || !m.used) continue;
+    m.used = frac >= 1 ? 0 : Math.max(0, m.used - Math.ceil(max * frac));
+  }
+}
+
+/** True if any limited move has been used. */
+export const usesSpent = (c: Creature) => c.moves.some((m) => (m.used ?? 0) > 0);
+
+/** Every move is out of uses: the creature falls back to a basic attack of its own type. */
+export const outOfMoves = (c: Creature) => c.moves.every((m) => !hasUses(m));
+export const fallbackMove = (c: Creature): MoveSlot => ({ id: attackId(creatureTypes(c)[0], 0), tier: 1 });
+
 export function moveDef(slot: MoveSlot): MoveDef {
   return MOVES[slot.id];
 }
@@ -387,7 +417,7 @@ export function evolve(c: Creature): boolean {
     for (let r = d.rank + 1; r <= 3; r++) {
       const id = attackId(d.element, r);
       if (!knows(c, id)) {
-        c.moves[i] = { ...c.moves[i], id };
+        c.moves[i] = { ...c.moves[i], id, used: 0 };
         break;
       }
     }

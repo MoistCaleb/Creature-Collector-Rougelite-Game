@@ -9,6 +9,7 @@ import {
   createCreature,
   healFraction,
   levelCap,
+  restoreUses,
   stats,
   type Creature,
 } from './creature';
@@ -30,7 +31,7 @@ export interface ItemDef {
 
 export const ITEMS: Record<ItemId, ItemDef> = {
   potion: { name: 'Potion', desc: 'Carry it · heals 50% and cures status, even mid-battle', basePrice: 15, weight: 10, target: 'none' },
-  restore: { name: 'Full Restore', desc: 'Heal every creature to full and cure statuses', basePrice: 70, weight: 6, target: 'none' },
+  restore: { name: 'Full Restore', desc: 'Heal every creature to full, cure statuses and restore move uses', basePrice: 70, weight: 6, target: 'none' },
   manual: { name: 'Training Manual', desc: 'One creature gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
   scroll: { name: 'Skill Scroll', desc: 'Upgrade one move a tier', basePrice: 55, weight: 8, target: 'move' },
   stone: { name: 'Evolution Stone', desc: 'Evolve a creature that has reached Lv 30 (or 65 for its final form)', basePrice: 120, weight: 5, target: 'none' },
@@ -148,8 +149,11 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       run.potions = (run.potions ?? 0) + 1;
       return `Potion added to your pouch (${run.potions}/${maxPotions(run)}). Use it from the battle screen or the Team screen.`;
     case 'restore':
-      for (const c of allCreatures(run)) healFraction(c, 1);
-      return 'Everyone is fully healed.';
+      for (const c of allCreatures(run)) {
+        healFraction(c, 1);
+        restoreUses(c);
+      }
+      return 'Everyone is fully healed and every move is restored.';
     case 'manual': {
       const n = addLevels(target!, 2);
       return `Gained ${n} level${n === 1 ? '' : 's'} (now Lv ${target!.level}).`;

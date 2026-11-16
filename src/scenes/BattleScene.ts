@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MOVES, moveSummary } from '../data/moves';
+import { maxUses, MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
@@ -16,6 +16,10 @@ import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
   canEvolve,
+  fallbackMove,
+  hasUses,
+  outOfMoves,
+  usesLeft,
   evolveLevel,
   readyToEvolve,
   canPrestige,
@@ -316,7 +320,21 @@ export class BattleScene extends Phaser.Scene {
     const p = this.battle.p.c;
     const e = this.battle.e.c;
     const bw = (W - 36) / 2;
+    if (outOfMoves(p)) {
+      // Every move is spent: only the basic attack is left until uses are restored.
+      const fb = moveDef(fallbackMove(p));
+      const color = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[fb.element]).darken(45).color;
+      this.actions.add(
+        button(this, W / 2, 640, W - 24, 64, `${fb.name} (basic attack)`, () => this.act({ kind: 'move', index: -1 }), {
+          color,
+          sub: `${moveSummary(fb, 1)}`,
+          fontSize: 17,
+        }),
+      );
+      this.actions.add(text(this, W / 2, 690, 'Out of move uses! Rest, bench it, or use a Full Restore.', 13, '#ffc94d').setOrigin(0.5, 0));
+    }
     p.moves.forEach((m, i) => {
+      if (outOfMoves(p)) return;
       const d = moveDef(m);
       const mult = typeMultiplier(d.element, creatureTypes(e));
       const hint = d.kind !== 'attack' ? '' : mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
@@ -328,8 +346,17 @@ export class BattleScene extends Phaser.Scene {
           color,
           sub: `${moveSummary(d, m.tier)}  ·  ${'✦'.repeat(m.tier)}`,
           fontSize: 17,
+          enabled: hasUses(m),
         }),
       );
+      // Limited moves show their uses left in the corner.
+      const left = usesLeft(m);
+      if (Number.isFinite(left)) {
+        const max = maxUses(d)!;
+        this.actions.add(
+          text(this, x + bw / 2 - 6, y - 30, `${left}/${max}`, 11, left === 0 ? '#e0524a' : left <= 2 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setOrigin(1, 0),
+        );
+      }
     });
     const canSwap = this.battle.player.some((x, i) => i !== this.battle.pActive && isAlive(x.c));
     this.actions.add(button(this, W / 2 - 56, 768, 106, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));

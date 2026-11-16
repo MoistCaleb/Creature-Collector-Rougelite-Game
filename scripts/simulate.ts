@@ -11,7 +11,7 @@ import { DEFAULT_STARTERS, SPECIES } from '../src/data/species';
 import { stabMultiplier, typeMultiplier } from '../src/data/types';
 import { Battle } from '../src/logic/battle';
 import {
-  addLevels, readyToEvolve, canEvolve, canPrestige, prestige, sharesType, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
+  addLevels, hasUses, usesLeft, restoreUses, readyToEvolve, canEvolve, canPrestige, prestige, sharesType, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
   allCreatures, usePotion, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, fillTeamFromBench, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
@@ -25,10 +25,14 @@ const SMART = process.env.NAIVE ? false : true;
 (globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
 
 function bestMove(b: Battle): number {
-  let best = 0, score = -1;
+  let best = -1, score = -1;
   b.p.c.moves.forEach((m, i) => {
+    if (!hasUses(m)) return;
     const d = moveDef(m);
-    const s = d.power * TIER_POWER[m.tier] * typeMultiplier(d.element, creatureTypes(b.e.c)) * stabMultiplier(d.element, creatureTypes(b.p.c));
+    const eff = typeMultiplier(d.element, creatureTypes(b.e.c));
+    let s = d.power * TIER_POWER[m.tier] * eff * stabMultiplier(d.element, creatureTypes(b.p.c));
+    // Save limited moves unless they hit hard or can finish the foe.
+    if (Number.isFinite(usesLeft(m)) && eff <= 1 && b.e.c.hp / stats(b.e.c).hp >= 0.35) s *= 0.75;
     if (s > score) { score = s; best = i; }
   });
   return best;
@@ -148,7 +152,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
         }
         break;
       }
-      case 'heal': allCreatures(run).forEach((c) => healFraction(c, 0.5)); break;
+      case 'heal': allCreatures(run).forEach((c) => { healFraction(c, 0.5); restoreUses(c); }); break;
       case 'treasure': run.coins += 30 * (1 + run.floor); break;
       case 'event': break;
       case 'prestige': {

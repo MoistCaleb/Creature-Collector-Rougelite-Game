@@ -20,6 +20,7 @@ import {
   creatureTypes,
   isAlive,
   releaseBanked,
+  restoreUses,
   setFloorCeiling,
   stageCap,
   stats,
@@ -449,6 +450,8 @@ export function runMvp(run: Run): { speciesId: string; stage: number; level: num
 export function postBattleRecover(run: Run) {
   const frac = (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult;
   for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * frac));
+  // Resting on the bench restores some move uses.
+  for (const c of run.bench) restoreUses(c, BALANCE.benchUseRestore);
 }
 
 /** Remove fainted creatures (permadeath). Returns their names. */
@@ -852,6 +855,8 @@ export function clearFloor(run: Run): boolean {
   }
   saveMeta(meta);
   run.floor += 1;
+  // A new floor: everyone's moves are fully restored.
+  for (const c of allCreatures(run)) restoreUses(c);
   applyFloorCap(run);
   run.map = generateFloor(run.floor, run.biomes[run.floor], run.rng.int(0, 2 ** 31));
   run.currentId = run.map.startId;
