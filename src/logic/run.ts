@@ -19,7 +19,9 @@ import {
   xpToNext,
   creatureTypes,
   isAlive,
-  levelCap,
+  releaseBanked,
+  setFloorCeiling,
+  stageCap,
   stats,
   type Creature,
 } from './creature';
@@ -305,7 +307,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
   // Daily runs are the same for everyone: no passive, standard Heat.
   const passive = daily ? null : meta.equippedPassive;
   saveMeta(meta);
-  return {
+  const run: Run = {
     heat: daily ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
     ...(daily ? { daily } : {}),
     rng,
@@ -335,6 +337,17 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     eventId: null,
     treasure: null,
   };
+  applyFloorCap(run);
+  return run;
+}
+
+/**
+ * Set the level ceiling for the run's current floor. When it rises (new floor), XP your creatures
+ * stored while held back pours in. Creatures already above it (older saves) keep their levels.
+ */
+export function applyFloorCap(run: Run) {
+  setFloorCeiling(BALANCE.floorLevelCap[run.floor] ?? Infinity);
+  for (const c of allCreatures(run)) releaseBanked(c);
 }
 
 // ---------------------------------------------------------------- saving a run in progress
@@ -371,6 +384,7 @@ export function loadRun(meta: Meta): Run | null {
     const run = { ...data, rng, meta } as Run;
     const all = [...run.team, ...run.bench, ...(run.activeBattle?.enemies ?? [])];
     setNextUid(Math.max(0, ...all.map((c) => c.uid)) + 1);
+    applyFloorCap(run);
     return run;
   } catch {
     return null;
@@ -701,7 +715,7 @@ export const SCOUT_BONUS_LEVELS = 3;
 export function catchLevel(run: Run, enemy: Creature): number {
   const stars = catchBonus(run, enemy.speciesId) ? 1 : 0;
   const bonus = run.passive === 'scout' ? SCOUT_BONUS_LEVELS : 0;
-  return Math.min(levelCap({ stage: enemy.stage, stars }), enemy.level + bonus);
+  return Math.min(stageCap({ stage: enemy.stage, stars }), enemy.level + bonus);
 }
 
 export function catchCreature(
@@ -823,6 +837,7 @@ export function clearFloor(run: Run): boolean {
   }
   saveMeta(meta);
   run.floor += 1;
+  applyFloorCap(run);
   run.map = generateFloor(run.floor, run.biomes[run.floor], run.rng.int(0, 2 ** 31));
   run.currentId = run.map.startId;
   run.visited = [run.map.startId];

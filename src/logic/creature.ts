@@ -60,9 +60,27 @@ export function creatureTypes(c: Creature): TypePair {
 
 /** Level caps per evolution stage; each prestige star adds 5. */
 export const STAGE_CAPS = [30, 65, 100];
-export function levelCap(c: Pick<Creature, 'stage' | 'stars'>): number {
+export function stageCap(c: Pick<Creature, 'stage' | 'stars'>): number {
   return STAGE_CAPS[c.stage] + c.stars * 5;
 }
+
+/**
+ * The current floor's level ceiling (set by the run). Your creatures can't level past it, so you
+ * can't outgrow a floor; XP beyond it is stored and pays coins, and it opens up on the next floor.
+ */
+let floorCeiling = Infinity;
+export function setFloorCeiling(n: number) {
+  floorCeiling = n;
+}
+export const getFloorCeiling = () => floorCeiling;
+
+/** Effective level cap: the stage cap, or the floor ceiling if that's lower. */
+export function levelCap(c: Pick<Creature, 'stage' | 'stars'>): number {
+  return Math.min(stageCap(c), floorCeiling);
+}
+
+/** True when the floor ceiling (not the creature's own stage cap) is what's holding it back. */
+export const floorCapped = (c: Pick<Creature, 'stage' | 'stars'>) => floorCeiling < stageCap(c);
 
 export function xpToNext(level: number): number {
   return Math.round(10 + level * BALANCE.xpPerLevelNeeded + level * level * BALANCE.xpQuad);

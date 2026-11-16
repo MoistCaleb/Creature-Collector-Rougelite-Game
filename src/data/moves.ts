@@ -217,7 +217,7 @@ function special(el: Element, i: number, s: Special): MoveDef {
     case 'multi':
       return { ...base, power: 22, accuracy: 95, hits: 3 };
     case 'drain':
-      return { ...base, power: 55, accuracy: 100, drain: 0.5 };
+      return { ...base, power: 55, accuracy: 100, drain: 0.2 };
     case 'sap':
       return { ...base, power: 50, accuracy: 100, targetAfter: s.fx };
     case 'boost':
@@ -274,7 +274,7 @@ export function registerSignature(speciesId: string, name: string, el: Element, 
       m = { ...base, kind: 'attack', power: 30, accuracy: 95, hits: 3 };
       break;
     case 'sap':
-      m = { ...base, kind: 'attack', power: 70, accuracy: 100, drain: 0.5 };
+      m = { ...base, kind: 'attack', power: 70, accuracy: 100, drain: 0.2 };
       break;
     case 'ambush':
       m = { ...base, kind: 'attack', power: 60, accuracy: 100, priority: true };
@@ -301,10 +301,10 @@ export const allMoveIds = () => Object.keys(MOVES);
 export const TIER3_EFFECT: Record<Element, string> = {
   Fire: 'Burns the target',
   Frost: "Lowers target's Speed",
-  Nature: 'Drains 40% of damage',
+  Nature: 'Drains 15% of damage',
   Earth: "Raises user's Defense",
   Storm: '35% chance to strike again',
-  Water: 'Heals user 15% max HP',
+  Water: 'Heals 15% of damage',
   Metal: "Raises user's Attack",
   Toxic: 'Poisons the target',
   Shadow: "Lowers target's Attack",

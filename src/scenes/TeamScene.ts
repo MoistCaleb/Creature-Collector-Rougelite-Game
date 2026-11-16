@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS, elementTextColor } from '../data/types';
 import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
-import { BANK_LEVELS, bankedLevels, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { BANK_LEVELS, bankedLevels, floorCapped, getFloorCeiling, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -53,6 +53,7 @@ export class TeamScene extends Phaser.Scene {
 
     const rowW = W - 32;
     text(this, 16, 70, `Main team  ${run.team.length}/${TEAM_MAX}`, 15, COLORS.text);
+    if (Number.isFinite(getFloorCeiling())) text(this, W - 16, 72, `Floor level cap: ${getFloorCeiling()}`, 12, '#c9a3dd').setOrigin(1, 0);
     run.team.forEach((c, i) => this.row(16, 90 + i * 68, rowW, c, { list: 'team', i }));
     const benchY = 90 + TEAM_MAX * 68 + 6;
     text(this, 16, benchY, `Bench  ${run.bench.length}/${BENCH_MAX}  (second life + prestige fuel)`, 15, COLORS.text);
@@ -111,8 +112,10 @@ export class TeamScene extends Phaser.Scene {
       c.level < cap
         ? `XP ${c.xp}/${xpToNext(c.level)}`
         : stored
-          ? `MAX · Stored ${full ? BANK_LEVELS : bankedLevels(c).toFixed(1)}/${BANK_LEVELS} lv${full ? ' (full)' : ''}`
-          : 'MAX · XP is stored and pays coins';
+          ? `${floorCapped(c) ? 'Floor cap' : 'MAX'} · Stored ${full ? BANK_LEVELS : bankedLevels(c).toFixed(1)}/${BANK_LEVELS} lv${full ? ' (full)' : ''}`
+          : floorCapped(c)
+            ? 'Floor cap · XP is stored for the next floor'
+            : 'MAX · XP is stored and pays coins';
     text(this, 18, y0 + 31, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim);
     text(this, 18, y0 + 47, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text);
     c.moves.forEach((m, i) => {

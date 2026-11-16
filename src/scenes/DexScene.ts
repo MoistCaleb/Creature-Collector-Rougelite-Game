@@ -7,7 +7,7 @@ import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
-import { createCreature, levelCap, stats } from '../logic/creature';
+import { createCreature, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
 import { toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
@@ -221,7 +221,7 @@ export class DexScene extends Phaser.Scene {
         row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s)).setScale(3.4 * SPRITE_FIT));
         // Stats at this form's level cap (no prestige stars).
         const c = createCreature(sp.id, 1, s);
-        c.level = levelCap(c);
+        c.level = stageCap(c);
         const st = stats(c);
         row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
         row.add(text(this, 150, sy + 34, STAGE_LABEL[s], 12, '#8e86ad'));

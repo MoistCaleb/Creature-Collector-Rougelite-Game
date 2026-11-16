@@ -18,6 +18,8 @@ export const BALANCE = {
   rampCurve: 1.2,
   /** Floor boss levels (the lead creature is +2). */
   bossLevel: [25, 63, 96],
+  /** Highest level your creatures can reach on each floor (XP past it is stored for the next floor). */
+  floorLevelCap: [45, 75, 105],
   /** Whether each floor boss's lead creature is one evolution ahead. */
   bossLeadEvolves: [false, true, true],
   eliteLevelBonus: 1,

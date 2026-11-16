@@ -524,7 +524,7 @@ export class Battle {
         }
         break;
       case 'Nature': {
-        const amt = Math.ceil(damage * 0.4);
+        const amt = Math.ceil(damage * 0.15);
         if (amt > 0 && isAlive(user.c)) {
           user.c.hp = Math.min(userMax, user.c.hp + amt);
           ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
@@ -539,8 +539,8 @@ export class Battle {
         }
         break;
       case 'Water':
-        if (isAlive(user.c)) {
-          user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(userMax * 0.15));
+        if (isAlive(user.c) && damage > 0) {
+          user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(damage * 0.15));
           ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
           ev.push({ kind: 'text', text: `${creatureName(user.c)} was refreshed!` });
         }
