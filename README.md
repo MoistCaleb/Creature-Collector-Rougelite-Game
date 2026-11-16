@@ -48,7 +48,7 @@ Saves on the installed app live on that device. The claude.ai preview keeps its 
 - **Procedural pixel creatures** — generated from species seed; evolution grows horns/spikes.
 - **Held items** — 11 items (one per creature), equipped from the Team screen; from shops, chests, events and trainer prizes.
 - **Events** — 23 events with trade-offs; none repeats in a run until you've seen them all.
-- **Heat** — beat a run to unlock Heat 1–8: each level stacks a harder rule.
+- **Heat** — beat a run to unlock Heat 1–8: each level stacks a harder rule. Pick it after choosing a map; each Heat won on a map lights one of its 8 flame tokens.
 - **Daily run** — the same seed, starters and map for everyone each day; your best result is kept.
 - **Battle controls** — 1×/2×/3× speed and auto-battle; vibration on Android.
 - **Run summary** — what beat you, your MVP, stats, survivors and the fallen.
