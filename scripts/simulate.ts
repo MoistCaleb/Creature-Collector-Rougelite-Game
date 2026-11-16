@@ -14,7 +14,7 @@ import {
   addLevels, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
-  allCreatures, usePotion, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
+  allCreatures, usePotion, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, fillTeamFromBench, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
   moveTo, postBattleRecover, promoteBench, type Meta, type Run, startRun,
 } from '../src/logic/run';
 import { Rng } from '../src/logic/rng';
@@ -67,7 +67,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   }
   const o = b.outcome();
   if (o === 'win') {
-    buryFallen(run);
+    if (buryFallen(run).length) fillTeamFromBench(run);
     postBattleRecover(run);
     // Drink carried potions on anyone below half HP.
     for (;;) {

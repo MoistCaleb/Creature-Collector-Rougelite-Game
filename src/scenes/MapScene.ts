@@ -216,7 +216,7 @@ export class MapScene extends Phaser.Scene {
     }
     muteButton(this, W - 192, TOP_BAR / 2, 36);
     button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
-    button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
+    button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 17 });
   }
 
   private drawBottomBar() {
@@ -227,7 +227,7 @@ export class MapScene extends Phaser.Scene {
     run.team.forEach((c, i) => {
       const x = slotW * i + slotW / 2;
       const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6 * SPRITE_FIT);
-      img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team'));
+      img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
       text(this, x, y0 + 64, `Lv ${c.level}`, 12, COLORS.textDim).setOrigin(0.5);
       new HpBar(this, x - 36, y0 + 84, 72, 7, false).set(c.hp, stats(c).hp);
     });

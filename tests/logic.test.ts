@@ -272,6 +272,20 @@ describe('acquiring creatures', () => {
     expect(r2.coins).toBe(Math.round(250 * BALANCE.fullBankCoinRate));
     expect(run.coins).toBe(coins0 + r1.coins + r2.coins);
   });
+  it('after a battle, bench creatures fill the slots of the fallen', async () => {
+    const { fillTeamFromBench } = await import('../src/logic/run');
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    run.team.push(createCreature('mossling', 5), createCreature('mossling', 5));
+    const b1 = createCreature('puddlet', 5);
+    const b2 = createCreature('puddlet', 5);
+    run.bench.push(b1, b2);
+    run.team[1].hp = 0;
+    run.team[2].hp = 0;
+    expect(buryFallen(run)).toHaveLength(2);
+    expect(fillTeamFromBench(run)).toEqual([b1, b2]);
+    expect(run.team).toHaveLength(3);
+    expect(run.bench).toHaveLength(0);
+  });
   it('with a full party, catching releases the chosen creature and takes its spot', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
     while (run.team.length < 4) run.team.push(createCreature('mossling', 5));

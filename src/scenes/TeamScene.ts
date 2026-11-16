@@ -24,13 +24,15 @@ export class TeamScene extends Phaser.Scene {
 
   init(data: { selected?: Ref | null }) {
     this.selected = data.selected ?? null;
+    // Never keep a selection that points at an empty slot (creatures can leave between visits).
+    if (this.selected && !state.run?.[this.selected.list][this.selected.i]) this.selected = null;
   }
 
   create() {
     const run = state.run!;
     background(this);
     text(this, 16, 14, 'Your Creatures', 24, '#ffc94d', { fontStyle: 'bold' });
-    button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map'), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
+    button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
     // Team synergy: shared elements on the main team boost everyone.
     const syn = teamSynergy(run.team, run.passive === 'harmonist' ? 2 : 1);
     if (syn.length) {
@@ -84,6 +86,10 @@ export class TeamScene extends Phaser.Scene {
     const a = this.selected;
     const ca = run[a.list][a.i];
     const cb = run[ref.list][ref.i];
+    if (!ca || !cb) {
+      this.scene.restart({ selected: cb ? ref : null });
+      return;
+    }
     run[a.list][a.i] = cb;
     run[ref.list][ref.i] = ca;
     this.scene.restart({ selected: null });
