@@ -767,10 +767,22 @@ export function catchCreature(
   return { c, bonus, newlyClaimed };
 }
 
-/** Boss boon: one of the guardian's creatures joins at Lv 1, keeping its evolved form. */
+/** Levels above its own that a claimed guardian joins at. */
+export const GUARDIAN_BONUS_LEVELS = 5;
+
+/**
+ * The level a claimed guardian joins at: its own level +5, within its stage cap and the next
+ * floor's level ceiling (it's claimed as you climb to that floor).
+ */
+export function guardianLevel(run: Run, boss: Creature): number {
+  const ceiling = BALANCE.floorLevelCap[run.floor + 1] ?? Infinity;
+  return Math.max(1, Math.min(stageCap({ stage: boss.stage, stars: 0 }), ceiling, boss.level + GUARDIAN_BONUS_LEVELS));
+}
+
+/** Boss boon: one of the guardian's creatures joins at its level +5, keeping its evolved form. */
 export function claimGuardian(run: Run, boss: Creature, release?: Creature): Creature | null {
   if (!canMakeRoom(run, release)) return null;
-  const c = createCreature(boss.speciesId, 1, boss.stage);
+  const c = createCreature(boss.speciesId, guardianLevel(run, boss), boss.stage);
   addToParty(run, c, release);
   return c;
 }

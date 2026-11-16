@@ -45,6 +45,8 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
+  GUARDIAN_BONUS_LEVELS,
+  guardianLevel,
   rollHeld,
   stash,
   potionHeal,
@@ -852,7 +854,9 @@ export class BattleScene extends Phaser.Scene {
         { label: 'Evolve one', sub: evolvable.length ? 'Evolve a creature that has reached its evolution level' : 'No creature has reached its evolution level (Lv 30 / 65)', color: 0x4a2f7a, disabled: evolvable.length === 0 },
         {
           label: 'Claim a guardian',
-          sub: full ? 'Joins at Lv 1, already evolved (release one to make room)' : 'One of its creatures joins you at Lv 1, already evolved',
+          sub: full
+            ? `Joins at its level +${GUARDIAN_BONUS_LEVELS}, already evolved (release one to make room)`
+            : `One of its creatures joins you at its level +${GUARDIAN_BONUS_LEVELS}, already evolved`,
           color: 0x2f4a7a,
         },
       ],
@@ -887,17 +891,17 @@ export class BattleScene extends Phaser.Scene {
             },
           });
         } else {
-          // Preview each guardian as it would join: Lv 1, same form, full HP.
+          // Preview each guardian as it would join: its level +5, same form, full HP.
           const top = Math.max(...this.enemies.map((e) => e.stage));
           const guardians = this.enemies.filter((e) => e.stage === top);
           const previews = guardians.map((e) => {
-            const p = { ...e, level: 1, hp: 1 };
+            const p = { ...e, level: guardianLevel(run, e), stars: 0, held: undefined, status: undefined, hp: 1 };
             p.hp = stats(p).hp;
             return p;
           });
           openPicker(this, {
             title: 'Claim a guardian',
-            subtitle: 'It joins at Lv 1 but keeps its evolved form and higher level cap.',
+            subtitle: `It joins ${GUARDIAN_BONUS_LEVELS} levels above its own level, in its evolved form, at full health.`,
             options: previews.map((p) => ({ creature: p })),
             onPick: (k) => {
               const claim = (release?: Creature) => {
