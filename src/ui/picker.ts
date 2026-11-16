@@ -17,6 +17,8 @@ export interface PickOption {
 export interface PickRow {
   creature: Creature;
   text: string;
+  /** Taller row with a bigger sprite, for prompts about a single creature. */
+  big?: boolean;
 }
 
 export interface PickConfig {
@@ -38,8 +40,8 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   const close = () => root.destroy();
 
   const rowH = cfg.options.some((o) => o.creature) ? 72 : 76;
-  const infoRowH = 48;
-  const infoH = (cfg.rows?.length ?? 0) * infoRowH + (cfg.rows?.length ? 10 : 0);
+  const rowHeight = (r: PickRow) => (r.big ? 84 : 48);
+  const infoH = (cfg.rows ?? []).reduce((h, r) => h + rowHeight(r), 0) + (cfg.rows?.length ? 10 : 0);
   const listH = cfg.options.length * rowH + infoH;
   const title = text(scene, W / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
   const sub = cfg.subtitle
@@ -60,10 +62,13 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
 
   let y = top + headerH;
   for (const r of cfg.rows ?? []) {
-    root.add(scene.add.rectangle(30, y, W - 60, infoRowH - 6, COLORS.panelLight).setOrigin(0));
-    root.add(creatureSprite(scene, 58, y + (infoRowH - 6) / 2 - 7, r.creature, 1.3));
-    root.add(text(scene, 88, y + (infoRowH - 6) / 2, r.text, 15, COLORS.text, { wordWrap: { width: W - 130 } }).setOrigin(0, 0.5));
-    y += infoRowH;
+    const h = rowHeight(r) - 6;
+    root.add(scene.add.rectangle(30, y, W - 60, h, COLORS.panelLight).setOrigin(0));
+    root.add(creatureSprite(scene, r.big ? 76 : 58, y + h / 2 - (r.big ? 12 : 7), r.creature, r.big ? 2.6 : 1.3));
+    root.add(
+      text(scene, r.big ? 124 : 88, y + h / 2, r.text, r.big ? 18 : 15, COLORS.text, { wordWrap: { width: W - (r.big ? 170 : 130) } }).setOrigin(0, 0.5),
+    );
+    y += rowHeight(r);
   }
   if (cfg.rows?.length) y += 10;
   cfg.options.forEach((o, i) => {
