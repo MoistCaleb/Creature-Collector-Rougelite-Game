@@ -68,6 +68,12 @@ export class ArenaScene extends Phaser.Scene {
       glyph: 'swords',
     });
 
+    button(this, W / 2, y + 106, W - 40, 56, 'Duel a friend', () => this.scene.start('Duel', {}), {
+      color: 0x2f4a6b,
+      fontSize: 19,
+      sub: 'Live, phone to phone, with a 5-digit code',
+    });
+
     if (data.ladder) this.time.delayedCall(50, () => this.startLadder(data.ladder!));
   }
 

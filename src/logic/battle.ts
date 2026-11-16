@@ -62,6 +62,8 @@ export class Battle {
   /** Chance the enemy picks a random move instead of its best one. */
   private enemyRandomness: number;
   private permadeath: boolean;
+  /** Set for duels between two people (see the constructor option). */
+  readonly duel: { player: string; enemy: string } | null;
   /** A floor boss's special rule, if any. */
   readonly rule: BossRule | null;
   private ruleName: string;
@@ -79,6 +81,11 @@ export class Battle {
       enemyRandomness?: number;
       /** Your fainted creatures are gone for good (runs); off for Arena and duels. */
       permadeath?: boolean;
+      /**
+       * Duels between two people: names shown for each side ("Sam's Monolith"), and the enemy side
+       * chooses its own next creature after a faint (see forcedEnemySwitch).
+       */
+      duel?: { player: string; enemy: string };
       rule?: BossRule;
       ruleName?: string;
       spareLast?: boolean;
@@ -98,6 +105,7 @@ export class Battle {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
     this.permadeath = opts.permadeath ?? true;
+    this.duel = opts.duel ?? null;
     this.rule = opts.rule ?? null;
     this.ruleName = opts.ruleName ?? 'The field';
     this.spareLast = opts.spareLast ?? false;
@@ -256,6 +264,86 @@ export class Battle {
     return ev;
   }
 
+  // ------------------------------------------------------------ duels
+
+  canEnemySwapTo(index: number): boolean {
+    return index !== this.eActive && !!this.enemy[index] && isAlive(this.enemy[index].c);
+  }
+
+  /** In a duel, the enemy side's active creature fainted and it has to pick another. */
+  enemyNeedsSwitch(): boolean {
+    return !isAlive(this.e.c) && this.enemy.some((x) => isAlive(x.c));
+  }
+
+  /** In a duel, your active creature fainted and you have to pick another. */
+  playerNeedsSwitch(): boolean {
+    return !isAlive(this.p.c) && this.player.some((x) => isAlive(x.c));
+  }
+
+  /** Duel: the enemy side sends in its choice after a faint. */
+  forcedEnemySwitch(index: number): BattleEvent[] {
+    if (!this.canEnemySwapTo(index)) return [];
+    const ev: BattleEvent[] = [];
+    this.sendEnemy(index, ev);
+    return ev;
+  }
+
+  private sendEnemy(index: number, ev: BattleEvent[]) {
+    this.eActive = index;
+    resetStages(this.e);
+    ev.push({ kind: 'enemySend', index, hp: this.e.c.hp });
+    ev.push({ kind: 'text', text: `${this.duel ? this.duel.enemy : 'The enemy'} sends out ${creatureName(this.e.c)}!` });
+    this.onEnter('enemy', ev);
+  }
+
+  /**
+   * A duel turn: both sides are people. Switches happen first, then moves in priority / speed
+   * order, then end-of-turn effects. Potions aren't allowed.
+   */
+  takeDuelTurn(pAct: PlayerAction, eAct: PlayerAction): BattleEvent[] {
+    const ev: BattleEvent[] = [];
+    const names = this.duel ?? { player: 'You', enemy: 'The enemy' };
+    if (pAct.kind === 'swap' && this.canSwapTo(pAct.index)) {
+      ev.push({ kind: 'text', text: `${names.player} calls back ${creatureName(this.p.c)}.` });
+      this.pActive = pAct.index;
+      this.fought.add(this.p.c.uid);
+      resetStages(this.p);
+      ev.push({ kind: 'swap', side: 'player', index: pAct.index, hp: this.p.c.hp });
+      ev.push({ kind: 'text', text: `${names.player} sends out ${creatureName(this.p.c)}!` });
+      this.onEnter('player', ev);
+    }
+    if (eAct.kind === 'swap' && this.canEnemySwapTo(eAct.index)) {
+      ev.push({ kind: 'text', text: `${names.enemy} calls back ${creatureName(this.e.c)}.` });
+      this.sendEnemy(eAct.index, ev);
+    }
+    const slotFor = (act: PlayerAction, c: Creature): MoveSlot | null => {
+      if (act.kind !== 'move') return null;
+      const m = c.moves[act.index];
+      return m && hasUses(m) ? m : fallbackMove(c);
+    };
+    const pSlot = slotFor(pAct, this.p.c);
+    const eSlot = slotFor(eAct, this.e.c);
+    const pAt = this.p;
+    const eAt = this.e;
+    let order: Side[] = [];
+    if (pSlot && eSlot) {
+      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p);
+      const ePri = !!moveDef(eSlot).priority || this.clawProc(this.e);
+      order = (pPri !== ePri ? pPri : this.playerGoesFirst()) ? ['player', 'enemy'] : ['enemy', 'player'];
+    } else if (pSlot) order = ['player'];
+    else if (eSlot) order = ['enemy'];
+    for (const side of order) {
+      // A creature that was knocked out (or replaced) this turn doesn't get to act.
+      const actor = side === 'player' ? this.p : this.e;
+      if (actor !== (side === 'player' ? pAt : eAt) || !isAlive(actor.c)) continue;
+      const target = side === 'player' ? this.e : this.p;
+      if (!isAlive(target.c)) continue;
+      this.useMove(side, side === 'player' ? pSlot! : eSlot!, ev);
+    }
+    this.endOfTurn(ev);
+    return ev;
+  }
+
   /** Quick Claw: a 25% chance to jump the queue this turn. */
   private clawProc(x: Combatant): boolean {
     return x.c.held === 'claw' && this.rng.chance(0.25);
@@ -336,7 +424,7 @@ export class Battle {
     const target = side === 'player' ? this.e : this.p;
     const holder = def.kind === 'buff' ? user : target;
     const holderSide: Side = def.kind === 'buff' ? side : side === 'player' ? 'enemy' : 'player';
-    const name = (holderSide === 'enemy' ? 'Enemy ' : '') + creatureName(holder.c);
+    const name = this.nameOf(holderSide, holder.c);
     for (const e of effectsAtTier(def, slot.tier)) {
       const key = stageKey(e.stat);
       const before = holder[key];
@@ -355,7 +443,13 @@ export class Battle {
   // ------------------------------------------------------------ status conditions
 
   private label(x: Combatant): string {
-    return (this.enemy.includes(x) ? 'Enemy ' : '') + creatureName(x.c);
+    return this.nameOf(this.enemy.includes(x) ? 'enemy' : 'player', x.c);
+  }
+
+  /** "Monolith" / "Enemy Monolith", or in duels "Sam's Monolith" on both sides. */
+  nameOf(side: Side, c: Creature): string {
+    if (this.duel) return `${this.duel[side]}'s ${creatureName(c)}`;
+    return (side === 'enemy' ? 'Enemy ' : '') + creatureName(c);
   }
 
   /** Give a combatant a status. Fails if it already has one, has fainted, or its type is immune. */
@@ -430,7 +524,7 @@ export class Battle {
     const target = side === 'player' ? this.e : this.p;
     const targetSide: Side = side === 'player' ? 'enemy' : 'player';
     const def = moveDef(slot);
-    const who = side === 'enemy' ? `Enemy ${creatureName(user.c)}` : creatureName(user.c);
+    const who = this.nameOf(side, user.c);
     ev.push({ kind: 'attack', side, move: def.name, moveId: def.id });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
 
@@ -602,10 +696,11 @@ export class Battle {
     ev.push({ kind: 'faint', side, index: idx });
     ev.push({
       kind: 'text',
-      text: side === 'player' ? `${creatureName(c)} ${this.permadeath ? 'has fallen... forever' : 'fainted'}.` : `Enemy ${creatureName(c)} fainted!`,
+      text: side === 'player' && this.permadeath ? `${creatureName(c)} has fallen... forever.` : `${this.nameOf(side, c)} fainted!`,
     });
     if (side === 'enemy') {
-      const next = this.enemy.findIndex((x) => isAlive(x.c));
+      // In duels the other person picks their next creature themselves.
+      const next = this.duel ? -1 : this.enemy.findIndex((x) => isAlive(x.c));
       if (next >= 0) {
         this.eActive = next;
         resetStages(this.e);
@@ -705,7 +800,7 @@ export class Battle {
       if (x.c.held !== 'berry' || !isAlive(x.c) || x.c.hp >= max) continue;
       x.c.hp = Math.min(max, x.c.hp + Math.ceil(max / 12));
       ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
-      ev.push({ kind: 'text', text: `${side === 'enemy' ? 'Enemy ' : ''}${creatureName(x.c)} snacks on a berry.` });
+      ev.push({ kind: 'text', text: `${this.nameOf(side, x.c)} snacks on a berry.` });
     }
   }
 

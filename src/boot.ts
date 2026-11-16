@@ -3,6 +3,7 @@ import { BattleScene } from './scenes/BattleScene';
 import { DexScene } from './scenes/DexScene';
 import { BagScene } from './scenes/BagScene';
 import { ArenaScene } from './scenes/ArenaScene';
+import { DuelScene } from './scenes/DuelScene';
 import { EndScene } from './scenes/EndScene';
 import { MapScene } from './scenes/MapScene';
 import { MapSelectScene } from './scenes/MapSelectScene';
@@ -34,6 +35,7 @@ export function startGame() {
       TeamScene,
       BagScene,
       ArenaScene,
+      DuelScene,
       EndScene,
       DexScene,
       PassivesScene,
