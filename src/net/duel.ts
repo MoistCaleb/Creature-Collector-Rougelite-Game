@@ -1,7 +1,7 @@
 import type { ArenaPick } from '../logic/arena';
 import { makeArenaCreature } from '../logic/arena';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
-import { isAlive } from '../logic/creature';
+import { isAlive, stats, type Creature } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { synergyMults } from '../logic/synergy';
 import type { StatusId } from '../data/status';
@@ -29,6 +29,26 @@ export interface StartInfo {
   guestName: string;
   hostTeam: ArenaPick[];
   guestTeam: ArenaPick[];
+  /** Stage race finale: the teams as they finished their runs (levels, stars, items), fully healed. */
+  hostCreatures?: Creature[];
+  guestCreatures?: Creature[];
+}
+
+/** A stage race: both play the same map from the same seed, then duel with what they've got. */
+export interface RaceInfo {
+  seed: number;
+  mapId: string;
+  starters: string[];
+}
+
+/** Where a racer is: shown on the other phone's map. */
+export interface RaceProgress {
+  floor: number;
+  /** Run over (won or lost). */
+  finished: boolean;
+  won: boolean;
+  /** Team to bring to the final duel (empty if wiped out). */
+  team?: Creature[];
 }
 
 export type DuelMsg =
@@ -38,6 +58,8 @@ export type DuelMsg =
   | { t: 'switch'; index: number }
   | { t: 'step'; events: BattleEvent[]; snap: Snap; next: Next }
   | { t: 'resume'; info: StartInfo; snap: Snap; next: Next }
+  | { t: 'race'; race: RaceInfo }
+  | { t: 'progress'; p: RaceProgress }
   | { t: 'lobby' };
 
 // ---------------------------------------------------------------- snapshots
@@ -116,8 +138,8 @@ export function flipEvents(events: BattleEvent[]): BattleEvent[] {
 
 /** Build a duel battle from one player's point of view (host: player = host team). */
 export function duelBattle(info: StartInfo, role: 'host' | 'guest'): Battle {
-  const host = info.hostTeam.map(makeArenaCreature);
-  const guest = info.guestTeam.map(makeArenaCreature);
+  const host = info.hostCreatures ? info.hostCreatures.map(readyForDuel) : info.hostTeam.map(makeArenaCreature);
+  const guest = info.guestCreatures ? info.guestCreatures.map(readyForDuel) : info.guestTeam.map(makeArenaCreature);
   const [mine, theirs] = role === 'host' ? [host, guest] : [guest, host];
   const names = role === 'host' ? { player: info.hostName, enemy: info.guestName } : { player: info.guestName, enemy: info.hostName };
   return new Battle(mine, theirs, new Rng(info.seed), {
@@ -126,6 +148,16 @@ export function duelBattle(info: StartInfo, role: 'host' | 'guest'): Battle {
     synergy: synergyMults(mine),
     enemySynergy: synergyMults(theirs),
   });
+}
+
+/** A run creature heading into the race finale: a copy, fully healed, no status, all move uses. */
+export function readyForDuel(c: Creature): Creature {
+  const x: Creature = JSON.parse(JSON.stringify(c));
+  x.hp = stats(x).hp;
+  x.status = undefined;
+  for (const m of x.moves) m.used = 0;
+  x.pendingMoves = [];
+  return x;
 }
 
 // ---------------------------------------------------------------- turn flow

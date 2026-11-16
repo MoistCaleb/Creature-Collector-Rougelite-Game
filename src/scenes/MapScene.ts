@@ -1,6 +1,8 @@
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
+import { duel, sendProgress } from '../net/runtime';
+import { session } from '../net/session';
 import { MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
@@ -207,6 +209,7 @@ export class MapScene extends Phaser.Scene {
 
   private drawTopBar() {
     const run = state.run!;
+    if (run.race) this.drawRaceStatus();
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
@@ -232,6 +235,24 @@ export class MapScene extends Phaser.Scene {
     const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });
     if ((run.bag ?? []).length) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
     button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
+  }
+
+  /** Stage race: share where we are, and show where the other racer is. */
+  private drawRaceStatus() {
+    const run = state.run!;
+    sendProgress({ floor: run.floor, finished: false, won: false });
+    const t = text(this, W - 8, 66, '', 12, '#8fd0ff', { fontStyle: 'bold' }).setOrigin(1, 0).setDepth(5);
+    const draw = () => {
+      if (!t.active) return;
+      const them = duel.race?.theirs;
+      const where = !session.connected ? 'reconnecting…' : !them ? 'starting' : them.finished ? (them.won ? 'finished!' : 'run over') : `floor ${them.floor + 1}`;
+      t.setText(`vs ${run.race!.opponent}: ${where}`);
+    };
+    draw();
+    duel.onRaceChange = draw;
+    this.events.once('shutdown', () => {
+      if (duel.onRaceChange === draw) duel.onRaceChange = null;
+    });
   }
 
   private drawBottomBar() {

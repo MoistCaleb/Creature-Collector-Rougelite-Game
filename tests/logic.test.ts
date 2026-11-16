@@ -1298,3 +1298,29 @@ describe('duels', () => {
     expect(hostNext.won && guestNext.won).toBe(false);
   });
 });
+
+describe('stage races', () => {
+  it('race runs start even (no passive, Heat 0) without touching the saved passive, and finale teams are healed copies', async () => {
+    const { readyForDuel } = await import('../src/net/duel');
+    const m: Meta = {
+      unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: 'mentor', runs: 0, wins: 0,
+      dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands',
+      stats: emptyStats(), achievements: [], newAchievements: [], heat: 3, heatUnlocked: 3,
+    };
+    const a = startRun(m, 'emberkit', 77, 'wildlands', undefined, true);
+    const b = startRun(m, 'emberkit', 77, 'wildlands', undefined, true);
+    expect(a.passive).toBe(null);
+    expect(a.heat).toBe(0);
+    expect(m.equippedPassive).toBe('mentor');
+    expect(Object.keys(a.map.nodes)).toEqual(Object.keys(b.map.nodes));
+    const c = a.team[0];
+    c.hp = 1;
+    c.status = { id: 'burn', turns: 3 };
+    c.moves[0].used = 2;
+    const d = readyForDuel(c);
+    expect(d.hp).toBe(stats(d).hp);
+    expect(d.status).toBeUndefined();
+    expect(d.moves[0].used).toBe(0);
+    expect(c.hp).toBe(1);
+  });
+});

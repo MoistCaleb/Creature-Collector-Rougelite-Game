@@ -221,6 +221,8 @@ export interface Run {
   heat?: number;
   /** Set on a daily run: the UTC date it belongs to. */
   daily?: string;
+  /** Stage race against a friend: same map and seed, double battle rewards, a live duel at the end. */
+  race?: { opponent: string; role: 'host' | 'guest' };
   /** Potions carried (usable any time, including mid-battle). */
   potions?: number;
   /** Held items not on any creature. */
@@ -303,7 +305,8 @@ export function describeDaily(r: DailyResult): string {
   return r.won ? `Won! · ${r.battlesWon} battles` : `Floor ${r.floor + 1} · ${r.battlesWon} battles`;
 }
 
-export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string): Run {
+/** `even`: no passive and Heat 0 (daily runs and stage races, so everyone starts level). */
+export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string, even = !!daily): Run {
   const rng = new Rng(seed);
   const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
   const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
@@ -314,11 +317,11 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     if (meta.daily?.date !== daily) meta.daily = { date: daily, attempts: 0, best: null };
     meta.daily.attempts += 1;
   }
-  // Daily runs are the same for everyone: no passive, standard Heat.
-  const passive = daily ? null : meta.equippedPassive;
+  // Daily runs and races are the same for everyone: no passive, standard Heat.
+  const passive = even ? null : meta.equippedPassive;
   saveMeta(meta);
   const run: Run = {
-    heat: daily ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
+    heat: even ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
     ...(daily ? { daily } : {}),
     rng,
     seed,
