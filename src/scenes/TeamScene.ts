@@ -4,10 +4,10 @@ import { ELEMENT_COLORS } from '../data/types';
 import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { allCreatures, BENCH_MAX, dexComplete, equipHeld, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
+import { allCreatures, BENCH_MAX, dexComplete, equipHeld, usePotion, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
-import { dex, state } from '../state';
+import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { background, button, COLORS, creatureRow, stars, text, W } from '../ui/widgets';
 
@@ -109,14 +109,13 @@ export class TeamScene extends Phaser.Scene {
       { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a },
     );
 
-    const bx = 70;
     const by = y0 + 168;
     const stoneOk = run.evoStones > 0 && canEvolve(c) && c.level >= cap;
     button(
       this,
-      bx,
+      58,
       by,
-      120,
+      100,
       36,
       'Evolve ◆',
       () => {
@@ -136,9 +135,9 @@ export class TeamScene extends Phaser.Scene {
     const canMove = ref.list === 'team' ? run.bench.length < BENCH_MAX && run.team.length > 1 : run.team.length < TEAM_MAX;
     button(
       this,
-      bx + 130,
+      166,
       by,
-      130,
+      104,
       36,
       ref.list === 'team' ? 'To bench' : 'To team',
       () => {
@@ -151,9 +150,9 @@ export class TeamScene extends Phaser.Scene {
     );
     button(
       this,
-      bx + 260,
+      270,
       by,
-      110,
+      92,
       36,
       'Release',
       () =>
@@ -170,6 +169,21 @@ export class TeamScene extends Phaser.Scene {
           onCancel: () => {},
         }),
       { enabled: allCreatures(run).length > 1, fontSize: 15, color: 0x5a2a2a },
+    );
+    const potions = run.potions ?? 0;
+    button(
+      this,
+      374,
+      by,
+      100,
+      36,
+      `✚ Potion ${potions}`,
+      () => {
+        usePotion(run, c);
+        persist();
+        this.scene.restart({ selected: this.selected });
+      },
+      { enabled: potions > 0 && c.hp < s.hp, fontSize: 14, color: 0x2f5a4a },
     );
     if (!stoneOk && run.evoStones > 0 && canEvolve(c))
       text(this, 18, y0 + 136, 'Reach the level cap to use a stone.', 11, '#ffc94d');

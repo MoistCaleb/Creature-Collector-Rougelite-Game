@@ -13,7 +13,7 @@ import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
 import { allCreatures, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
-import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
+import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
 import { Rng } from '../src/logic/rng';
 import { SPECIES } from '../src/data/species';
@@ -870,5 +870,28 @@ describe('daily run', () => {
     expect(recordDaily(worse, false)).toBe(false);
     expect(meta.daily!.best!.floor).toBe(1);
     expect(meta.daily!.attempts).toBe(2);
+  });
+});
+
+describe('potions', () => {
+  it('a potion in battle heals the chosen creature and the enemy still acts', () => {
+    const p = createCreature('emberkit', 20);
+    p.hp = 10;
+    const e = createCreature('mossling', 20);
+    const b = new Battle([p], [e], new Rng(4));
+    const ev = b.takeTurn({ kind: 'potion', index: 0, heal: 0.5 });
+    expect(ev.some((x) => x.kind === 'heal' && x.side === 'player')).toBe(true);
+    expect(ev.some((x) => x.kind === 'attack' && x.side === 'enemy')).toBe(true);
+  });
+  it('shop potions go into the pouch, which holds five', () => {
+    const run = startRun(
+      { unlockedStarters: ['emberkit'], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] },
+      'emberkit',
+      1,
+    );
+    const slot = { item: 'potion' as const, price: 0, sold: false };
+    for (let i = 0; i < 5; i++) applyItem(run, slot);
+    expect(run.potions).toBe(5);
+    expect(unusableReason(run, slot)).toMatch(/full/);
   });
 });

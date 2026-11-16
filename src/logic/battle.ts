@@ -19,7 +19,11 @@ export interface Combatant {
   sash?: 'fired' | 'spent';
 }
 
-export type PlayerAction = { kind: 'move'; index: number } | { kind: 'swap'; index: number };
+export type PlayerAction =
+  | { kind: 'move'; index: number }
+  | { kind: 'swap'; index: number }
+  /** Heal a party member by `heal` (fraction of max HP); uses the turn. */
+  | { kind: 'potion'; index: number; heal: number };
 
 export type BattleEvent =
   | { kind: 'text'; text: string }
@@ -166,7 +170,16 @@ export class Battle {
     const ev: BattleEvent[] = [];
     const enemyMove = this.chooseEnemyMove();
 
-    if (action.kind === 'swap') {
+    if (action.kind === 'potion') {
+      const x = this.player[action.index];
+      if (!x || !isAlive(x.c)) return ev;
+      const max = stats(x.c).hp;
+      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * action.heal));
+      ev.push({ kind: 'text', text: `You use a Potion on ${creatureName(x.c)}.` });
+      if (x === this.p) ev.push({ kind: 'heal', side: 'player', hp: x.c.hp, maxHp: max });
+      ev.push({ kind: 'text', text: `${creatureName(x.c)} recovered health!` });
+      if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
+    } else if (action.kind === 'swap') {
       if (!this.canSwapTo(action.index)) return ev;
       ev.push({ kind: 'text', text: `${creatureName(this.p.c)}, come back!` });
       this.pActive = action.index;

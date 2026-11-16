@@ -8,6 +8,7 @@ import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Spec
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
 import {
   addXp,
+  healFraction,
   catchUpMultiplier,
   createCreature,
   creatureName,
@@ -195,6 +196,8 @@ export interface Run {
   heat?: number;
   /** Set on a daily run: the UTC date it belongs to. */
   daily?: string;
+  /** Potions carried (usable any time, including mid-battle). */
+  potions?: number;
   /** Held items not on any creature. */
   bag?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
@@ -536,6 +539,17 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
     out.push({ name: creatureName(c), xp, levels: addXp(c, xp) });
   }
   return out;
+}
+
+export const MAX_POTIONS = 5;
+export const POTION_HEAL = 0.5;
+
+/** Drink a carried potion. Returns false if there's none or it wouldn't help. */
+export function usePotion(run: Run, c: Creature): boolean {
+  if ((run.potions ?? 0) < 1 || !isAlive(c) || c.hp >= stats(c).hp) return false;
+  run.potions! -= 1;
+  healFraction(c, POTION_HEAL);
+  return true;
 }
 
 const eggMult = (c: Creature) => (c.held === 'egg' ? 1.4 : 1);
