@@ -902,3 +902,38 @@ describe('pixel icons', () => {
     expect(iconProblems()).toEqual([]);
   });
 });
+
+describe('team synergy', () => {
+  it('two or more creatures sharing an element boost that stat for the team', async () => {
+    const { teamSynergy, synergyMults } = await import('../src/logic/synergy');
+    const fire = SPECIES.filter((s) => s.types[0] === 'Fire' && s.types[1] === 'Fire');
+    const team = [createCreature(fire[0].id, 5), createCreature(fire[1].id, 5)];
+    expect(teamSynergy(team)).toEqual([{ element: 'Fire', count: 2, stat: 'atk', bonus: 0.06 }]);
+    team.push(createCreature(fire[2].id, 5));
+    expect(synergyMults(team).atk).toBeCloseTo(1.12);
+    expect(synergyMults(team, 2).atk).toBeCloseTo(1.24);
+    expect(teamSynergy([createCreature(fire[0].id, 5)])).toEqual([]);
+  });
+  it('synergy makes your attacks hit harder', () => {
+    let plain = 0;
+    let boosted = 0;
+    for (let s = 0; s < 30; s++) {
+      for (const syn of [undefined, { atk: 1.2, def: 1, spd: 1 }]) {
+        const d = createCreature('mossling', 30);
+        d.hp = 100000;
+        const b = new Battle([createCreature('emberkit', 30)], [d], new Rng(s), { synergy: syn });
+        const dmg = b.takeTurn({ kind: 'move', index: 0 }).reduce((n, e) => n + (e.kind === 'damage' && e.side === 'enemy' ? e.amount : 0), 0);
+        if (syn) boosted += dmg;
+        else plain += dmg;
+      }
+    }
+    expect(boosted).toBeGreaterThan(plain * 1.1);
+  });
+  it('Tempered creatures shrug off burn and poison', () => {
+    const p = createCreature('mossling', 20);
+    const e = createCreature('emberkit', 20);
+    const b = new Battle([p], [e], new Rng(1), { rule: 'miasma', ruleName: 'Miasma', playerStatusImmune: ['burn', 'poison'] });
+    b.start();
+    expect(b.p.status).toBeNull();
+  });
+});

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
+import { synergyMults, teamSynergy } from '../logic/synergy';
 import { ensureIcon, icon } from '../ui/icons';
 import { STATUS, type StatusId } from '../data/status';
 import { HELD, heldName } from '../data/held';
@@ -37,7 +38,8 @@ import {
   claimGuardian,
   rollHeld,
   stash,
-  POTION_HEAL,
+  potionHeal,
+  notePotion,
   earnCoins,
   evolveTracked,
   prestigeTracked,
@@ -114,6 +116,9 @@ export class BattleScene extends Phaser.Scene {
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
       spareLast: this.kind === 'battle',
       spared: run.activeBattle.spared,
+      synergy: synergyMults(run.team, run.passive === 'harmonist' ? 2 : 1),
+      playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
+      playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -341,7 +346,7 @@ export class BattleScene extends Phaser.Scene {
     const list = this.battle.player;
     openPicker(this, {
       title: `Use a Potion (${run.potions ?? 0} left)`,
-      subtitle: `Heals ${Math.round(POTION_HEAL * 100)}% of max HP. Uses your turn.`,
+      subtitle: `Heals ${Math.round(potionHeal(run) * 100)}% of max HP. Uses your turn.`,
       options: list.map((x) => ({
         creature: x.c,
         disabled: !isAlive(x.c) || x.c.hp >= stats(x.c).hp,
@@ -349,7 +354,8 @@ export class BattleScene extends Phaser.Scene {
       })),
       onPick: (i) => {
         run.potions = Math.max(0, (run.potions ?? 0) - 1);
-        this.act({ kind: 'potion', index: i, heal: POTION_HEAL });
+        notePotion(run);
+        this.act({ kind: 'potion', index: i, heal: potionHeal(run) });
       },
       onCancel: () => this.maybeAuto(),
     });
@@ -492,6 +498,7 @@ export class BattleScene extends Phaser.Scene {
         }
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
+          if (ev.side === 'enemy' && ev.status) trackStat(state.run!, 'statusInflicted');
           this.setStatus(panel, ev.status);
           if (ev.status) {
             const s = this.spriteOf(ev.side);
@@ -575,6 +582,7 @@ export class BattleScene extends Phaser.Scene {
     if (!ab.settled) {
       run.log.battlesWon += 1;
       trackStat(run, 'battlesWon');
+      if (teamSynergy(run.team).length) trackStat(run, 'synergyWins');
       const fallen = this.fallenNote();
       postBattleRecover(run);
       ab.summary = fallen;

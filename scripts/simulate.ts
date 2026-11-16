@@ -3,6 +3,7 @@
  * Usage: npx vite-node scripts/simulate.ts [runs]
  */
 import { BALANCE } from '../src/data/balance';
+import { synergyMults } from '../src/logic/synergy';
 import { BOSSES } from '../src/data/trainers';
 import { emptyStats } from '../src/logic/achievements';
 import { TIER_POWER } from '../src/data/moves';
@@ -53,7 +54,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   const enemies = makeEncounter(run, currentNode(run));
   enemyLevels = enemies.map((e) => e.level);
   const boss = kind === 'boss' ? BOSSES[run.map.biome] : null;
-  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName });
+  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName, synergy: synergyMults(run.team) });
   b.start();
   for (let t = 0; t < 500; t++) {
     const o = b.outcome();

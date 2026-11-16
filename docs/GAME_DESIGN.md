@@ -219,5 +219,29 @@ Runs unlock:
   | Naturalist | Catch 40 different species | Naturalist: +25% XP from wild battles |
   | Guardian Slayer | Defeat 15 floor bosses | Iron Will: survivors recover 70% after wins (normally 40%) |
   | Treasure Hunter | Open 15 treasure chests | Lucky Charm: coin-flip events succeed 75% |
+  | Chemist | Use 15 potions | Apothecary: 2 starting potions, carry 8, they heal 75% |
+  | Outfitter | Give your creatures 10 held items | Quartermaster: start with two held items |
+  | Hexer | Inflict 30 status conditions | Afflicter: your moves inflict statuses twice as often |
+  | Trial by Fire | Win a run at Heat 2 | Tempered: your creatures can't be burned or poisoned |
+  | In Tune | Win 25 battles with a synergy active | Harmonist: team synergy bonuses doubled |
+
+## Battle systems (later additions)
+
+- **Status conditions** (one per creature; cleared on switching out or at battle end). Moves named for a
+  condition can inflict it (Spark → paralysis, Acid Spit → poison...): attacks 10–20%, debuff moves 40%.
+  | Status | Effect | Immune |
+  |---|---|---|
+  | Burn | −1/12 HP per turn, deals 20% less damage, 4 turns | Fire |
+  | Poison | −1/8 HP per turn, 4 turns | Toxic, Metal |
+  | Paralysis | half speed, 25% chance to lose the turn, 3–4 turns | Storm |
+  | Freeze | can't act; 30% thaw chance per turn, 1–3 turns; a Fire hit thaws | Frost, Fire |
+  | Sleep | can't act for 1–3 turns | — |
+  | Confusion | 33% chance to hit itself for 1/10 HP instead, 2–4 turns | — |
+- **Team synergy**: 2/3/4 creatures sharing an element on the main team give the whole team +6/12/18% to
+  that element's stat (ATK: Fire, Dragon, Toxic, Shadow · DEF: Earth, Metal, Frost, Water · SPD: Storm,
+  Light, Spirit, Nature). Player side only.
+- **Potions** are carried (5, or 8 with Apothecary) and used from the battle screen (costs the turn) or the
+  Team screen.
+- **Evolution Stones** also drop from won wild battles: 5% / 7% / 9% by floor.
 
 ## Open questions

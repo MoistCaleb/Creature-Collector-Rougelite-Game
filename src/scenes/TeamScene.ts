@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
-import { ELEMENT_COLORS } from '../data/types';
+import { ELEMENT_COLORS, elementTextColor } from '../data/types';
+import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
 import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -29,10 +30,23 @@ export class TeamScene extends Phaser.Scene {
     background(this);
     text(this, 16, 14, 'Your Creatures', 24, '#ffc94d', { fontStyle: 'bold' });
     button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map'), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
-    const hint = dexComplete(run)
-      ? `★ Type bonus left: ${unclaimedTypes(run).join(', ') || 'none'}`
-      : 'Tap one creature, then another to swap them.';
-    text(this, 16, 50, hint, 12, dexComplete(run) ? '#ffc94d' : COLORS.textDim);
+    // Team synergy: shared elements on the main team boost everyone.
+    const syn = teamSynergy(run.team, run.passive === 'harmonist' ? 2 : 1);
+    if (syn.length) {
+      text(this, 16, 50, 'Synergy:', 12, '#8fe08a', { fontStyle: 'bold' });
+      let sx = 74;
+      for (const s of syn.slice(0, 3)) {
+        const label = `${s.element} ×${s.count} ${SYNERGY_LABEL[s.stat]} +${Math.round(s.bonus * 100)}%`;
+        const t = text(this, sx + 5, 58, label, 11, elementTextColor(s.element), { fontStyle: 'bold' }).setOrigin(0, 0.5).setDepth(1);
+        this.add.rectangle(sx, 58, t.width + 10, 16, ELEMENT_COLORS[s.element]).setOrigin(0, 0.5);
+        sx += t.width + 16;
+      }
+    } else {
+      const hint = dexComplete(run)
+        ? `★ Type bonus left: ${unclaimedTypes(run).join(', ') || 'none'}`
+        : 'Tap two creatures to swap. 2+ of an element on the team = synergy.';
+      text(this, 16, 50, hint, 12, dexComplete(run) ? '#ffc94d' : COLORS.textDim);
+    }
 
     const rowW = W - 32;
     text(this, 16, 70, `Main team  ${run.team.length}/${TEAM_MAX}`, 15, COLORS.text);

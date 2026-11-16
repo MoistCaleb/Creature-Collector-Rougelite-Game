@@ -17,6 +17,8 @@ export interface Combatant {
   /** Major status condition, if any, and the turns it has left. */
   status: StatusId | null;
   statusTurns: number;
+  /** Team synergy multipliers (player side only). */
+  syn?: { atk: number; def: number; spd: number };
   /** Last Stand Sash: 'fired' right after it saved the holder, then 'spent'. */
   sash?: 'fired' | 'spent';
 }
@@ -54,6 +56,8 @@ export class Battle {
   eActive = 0;
   private rng: Rng;
   private playerDamageMult: number;
+  private playerStatusMult: number;
+  private playerImmune: StatusId[];
   /** Chance the enemy picks a random move instead of its best one. */
   private enemyRandomness: number;
   /** A floor boss's special rule, if any. */
@@ -68,7 +72,20 @@ export class Battle {
     playerTeam: Creature[],
     enemyTeam: Creature[],
     rng: Rng = new Rng(),
-    opts: { playerDamageMult?: number; enemyRandomness?: number; rule?: BossRule; ruleName?: string; spareLast?: boolean; spared?: boolean } = {},
+    opts: {
+      playerDamageMult?: number;
+      enemyRandomness?: number;
+      rule?: BossRule;
+      ruleName?: string;
+      spareLast?: boolean;
+      spared?: boolean;
+      /** Team synergy multipliers for the player's creatures. */
+      synergy?: { atk: number; def: number; spd: number };
+      /** Chance multiplier for the player's moves inflicting a status (Afflicter). */
+      playerStatusMult?: number;
+      /** Statuses the player's creatures can't get (Tempered). */
+      playerStatusImmune?: StatusId[];
+    } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
@@ -77,6 +94,9 @@ export class Battle {
     this.spareLast = opts.spareLast ?? false;
     this.spared = opts.spared ?? false;
     this.player = playerTeam.map(fresh);
+    if (opts.synergy) for (const x of this.player) x.syn = opts.synergy;
+    this.playerStatusMult = opts.playerStatusMult ?? 1;
+    this.playerImmune = opts.playerStatusImmune ?? [];
     this.enemy = enemyTeam.map(fresh);
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
     this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
@@ -219,7 +239,7 @@ export class Battle {
   }
 
   private playerGoesFirst(): boolean {
-    const ps = stats(this.p.c).spd * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1);
+    const ps = stats(this.p.c).spd * (this.p.syn?.spd ?? 1) * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1);
     const es = stats(this.e.c).spd * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1);
     if (ps === es) return this.rng.chance(0.5);
     return ps > es;
@@ -309,6 +329,7 @@ export class Battle {
     if (!isAlive(x.c) || x.status) return false;
     const def = STATUS[id];
     if (creatureTypes(x.c).some((t) => def.immune.includes(t))) return false;
+    if (side === 'player' && this.playerImmune.includes(id)) return false;
     x.status = id;
     x.statusTurns = this.rng.int(def.turns[0], def.turns[1]);
     ev.push({ kind: 'status', side, status: id });
@@ -392,7 +413,7 @@ export class Battle {
     }
     if (def.kind !== 'attack') {
       this.applyStatus(side, slot, ev);
-      if (def.status && def.kind === 'debuff' && this.rng.chance(def.status.chance)) {
+      if (def.status && def.kind === 'debuff' && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
         this.inflict(target, targetSide, def.status.id, ev);
       }
       return;
@@ -458,7 +479,9 @@ export class Battle {
     // A Fire hit thaws a frozen target; moves named for a condition can inflict it.
     if (landed > 0 && isAlive(target.c)) {
       if (target.status === 'freeze' && el === 'Fire') this.cure(target, targetSide, ev);
-      if (def.status && this.rng.chance(def.status.chance)) this.inflict(target, targetSide, def.status.id, ev);
+      if (def.status && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
+        this.inflict(target, targetSide, def.status.id, ev);
+      }
     }
 
     if (!isAlive(target.c)) this.handleFaint(targetSide, ev);
@@ -690,8 +713,8 @@ export function computeDamage(
 ): { dmg: number; mult: number } {
   const us = stats(user.c);
   const ts = stats(target.c);
-  const atk = us.atk * stageMult(user.atkStage);
-  const dfn = ts.def * stageMult(target.defStage);
+  const atk = us.atk * (user.syn?.atk ?? 1) * stageMult(user.atkStage);
+  const dfn = ts.def * (target.syn?.def ?? 1) * stageMult(target.defStage);
   const mult = typeMultiplier(element, creatureTypes(target.c));
   const stab = stabMultiplier(element, creatureTypes(user.c));
   const held =
