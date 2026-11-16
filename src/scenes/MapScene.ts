@@ -18,7 +18,7 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
+import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
@@ -407,9 +407,6 @@ export class MapScene extends Phaser.Scene {
     const boost = run.passive === 'trainer' ? 1.5 : 1;
     const focus = Math.round(BALANCE.levelUpFocus[run.floor] * boost);
     const drill = Math.round(BALANCE.levelUpTeam[run.floor] * boost);
-    const gap = BALANCE.levelUpCatchUpGap;
-    const top = highestLevel(run);
-    const behind = allCreatures(run).filter((c) => c.level < top - gap && c.level < levelCap(c));
     const report = (title: string, rows: { c: Creature; before: number }[]) =>
       openPicker(this, {
         title,
@@ -426,13 +423,6 @@ export class MapScene extends Phaser.Scene {
       options: [
         { label: 'Focus training', sub: `One creature gains ${focus} levels` },
         { label: 'Team drills', sub: `Every creature, bench included, gains ${drill} levels` },
-        {
-          label: 'Catch-up camp',
-          sub: behind.length
-            ? `${behind.length} creature${behind.length === 1 ? ' rises' : 's rise'} to within ${gap} levels of your strongest (Lv ${top})`
-            : `Everyone is already within ${gap} levels of your strongest`,
-          disabled: behind.length === 0,
-        },
       ],
       onPick: (i) => {
         trackStat(run, 'levelups');
@@ -441,11 +431,6 @@ export class MapScene extends Phaser.Scene {
           const rows = allCreatures(run).map((c) => ({ c, before: c.level }));
           for (const { c } of rows) addLevels(c, drill);
           return report('Team drills', rows);
-        }
-        if (i === 2) {
-          const rows = behind.map((c) => ({ c, before: c.level }));
-          for (const { c } of rows) addLevels(c, top - gap - c.level);
-          return report('Catch-up camp', rows);
         }
         this.pickCreature('Focus training', `Choose a creature (+${focus} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
           const before = c.level;

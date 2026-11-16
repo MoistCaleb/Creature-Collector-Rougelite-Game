@@ -48,8 +48,6 @@ export const BALANCE = {
   /** Level Up node: levels for Focus (one creature) and Team drills (everyone), per floor. */
   levelUpFocus: [6, 9, 12],
   levelUpTeam: [3, 4, 5],
-  /** Catch-up camp raises creatures to within this many levels of your strongest. */
-  levelUpCatchUpGap: 5,
   /** Trainer (elite) battles: no catching, but XP and coins are multiplied by these. */
   trainerXpMult: 3,
   trainerCoinMult: 3,
