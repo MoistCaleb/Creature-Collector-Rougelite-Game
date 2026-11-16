@@ -384,13 +384,17 @@ describe('acquiring creatures', () => {
     const next = startRun(meta, 'emberkit', 9);
     expect(next.claimedTypes).toEqual([]); // resets each run
   });
-  it('claimed guardians join at Lv 1 in their evolved form', () => {
+  it('claimed guardians join at their level +5 in their evolved form', () => {
     const run = startRun(mkMeta(), 'emberkit', 6);
-    const boss = createCreature('cragice', 20, 1);
+    const boss = createCreature('cragice', 27, 1);
+    boss.stars = 2;
     const c = claimGuardian(run, boss)!;
-    expect(c.level).toBe(1);
+    expect(c.level).toBe(32);
     expect(c.stage).toBe(1);
-    expect(levelCap(c)).toBeGreaterThan(12);
+    expect(c.stars).toBe(0);
+    // Never past its stage cap or the next floor's ceiling.
+    const big = createCreature('cragice', 98, 2);
+    expect(claimGuardian(run, big)!.level).toBe(Math.min(100, BALANCE.floorLevelCap[1]));
   });
   it('pre-boss shops always stock healing, even after rerolls', () => {
     const run = startRun(mkMeta(), 'emberkit', 7);

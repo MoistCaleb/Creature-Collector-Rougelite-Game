@@ -125,7 +125,8 @@ during the fight:
 - Full heal (team + bench)
 - Full team prestige
 - Single creature evolution
-- Claim a guardian: one of the boss's most-evolved creatures joins at Lv 1, keeping its form and level cap
+- Claim a guardian: one of the boss's most-evolved creatures joins at its level +5 (within its stage cap and
+  the next floor's level cap), keeping its form
 
 ### Floor 1 approach
 - The row before the floor 1 boss is all shops (every route passes one), always stocking Potion + Full Restore.
