@@ -1,4 +1,5 @@
 import { elementPool, MAX_TIER, MOVES } from '../data/moves';
+import { HELD, heldName } from '../data/held';
 import { SPECIES } from '../data/species';
 import {
   addLevels,
@@ -13,7 +14,7 @@ import {
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, earnCoins, highestLevel, luckyOdds, prestigeTracked, registerJoin, rosterFull, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, earnCoins, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, prestigeTracked, registerJoin, rosterFull, TEAM_MAX, type Run } from './run';
 import { speciesWithElement } from '../data/species';
 
 export interface EventResult {
@@ -296,6 +297,7 @@ export const EVENTS: GameEvent[] = [
         eligible: (run, c) => run.bench.includes(c) && !!circleTarget(run),
         run: (run, c) => {
           const t = circleTarget(run)!;
+          unequipHeld(run, c!);
           run.bench = run.bench.filter((x) => x !== c);
           prestigeTracked(run, t);
           return { text: `${creatureName(c!)} walks into the stones and is gone. ${creatureName(t)} rises to ${'★'.repeat(t.stars)}.` };
@@ -332,6 +334,7 @@ export const EVENTS: GameEvent[] = [
           const n = createCreature(pick.id, Math.min(c!.level + 2, 99), c!.stage);
           n.level = Math.min(n.level, levelCap(n));
           n.hp = stats(n).hp;
+          unequipHeld(run, c!);
           const swap = (list: Creature[]) => list.map((x) => (x === c ? n : x));
           run.team = swap(run.team);
           run.bench = swap(run.bench);
@@ -496,6 +499,24 @@ export const EVENTS: GameEvent[] = [
       },
     ],
   },
+  {
+    id: 'peddler',
+    title: 'Trinket Peddler',
+    text: 'A peddler rattles a sack of odds and ends. "Something useful in here, I promise."',
+    options: [
+      {
+        label: 'Buy a mystery trinket',
+        sub: (run) => `◉ ${scale(run, 25)} · a random held item`,
+        blocked: (run) => (run.coins < scale(run, 25) ? 'Not enough coins' : null),
+        run: (run) => {
+          run.coins -= scale(run, 25);
+          const id = rollHeld(run.rng);
+          stash(run, id);
+          return { text: `You pull out ${heldName(id)}: ${HELD[id].desc.toLowerCase()}. It's in your bag.` };
+        },
+      },
+    ],
+  },
 ];
 
 export const EVENT_BY_ID: Record<string, GameEvent> = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
@@ -538,10 +559,16 @@ export function leaveEvent(run: Run, ev: GameEvent): string {
 export interface TreasureOffer {
   coins: number;
   item: import('./shop').ItemId;
+  held?: import('../data/held').HeldId;
 }
 
 export function rollTreasure(run: Run): TreasureOffer {
-  const items: import('./shop').ItemId[] = ['potion', 'manual', 'scroll', 'stone', 'restore', 'sigil'];
+  const items: import('./shop').ItemId[] = ['potion', 'manual', 'scroll', 'stone', 'restore', 'sigil', 'held', 'held'];
   const coins = scale(run, 30) + run.rng.int(0, 15);
-  return { coins: Math.round(coins * (run.passive === 'explorer' ? 1.5 : 1)), item: run.rng.pick(items) };
+  const item = run.rng.pick(items);
+  return {
+    coins: Math.round(coins * (run.passive === 'explorer' ? 1.5 : 1)),
+    item,
+    ...(item === 'held' ? { held: rollHeld(run.rng) } : {}),
+  };
 }

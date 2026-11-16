@@ -15,6 +15,8 @@ export interface Combatant {
   spdStage: number;
   burn: number; // damage-over-time turns remaining
   dot: 'burn' | 'poison';
+  /** Last Stand Sash: 'fired' right after it saved the holder, then 'spent'. */
+  sash?: 'fired' | 'spent';
 }
 
 export type PlayerAction = { kind: 'move'; index: number } | { kind: 'swap'; index: number };
@@ -175,8 +177,8 @@ export class Battle {
       if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
     } else {
       const enemyAtStart = this.e;
-      const pPri = !!moveDef(this.p.c.moves[action.index]).priority;
-      const ePri = !!moveDef(enemyMove).priority;
+      const pPri = !!moveDef(this.p.c.moves[action.index]).priority || this.clawProc(this.p);
+      const ePri = !!moveDef(enemyMove).priority || this.clawProc(this.e);
       const playerFirst = pPri !== ePri ? pPri : this.rule === 'tailwind' ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       for (const side of order) {
@@ -197,9 +199,14 @@ export class Battle {
     return ev;
   }
 
+  /** Quick Claw: a 25% chance to jump the queue this turn. */
+  private clawProc(x: Combatant): boolean {
+    return x.c.held === 'claw' && this.rng.chance(0.25);
+  }
+
   private playerGoesFirst(): boolean {
-    const ps = stats(this.p.c).spd * stageMult(this.p.spdStage);
-    const es = stats(this.e.c).spd * stageMult(this.e.spdStage);
+    const ps = stats(this.p.c).spd * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1);
+    const es = stats(this.e.c).spd * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1);
     if (ps === es) return this.rng.chance(0.5);
     return ps > es;
   }
@@ -284,7 +291,7 @@ export class Battle {
     ev.push({ kind: 'attack', side, move: def.name, moveId: def.id });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
 
-    if (this.rng.next() * 100 >= def.accuracy) {
+    if (this.rng.next() * 100 >= (user.c.held === 'lens' ? 100 : def.accuracy)) {
       ev.push({ kind: 'text', text: 'It missed!' });
       return;
     }
@@ -318,6 +325,7 @@ export class Battle {
       }
       landed++;
       ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el });
+      this.sashNote(target, ev);
       if (h === 0) {
         const label = effectivenessLabel(r.mult);
         if (label) ev.push({ kind: 'text', text: label });
@@ -332,6 +340,16 @@ export class Battle {
       user.c.hp = Math.max(0, user.c.hp - th);
       ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: th });
       ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(user.c)} is cut by thorns!` });
+    }
+    if (target.c.held === 'barb' && total > 0 && isAlive(user.c) && !(this.spared && side === 'enemy')) {
+      const bb = this.hurt(user, Math.max(1, Math.round(total * 0.15)));
+      ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: bb });
+      ev.push({ kind: 'text', text: `${who} is pricked by the Barb Collar!` });
+    }
+    if (user.c.held === 'fang' && total > 0 && isAlive(user.c) && user.c.hp < userMax) {
+      user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * 0.15));
+      ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
+      ev.push({ kind: 'text', text: `${who}'s Vampire Fang drinks deep.` });
     }
     if (def.drain && isAlive(user.c)) {
       user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * def.drain));
@@ -469,6 +487,12 @@ export class Battle {
       this.spareLast && this.enemy.includes(x) && this.enemy.every((o) => o === x || !isAlive(o.c));
     const floor = isLastEnemy ? 1 : 0;
     const before = x.c.hp;
+    // Last Stand Sash: once per battle, a knockout blow from full HP leaves 1 HP.
+    if (x.c.held === 'sash' && !x.sash && dmg >= before && before === stats(x.c).hp && before > 1) {
+      x.sash = 'fired';
+      x.c.hp = 1;
+      return before - 1;
+    }
     x.c.hp = Math.max(floor, x.c.hp - dmg);
     if (isLastEnemy && x.c.hp === 1 && before - dmg <= 0) this.spared = true;
     return before - x.c.hp;
@@ -480,6 +504,7 @@ export class Battle {
       return;
     }
     this.ruleEndOfTurn(ev);
+    if (this.outcome() === 'ongoing' || this.outcome() === 'needSwitch') this.berries(ev);
     for (const side of ['player', 'enemy'] as const) {
       const x = side === 'player' ? this.p : this.e;
       if (x.burn > 0 && isAlive(x.c)) {
@@ -488,8 +513,27 @@ export class Battle {
         x.burn -= 1;
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
         ev.push({ kind: 'text', text: `${creatureName(x.c)} is hurt by its ${x.dot}!` });
+        this.sashNote(x, ev);
         if (!isAlive(x.c)) this.handleFaint(side, ev);
       }
+    }
+  }
+
+  private sashNote(x: Combatant, ev: BattleEvent[]) {
+    if (x.sash !== 'fired') return;
+    x.sash = 'spent';
+    ev.push({ kind: 'text', text: `${creatureName(x.c)} hung on with its Last Stand Sash!` });
+  }
+
+  /** Berry Pouch: a little healing at the end of every turn. */
+  private berries(ev: BattleEvent[]) {
+    for (const side of ['player', 'enemy'] as const) {
+      const x = side === 'player' ? this.p : this.e;
+      const max = stats(x.c).hp;
+      if (x.c.held !== 'berry' || !isAlive(x.c) || x.c.hp >= max) continue;
+      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max / 12));
+      ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
+      ev.push({ kind: 'text', text: `${side === 'enemy' ? 'Enemy ' : ''}${creatureName(x.c)} snacks on a berry.` });
     }
   }
 
@@ -557,8 +601,10 @@ export function computeDamage(
   const dfn = ts.def * stageMult(target.defStage);
   const mult = typeMultiplier(element, creatureTypes(target.c));
   const stab = stabMultiplier(element, creatureTypes(user.c));
+  const held =
+    (user.c.held === 'band' ? 1.15 : 1) * (user.c.held === 'charm' && stab > 1 ? 1.2 : 1) * (target.c.held === 'shell' ? 0.85 : 1);
   const power = def.power * powerMult * TIER_POWER[tier] * (tier >= 3 && def.element === 'Dragon' ? 1.2 : 1);
   const base = power * (atk / dfn) * levelFactor(user.c.level) * BALANCE.damageScale;
   const roll = 0.85 + rng.next() * 0.15;
-  return { dmg: Math.max(1, Math.round(base * mult * stab * roll)), mult };
+  return { dmg: Math.max(1, Math.round(base * mult * stab * held * roll)), mult };
 }

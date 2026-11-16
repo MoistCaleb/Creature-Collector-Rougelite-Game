@@ -13,7 +13,7 @@ import {
   addLevels, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
-  allCreatures, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
+  allCreatures, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
   moveTo, postBattleRecover, promoteBench, type Meta, type Run, startRun,
 } from '../src/logic/run';
 import { Rng } from '../src/logic/rng';
@@ -71,7 +71,14 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
     const xp = battleXp(enemies, kind, run.floor);
     if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
     else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind); }
-    if (kind === 'elite') run.evoStones++;
+    if (kind === 'elite') {
+      run.evoStones++;
+      // Trainer prize: a held item, handed to the first team member without one.
+      const prize = rollHeld(run.rng);
+      stash(run, prize);
+      const free = run.team.find((c) => !c.held);
+      if (free) equipHeld(run, free, prize);
+    }
     if (kind !== 'battle') { run.coins += battleCoins(enemies, kind); grantXp(run, xp, [...b.fought]); }
     return 'win';
   }

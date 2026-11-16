@@ -25,6 +25,8 @@ export interface Creature {
   /** Damage dealt and knockouts this run (for the run summary). */
   dealt?: number;
   kos?: number;
+  /** The one item this creature carries. */
+  held?: import('../data/held').HeldId;
 }
 
 export type Stats = BaseStats;

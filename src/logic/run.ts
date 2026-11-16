@@ -1,6 +1,7 @@
 import { BOSSES } from '../data/trainers';
 import * as storage from '../storage';
 import { BALANCE } from '../data/balance';
+import { HELD, HELD_IDS, type HeldId } from '../data/held';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
@@ -170,10 +171,12 @@ export interface Run {
   activeBattle: ActiveBattle | null;
   /** The event on offer at the current node, if any. */
   eventId: string | null;
+  /** Held items not on any creature. */
+  bag?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
   eventsSeen?: string[];
   /** The open treasure chest's contents, fixed once rolled. */
-  treasure: { coins: number; item: import('./shop').ItemId } | null;
+  treasure: import('./events').TreasureOffer | null;
 }
 
 export interface ActiveBattle {
@@ -332,6 +335,8 @@ export function postBattleRecover(run: Run) {
 /** Remove fainted creatures (permadeath). Returns their names. */
 export function buryFallen(run: Run): string[] {
   const fallen = run.team.filter((c) => !isAlive(c));
+  // Their items are recovered.
+  for (const c of fallen) unequipHeld(run, c);
   run.team = run.team.filter(isAlive);
   run.log.lost += fallen.length;
   run.log.fallen = [
@@ -388,6 +393,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
       for (const m of c.moves) if (rng.chance(0.4)) m.tier = 2;
     }
     if (kind === 'boss' && f === 2) for (const m of c.moves) m.tier = Math.max(m.tier, 2);
+    // Trainers and guardians carry held items (the guardian's ace always, trainers sometimes from floor 2).
+    const holds = boss ? i === count - 1 : kind === 'elite' && f > 0 && rng.chance(0.4);
+    if (holds) c.held = rollHeld(rng);
     c.hp = stats(c).hp;
     enemies.push(c);
   }
@@ -446,14 +454,44 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
   const out: XpResult[] = [];
   for (const c of run.team) {
     const share = !fought || fought.includes(c.uid) ? 1 : BALANCE.sideXpShare;
-    const xp = Math.round(amount * share * catchUpMultiplier(c.level, top));
+    const xp = Math.round(amount * share * catchUpMultiplier(c.level, top) * eggMult(c));
     out.push({ name: creatureName(c), xp, levels: addXp(c, xp) });
   }
   for (const c of run.bench) {
-    const xp = Math.round(amount * benchShare * catchUpMultiplier(c.level, top));
+    const xp = Math.round(amount * benchShare * catchUpMultiplier(c.level, top) * eggMult(c));
     out.push({ name: creatureName(c), xp, levels: addXp(c, xp) });
   }
   return out;
+}
+
+const eggMult = (c: Creature) => (c.held === 'egg' ? 1.4 : 1);
+
+/** A random held item, weighted by rarity. */
+export function rollHeld(rng: Rng): HeldId {
+  return rng.weighted(Object.fromEntries(HELD_IDS.map((id) => [id, HELD[id].weight])) as Record<HeldId, number>);
+}
+
+/** Put an item in the bag. */
+export function stash(run: Run, id: HeldId) {
+  run.bag = [...(run.bag ?? []), id];
+}
+
+/** Give a bag item to a creature; whatever it held goes back in the bag. */
+export function equipHeld(run: Run, c: Creature, id: HeldId) {
+  const bag = [...(run.bag ?? [])];
+  const at = bag.indexOf(id);
+  if (at < 0) return;
+  bag.splice(at, 1);
+  if (c.held) bag.push(c.held);
+  c.held = id;
+  run.bag = bag;
+}
+
+/** Take a creature's item back into the bag. */
+export function unequipHeld(run: Run, c: Creature) {
+  if (!c.held) return;
+  stash(run, c.held);
+  c.held = undefined;
 }
 
 export function rosterFull(run: Run): boolean {

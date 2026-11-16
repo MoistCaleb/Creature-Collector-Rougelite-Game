@@ -4,7 +4,8 @@ import { ELEMENT_COLORS } from '../data/types';
 import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { allCreatures, BENCH_MAX, dexComplete, evolveTracked, TEAM_MAX, unclaimedTypes } from '../logic/run';
+import { allCreatures, BENCH_MAX, dexComplete, equipHeld, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
+import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -95,6 +96,19 @@ export class TeamScene extends Phaser.Scene {
     const next = c.stage < 2 ? `Evolves into ${formName(state.meta.dex, sp.id, c.stage + 1)}` : 'Final form';
     text(this, 18, y0 + 116, next, 12, '#8e86ad');
 
+    // Held item.
+    const bag = run.bag ?? [];
+    button(
+      this,
+      W - 112,
+      y0 + 126,
+      196,
+      32,
+      c.held ? heldName(c.held) : bag.length ? `🎒 Give item (${bag.length})` : '🎒 No items',
+      () => this.itemPicker(c),
+      { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a },
+    );
+
     const bx = 70;
     const by = y0 + 168;
     const stoneOk = run.evoStones > 0 && canEvolve(c) && c.level >= cap;
@@ -148,6 +162,7 @@ export class TeamScene extends Phaser.Scene {
           subtitle: 'It will leave your party for good.',
           options: [{ label: 'Release', color: 0x8a2c2c }],
           onPick: () => {
+            unequipHeld(run, c);
             run[ref.list].splice(ref.i, 1);
             if (run.team.length === 0 && run.bench.length) run.team.push(run.bench.shift()!);
             this.scene.restart({ selected: null });
@@ -157,6 +172,33 @@ export class TeamScene extends Phaser.Scene {
       { enabled: allCreatures(run).length > 1, fontSize: 15, color: 0x5a2a2a },
     );
     if (!stoneOk && run.evoStones > 0 && canEvolve(c))
-      text(this, 18, y0 + 132, 'Reach the level cap to use an Evolution Stone.', 11, '#ffc94d');
+      text(this, 18, y0 + 136, 'Reach the level cap to use a stone.', 11, '#ffc94d');
+  }
+
+  /** Give, swap or take off a held item. */
+  private itemPicker(c: Creature) {
+    const run = state.run!;
+    const bag = [...new Set(run.bag ?? [])] as HeldId[];
+    const count = (id: HeldId) => (run.bag ?? []).filter((x) => x === id).length;
+    const restart = () => this.scene.restart({ selected: this.selected });
+    openPicker(this, {
+      title: c.held ? `${creatureName(c)} holds ${HELD[c.held].name}` : `Give ${creatureName(c)} an item`,
+      subtitle: c.held ? HELD[c.held].desc : 'Each creature can hold one item. Items come back to your bag if it falls.',
+      rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
+      options: [
+        ...bag.map((id) => ({
+          label: `${heldName(id)}${count(id) > 1 ? ` ×${count(id)}` : ''}`,
+          sub: HELD[id].desc,
+          color: 0x2f4a6b,
+        })),
+        ...(c.held ? [{ label: 'Take it off', sub: 'Put it back in the bag', color: 0x3a3450 }] : []),
+      ],
+      onPick: (i) => {
+        if (i < bag.length) equipHeld(run, c, bag[i]);
+        else unequipHeld(run, c);
+        restart();
+      },
+      onCancel: () => {},
+    });
   }
 }

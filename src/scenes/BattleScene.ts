@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
+import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
 import { moveImpact, playMove, type Style } from '../ui/movefx';
@@ -31,6 +32,8 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
+  rollHeld,
+  stash,
   earnCoins,
   evolveTracked,
   prestigeTracked,
@@ -186,7 +189,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fillPanel(p: SidePanel, c: Creature) {
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}${c.held ? ` ${HELD[c.held].icon}` : ''}`);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
@@ -513,7 +516,11 @@ export class BattleScene extends Phaser.Scene {
         run.evoStones += stones;
         earnCoins(run, coins);
         trackStat(run, 'elites');
-        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins and ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'}\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        // The trainer hands over one of their held items (or a random one).
+        const theirs = this.enemies.map((e) => e.held).filter((h) => !!h);
+        const prize = theirs.length ? run.rng.pick(theirs)! : rollHeld(run.rng);
+        stash(run, prize);
+        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'} and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);

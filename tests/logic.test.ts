@@ -11,7 +11,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { allCreatures, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -708,5 +708,76 @@ describe('learn-move recommendation', () => {
     const buffs = Object.values(MOVES).filter((m) => m.kind === 'buff').map((m) => m.id);
     c.moves = [{ id: attackId('Fire', 0), tier: 1 }, { id: buffs[0], tier: 1 }, { id: buffs[1], tier: 1 }, { id: buffs[2], tier: 1 }];
     expect(recommendForget(c, buffs[3])).not.toBe(0);
+  });
+});
+
+describe('held items', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  const fighter = (held?: import('../src/data/held').HeldId) => {
+    const c = createCreature('emberkit', 30);
+    c.held = held;
+    return c;
+  };
+  const avgDamage = (atk?: import('../src/data/held').HeldId, def?: import('../src/data/held').HeldId) => {
+    let total = 0;
+    for (let s = 0; s < 40; s++) {
+      const a = fighter(atk);
+      const d = createCreature('mossling', 30);
+      d.held = def;
+      d.hp = 100000;
+      const b = new Battle([a], [d], new Rng(s));
+      const ev = b.takeTurn({ kind: 'move', index: 0 });
+      total += ev.filter((e) => e.kind === 'damage' && e.side === 'enemy').reduce((n, e) => n + (e.kind === 'damage' ? e.amount : 0), 0);
+    }
+    return total;
+  };
+  it('Power Band hits harder and Hard Shell takes less', () => {
+    const base = avgDamage();
+    expect(avgDamage('band')).toBeGreaterThan(base * 1.08);
+    expect(avgDamage(undefined, 'shell')).toBeLessThan(base * 0.92);
+  });
+  it('Last Stand Sash survives one knockout blow from full HP', () => {
+    const p = createCreature('emberkit', 60);
+    const e = createCreature('mossling', 2);
+    e.held = 'sash';
+    e.hp = stats(e).hp;
+    const b = new Battle([p], [e], new Rng(2));
+    const ev = b.takeTurn({ kind: 'move', index: 0 });
+    expect(ev.some((x) => x.kind === 'text' && x.text.includes('Last Stand Sash'))).toBe(true);
+    expect(e.hp).toBeGreaterThanOrEqual(0);
+  });
+  it('items move between the bag and creatures, and come back when a creature falls', () => {
+    const run = startRun(mkMeta(), 'emberkit', 9);
+    const c = run.team[0];
+    stash(run, 'band');
+    stash(run, 'egg');
+    equipHeld(run, c, 'band');
+    expect(c.held).toBe('band');
+    equipHeld(run, c, 'egg');
+    expect(c.held).toBe('egg');
+    expect(run.bag).toEqual(['band']);
+    c.hp = 0;
+    buryFallen(run);
+    expect(run.bag!.sort()).toEqual(['band', 'egg']);
+  });
+  it('Lucky Egg earns more XP', () => {
+    const run = startRun(mkMeta(), 'emberkit', 10);
+    const a = run.team[0];
+    const b = createCreature('emberkit', a.level);
+    run.team.push(b);
+    b.held = 'egg';
+    const res = grantXp(run, 100);
+    expect(res[1].xp).toBeGreaterThan(res[0].xp);
   });
 });
