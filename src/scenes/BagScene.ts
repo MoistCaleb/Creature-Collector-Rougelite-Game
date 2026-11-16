@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { creatureName } from '../logic/creature';
-import { allCreatures, equipHeld, maxPotions, unequipHeld } from '../logic/run';
+import { allCreatures, equipHeld, maxPotions, needsPotion, potionHeal, unequipHeld, usePotion } from '../logic/run';
+import { sfx } from '../ui/sound';
 import { persist, state } from '../state';
 import { icon as pixelIcon } from '../ui/icons';
 import { openPicker } from '../ui/picker';
@@ -94,8 +95,33 @@ export class BagScene extends Phaser.Scene {
       head(text(this, x + 48, 76, title, 22, color, { fontStyle: 'bold' }));
       head(text(this, x + 12, 116, sub, 12, COLORS.textDim, { wordWrap: { width: (W - 36) / 2 - 20 } }));
     };
-    card(12, 'potion', `${run.potions ?? 0}/${maxPotions(run)}`, 'Potions · heal 50% and cure status. Use from the Team screen or in battle.', '#8fe08a');
+    card(12, 'potion', `${run.potions ?? 0}/${maxPotions(run)}`, `Potions · heal ${Math.round(potionHeal(run) * 100)}% and cure status. Also usable in battle.`, '#8fe08a');
+    const hurt = allCreatures(run).some(needsPotion);
+    head(
+      button(this, 12 + (W - 36) / 2 - 40, 92, 64, 32, 'Use', () => this.drinkPotion(), {
+        fontSize: 14,
+        color: 0x2f5a4a,
+        enabled: (run.potions ?? 0) > 0 && hurt,
+      }),
+    );
     card(24 + (W - 36) / 2, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a creature at Lv 30 / 65 from the Team screen.', '#e0a8ff');
+  }
+
+  /** Use a potion: choose a hurt (or afflicted) creature. */
+  private drinkPotion() {
+    const run = state.run!;
+    const all = allCreatures(run);
+    openPicker(this, {
+      title: 'Use a Potion',
+      subtitle: `Heals ${Math.round(potionHeal(run) * 100)}% HP and cures status conditions. ${run.potions ?? 0} left.`,
+      options: all.map((c) => ({ creature: c, disabled: !needsPotion(c), note: needsPotion(c) ? undefined : 'Healthy' })),
+      onPick: (k) => {
+        if (usePotion(run, all[k])) sfx.heal();
+        persist();
+        this.scene.restart({});
+      },
+      onCancel: () => {},
+    });
   }
 
   /** Give an item: choose who holds it (whatever they held goes back in the bag). */
