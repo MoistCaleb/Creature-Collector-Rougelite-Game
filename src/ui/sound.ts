@@ -316,6 +316,29 @@ export const sfx = {
   defeat() {
     [7, 3, 0, -5].forEach((s, i) => tone(note(s, 330), 0.3, { type: 'triangle', vol: 0.22, delay: i * 0.22 }));
   },
+  /** A creature bursts out of its hexagon. */
+  release() {
+    tone(330, 0.25, { type: 'triangle', vol: 0.16, slide: 990 });
+    noise(0.25, { freq: 3000, to: 900, vol: 0.12, type: 'bandpass', q: 2 });
+    tone(1320, 0.18, { type: 'sine', vol: 0.1, delay: 0.18 });
+  },
+  /** A creature is called back into its hexagon. */
+  recall() {
+    tone(990, 0.22, { type: 'triangle', vol: 0.14, slide: 330 });
+    noise(0.18, { freq: 1500, to: 400, vol: 0.1, type: 'bandpass', q: 2 });
+  },
+  rustle() {
+    noise(0.35, { freq: 3500, to: 1800, vol: 0.2, type: 'highpass' });
+    noise(0.2, { freq: 2500, vol: 0.12, type: 'bandpass', q: 1 });
+  },
+  rocks() {
+    noise(0.3, { freq: 600, to: 150, vol: 0.4 });
+    tone(110, 0.2, { type: 'square', vol: 0.2, slide: 60 });
+  },
+  splash() {
+    noise(0.45, { freq: 2200, to: 600, vol: 0.3, type: 'bandpass', q: 1.5 });
+    tone(500, 0.2, { type: 'sine', vol: 0.1, slide: 1200 });
+  },
   bossRoar() {
     noise(0.9, { freq: 300, to: 80, vol: 0.6 });
     tone(70, 0.9, { type: 'sawtooth', vol: 0.35, slide: 40 });

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
+import { emergeFrom, recallToHex, releaseFromHex, terrainFor } from '../ui/entrance';
 import { SYNERGY_LABEL, synergyMults, teamSynergy } from '../logic/synergy';
 import { ensureIcon, icon } from '../ui/icons';
 import { STATUS, type StatusId } from '../data/status';
@@ -173,7 +174,6 @@ export class BattleScene extends Phaser.Scene {
     this.showActions();
     ensureFxTextures(this);
     playMusic(boss ? 'boss' : 'battle');
-    if (!resuming) this.entrance(this.enemySprite, 'enemy');
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     const begin = () => {
@@ -188,14 +188,46 @@ export class BattleScene extends Phaser.Scene {
       else if (o === 'lose') this.onLose();
       else if (o === 'needSwitch') this.openSwitch(true);
       else begin();
-    } else if (boss) {
-      openPicker(this, {
-        title: `${boss.name}, ${boss.title}`,
-        subtitle: `"${boss.quote}"\n\n${boss.ruleName}\n${boss.ruleDesc}`,
-        options: [{ label: 'Fight!', color: 0x8a2c2c }],
-        onPick: begin,
-      });
-    } else begin();
+    } else {
+      // Both sides take the field: the enemy appears, then you release your lead.
+      this.enemySprite.setVisible(false);
+      this.playerSprite.setVisible(false);
+      this.actions.setVisible(false);
+      this.busy = true;
+      void (async () => {
+        await this.wait(250);
+        await this.enterEnemy();
+        if (this.kind === 'battle') this.msg.setText(intro);
+        await this.wait(200);
+        this.msg.setText(`Go, ${creatureName(this.battle.p.c)}!`);
+        await this.enterPlayer();
+        this.busy = false;
+        this.fast = false;
+        this.setSpeed();
+        this.msg.setText(intro);
+        this.actions.setVisible(true);
+        if (boss) {
+          openPicker(this, {
+            title: `${boss.name}, ${boss.title}`,
+            subtitle: `"${boss.quote}"\n\n${boss.ruleName}\n${boss.ruleDesc}`,
+            options: [{ label: 'Fight!', color: 0x8a2c2c }],
+            onPick: begin,
+          });
+        } else begin();
+      })();
+    }
+  }
+
+  /** The enemy's current creature takes the field: wild ones burst out of the terrain, others from a hexagon. */
+  private enterEnemy() {
+    const c = this.battle.e.c;
+    const el = creatureTypes(c)[0];
+    if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, terrainFor(el));
+    return releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el]);
+  }
+
+  private enterPlayer() {
+    return releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(this.battle.p.c)[0]]);
   }
 
   // ------------------------------------------------------------ panels
@@ -242,22 +274,18 @@ export class BattleScene extends Phaser.Scene {
     this.pips.setText('●'.repeat(alive) + '○'.repeat(this.battle.enemy.length - alive));
   }
 
+  /** The creature the player's sprite is showing (playback can lag behind the battle logic). */
+  private shownPlayer: Creature | null = null;
+
   private refreshPlayer(hp?: number) {
     const p = this.battle.p.c;
+    this.shownPlayer = p;
     dex.creature(p, true);
     this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
     this.fillPanel(this.playerPanel, p, hp);
   }
 
-  /** A creature pops in from nothing with a little puff. */
-  private entrance(s: Phaser.GameObjects.Image, side: 'player' | 'enemy') {
-    const full = s.scale;
-    s.setScale(0.1).setAlpha(0.2);
-    this.tweens.add({ targets: s, scale: full, alpha: 1, duration: 280, ease: 'Back.easeOut' });
-    const c = side === 'player' ? this.battle.p.c : this.battle.e.c;
-    faintFx(this, { x: s.x, y: s.y + 30 }, ELEMENT_COLORS[creatureTypes(c)[0]]);
-  }
 
   /** The guardian looms: it grows, the screen shakes, and it roars. */
   private bossEntrance() {
@@ -518,15 +546,19 @@ export class BattleScene extends Phaser.Scene {
           }
           break;
         }
-        case 'swap':
+        case 'swap': {
+          // Call the old creature back (unless it just fainted), then release the new one.
+          const s = this.playerSprite;
+          if (s.visible && s.alpha > 0.5 && this.shownPlayer) {
+            await recallToHex(this, s, ELEMENT_COLORS[creatureTypes(this.shownPlayer)[0]]);
+          }
           this.refreshPlayer(ev.hp);
-          this.entrance(this.playerSprite, 'player');
-          await this.wait(300);
+          await this.enterPlayer();
           break;
+        }
         case 'enemySend':
           this.refreshEnemy(ev.hp);
-          this.entrance(this.enemySprite, 'enemy');
-          await this.wait(300);
+          await this.enterEnemy();
           break;
       }
     }
