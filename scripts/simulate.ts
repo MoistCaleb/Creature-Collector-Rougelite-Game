@@ -54,7 +54,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   const enemies = makeEncounter(run, currentNode(run));
   enemyLevels = enemies.map((e) => e.level);
   const boss = kind === 'boss' ? BOSSES[run.map.biome] : null;
-  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName, synergy: synergyMults(run.team) });
+  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName, synergy: synergyMults(run.team), enemySynergy: boss ? synergyMults(enemies) : undefined });
   b.start();
   for (let t = 0; t < 500; t++) {
     const o = b.outcome();

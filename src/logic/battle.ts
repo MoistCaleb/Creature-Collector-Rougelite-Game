@@ -81,6 +81,8 @@ export class Battle {
       spared?: boolean;
       /** Team synergy multipliers for the player's creatures. */
       synergy?: { atk: number; def: number; spd: number };
+      /** Team synergy for the enemy side (floor bosses). */
+      enemySynergy?: { atk: number; def: number; spd: number };
       /** Chance multiplier for the player's moves inflicting a status (Afflicter). */
       playerStatusMult?: number;
       /** Statuses the player's creatures can't get (Tempered). */
@@ -98,6 +100,7 @@ export class Battle {
     this.playerStatusMult = opts.playerStatusMult ?? 1;
     this.playerImmune = opts.playerStatusImmune ?? [];
     this.enemy = enemyTeam.map(fresh);
+    if (opts.enemySynergy) for (const x of this.enemy) x.syn = opts.enemySynergy;
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
     this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
     if (this.player[this.pActive]) this.fought.add(this.player[this.pActive].c.uid);
@@ -240,7 +243,7 @@ export class Battle {
 
   private playerGoesFirst(): boolean {
     const ps = stats(this.p.c).spd * (this.p.syn?.spd ?? 1) * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1);
-    const es = stats(this.e.c).spd * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1);
+    const es = stats(this.e.c).spd * (this.e.syn?.spd ?? 1) * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1);
     if (ps === es) return this.rng.chance(0.5);
     return ps > es;
   }
@@ -371,7 +374,7 @@ export class Battle {
         }
         return true;
       case 'confuse': {
-        if (--x.statusTurns < 0) {
+        if (--x.statusTurns <= 0) {
           this.cure(x, side, ev);
           return true;
         }

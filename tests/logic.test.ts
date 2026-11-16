@@ -937,3 +937,25 @@ describe('team synergy', () => {
     expect(b.p.status).toBeNull();
   });
 });
+
+describe('boss synergy and status length', () => {
+  it('enemy synergy toughens the enemy side', () => {
+    let plain = 0;
+    let tough = 0;
+    for (let s = 0; s < 30; s++) {
+      for (const syn of [undefined, { atk: 1, def: 1.2, spd: 1 }]) {
+        const d = createCreature('mossling', 30);
+        d.hp = 100000;
+        const b = new Battle([createCreature('emberkit', 30)], [d], new Rng(s), { enemySynergy: syn });
+        const dmg = b.takeTurn({ kind: 'move', index: 0 }).reduce((n, e) => n + (e.kind === 'damage' && e.side === 'enemy' ? e.amount : 0), 0);
+        if (syn) tough += dmg;
+        else plain += dmg;
+      }
+    }
+    expect(tough).toBeLessThan(plain * 0.92);
+  });
+  it('statuses last 3 to 5 turns', async () => {
+    const { STATUS } = await import('../src/data/status');
+    for (const def of Object.values(STATUS)) expect(def.turns).toEqual([3, 5]);
+  });
+});

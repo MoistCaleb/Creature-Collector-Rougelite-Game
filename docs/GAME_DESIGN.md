@@ -227,19 +227,19 @@ Runs unlock:
 
 ## Battle systems (later additions)
 
-- **Status conditions** (one per creature; cleared on switching out or at battle end). Moves named for a
+- **Status conditions** (one per creature; each lasts 3–5 turns, and clears on switching out or at battle end). Moves named for a
   condition can inflict it (Spark → paralysis, Acid Spit → poison...): attacks 10–20%, debuff moves 40%.
   | Status | Effect | Immune |
   |---|---|---|
-  | Burn | −1/12 HP per turn, deals 20% less damage, 4 turns | Fire |
-  | Poison | −1/8 HP per turn, 4 turns | Toxic, Metal |
-  | Paralysis | half speed, 25% chance to lose the turn, 3–4 turns | Storm |
-  | Freeze | can't act; 30% thaw chance per turn, 1–3 turns; a Fire hit thaws | Frost, Fire |
-  | Sleep | can't act for 1–3 turns | — |
-  | Confusion | 33% chance to hit itself for 1/10 HP instead, 2–4 turns | — |
+  | Burn | −1/12 HP per turn, deals 20% less damage | Fire |
+  | Poison | −1/8 HP per turn | Toxic, Metal |
+  | Paralysis | half speed, 25% chance to lose the turn | Storm |
+  | Freeze | can't act; 30% thaw chance per turn; a Fire hit thaws | Frost, Fire |
+  | Sleep | can't act until it wakes | — |
+  | Confusion | 33% chance to hit itself for 1/10 HP instead | — |
 - **Team synergy**: 2/3/4 creatures sharing an element on the main team give the whole team +6/12/18% to
   that element's stat (ATK: Fire, Dragon, Toxic, Shadow · DEF: Earth, Metal, Frost, Water · SPD: Storm,
-  Light, Spirit, Nature). Player side only.
+  Light, Spirit, Nature). Floor bosses' teams get synergy too; wild creatures and trainers don't.
 - **Potions** are carried (5, or 8 with Apothecary) and used from the battle screen (costs the turn) or the
   Team screen.
 - **Evolution Stones** also drop from won wild battles: 5% / 7% / 9% by floor.
