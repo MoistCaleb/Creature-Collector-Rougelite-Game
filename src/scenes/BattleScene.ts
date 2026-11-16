@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
+import { STATUS, type StatusId } from '../data/status';
 import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
@@ -57,6 +58,8 @@ interface SidePanel {
   name: Phaser.GameObjects.Text;
   chips: Phaser.GameObjects.Container;
   bar: HpBar;
+  /** Status tag (BRN, PSN...) at the top right. */
+  status: Phaser.GameObjects.Container;
 }
 
 const ENEMY_POS = { x: 320, y: 200 };
@@ -186,11 +189,21 @@ export class BattleScene extends Phaser.Scene {
     const name = text(this, 12, 8, '', 17, COLORS.text, { fontStyle: 'bold' });
     const chips = this.add.container(12, 40);
     const bar = new HpBar(this, 140, 40, 118, 10, true);
-    root.add([name, chips, ...bar.objects()]);
-    return { root, name, chips, bar };
+    const status = this.add.container(262, 9);
+    root.add([name, chips, ...bar.objects(), status]);
+    return { root, name, chips, bar, status };
+  }
+
+  private setStatus(p: SidePanel, id: StatusId | null) {
+    p.status.removeAll(true);
+    if (!id) return;
+    const def = STATUS[id];
+    p.status.add(this.add.rectangle(0, 0, 40, 18, def.color).setOrigin(1, 0));
+    p.status.add(text(this, -20, 9, def.tag, 11, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
   }
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
+    this.setStatus(p, null);
     p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}${c.held ? ` ${HELD[c.held].icon}` : ''}`);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
@@ -466,6 +479,19 @@ export class BattleScene extends Phaser.Scene {
           if (ev.side === 'enemy') {
             const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
             this.pips.setText('●'.repeat(alive) + '○'.repeat(this.battle.enemy.length - alive));
+          }
+          break;
+        }
+        case 'status': {
+          const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
+          this.setStatus(panel, ev.status);
+          if (ev.status) {
+            const s = this.spriteOf(ev.side);
+            sfx.statDown();
+            s.setTint(STATUS[ev.status].color);
+            this.tweens.add({ targets: s, scaleX: s.scaleX * 1.08, scaleY: s.scaleY * 0.92, yoyo: true, repeat: 1, duration: 90 });
+            await this.wait(320);
+            s.clearTint();
           }
           break;
         }

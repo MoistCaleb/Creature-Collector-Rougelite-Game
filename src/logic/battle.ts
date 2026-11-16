@@ -5,6 +5,7 @@ import type { Element } from '../data/types';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
 import { creatureName, creatureTypes, isAlive, levelFactor, moveDef, stats, type Creature, type MoveSlot } from './creature';
 import { Rng } from './rng';
+import { STATUS, type StatusId } from '../data/status';
 
 export type Side = 'player' | 'enemy';
 
@@ -13,8 +14,9 @@ export interface Combatant {
   atkStage: number;
   defStage: number;
   spdStage: number;
-  burn: number; // damage-over-time turns remaining
-  dot: 'burn' | 'poison';
+  /** Major status condition, if any, and the turns it has left. */
+  status: StatusId | null;
+  statusTurns: number;
   /** Last Stand Sash: 'fired' right after it saved the holder, then 'spent'. */
   sash?: 'fired' | 'spent';
 }
@@ -35,7 +37,9 @@ export type BattleEvent =
   | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number; mult?: number; element?: Element }
   | { kind: 'heal'; side: Side; hp: number; maxHp: number }
   | { kind: 'faint'; side: Side; index: number }
-  | { kind: 'enemySend'; index: number; hp: number };
+  | { kind: 'enemySend'; index: number; hp: number }
+  /** A status condition was gained (or cleared, when null). */
+  | { kind: 'status'; side: Side; status: StatusId | null };
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
@@ -107,11 +111,7 @@ export class Battle {
     }
     if (r === 'whiteout') this.ruleBump(x, side, 'spd', -1, ev);
     if (r === 'dread') this.ruleBump(x, side, 'atk', -1, ev);
-    if (r === 'miasma' && x.burn === 0) {
-      x.burn = 4;
-      x.dot = 'poison';
-      ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(x.c)} was poisoned!` });
-    }
+    if (r === 'miasma' && !x.status) this.inflict(x, side, 'poison', ev, `${this.ruleName}: `);
     if (r === 'riptide' && !skipHpCost) {
       const max = stats(x.c).hp;
       const dmg = Math.min(x.c.hp - 1, Math.max(1, Math.floor(max / 8)));
@@ -219,8 +219,8 @@ export class Battle {
   }
 
   private playerGoesFirst(): boolean {
-    const ps = stats(this.p.c).spd * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1);
-    const es = stats(this.e.c).spd * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1);
+    const ps = stats(this.p.c).spd * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1);
+    const es = stats(this.e.c).spd * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1);
     if (ps === es) return this.rng.chance(0.5);
     return ps > es;
   }
@@ -271,7 +271,9 @@ export class Battle {
       const cur = holder[stageKey(e.stat)];
       return e.stages > 0 ? cur < 2 : cur > -2;
     });
-    return room ? 50 * hpFrac : 0;
+    // Debuffs that can inflict a condition are worth more against a healthy target.
+    const bonus = d.status && !foe.status ? 20 * d.status.chance : 0;
+    return room ? 50 * hpFrac + bonus : bonus * hpFrac;
   }
 
   private applyStatus(side: Side, slot: MoveSlot, ev: BattleEvent[]) {
@@ -296,8 +298,79 @@ export class Battle {
     }
   }
 
+  // ------------------------------------------------------------ status conditions
+
+  private label(x: Combatant): string {
+    return (this.enemy.includes(x) ? 'Enemy ' : '') + creatureName(x.c);
+  }
+
+  /** Give a combatant a status. Fails if it already has one, has fainted, or its type is immune. */
+  private inflict(x: Combatant, side: Side, id: StatusId, ev: BattleEvent[], prefix = ''): boolean {
+    if (!isAlive(x.c) || x.status) return false;
+    const def = STATUS[id];
+    if (creatureTypes(x.c).some((t) => def.immune.includes(t))) return false;
+    x.status = id;
+    x.statusTurns = this.rng.int(def.turns[0], def.turns[1]);
+    ev.push({ kind: 'status', side, status: id });
+    ev.push({ kind: 'text', text: `${prefix}${this.label(x)} ${def.verb}!` });
+    return true;
+  }
+
+  private cure(x: Combatant, side: Side, ev: BattleEvent[]) {
+    if (!x.status) return;
+    const def = STATUS[x.status];
+    x.status = null;
+    x.statusTurns = 0;
+    ev.push({ kind: 'status', side, status: null });
+    ev.push({ kind: 'text', text: `${this.label(x)} ${def.ends}!` });
+  }
+
+  /** Sleep, freeze, paralysis and confusion can stop a creature from acting. */
+  private canAct(x: Combatant, side: Side, ev: BattleEvent[]): boolean {
+    const who = this.label(x);
+    switch (x.status) {
+      case 'sleep':
+        if (--x.statusTurns <= 0) {
+          this.cure(x, side, ev);
+          return true;
+        }
+        ev.push({ kind: 'text', text: `${who} is fast asleep.` });
+        return false;
+      case 'freeze':
+        if (--x.statusTurns <= 0 || this.rng.chance(0.3)) {
+          this.cure(x, side, ev);
+          return true;
+        }
+        ev.push({ kind: 'text', text: `${who} is frozen solid!` });
+        return false;
+      case 'para':
+        if (this.rng.chance(0.25)) {
+          ev.push({ kind: 'text', text: `${who} is paralyzed! It can't move!` });
+          return false;
+        }
+        return true;
+      case 'confuse': {
+        if (--x.statusTurns < 0) {
+          this.cure(x, side, ev);
+          return true;
+        }
+        ev.push({ kind: 'text', text: `${who} is confused...` });
+        if (!this.rng.chance(1 / 3)) return true;
+        const max = stats(x.c).hp;
+        const dmg = this.hurt(x, Math.max(1, Math.floor(max / 10)));
+        ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
+        ev.push({ kind: 'text', text: 'It hurt itself in its confusion!' });
+        if (!isAlive(x.c)) this.handleFaint(side, ev);
+        return false;
+      }
+      default:
+        return true;
+    }
+  }
+
   private useMove(side: Side, slot: MoveSlot, ev: BattleEvent[]) {
     const user = side === 'player' ? this.p : this.e;
+    if (!this.canAct(user, side, ev)) return;
     const target = side === 'player' ? this.e : this.p;
     const targetSide: Side = side === 'player' ? 'enemy' : 'player';
     const def = moveDef(slot);
@@ -319,6 +392,9 @@ export class Battle {
     }
     if (def.kind !== 'attack') {
       this.applyStatus(side, slot, ev);
+      if (def.status && def.kind === 'debuff' && this.rng.chance(def.status.chance)) {
+        this.inflict(target, targetSide, def.status.id, ev);
+      }
       return;
     }
 
@@ -379,6 +455,11 @@ export class Battle {
     if (def.selfAfter && isAlive(user.c)) for (const e of def.selfAfter) this.bump(user, side, e.stat, e.stages, ev);
 
     if (slot.tier >= 3) this.applyTier3(def, user, target, side, total, ev);
+    // A Fire hit thaws a frozen target; moves named for a condition can inflict it.
+    if (landed > 0 && isAlive(target.c)) {
+      if (target.status === 'freeze' && el === 'Fire') this.cure(target, targetSide, ev);
+      if (def.status && this.rng.chance(def.status.chance)) this.inflict(target, targetSide, def.status.id, ev);
+    }
 
     if (!isAlive(target.c)) this.handleFaint(targetSide, ev);
     if (!isAlive(user.c)) this.handleFaint(side, ev);
@@ -395,11 +476,7 @@ export class Battle {
     const userMax = stats(user.c).hp;
     switch (def.element) {
       case 'Fire':
-        if (isAlive(target.c) && target.burn === 0) {
-          target.burn = 3;
-          target.dot = 'burn';
-          ev.push({ kind: 'text', text: `${creatureName(target.c)} was burned!` });
-        }
+        this.inflict(target, side === 'player' ? 'enemy' : 'player', 'burn', ev);
         break;
       case 'Frost':
         if (isAlive(target.c) && target.spdStage > -MAX_STAGE) {
@@ -433,11 +510,7 @@ export class Battle {
       case 'Dragon':
         break; // handled in damage (double strike / bonus damage)
       case 'Toxic':
-        if (isAlive(target.c) && target.burn === 0) {
-          target.burn = 3;
-          target.dot = 'poison';
-          ev.push({ kind: 'text', text: `${creatureName(target.c)} was poisoned!` });
-        }
+        this.inflict(target, side === 'player' ? 'enemy' : 'player', 'poison', ev);
         break;
       case 'Metal':
         this.bump(user, side, 'atk', 1, ev);
@@ -521,15 +594,20 @@ export class Battle {
     if (this.outcome() === 'ongoing' || this.outcome() === 'needSwitch') this.berries(ev);
     for (const side of ['player', 'enemy'] as const) {
       const x = side === 'player' ? this.p : this.e;
-      if (x.burn > 0 && isAlive(x.c)) {
+      if (!isAlive(x.c) || !x.status) continue;
+      if (x.status === 'burn' || x.status === 'poison') {
         const max = stats(x.c).hp;
-        const dmg = this.hurt(x, Math.max(1, Math.floor(max / 12)));
-        x.burn -= 1;
+        const dmg = this.hurt(x, Math.max(1, Math.floor(max / (x.status === 'burn' ? 12 : 8))));
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
-        ev.push({ kind: 'text', text: `${creatureName(x.c)} is hurt by its ${x.dot}!` });
+        ev.push({ kind: 'text', text: `${this.label(x)} is hurt by its ${x.status === 'burn' ? 'burn' : 'poison'}!` });
         this.sashNote(x, ev);
-        if (!isAlive(x.c)) this.handleFaint(side, ev);
+        if (!isAlive(x.c)) {
+          this.handleFaint(side, ev);
+          continue;
+        }
       }
+      // Burn, poison and paralysis wear off with time (the others count down when it tries to act).
+      if ((x.status === 'burn' || x.status === 'poison' || x.status === 'para') && --x.statusTurns <= 0) this.cure(x, side, ev);
     }
   }
 
@@ -582,14 +660,15 @@ function stageKey(stat: StatKey): 'atkStage' | 'defStage' | 'spdStage' {
 }
 
 function fresh(c: Creature): Combatant {
-  return { c, atkStage: 0, defStage: 0, spdStage: 0, burn: 0, dot: 'burn' };
+  return { c, atkStage: 0, defStage: 0, spdStage: 0, status: null, statusTurns: 0 };
 }
 
 function resetStages(x: Combatant) {
   x.atkStage = 0;
   x.defStage = 0;
   x.spdStage = 0;
-  x.burn = 0;
+  x.status = null;
+  x.statusTurns = 0;
 }
 
 /** The element an attack actually hits with (bestType moves pick the user's most effective type). */
@@ -616,7 +695,10 @@ export function computeDamage(
   const mult = typeMultiplier(element, creatureTypes(target.c));
   const stab = stabMultiplier(element, creatureTypes(user.c));
   const held =
-    (user.c.held === 'band' ? 1.15 : 1) * (user.c.held === 'charm' && stab > 1 ? 1.2 : 1) * (target.c.held === 'shell' ? 0.85 : 1);
+    (user.c.held === 'band' ? 1.15 : 1) *
+    (user.c.held === 'charm' && stab > 1 ? 1.2 : 1) *
+    (target.c.held === 'shell' ? 0.85 : 1) *
+    (user.status === 'burn' ? 0.8 : 1);
   const power = def.power * powerMult * TIER_POWER[tier] * (tier >= 3 && def.element === 'Dragon' ? 1.2 : 1);
   const base = power * (atk / dfn) * levelFactor(user.c.level) * BALANCE.damageScale;
   const roll = 0.85 + rng.next() * 0.15;

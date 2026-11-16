@@ -1,3 +1,4 @@
+import { STATUS, statusFromName, type StatusId } from './status';
 import { ELEMENTS, type Element } from './types';
 
 export type MoveKind = 'attack' | 'buff' | 'debuff' | 'heal';
@@ -32,6 +33,8 @@ export interface MoveDef {
   heal?: number;
   /** Signature move of this species. */
   signature?: string;
+  /** Status this move can inflict on the target, and the chance. */
+  status?: { id: StatusId; chance: number };
 }
 
 const LINE_POWER = [40, 55, 70, 90];
@@ -238,6 +241,12 @@ for (const el of ELEMENTS) {
       : { id: extraId(el), name: ex.buff[0], element: el, kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: ex.buff[1] };
 }
 
+// Moves whose names describe a condition can inflict it (Spark paralyzes, Acid Spit poisons...).
+for (const m of Object.values(MOVES)) {
+  const st = statusFromName(m.name, m.kind);
+  if (st) m.status = st;
+}
+
 /** Moves in an element's shared pool (excludes signatures). */
 export function elementPool(el: Element): string[] {
   return [0, 1, 2, 3]
@@ -280,6 +289,8 @@ export function registerSignature(speciesId: string, name: string, el: Element, 
       m = { ...base, kind: 'debuff', power: 0, accuracy: 95, effects: fx(['atk', -2], ['def', -2]) };
       break;
   }
+  const st = statusFromName(m.name, m.kind);
+  if (st) m.status = st;
   MOVES[m.id] = m;
   return m;
 }
@@ -330,7 +341,8 @@ export function moveSummary(m: MoveDef, tier: number): string {
     const h = `Heal ${Math.round(healAtTier(m, tier) * 100)}%`;
     return m.effects.length ? `${h}, ${fmtFx(effectsAtTier(m, tier))}` : h;
   }
-  if (m.kind !== 'attack') return describeEffects(m, tier);
+  const st = m.status ? `${Math.round(m.status.chance * 100)}% ${STATUS[m.status.id].tag}` : '';
+  if (m.kind !== 'attack') return describeEffects(m, tier) + (st ? `, ${st}` : '');
   const pow = Math.round(m.power * TIER_POWER[tier]);
   const parts = [m.hits ? `Pow ${pow}×${m.hits}` : `Pow ${pow}`];
   if (m.priority) parts.push('first');
@@ -340,6 +352,7 @@ export function moveSummary(m: MoveDef, tier: number): string {
   if (m.bestType) parts.push('best type');
   if (m.targetAfter) parts.push(`foe ${fmtFx(m.targetAfter)}`);
   if (m.selfAfter) parts.push(`self ${fmtFx(m.selfAfter)}`);
+  if (st) parts.push(st);
   return parts.join(' · ');
 }
 

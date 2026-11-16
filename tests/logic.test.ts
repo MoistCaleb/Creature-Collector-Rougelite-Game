@@ -550,7 +550,7 @@ describe('bosses and trainers', () => {
   it('miasma poisons and whiteout slows creatures as they enter', () => {
     const b = new Battle([mk(anyOf('Water'))], [mk(anyOf('Toxic'))], new Rng(1), { rule: 'miasma' });
     b.start();
-    expect(b.p.burn).toBeGreaterThan(0);
+    expect(b.p.status).toBe('poison');
     const w = new Battle([mk(anyOf('Water'))], [mk(anyOf('Frost'))], new Rng(1), { rule: 'whiteout' });
     w.start();
     expect(w.p.spdStage).toBe(-1);
