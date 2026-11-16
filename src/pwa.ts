@@ -64,10 +64,28 @@ export function setupPwa() {
     listeners.forEach((fn) => fn());
   });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // When a new version's service worker takes over, reload once so the new game loads.
+    // Runs are saved after every step, so this is safe even mid-run.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {
-        /* offline play just won't be available */
-      });
+      navigator.serviceWorker
+        .register('./sw.js', { updateViaCache: 'none' })
+        .then((reg) => {
+          // Check for a new version on launch and whenever the app comes back to the foreground.
+          void reg.update();
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) void reg.update();
+          });
+        })
+        .catch(() => {
+          /* offline play just won't be available */
+        });
     });
   }
 }

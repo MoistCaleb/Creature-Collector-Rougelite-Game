@@ -16,6 +16,7 @@ export class TitleScene extends Phaser.Scene {
   create() {
     background(this);
     playMusic('title');
+    text(this, 8, H - 8, `build ${__BUILD__}`, 10, '#4a4068').setOrigin(0, 1);
     muteButton(this, W - 30, 30);
     const meta = state.meta;
 
