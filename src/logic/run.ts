@@ -67,7 +67,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
   hunter: { name: 'Big Game Hunter', desc: 'Trainers drop 2 Evolution Stones.' },
   naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
-  ironwill: { name: 'Iron Will', desc: 'Survivors recover 85% HP after wins.' },
+  ironwill: { name: 'Iron Will', desc: 'Survivors recover 70% HP after wins (normally 40%).' },
   lucky: { name: 'Lucky Charm', desc: 'Coin-flip events succeed 75% of the time.' },
 };
 
@@ -293,7 +293,7 @@ export function highestLevel(run: Run): number {
 
 /** Survivors catch their breath after a win. */
 export function postBattleRecover(run: Run) {
-  const frac = run.passive === 'ironwill' ? 0.85 : BALANCE.postBattleHeal;
+  const frac = run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal;
   for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * frac));
 }
 
@@ -468,7 +468,7 @@ export function catchCreature(
   enemy: Creature,
 ): { c: Creature; bonus: CatchBonus; newlyClaimed: Element[] } | null {
   if (rosterFull(run)) return null;
-  // It joins as it was in battle: same level, evolution and moves, healed to full.
+  // It joins as it was in battle: same level, evolution and moves, still recovering (partial HP).
   const level = catchLevel(run, enemy);
   const bonus = catchBonus(run, enemy.speciesId);
   const c = createCreature(enemy.speciesId, level, enemy.stage);
@@ -476,7 +476,7 @@ export function catchCreature(
   c.learnIndex = enemy.learnIndex;
   c.pendingMoves = [];
   if (bonus) c.stars = 1;
-  c.hp = stats(c).hp;
+  c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
   const newlyClaimed: Element[] = [];
   if (bonus === 'type')
     for (const t of creatureTypes(c))

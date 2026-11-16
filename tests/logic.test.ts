@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BALANCE } from '../src/data/balance';
 import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
@@ -653,7 +654,7 @@ describe('caught creatures keep their level and evolution', () => {
     dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
-  it('joins at the same level, stage and moves, at full HP', () => {
+  it('joins at the same level, stage and moves, at partial HP', () => {
     const run = startRun(meta(), 'emberkit', 11);
     const wild = createCreature('frostling', 40, 1);
     wild.hp = 1;
@@ -662,7 +663,7 @@ describe('caught creatures keep their level and evolution', () => {
     expect(c.stage).toBe(1);
     expect(c.moves.map((m) => m.id)).toEqual(wild.moves.map((m) => m.id));
     expect(c.uid).not.toBe(wild.uid);
-    expect(c.hp).toBe(stats(c).hp);
+    expect(c.hp).toBe(Math.round(stats(c).hp * BALANCE.catchHp)); // still recovering from the fight
   });
   it('Scout adds 3 levels, never past the level cap', () => {
     const run = startRun({ ...meta(), equippedPassive: 'scout', unlockedPassives: ['scout'] }, 'emberkit', 12);
