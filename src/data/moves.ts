@@ -35,7 +35,48 @@ export interface MoveDef {
   signature?: string;
   /** Status this move can inflict on the target, and the chance. */
   status?: { id: StatusId; chance: number };
+  /** Team move: an effect on the user's whole side (see TEAM_FX). */
+  team?: TeamFxId;
 }
+
+// ---------------------------------------------------------------- team moves
+
+/**
+ * Team effects cover the user's whole side, not just the creature using them: they stay up for a
+ * few turns whoever is out, so switching doesn't throw them away. Mend is instant instead.
+ */
+export type TeamFxId = 'rally' | 'guard' | 'tailwind' | 'ward' | 'venom' | 'shroud' | 'mend';
+
+export const TEAM_FX: Record<TeamFxId, { name: string; tag: string; color: number; desc: string }> = {
+  rally: { name: 'Rally', tag: 'RALLY', color: 0xff7a3a, desc: 'your team deals 25% more damage' },
+  guard: { name: 'Guard', tag: 'GUARD', color: 0xc9a36a, desc: 'your team takes 25% less damage' },
+  tailwind: { name: 'Tailwind', tag: 'WIND', color: 0xf0d040, desc: 'your team is 50% faster' },
+  ward: { name: 'Ward', tag: 'WARD', color: 0x8fdcf0, desc: "your team can't get status conditions" },
+  venom: { name: 'Venom coat', tag: 'VENOM', color: 0xb05ae0, desc: "your team's hits may poison (30%)" },
+  shroud: { name: 'Shroud', tag: 'SHROUD', color: 0x7a6aa0, desc: 'attacks on your team miss 20% more' },
+  mend: { name: 'Mend', tag: 'MEND', color: 0x5ad06a, desc: 'heals your whole team and cures their status' },
+};
+
+/** Turns a team effect lasts (counting the turn it's used); skill tiers add one each. */
+export const teamFxTurns = (tier: number) => 4 + tier;
+/** Mend: share of max HP every teammate gets back. */
+export const mendHeal = (tier: number) => 0.15 + 0.05 * (tier - 1);
+
+const TEAM_MOVES: Record<Element, [string, TeamFxId]> = {
+  Fire: ['Ember Anthem', 'rally'],
+  Dragon: ['Wyrm Roar', 'rally'],
+  Earth: ['Stone Bulwark', 'guard'],
+  Metal: ['Iron Phalanx', 'guard'],
+  Storm: ['Gale Wake', 'tailwind'],
+  Spirit: ['Spirit Draft', 'tailwind'],
+  Light: ['Sanctum Glow', 'ward'],
+  Frost: ['Hoarfrost Veil', 'ward'],
+  Toxic: ['Venom Coat', 'venom'],
+  Shadow: ['Shadow Shroud', 'shroud'],
+  Nature: ['Bloom Mend', 'mend'],
+  Water: ['Tide Mend', 'mend'],
+};
+export const teamMoveId = (el: Element) => `${el}:team`;
 
 const LINE_POWER = [40, 55, 70, 90];
 const LINE_ACC = [100, 95, 90, 85];
@@ -234,6 +275,8 @@ for (const el of ELEMENTS) {
   MOVES[buffId(el)] = { id: buffId(el), name: kit.buff[0], element: el, kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: kit.buff[1] };
   MOVES[debuffId(el)] = { id: debuffId(el), name: kit.debuff[0], element: el, kind: 'debuff', rank: -1, power: 0, accuracy: 90, effects: kit.debuff[1] };
   kit.specials.forEach((s, i) => (MOVES[specialId(el, i)] = special(el, i, s)));
+  const [teamName, teamFx] = TEAM_MOVES[el];
+  MOVES[teamMoveId(el)] = { id: teamMoveId(el), name: teamName, element: el, kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: [], team: teamFx };
   const ex = kit.extra;
   MOVES[extraId(el)] =
     'heal' in ex
@@ -251,7 +294,7 @@ for (const m of Object.values(MOVES)) {
 export function elementPool(el: Element): string[] {
   return [0, 1, 2, 3]
     .map((r) => attackId(el, r))
-    .concat([buffId(el), debuffId(el), specialId(el, 0), specialId(el, 1), specialId(el, 2), extraId(el)]);
+    .concat([buffId(el), debuffId(el), specialId(el, 0), specialId(el, 1), specialId(el, 2), extraId(el), teamMoveId(el)]);
 }
 
 // ---------------------------------------------------------------- signatures
@@ -337,6 +380,8 @@ export function describeEffects(m: MoveDef, tier: number): string {
 
 /** Short summary for UI. */
 export function moveSummary(m: MoveDef, tier: number): string {
+  if (m.team === 'mend') return `Team: heal ${Math.round(mendHeal(tier) * 100)}% + cure`;
+  if (m.team) return `Team: ${TEAM_FX[m.team].name.toLowerCase()} ${teamFxTurns(tier)} turns`;
   if (m.kind === 'heal') {
     const h = `Heal ${Math.round(healAtTier(m, tier) * 100)}%`;
     return m.effects.length ? `${h}, ${fmtFx(effectsAtTier(m, tier))}` : h;
@@ -359,7 +404,7 @@ export function moveSummary(m: MoveDef, tier: number): string {
 /** What a skill-tier upgrade does to this move. */
 export function tierUpgradeText(m: MoveDef, toTier: number): string {
   if (m.kind === 'attack') return toTier === 3 ? `+50% power total, ${TIER3_EFFECT[m.element]}` : '+25% power';
-  if (m.kind === 'heal') return `Stronger: ${moveSummary(m, toTier)}`;
+  if (m.kind === 'heal' || m.team) return `Stronger: ${moveSummary(m, toTier)}`;
   return `Stronger: ${describeEffects(m, toTier)}`;
 }
 
@@ -377,6 +422,7 @@ export function attackValue(m: MoveDef, tier = 1): number {
  * creature never runs dry; strong attacks, signatures and heals are limited.
  */
 export function maxUses(d: MoveDef): number | null {
+  if (d.team) return 8;
   if (d.kind === 'heal') return 10;
   if (d.kind === 'buff' || d.kind === 'debuff') return 20;
   if (d.rank === 0 || d.rank === 1) return null;

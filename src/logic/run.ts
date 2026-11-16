@@ -5,6 +5,7 @@ import { HELD, HELD_IDS, type HeldId } from '../data/held';
 import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
+import { MOVES, teamMoveId } from '../data/moves';
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
 import {
   bankLimit,
@@ -24,6 +25,8 @@ import {
   setFloorCeiling,
   stageCap,
   stats,
+  MAX_MOVES,
+  teamElement,
   type Creature,
 } from './creature';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
@@ -557,6 +560,8 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
       for (const m of c.moves) if (rng.chance(0.4)) m.tier = 2;
     }
     if (kind === 'boss' && f === 2) for (const m of c.moves) m.tier = Math.max(m.tier, 2);
+    // Guardians from floor 2 (and some floor 3 trainers) use their team move in place of a stat move.
+    if ((kind === 'boss' && f > 0) || (kind === 'elite' && f === 2 && rng.chance(0.5))) giveTeamMove(c);
     // Trainers and guardians carry held items (the guardian's ace always, trainers sometimes from floor 2).
     const holds = boss ? i === count - 1 || heat.bossTeamItems : kind === 'elite' && (heat.eliteItems || (f > 0 && rng.chance(0.4)));
     if (holds) c.held = rollHeld(rng);
@@ -565,6 +570,15 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   }
   run.log.fights += 1;
   return enemies;
+}
+
+/** Swap a creature's first stat move (or its last move) for its line's team move. */
+function giveTeamMove(c: Creature) {
+  const id = teamMoveId(teamElement(SPECIES_BY_ID[c.speciesId]));
+  if (c.moves.some((m) => m.id === id)) return;
+  if (c.moves.length < MAX_MOVES) return void c.moves.push({ id, tier: 1 });
+  const i = c.moves.findIndex((m) => MOVES[m.id].kind === 'buff' || MOVES[m.id].kind === 'debuff');
+  c.moves[i >= 0 ? i : c.moves.length - 1] = { id, tier: 1 };
 }
 
 // Early-game fairness filters (lead = types of your first creature).

@@ -117,6 +117,8 @@ export interface Snap {
   enemy: SideSnap[];
   pActive: number;
   eActive: number;
+  /** Team effects up on each side, with turns left. */
+  fx?: { player: Battle['teamFx']['player']; enemy: Battle['teamFx']['enemy'] };
 }
 
 export function snapshot(b: Battle): Snap {
@@ -130,12 +132,12 @@ export function snapshot(b: Battle): Snap {
       spd: x.spdStage,
       sash: x.sash ?? null,
     }));
-  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive };
+  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } } };
 }
 
 /** The same state seen from the other side of the field. */
 export function flipSnap(s: Snap): Snap {
-  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive };
+  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined };
 }
 
 export function applySnap(b: Battle, s: Snap) {
@@ -155,6 +157,7 @@ export function applySnap(b: Battle, s: Snap) {
   side(b.enemy, s.enemy);
   b.pActive = s.pActive;
   b.eActive = s.eActive;
+  b.teamFx = { player: { ...(s.fx?.player ?? {}) }, enemy: { ...(s.fx?.enemy ?? {}) } };
 }
 
 /** Battle events seen from the other side of the field. */
@@ -177,8 +180,8 @@ export function flipEvents(events: BattleEvent[]): BattleEvent[] {
 /** Build a duel battle from one player's point of view (host: player = host team). */
 export function duelBattle(info: StartInfo, role: 'host' | 'guest'): Battle {
   const level = info.level ?? 50;
-  const host = info.hostCreatures ? info.hostCreatures.map(readyForDuel) : info.hostTeam.map((p) => makeArenaCreature(p, level));
-  const guest = info.guestCreatures ? info.guestCreatures.map(readyForDuel) : info.guestTeam.map((p) => makeArenaCreature(p, level));
+  const host = info.hostCreatures ? info.hostCreatures.map(readyForDuel) : info.hostTeam.map((p) => makeArenaCreature(p, { level }));
+  const guest = info.guestCreatures ? info.guestCreatures.map(readyForDuel) : info.guestTeam.map((p) => makeArenaCreature(p, { level }));
   const [mine, theirs] = role === 'host' ? [host, guest] : [guest, host];
   const names = role === 'host' ? { player: info.hostName, enemy: info.guestName } : { player: info.guestName, enemy: info.hostName };
   return new Battle(mine, theirs, new Rng(info.seed), {

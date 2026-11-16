@@ -213,7 +213,7 @@ export class ArenaScene extends Phaser.Scene {
       options: [{ label: 'Fight!', color: 0x8a2c2c }],
       onPick: () => {
         const match: BattleMatch = {
-          team: this.team.map(makeArenaCreature),
+          team: this.team.map((p) => makeArenaCreature(p)),
           enemies: opp.team,
           seed: l.seed + l.round,
           title: `ARENA ${l.round + 1}/${ARENA_ROUNDS}`,

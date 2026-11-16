@@ -188,6 +188,11 @@ Proposed math:
 ## Level curve (target)
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★. Evolving needs Lv 30 (first) / Lv 65 (second),
   whatever the cap (a floor ceiling or stars don't change it), including the boss's "Evolve one" boon.
+- **Team moves:** every line learns its element's team move at Lv 26. Effects sit on your side for 5 turns
+  (+1 per skill tier), whoever is out, so switching keeps them: Rally (Fire/Dragon, +25% damage), Guard
+  (Earth/Metal, -25% damage taken), Tailwind (Storm/Spirit, +50% speed), Ward (Light/Frost, no status),
+  Venom coat (Toxic, hits poison 30%), Shroud (Shadow, attacks on you miss 20% more). Mend (Nature/Water)
+  instead heals the whole team 15% and cures statuses. 8 uses. Guardians from floor 2 use them too.
 - **Move uses:** basic attacks (ranks 1-2 of the main line, quick/multi/sap/boost specials) are unlimited.
   Mid attacks, drain moves and signatures have 15 uses; top-rank and 100+ power attacks and heals 10; buffs and
   debuffs 20. Uses carry between battles. Restored fully at rest nodes, on a new floor and by Full Restore;
