@@ -291,6 +291,22 @@ export const sfx = {
   catch() {
     [0, 7, 12, 7, 12, 19].forEach((s, i) => tone(note(s, 523), 0.1, { type: 'triangle', vol: 0.2, delay: i * 0.08 }));
   },
+  throwCrystal() {
+    noise(0.4, { freq: 600, to: 2400, vol: 0.18, type: 'bandpass', q: 3 });
+    tone(400, 0.4, { type: 'triangle', vol: 0.12, slide: 900 });
+  },
+  catchDraw() {
+    tone(1200, 0.5, { type: 'sine', vol: 0.16, slide: 300 });
+    tone(1800, 0.5, { type: 'triangle', vol: 0.08, slide: 450 });
+  },
+  crystalLand() {
+    tone(1500, 0.08, { type: 'square', vol: 0.12 });
+    tone(1100, 0.1, { type: 'square', vol: 0.1, delay: 0.09 });
+  },
+  wobble(i: number) {
+    tone(320 + i * 60, 0.12, { type: 'triangle', vol: 0.22, slide: 220 + i * 60 });
+    noise(0.06, { freq: 2500, vol: 0.12, type: 'bandpass' });
+  },
   victory() {
     const seq = [0, 4, 7, 12, 7, 12, 16];
     seq.forEach((s, i) => tone(note(s, 523), i === seq.length - 1 ? 0.5 : 0.12, { type: 'square', vol: 0.16, delay: i * 0.11 }));

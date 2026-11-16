@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
-import { damageNumber, ensureFxTextures, faintFx, healFx, playEvolution, statusFx } from '../ui/fx';
+import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
 import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
@@ -496,8 +496,18 @@ export class BattleScene extends Phaser.Scene {
                   ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
                   : '';
             const starterNote = wasStarter ? '' : `\n\nNew starter unlocked: ${species(c).names[0]}!`;
-            sfx.catch();
-            showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}`, () => this.toMap());
+            persist();
+            const wild = this.enemies[i - 1];
+            playCatch(
+              this,
+              ensureCreatureTexture(this, wild.speciesId, wild.stage),
+              (this.kind === 'boss' ? 6 : 5) * SPRITE_FIT,
+              { x: PLAYER_POS.x + 30, y: PLAYER_POS.y - 30 },
+              ENEMY_POS,
+              ELEMENT_COLORS[creatureTypes(wild)[0]],
+              kind === 'species' || kind === 'type',
+              () => showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}`, () => this.toMap()),
+            );
           }
         },
       });

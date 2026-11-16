@@ -305,6 +305,129 @@ export function damageNumber(scene: Phaser.Scene, at: Pt, amount: number, mult =
   scene.tweens.add({ targets: t, y: t.y - 46, alpha: 0, delay: 380, duration: 520, onComplete: () => t.destroy() });
 }
 
+/** A glowing hexagonal "bond crystal" drawn around (0, 0). */
+function crystal(scene: Phaser.Scene, color: number): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics();
+  const hex = (r: number) =>
+    Array.from({ length: 6 }, (_, i) => new Phaser.Math.Vector2(Math.cos(-Math.PI / 2 + (i * Math.PI) / 3) * r, Math.sin(-Math.PI / 2 + (i * Math.PI) / 3) * r));
+  g.fillStyle(darken(color, 25), 1);
+  g.fillPoints(hex(18), true);
+  g.fillStyle(lighten(color, 25), 1);
+  g.fillPoints(hex(11), true);
+  g.fillStyle(0xffffff, 0.9);
+  g.fillTriangle(-6, -10, 0, -13, -2, -4);
+  g.lineStyle(3, 0xffffff, 0.9);
+  g.strokePoints(hex(18), true);
+  return g;
+}
+
+/**
+ * Catch sequence: a bond crystal arcs over, draws the creature in as light, drops, wobbles three
+ * times and locks with a burst. `special` adds a golden flourish (first-catch / type bonus).
+ */
+export function playCatch(
+  scene: Phaser.Scene,
+  creatureKey: string,
+  scale: number,
+  from: Pt,
+  at: Pt,
+  color: number,
+  special: boolean,
+  onDone: () => void,
+) {
+  ensureFxTextures(scene);
+  const W = scene.scale.width;
+  const H = scene.scale.height;
+  const dim = scene.add.rectangle(0, 0, W, H, 0x000000, 0.35).setOrigin(0).setDepth(1500).setInteractive();
+  const mon = scene.add.image(at.x, at.y, creatureKey).setScale(scale).setDepth(1501).setAlpha(0);
+  const gem = crystal(scene, color).setDepth(1503).setPosition(from.x, from.y).setScale(0.8);
+  const groundY = at.y + 60;
+  const parts: Phaser.GameObjects.GameObject[] = [dim, mon, gem];
+  const step = (fn: () => void, ms: number) => scene.time.delayedCall(ms, fn);
+
+  // The creature reappears so you can see what you're catching.
+  scene.tweens.add({ targets: mon, alpha: 1, duration: 200 });
+  sfx.throwCrystal();
+  // 1. Throw: arc from your side to just above the creature, spinning.
+  const t = { p: 0 };
+  scene.tweens.add({
+    targets: t,
+    p: 1,
+    duration: 520,
+    delay: 250,
+    ease: 'Sine.easeInOut',
+    onUpdate: () => {
+      gem.setPosition(from.x + (at.x - from.x) * t.p, from.y + (at.y - 70 - from.y) * t.p - Math.sin(t.p * Math.PI) * 160);
+      gem.rotation = t.p * Math.PI * 4;
+    },
+    onComplete: () => {
+      gem.rotation = 0;
+      // 2. Draw in: a beam of light, the creature turns to light and shrinks into the crystal.
+      sfx.catchDraw();
+      // Triangle points are relative to its own box, so the apex sits at x = 55 of a 110-wide box.
+      const beam = scene.add.triangle(at.x, at.y - 70, 55, 0, 0, 110, 110, 110, lighten(color, 40), 0.55).setOrigin(0.5, 0).setDepth(1502);
+      parts.push(beam);
+      scene.tweens.add({ targets: beam, alpha: 0.85, yoyo: true, duration: 220, repeat: 1 });
+      mon.setTintFill(0xffffff);
+      scene.tweens.add({ targets: mon, scale: 0.05, y: at.y - 70, alpha: 0.3, duration: 420, delay: 120, ease: 'Quad.easeIn' });
+      burst(scene, at, 'fx-spark', [0xffffff, lighten(color, 30)], 18, { speed: { min: 20, max: 80 }, lifespan: 500 }).setDepth(1504);
+      step(() => {
+        beam.destroy();
+        mon.setVisible(false);
+        // 3. Drop to the ground with a bounce.
+        scene.tweens.add({
+          targets: gem,
+          y: groundY,
+          duration: 420,
+          ease: 'Bounce.easeOut',
+          onComplete: () => {
+            sfx.crystalLand();
+            // 4. Three wobbles, each with a pulse of light.
+            for (let w = 0; w < 3; w++) {
+              step(() => {
+                sfx.wobble(w);
+                scene.tweens.add({ targets: gem, rotation: w % 2 ? 0.45 : -0.45, yoyo: true, duration: 140, ease: 'Sine.easeInOut' });
+                const pulse = scene.add.circle(at.x, groundY, 10, color, 0.4).setDepth(1502);
+                parts.push(pulse);
+                scene.tweens.add({ targets: pulse, scale: 3, alpha: 0, duration: 380, onComplete: () => pulse.destroy() });
+              }, 350 + w * 520);
+            }
+            // 5. Lock: flash, burst of stars, the crystal hops.
+            step(() => {
+              sfx.catch();
+              scene.cameras.main.flash(160, 255, 255, 255, true);
+              burst(scene, { x: at.x, y: groundY }, 'fx-spark', special ? [0xffd23f, 0xffffff, 0xffb02e] : [0xffffff, lighten(color, 30)], special ? 40 : 24, {
+                speed: { min: 120, max: 300 },
+                lifespan: 800,
+              }).setDepth(1504);
+              burst(scene, { x: at.x, y: groundY }, 'fx-ring', [special ? 0xffd23f : 0xffffff], 2, { speed: 0, scale: { start: 0.5, end: 5 }, lifespan: 500 }).setDepth(1504);
+              scene.tweens.add({ targets: gem, y: groundY - 30, yoyo: true, duration: 180, ease: 'Quad.easeOut' });
+              if (special) {
+                // A golden star rises for a bonus catch.
+                const star = scene.add
+                  .text(at.x, groundY - 40, '★', { fontFamily: 'system-ui', fontSize: '44px', color: '#ffd23f', stroke: '#000', strokeThickness: 4 })
+                  .setOrigin(0.5)
+                  .setDepth(1505)
+                  .setScale(0.2);
+                parts.push(star);
+                scene.tweens.add({ targets: star, scale: 1.2, y: groundY - 110, duration: 500, ease: 'Back.easeOut' });
+                step(() => sfx.levelUp(), 200);
+              }
+            }, 350 + 3 * 520 + 150);
+            step(() => {
+              scene.tweens.add({ targets: parts, alpha: 0, duration: 250 });
+              step(() => {
+                parts.forEach((p) => p.destroy());
+                onDone();
+              }, 260);
+            }, 350 + 3 * 520 + 150 + 1000);
+          },
+        });
+      }, 560);
+    },
+  });
+}
+
 /** Full-screen evolution sequence: the old form flickers into the new one, then a burst. */
 export function playEvolution(
   scene: Phaser.Scene,
