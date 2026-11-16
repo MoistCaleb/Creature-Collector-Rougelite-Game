@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
-import { stoneReveal } from '../ui/stoneReveal';
+import { itemReveal, stoneReveal } from '../ui/stoneReveal';
 import { MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
@@ -166,13 +166,15 @@ export class MapScene extends Phaser.Scene {
       showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', after);
     };
     const afterBanner = () => (data.banner ? showMessage(this, `Floor ${run.floor + 1}`, data.banner, next) : next());
-    // New Evolution Stones since the map was last shown get their own moment.
+    // New held items and Evolution Stones since the map was last shown get their own moments.
+    const items = run.newItems ?? [];
+    run.newItems = [];
+    const afterItems = () => (items.length ? itemReveal(this, items, afterBanner) : afterBanner());
     const gained = run.evoStones - (run.stonesSeen ?? run.evoStones);
     run.stonesSeen = run.evoStones;
-    if (gained > 0) {
-      persist();
-      stoneReveal(this, gained, run.evoStones, afterBanner);
-    } else afterBanner();
+    if (gained > 0 || items.length) persist();
+    if (gained > 0) stoneReveal(this, gained, run.evoStones, afterItems);
+    else afterItems();
   }
 
   /** Creatures that leveled into a new move with a full move list ask what to forget. */
@@ -218,15 +220,18 @@ export class MapScene extends Phaser.Scene {
     if (run.daily) pixelIcon(this, mx, 46, 'calendar', 16);
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 158, 45, 'stone', 16);
-    text(this, 170, 36, `${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: run.evoStones ? 'bold' : 'normal' });
+    text(this, 170, 36, `${run.evoStones}`, 14, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 67, 'skull', 14);
       text(this, 32, 60, steps === 1 ? 'Boss is next' : `Boss in ${steps} steps`, 12, '#c9a3dd');
     }
-    muteButton(this, W - 192, TOP_BAR / 2, 36);
-    button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
-    button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 17 });
+    muteButton(this, W - 226, TOP_BAR / 2, 36);
+    button(this, W - 170, TOP_BAR / 2, 60, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 15 });
+    // The Bag shows a dot when it holds items nobody is using yet.
+    const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });
+    if ((run.bag ?? []).length) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
+    button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
   }
 
   private drawBottomBar() {

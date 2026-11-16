@@ -220,6 +220,8 @@ export interface Run {
   potions?: number;
   /** Held items not on any creature. */
   bag?: HeldId[];
+  /** Held items gained since the map was last shown (each gets an announcement). */
+  newItems?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
   eventsSeen?: string[];
   /** The open treasure chest's contents, fixed once rolled. */
@@ -661,8 +663,10 @@ export function rollHeld(rng: Rng): HeldId {
 }
 
 /** Put an item in the bag. */
-export function stash(run: Run, id: HeldId) {
+/** Put an item in the bag. `fresh` items (newly earned, not returned) get announced on the map. */
+export function stash(run: Run, id: HeldId, fresh = true) {
   run.bag = [...(run.bag ?? []), id];
+  if (fresh) run.newItems = [...(run.newItems ?? []), id];
 }
 
 /** Give a bag item to a creature; whatever it held goes back in the bag. */
@@ -680,7 +684,7 @@ export function equipHeld(run: Run, c: Creature, id: HeldId) {
 /** Take a creature's item back into the bag. */
 export function unequipHeld(run: Run, c: Creature) {
   if (!c.held) return;
-  stash(run, c.held);
+  stash(run, c.held, false);
   c.held = undefined;
 }
 

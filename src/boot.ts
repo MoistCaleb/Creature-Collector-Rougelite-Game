@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BattleScene } from './scenes/BattleScene';
 import { DexScene } from './scenes/DexScene';
+import { BagScene } from './scenes/BagScene';
 import { EndScene } from './scenes/EndScene';
 import { MapScene } from './scenes/MapScene';
 import { MapSelectScene } from './scenes/MapSelectScene';
@@ -30,6 +31,7 @@ export function startGame() {
       MapScene,
       BattleScene,
       TeamScene,
+      BagScene,
       EndScene,
       DexScene,
       PassivesScene,
