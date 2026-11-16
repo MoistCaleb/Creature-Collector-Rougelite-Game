@@ -174,6 +174,7 @@ export class MapScene extends Phaser.Scene {
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
       subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${nm.accuracy}%\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...c.moves.map((m) => {
           const d = moveDef(m);
@@ -591,6 +592,7 @@ export class MapScene extends Phaser.Scene {
         const moves = c.moves.map((m, idx) => ({ m, idx })).filter(({ m }) => m.tier < MAX_TIER);
         openPicker(this, {
           title: 'Upgrade which move?',
+          rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
           options: moves.map(({ m }) => {
             const d = moveDef(m);
             return { label: `${d.name}  T${m.tier} → T${m.tier + 1}`, sub: tierUpgradeText(d, m.tier + 1) };
