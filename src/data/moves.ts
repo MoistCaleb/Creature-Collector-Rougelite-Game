@@ -384,3 +384,9 @@ export function maxUses(d: MoveDef): number | null {
   if (d.rank === 2 || d.signature || d.drain || d.power >= 55) return 15;
   return null;
 }
+
+/** "10 uses" or "unlimited uses", for a move at full uses. */
+export function maxUsesText(d: MoveDef): string {
+  const max = maxUses(d);
+  return max === null ? 'unlimited uses' : `${max} uses`;
+}

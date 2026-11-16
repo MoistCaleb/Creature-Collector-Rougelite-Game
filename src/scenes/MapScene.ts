@@ -1,7 +1,7 @@
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { stoneReveal } from '../ui/stoneReveal';
-import { MAX_TIER, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
+import { MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
   addLevels,
@@ -10,6 +10,7 @@ import {
   healFraction,
   levelCap,
   restoreUses,
+  usesText,
   moveDef,
   recommendForget,
   resolvePending,
@@ -185,12 +186,12 @@ export class MapScene extends Phaser.Scene {
     const tag = 'RECOMMENDED';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
-      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${nm.accuracy}%\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${nm.accuracy}% · ${maxUsesText(nm)}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...c.moves.map((m, i) => {
           const d = moveDef(m);
-          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · T${m.tier}`, badge: rec === i ? tag : undefined };
+          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · T${m.tier} · ${usesText(m)}`, badge: rec === i ? tag : undefined };
         }),
         { label: `Don't learn ${nm.name}`, color: 0x3a3450, badge: rec === null ? tag : undefined },
       ],
