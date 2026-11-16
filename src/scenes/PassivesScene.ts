@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { achievementFor, progress } from '../logic/achievements';
 import { PASSIVES, saveMeta, type PassiveId } from '../logic/run';
 import { state } from '../state';
-import { background, button, COLORS, H, text, W, ZOOM } from '../ui/widgets';
+import { Scroller } from '../ui/scroll';
+import { background, button, COLORS, H, text, W } from '../ui/widgets';
 
 const TOP = 84;
 
@@ -10,9 +11,7 @@ const TOP = 84;
 export class PassivesScene extends Phaser.Scene {
   private list!: Phaser.GameObjects.Container;
   private listH = 0;
-  private dragStart = 0;
-  private startY = 0;
-  private dragged = false;
+  private scroller!: Scroller;
 
   constructor() {
     super('Passives');
@@ -61,7 +60,7 @@ export class PassivesScene extends Phaser.Scene {
       if (unlocked) {
         bg.setInteractive({ useHandCursor: true });
         bg.on('pointerup', () => {
-          if (this.dragged) return;
+          if (this.scroller.moved) return;
           meta.equippedPassive = equipped ? null : id;
           saveMeta(meta);
           this.scene.restart();
@@ -80,20 +79,13 @@ export class PassivesScene extends Phaser.Scene {
     });
     button(this, W - 50, 30, 80, 40, 'Back', () => this.scene.start('Title'), { fontSize: 15 });
 
-    // Drag / wheel to scroll
+    // Drag / wheel to scroll, with flick momentum. A drag never counts as tapping a passive.
     const min = Math.min(TOP, H - this.listH - 16);
-    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      this.dragStart = ptr.y / ZOOM;
-      this.startY = this.list.y;
-      this.dragged = false;
-    });
-    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
-      if (!ptr.isDown) return;
-      if (Math.abs(ptr.y / ZOOM - this.dragStart) > 8) this.dragged = true;
-      if (this.dragged) this.list.y = Phaser.Math.Clamp(this.startY + ptr.y / ZOOM - this.dragStart, min, TOP);
-    });
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
-      this.list.y = Phaser.Math.Clamp(this.list.y - dy, min, TOP);
+    this.scroller = new Scroller(this, {
+      get: () => this.list.y,
+      set: (y) => this.list.setY(y),
+      min: () => min,
+      max: () => TOP,
     });
   }
 }

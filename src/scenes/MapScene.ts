@@ -25,7 +25,8 @@ import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } fr
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
-import { background, button, COLORS, H, HpBar, muteButton, text, W, ZOOM } from '../ui/widgets';
+import { Scroller } from '../ui/scroll';
+import { background, button, COLORS, H, HpBar, muteButton, text, W } from '../ui/widgets';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
@@ -40,9 +41,7 @@ export class MapScene extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private minScroll = 0;
   private maxScroll = 0;
-  private dragStartY = 0;
-  private layerStartY = 0;
-  private dragging = false;
+  private scroller!: Scroller;
 
   constructor() {
     super('Map');
@@ -122,7 +121,7 @@ export class MapScene extends Phaser.Scene {
         this.tweens.add({ targets: [hex], scale: 1.07, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
         hex.setInteractive(new Phaser.Geom.Polygon(hexPoints(hw, hh, pointy)), Phaser.Geom.Polygon.Contains);
         hex.on('pointerup', () => {
-          if (!this.dragging) this.enterNode(n);
+          if (!this.scroller.moved) this.enterNode(n);
         });
       }
     }
@@ -134,15 +133,12 @@ export class MapScene extends Phaser.Scene {
     this.maxScroll = TOP_BAR;
     const cur = pos(currentNode(run));
     this.layer.y = Phaser.Math.Clamp(TOP_BAR + viewH * 0.7 - cur.y, this.minScroll, this.maxScroll);
-    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      this.dragStartY = ptr.y / ZOOM;
-      this.layerStartY = this.layer.y;
-      this.dragging = false;
-    });
-    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
-      if (!ptr.isDown) return;
-      if (Math.abs(ptr.y / ZOOM - this.dragStartY) > 8) this.dragging = true;
-      if (this.dragging) this.layer.y = Phaser.Math.Clamp(this.layerStartY + ptr.y / ZOOM - this.dragStartY, this.minScroll, this.maxScroll);
+    // Drag to scroll the map, with flick momentum. A drag never counts as tapping a node.
+    this.scroller = new Scroller(this, {
+      get: () => this.layer.y,
+      set: (y) => this.layer.setY(y),
+      min: () => this.minScroll,
+      max: () => this.maxScroll,
     });
 
     this.drawTopBar();

@@ -1,22 +1,25 @@
 import Phaser from 'phaser';
 import { allMoveIds, elementPool, MOVES, moveSummary } from '../data/moves';
 import { SPECIES } from '../data/species';
-import { ELEMENT_COLORS, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
+import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
+import { Scroller } from '../ui/scroll';
 import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, H, text, typeChip, W, ZOOM } from '../ui/widgets';
+import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
 
 type Tab = 'creatures' | 'moves' | 'elements';
-const TOP = 132;
+/** Content starts below the header, tabs and the jump-to-element bar. */
+const TOP = 196;
 
 export class DexScene extends Phaser.Scene {
   private from = 'Title';
   private tab: Tab = 'creatures';
   private content!: Phaser.GameObjects.Container;
   private contentH = 0;
-  private dragStart = 0;
-  private startY = 0;
+  private scroller!: Scroller;
+  /** Where each element's rows start in the current tab, for the jump bar. */
+  private anchors: Partial<Record<Element, number[]>> = {};
   /** Every row of the current tab: where it sits and how to draw it. Only rows near the screen exist. */
   private rows: { y: number; h: number; build: (c: Phaser.GameObjects.Container) => void }[] = [];
   private live = new Map<number, Phaser.GameObjects.Container>();
@@ -37,6 +40,7 @@ export class DexScene extends Phaser.Scene {
     this.content = this.add.container(0, TOP);
     this.rows = [];
     this.live = new Map();
+    this.anchors = {};
     const maskShape = this.make.graphics({}).fillRect(0, TOP, W, H - TOP);
     this.content.setMask(maskShape.createGeometryMask());
 
@@ -71,22 +75,49 @@ export class DexScene extends Phaser.Scene {
       });
     });
 
-    // Drag to scroll
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.dragStart = p.y / ZOOM;
-      this.startY = this.content.y;
+    this.drawJumpBar();
+
+    // Drag to scroll, with flick momentum.
+    this.scroller = new Scroller(this, {
+      get: () => this.content.y,
+      set: (y) => {
+        this.content.y = y;
+        this.refreshRows();
+      },
+      min: () => Math.min(TOP, H - this.contentH - 20),
+      max: () => TOP,
     });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!p.isDown) return;
-      const min = Math.min(TOP, H - this.contentH - 20);
-      this.content.y = Phaser.Math.Clamp(this.startY + p.y / ZOOM - this.dragStart, min, TOP);
-      this.refreshRows();
+  }
+
+  /** Two rows of element buttons: tap to glide to that element; tap again for the next one. */
+  private drawJumpBar() {
+    const dex = state.meta.dex;
+    const cols = 6;
+    const bw = (W - 32 - (cols - 1) * 4) / cols;
+    ELEMENTS.forEach((el, i) => {
+      const seen = dex.elements.includes(el);
+      const x = 16 + bw / 2 + (i % cols) * (bw + 4);
+      const y = 136 + Math.floor(i / cols) * 30;
+      button(this, x, y, bw, 26, seen ? el : '???', () => this.jumpTo(el), {
+        color: seen ? ELEMENT_COLORS[el] : COLORS.panelLight,
+        textColor: seen ? elementTextColor(el) : '#6d6588',
+        fontSize: 11,
+        enabled: (this.anchors[el]?.length ?? 0) > 0,
+      });
     });
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
-      const min = Math.min(TOP, H - this.contentH - 20);
-      this.content.y = Phaser.Math.Clamp(this.content.y - dy, min, TOP);
-      this.refreshRows();
-    });
+  }
+
+  /** Glide to the next row for this element below the current view (wrapping to the first). */
+  private jumpTo(el: Element) {
+    const ys = this.anchors[el] ?? [];
+    if (!ys.length) return;
+    const viewTop = TOP - this.content.y; // content-space y at the top of the view
+    const next = ys.find((y) => y > viewTop + 4) ?? ys[0];
+    this.scroller.glideTo(TOP - next + 4, () => this.refreshRows());
+  }
+
+  private anchor(el: Element, y: number) {
+    (this.anchors[el] ??= []).push(y);
   }
 
   /** Builds rows that are on (or near) the screen and removes ones that scrolled far away. */
@@ -117,6 +148,7 @@ export class DexScene extends Phaser.Scene {
     SPECIES.forEach((sp, i) => {
       const y = i * rowH + 8;
       this.addRow(y, rowH, (row) => this.drawCreatureRow(row, sp, i, y, rowH));
+      for (const el of new Set(sp.types)) this.anchor(el, y);
     });
     this.contentH = SPECIES.length * rowH + 16;
   }
@@ -160,6 +192,7 @@ export class DexScene extends Phaser.Scene {
     for (const el of ELEMENTS) {
       const elSeen = dex.elements.includes(el);
       const hy = y;
+      this.anchor(el, hy);
       this.addRow(hy, 30, (row) => {
         if (elSeen) row.add(typeChip(this, 16, hy + 12, el));
         else row.add(text(this, 16, hy + 2, '??? element', 14, '#4a4068'));
@@ -194,6 +227,7 @@ export class DexScene extends Phaser.Scene {
     const name = (e: Element) => (dex.elements.includes(e) ? e : '???');
     ELEMENTS.forEach((el, i) => {
       const y = 8 + i * 96;
+      this.anchor(el, y);
       this.addRow(y, 96, (row) => {
         row.add(this.add.rectangle(12, y, W - 24, 86, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
         if (!dex.elements.includes(el)) {
