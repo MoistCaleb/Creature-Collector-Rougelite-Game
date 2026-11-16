@@ -15,6 +15,9 @@ import { playMusic, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { Rng } from '../logic/rng';
+import type { DuelController, Next } from '../net/duel';
+import { session } from '../net/session';
+import { duel, leaveDuel, sendHello } from '../net/runtime';
 import {
   canEvolve,
   getFloorCeiling,
@@ -99,6 +102,10 @@ export interface BattleMatch {
   randomness: number;
   background: number;
   onEnd: (won: boolean) => void;
+  /** A live duel against another phone: the controller supplies the battle and resolves turns. */
+  duel?: DuelController;
+  /** Duel resumed after a dropped connection: what to do first. */
+  initialNext?: Next;
 }
 
 const ENEMY_POS = { x: 320, y: 200 };
@@ -264,12 +271,25 @@ export class BattleScene extends Phaser.Scene {
     const ceiling = getFloorCeiling();
     setFloorCeiling(Infinity);
     this.events.once('shutdown', () => setFloorCeiling(ceiling));
-    this.battle = new Battle(m.team, m.enemies, new Rng(m.seed), {
-      enemyRandomness: m.randomness,
-      permadeath: false,
-      synergy: synergyMults(m.team),
-      enemySynergy: synergyMults(m.enemies),
-    });
+    this.battle =
+      m.duel?.battle ??
+      new Battle(m.team, m.enemies, new Rng(m.seed), {
+        enemyRandomness: m.randomness,
+        permadeath: false,
+        synergy: synergyMults(m.team),
+        enemySynergy: synergyMults(m.enemies),
+      });
+    if (m.duel) {
+      this.enemies = this.battle.enemy.map((x) => x.c);
+      m.duel.attach({
+        step: (events, next) => {
+          this.duelNext = next;
+          this.hideWaiting();
+          void this.play(events);
+        },
+      });
+      this.watchConnection();
+    }
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
     });
@@ -290,12 +310,12 @@ export class BattleScene extends Phaser.Scene {
     this.drawControls();
     this.refreshEnemy();
     this.refreshPlayer();
-    const intro = `${m.opponent} wants to battle!`;
+    const intro = m.duel ? `Duel against ${m.opponent}!` : `${m.opponent} wants to battle!`;
     this.msg.setText(intro);
     this.showActions();
     ensureFxTextures(this);
     playMusic('battle');
-    const entry = this.battle.start();
+    const entry = m.duel ? [] : this.battle.start();
     this.enemySprite.setVisible(false);
     this.playerSprite.setVisible(false);
     this.actions.setVisible(false);
@@ -311,9 +331,85 @@ export class BattleScene extends Phaser.Scene {
       this.setSpeed();
       this.msg.setText(intro);
       this.actions.setVisible(true);
+      if (m.duel) return this.duelProceed(m.initialNext ?? { phase: 'choose' });
       if (entry.length) this.play(entry);
       else this.maybeAuto();
     })();
+  }
+
+  // ------------------------------------------------------------ duels
+
+  /** What the duel wants next, applied once the current turn has played out. */
+  private duelNext: Next | null = null;
+  private waiting: Phaser.GameObjects.Text | null = null;
+
+  private showWaiting(what: string) {
+    this.hideWaiting();
+    this.msg.setText(what);
+    this.waiting = text(this, W / 2, 700, 'Waiting…', 18, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    this.tweens.add({ targets: this.waiting, alpha: 0.35, yoyo: true, repeat: -1, duration: 600 });
+  }
+
+  private hideWaiting() {
+    this.waiting?.destroy();
+    this.waiting = null;
+  }
+
+  private duelProceed(next: Next) {
+    const opp = this.match!.opponent;
+    switch (next.phase) {
+      case 'choose':
+        this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
+        this.showActions();
+        this.actions.setVisible(true);
+        this.maybeAuto();
+        return;
+      case 'switch':
+        this.openSwitch(true);
+        return;
+      case 'waitSwitch':
+        this.actions.setVisible(false);
+        this.showWaiting(`${opp} is choosing their next creature.`);
+        return;
+      case 'end':
+        this.endMatch(next.won);
+        return;
+    }
+  }
+
+  /** Dropped connections: say so, and pick up again if the other phone comes back. */
+  private watchConnection() {
+    let box: Phaser.GameObjects.Container | null = null;
+    let retry: Phaser.Time.TimerEvent | null = null;
+    const off = session.onStatus((s) => {
+      if (s === 'lost' && !box) {
+        box = openPicker(this, {
+          title: 'Connection lost',
+          subtitle:
+            session.role === 'guest'
+              ? 'Trying to reconnect to the host… Keep the game open on both phones.'
+              : `Waiting for ${this.match!.opponent} to reconnect… Keep the game open.`,
+          options: [{ label: 'Give up and leave', color: 0x5a2a2a }],
+          onPick: () => {
+            leaveDuel();
+            this.scene.start('Duel', {});
+          },
+        });
+        // The guest keeps trying the same code; the host just waits for it.
+        if (session.role === 'guest') {
+          retry = this.time.addEvent({ delay: 3000, loop: true, callback: () => void session.connectGuest().then((ok) => ok && sendHello()) });
+        }
+      } else if (s === 'connected' && box) {
+        box.destroy();
+        box = null;
+        retry?.remove();
+        retry = null;
+      }
+    });
+    this.events.once('shutdown', () => {
+      off();
+      retry?.remove();
+    });
   }
 
   /** The enemy's current creature takes the field: wild ones burst out of the terrain, others from a hexagon. */
@@ -534,7 +630,10 @@ export class BattleScene extends Phaser.Scene {
         note: i === this.battle.pActive ? 'In battle' : !isAlive(x.c) ? 'Fallen' : undefined,
       })),
       onPick: (i) => {
-        if (forced) this.play(this.battle.forcedSwitch(i));
+        if (forced && this.match?.duel) {
+          this.showWaiting(`Waiting for ${this.match.opponent}.`);
+          this.match.duel.submitSwitch(i);
+        } else if (forced) this.play(this.battle.forcedSwitch(i));
         else this.act({ kind: 'swap', index: i });
       },
       onCancel: forced ? undefined : () => this.maybeAuto(),
@@ -544,6 +643,12 @@ export class BattleScene extends Phaser.Scene {
   private act(a: PlayerAction) {
     if (this.busy) return;
     this.cancelAuto();
+    if (this.match?.duel) {
+      this.actions.setVisible(false);
+      this.showWaiting(`Waiting for ${this.match.opponent} to choose.`);
+      this.match.duel.submitAction(a);
+      return;
+    }
     this.play(this.battle.takeTurn(a));
   }
 
@@ -701,6 +806,11 @@ export class BattleScene extends Phaser.Scene {
       if (this.battle.spared) ab.spared = true;
     }
     if (!this.match) persist();
+    if (this.match?.duel) {
+      const next = this.duelNext ?? { phase: 'choose' as const };
+      this.duelNext = null;
+      return this.duelProceed(next);
+    }
     switch (this.battle.outcome()) {
       case 'ongoing':
         this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
@@ -720,12 +830,20 @@ export class BattleScene extends Phaser.Scene {
 
   private endMatch(won: boolean) {
     this.cancelAuto();
+    this.hideWaiting();
     this.controls.setVisible(false);
     this.actions.setVisible(false);
     playMusic(null);
     if (won) sfx.victory();
     else sfx.defeat();
+    if (this.match!.duel) return this.endDuel(won);
     this.match!.onEnd(won);
+  }
+
+  private endDuel(won: boolean) {
+    const opp = this.match!.opponent;
+    duel.controller = null;
+    showMessage(this, won ? 'You win!' : 'You lost', won ? `You beat ${opp}!` : `${opp} wins this one.`, () => this.scene.start('Duel', {}));
   }
 
   // ------------------------------------------------------------ results

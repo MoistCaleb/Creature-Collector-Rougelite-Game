@@ -1251,3 +1251,50 @@ describe('battle arena', () => {
     expect(arenaOpponent(2, 42).team.map((c) => c.speciesId)).toEqual(arenaOpponent(2, 42).team.map((c) => c.speciesId));
   });
 });
+
+describe('duels', () => {
+  it('host and guest stay in sync through a full random duel', async () => {
+    const { DuelController, snapshot, flipSnap } = await import('../src/net/duel');
+    const { defaultArenaMoves } = await import('../src/logic/arena');
+    const pick = (id: string, st: number) => ({ speciesId: id, stage: st, moves: defaultArenaMoves(id, st) });
+    const info = {
+      seed: 99,
+      hostName: 'Ann',
+      guestName: 'Bo',
+      hostTeam: [pick('emberkit', 2), pick('mossling', 1), pick('golemite', 2)],
+      guestTeam: [pick('cragice', 2), pick('emberkit', 1)],
+    };
+    const queue: { to: 'host' | 'guest'; msg: any }[] = [];
+    const host = new DuelController('host', info, { send: (m) => queue.push({ to: 'guest', msg: JSON.parse(JSON.stringify(m)) }) });
+    const guest = new DuelController('guest', info, { send: (m) => queue.push({ to: 'host', msg: JSON.parse(JSON.stringify(m)) }) });
+    const rng = new Rng(5);
+    let hostNext: any = { phase: 'choose' };
+    let guestNext: any = { phase: 'choose' };
+    host.attach({ step: (_e, n) => (hostNext = n) });
+    guest.attach({ step: (_e, n) => (guestNext = n) });
+    const choose = (c: InstanceType<typeof DuelController>, next: any) => {
+      const b = c.battle;
+      if (next.phase === 'switch') {
+        const opts = b.player.map((_x, i) => i).filter((i) => b.canSwapTo(i));
+        return c.submitSwitch(rng.pick(opts));
+      }
+      if (next.phase !== 'choose') return;
+      const swaps = b.player.map((_x, i) => i).filter((i) => b.canSwapTo(i));
+      if (swaps.length && rng.chance(0.15)) return c.submitAction({ kind: 'swap', index: rng.pick(swaps) });
+      c.submitAction({ kind: 'move', index: rng.int(0, b.p.c.moves.length - 1) });
+    };
+    for (let turn = 0; turn < 300 && hostNext.phase !== 'end'; turn++) {
+      choose(host, hostNext);
+      choose(guest, guestNext);
+      while (queue.length) {
+        const { to, msg } = queue.shift()!;
+        (to === 'host' ? host : guest).receive(msg);
+      }
+      expect(snapshot(guest.battle)).toEqual(flipSnap(snapshot(host.battle)));
+    }
+    expect(hostNext.phase).toBe('end');
+    expect(guestNext.phase).toBe('end');
+    expect(hostNext.won || guestNext.won).toBe(true);
+    expect(hostNext.won && guestNext.won).toBe(false);
+  });
+});

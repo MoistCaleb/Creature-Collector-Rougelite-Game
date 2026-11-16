@@ -112,6 +112,8 @@ export interface Meta {
   /** Battle Arena team (Lv 50 mode) and best ladder result (rounds won). */
   arenaTeam?: import('./arena').ArenaPick[];
   arenaBest?: number;
+  /** Name shown to the other player in duels. */
+  duelName?: string;
   /** Heat levels (1-8) won on each map, for the map's Heat tokens. */
   mapHeats?: Record<string, number[]>;
   /** Today's daily run: best result and how many tries. */
