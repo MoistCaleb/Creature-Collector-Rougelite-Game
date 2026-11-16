@@ -283,6 +283,12 @@ export function usesLeft(slot: MoveSlot): number {
 }
 export const hasUses = (slot: MoveSlot) => usesLeft(slot) > 0;
 
+/** "7/10 uses" or "unlimited uses". */
+export function usesText(slot: MoveSlot): string {
+  const max = maxUses(MOVES[slot.id]);
+  return max === null ? 'unlimited uses' : `${usesLeft(slot)}/${max} uses`;
+}
+
 /** Spend one use (no-op for unlimited moves). */
 export function spendUse(slot: MoveSlot) {
   if (maxUses(MOVES[slot.id]) !== null) slot.used = (slot.used ?? 0) + 1;
