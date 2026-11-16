@@ -9,6 +9,7 @@ import {
   healFraction,
   levelCap,
   moveDef,
+  recommendForget,
   resolvePending,
   sharesType,
   stats,
@@ -171,16 +172,18 @@ export class MapScene extends Phaser.Scene {
     if (!c) return;
     const id = c.pendingMoves[0];
     const nm = MOVES[id];
+    const rec = recommendForget(c, id);
+    const tag = 'RECOMMENDED';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
       subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${nm.accuracy}%\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
-        ...c.moves.map((m) => {
+        ...c.moves.map((m, i) => {
           const d = moveDef(m);
-          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · T${m.tier}` };
+          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · T${m.tier}`, badge: rec === i ? tag : undefined };
         }),
-        { label: `Don't learn ${nm.name}`, color: 0x3a3450 },
+        { label: `Don't learn ${nm.name}`, color: 0x3a3450, badge: rec === null ? tag : undefined },
       ],
       onPick: (i) => {
         resolvePending(c, id, i < c.moves.length ? i : null);

@@ -52,6 +52,8 @@ export interface ButtonOpts {
   textColor?: string;
   /** A creature sprite drawn at the left edge; text shifts right to make room. */
   icon?: Creature;
+  /** A small gold tag on the top-right corner (e.g. "RECOMMENDED"), with a gold outline. */
+  badge?: string;
 }
 
 export function button(
@@ -77,6 +79,15 @@ export function button(
   c.add([bg, t]);
   if (opts.icon) c.add(creatureSprite(scene, -w / 2 + 32, -8, opts.icon, 1.6));
   if (opts.sub) c.add(text(scene, tx, 12, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 - iconW } }).setOrigin(0.5));
+  if (opts.badge) {
+    bg.setStrokeStyle(3, 0xffc94d, 1);
+    const tag = text(scene, 0, 0, opts.badge, 10, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5);
+    const tw = tag.width + 14;
+    const bx = w / 2 - tw / 2 - 6;
+    const by = -h / 2;
+    tag.setPosition(bx, by);
+    c.add([scene.add.rectangle(bx, by, tw, 18, 0xffc94d), tag]);
+  }
   c.setSize(w, h);
   if (!enabled) c.setAlpha(0.45);
   else {

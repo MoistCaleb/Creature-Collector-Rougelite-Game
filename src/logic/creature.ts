@@ -2,7 +2,7 @@ import { BALANCE } from '../data/balance';
 import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, MOVES, specialId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
-import type { Element, TypePair } from '../data/types';
+import { stabMultiplier, type Element, type TypePair } from '../data/types';
 
 export interface MoveSlot {
   id: string;
@@ -153,6 +153,55 @@ export function learnMoves(c: Creature, auto = false): string[] {
     }
   }
   return learned;
+}
+
+/**
+ * How useful a whole move list is to this creature, for recommending what to forget.
+ * Attacks count by expected damage with STAB; a second attack of an element you already hit
+ * harder with is mostly redundant; status moves are worth a fair hit each, but stacking more
+ * than one adds little; a list with no attack at all is useless.
+ */
+function moveSetValue(c: Creature, moves: MoveSlot[]): number {
+  const types = creatureTypes(c);
+  const attacks: { el: Element; v: number }[] = [];
+  const status: number[] = [];
+  for (const m of moves) {
+    const d = MOVES[m.id];
+    if (d.kind === 'attack') {
+      let v = attackValue(d, m.tier) * (d.bestType ? stabMultiplier(types[0], types) : stabMultiplier(d.element, types));
+      if (d.priority || d.drain || d.execute || d.selfAfter || d.targetAfter) v *= 1.1;
+      if (d.signature) v *= 1.15;
+      attacks.push({ el: d.bestType ? types[0] : d.element, v });
+    } else {
+      status.push((d.kind === 'heal' ? 60 : 50) * (1 + 0.15 * (m.tier - 1)));
+    }
+  }
+  if (attacks.length === 0) return 0;
+  let total = 0;
+  const seen = new Set<Element>();
+  for (const a of attacks.sort((x, y) => y.v - x.v)) {
+    total += seen.has(a.el) ? a.v * 0.5 : a.v;
+    seen.add(a.el);
+  }
+  status.sort((x, y) => y - x).forEach((v, i) => (total += i === 0 ? v : v * 0.4));
+  return total;
+}
+
+/**
+ * The game's suggestion for a pending move with a full list: the slot to forget, or null when
+ * the current moves are better than anything learning it would give.
+ */
+export function recommendForget(c: Creature, id: string): number | null {
+  let best: number | null = null;
+  let bestVal = moveSetValue(c, c.moves);
+  c.moves.forEach((_, i) => {
+    const v = moveSetValue(c, c.moves.map((m, j) => (j === i ? { id, tier: 1 } : m)));
+    if (v > bestVal + 0.01) {
+      bestVal = v;
+      best = i;
+    }
+  });
+  return best;
 }
 
 /** Player decision on a pending move: replace slot `replaceIndex`, or null to skip it. */
