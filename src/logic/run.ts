@@ -151,7 +151,17 @@ export interface Run {
   claimedTypes: Element[];
   /** Lost to a boss but survived via the bench: must re-fight it. */
   bossPending: boolean;
-  log: { battlesWon: number; caught: number; lost: number; fights: number };
+  log: {
+    battlesWon: number;
+    caught: number;
+    lost: number;
+    fights: number;
+    /** Added later; older saves lack these. */
+    coins?: number;
+    fallen?: FallenRecord[];
+    /** What ended a lost run. */
+    endedBy?: { label: string; speciesId: string; stage: number };
+  };
   unlockedThisRun: string[];
   mapId: string;
   /** A node whose choice hasn't been made yet (so a reload re-offers it). */
@@ -291,6 +301,26 @@ export function highestLevel(run: Run): number {
   return Math.max(1, ...allCreatures(run).map((c) => c.level));
 }
 
+/** A creature lost during the run, remembered for the summary. */
+export interface FallenRecord {
+  speciesId: string;
+  stage: number;
+  level: number;
+  name: string;
+  dealt: number;
+  kos: number;
+}
+
+/** The creature that did the most damage this run, alive or fallen. */
+export function runMvp(run: Run): { speciesId: string; stage: number; level: number; name: string; dealt: number; kos: number; fallen: boolean } | null {
+  const all = [
+    ...allCreatures(run).map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, name: creatureName(c), dealt: c.dealt ?? 0, kos: c.kos ?? 0, fallen: false })),
+    ...(run.log.fallen ?? []).map((f) => ({ ...f, fallen: true })),
+  ];
+  if (!all.length) return null;
+  return all.reduce((a, b) => (b.dealt > a.dealt ? b : a));
+}
+
 /** Survivors catch their breath after a win. */
 export function postBattleRecover(run: Run) {
   const frac = run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal;
@@ -302,6 +332,10 @@ export function buryFallen(run: Run): string[] {
   const fallen = run.team.filter((c) => !isAlive(c));
   run.team = run.team.filter(isAlive);
   run.log.lost += fallen.length;
+  run.log.fallen = [
+    ...(run.log.fallen ?? []),
+    ...fallen.map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, name: creatureName(c), dealt: c.dealt ?? 0, kos: c.kos ?? 0 })),
+  ];
   return fallen.map(creatureName);
 }
 
@@ -533,6 +567,7 @@ export function evolveTracked(run: Run, c: Creature): boolean {
 /** Gain coins (counts toward the Prospector achievement). */
 export function earnCoins(run: Run, n: number) {
   run.coins += n;
+  run.log.coins = (run.log.coins ?? 0) + n;
   trackStat(run, 'coinsEarned', n);
 }
 

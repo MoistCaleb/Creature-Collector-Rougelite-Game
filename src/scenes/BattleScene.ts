@@ -628,6 +628,8 @@ export class BattleScene extends Phaser.Scene {
     if (!wild) return reward();
     // Finish it: the final blow and the faint.
     wild.hp = 0;
+    const finisher = this.battle.p.c;
+    finisher.kos = (finisher.kos ?? 0) + 1;
     const s = this.enemySprite;
     this.tweens.killTweensOf(s);
     s.setAngle(0);
@@ -724,6 +726,13 @@ export class BattleScene extends Phaser.Scene {
     this.cancelAuto();
     this.controls.setVisible(false);
     const fallen = run.team.filter((c) => !isAlive(c)).map(creatureName);
+    const foe = this.battle.e.c;
+    const bossDef = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
+    run.log.endedBy = {
+      label: bossDef ? `${bossDef.name}, ${bossDef.title}` : this.kind === 'elite' ? `${run.activeBattle?.trainer ?? 'A trainer'}'s ${creatureName(foe)}` : `a wild ${creatureName(foe)}`,
+      speciesId: foe.speciesId,
+      stage: foe.stage,
+    };
     run.activeBattle = null;
     playMusic(null);
     sfx.defeat();

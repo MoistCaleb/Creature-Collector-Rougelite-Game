@@ -312,6 +312,10 @@ export class Battle {
       const raw = side === 'player' ? Math.round(r.dmg * this.playerDamageMult) : r.dmg;
       const dmg = this.hurt(target, raw);
       total += dmg;
+      if (side === 'player') {
+        user.c.dealt = (user.c.dealt ?? 0) + dmg;
+        if (!isAlive(target.c)) user.c.kos = (user.c.kos ?? 0) + 1;
+      }
       landed++;
       ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el });
       if (h === 0) {
