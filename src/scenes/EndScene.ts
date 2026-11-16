@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
 import { state } from '../state';
+import { isAlive } from '../logic/creature';
+import { duel, endRace, raceVerdict, sendProgress } from '../net/runtime';
+import { session } from '../net/session';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, text, W } from '../ui/widgets';
@@ -111,13 +114,61 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Achievements: ${earned.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name).join(', ')}`);
     }
-    if (extra.length && y < 690) {
+    if (extra.length && y < (run.race ? 610 : 690)) {
       text(this, W / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: W - 40 }, lineSpacing: 4 }).setOrigin(0.5, 0);
     }
 
+    if (run.race) return this.raceFinish(run, data.won);
     button(this, W / 2, 752, 260, 56, 'Back to title', () => {
       state.run = null;
       this.scene.start('Title', {});
     }, { color: 0x3b6d4a, fontSize: 20 });
+  }
+
+  /** Stage race: hand in the finished team and wait for the other racer; the final duel starts itself. */
+  private raceFinish(run: NonNullable<typeof state.run>, won: boolean) {
+    const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
+    sendProgress({ floor: run.floor, finished: true, won, team });
+    const opp = run.race!.opponent;
+    this.add.rectangle(16, 640, W - 32, 76, 0x14223a).setOrigin(0).setStrokeStyle(2, 0x8fd0ff, 0.8);
+    const status = text(this, W / 2, 652, '', 15, '#8fd0ff', { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
+    let leave: Phaser.GameObjects.Container | null = null;
+    const finish = (label: string) => {
+      leave?.destroy();
+      leave = button(this, W / 2, 752, 260, 56, label, () => {
+        endRace();
+        state.run = null;
+        this.scene.start(session.connected ? 'Duel' : 'Title', {});
+      }, { color: 0x3b6d4a, fontSize: 20 });
+    };
+    const draw = () => {
+      if (!status.active) return;
+      const them = duel.race?.theirs;
+      const verdict = raceVerdict();
+      if (!session.connected && verdict !== 'win' && verdict !== 'lose' && verdict !== 'draw') {
+        status.setText(`Lost the connection to ${opp}. If they come back, the final duel still happens.`);
+        finish('Leave the race');
+      } else if (!verdict) {
+        status.setText(`Race vs ${opp}: waiting for them to finish (${them ? (them.finished ? 'done' : `floor ${them.floor + 1}`) : 'starting'})…\nYour team is ready for the final duel.`);
+        finish('Give up the race');
+      } else if (verdict === 'duel') {
+        status.setText(`${opp} is done too. The final duel is starting…`);
+        leave?.destroy();
+      } else {
+        status.setText(
+          verdict === 'win'
+            ? `${opp} has no team left. You win the race!`
+            : verdict === 'lose'
+              ? `You have no team left, so ${opp} wins the race.`
+              : 'Neither of you has a team left. The race is a draw.',
+        );
+        finish('Done');
+      }
+    };
+    draw();
+    duel.onRaceChange = draw;
+    this.events.once('shutdown', () => {
+      if (duel.onRaceChange === draw) duel.onRaceChange = null;
+    });
   }
 }

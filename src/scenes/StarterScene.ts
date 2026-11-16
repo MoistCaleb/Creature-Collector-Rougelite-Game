@@ -6,6 +6,10 @@ import { Rng } from '../logic/rng';
 import { dailySeed, dailyStarters, rollStarterChoices, startRun } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
+import { MAP_BY_ID } from '../data/maps';
+import type { RaceInfo } from '../net/duel';
+import { duel, sendProgress } from '../net/runtime';
+import { session } from '../net/session';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { icon as pixelIcon } from '../ui/icons';
@@ -18,19 +22,25 @@ export class StarterScene extends Phaser.Scene {
 
   private mapId = 'wildlands';
   private daily: string | null = null;
+  private race: RaceInfo | null = null;
 
-  create(data: { mapId?: string; daily?: string } = {}) {
+  create(data: { mapId?: string; daily?: string; race?: RaceInfo } = {}) {
     this.daily = data.daily ?? null;
-    this.mapId = this.daily ? 'wildlands' : data.mapId ?? state.meta.lastMap ?? 'wildlands';
+    this.race = data.race ?? null;
+    this.mapId = this.race ? this.race.mapId : this.daily ? 'wildlands' : data.mapId ?? state.meta.lastMap ?? 'wildlands';
     background(this);
     playMusic('title');
-    const title = text(this, W / 2 + 20, 34, this.daily ? `Daily run · ${this.daily}` : 'Choose your starter', this.daily ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    const opp = duel.opponent?.name ?? 'your friend';
+    const titleText = this.race ? `Stage race vs ${opp}` : this.daily ? `Daily run · ${this.daily}` : 'Choose your starter';
+    const title = text(this, W / 2 + 20, 34, titleText, this.daily || this.race ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     if (this.daily) pixelIcon(this, title.x - title.width / 2 - 16, 34, 'calendar', 22);
     text(
       this,
       W / 2 + 20,
       64,
-      this.daily
+      this.race
+        ? `${MAP_BY_ID[this.mapId]?.name ?? 'Map'} · double battle rewards · same starters for both`
+        : this.daily
         ? 'Same starters and map for everyone today'
         : state.meta.favorite && state.meta.unlockedStarters.includes(state.meta.favorite)
           ? 'Your favorite plus two random picks'
@@ -39,7 +49,7 @@ export class StarterScene extends Phaser.Scene {
       COLORS.textDim,
     ).setOrigin(0.5);
 
-    const choices = this.daily ? dailyStarters(this.daily) : rollStarterChoices(state.meta, new Rng());
+    const choices = this.race ? this.race.starters : this.daily ? dailyStarters(this.daily) : rollStarterChoices(state.meta, new Rng());
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       dex.form(id, 0);
@@ -66,13 +76,21 @@ export class StarterScene extends Phaser.Scene {
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 
-    button(this, 40, 28, 64, 36, '', () => this.scene.start(this.daily ? 'Title' : 'MapSelect'), { fontSize: 15, glyph: 'back' });
+    if (!this.race) button(this, 40, 28, 64, 36, '', () => this.scene.start(this.daily ? 'Title' : 'MapSelect', {}), { fontSize: 15, glyph: 'back' });
   }
 
   private pick(id: string) {
-    state.run = this.daily
-      ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
-      : startRun(state.meta, id, Date.now(), this.mapId);
+    if (this.race) {
+      // Same map and seed as the other racer; Heat 0 and no passive so it's even.
+      const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true);
+      run.race = { opponent: duel.opponent?.name ?? 'Friend', role: session.role === 'host' ? 'host' : 'guest' };
+      state.run = run;
+      sendProgress({ floor: 0, finished: false, won: false });
+    } else {
+      state.run = this.daily
+        ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
+        : startRun(state.meta, id, Date.now(), this.mapId);
+    }
     this.scene.start('Map', {});
   }
 }

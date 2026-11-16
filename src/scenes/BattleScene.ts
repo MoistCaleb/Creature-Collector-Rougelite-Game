@@ -17,7 +17,7 @@ import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { Rng } from '../logic/rng';
 import type { DuelController, Next } from '../net/duel';
 import { session } from '../net/session';
-import { duel, leaveDuel, sendHello } from '../net/runtime';
+import { duel, endRace, leaveDuel, sendHello } from '../net/runtime';
 import {
   canEvolve,
   getFloorCeiling,
@@ -842,8 +842,23 @@ export class BattleScene extends Phaser.Scene {
 
   private endDuel(won: boolean) {
     const opp = this.match!.opponent;
+    const race = !!this.match!.duel!.info.hostCreatures;
     duel.controller = null;
-    showMessage(this, won ? 'You win!' : 'You lost', won ? `You beat ${opp}!` : `${opp} wins this one.`, () => this.scene.start('Duel', {}));
+    const title = race ? (won ? 'You won the race!' : `${opp} won the race`) : won ? 'You win!' : 'You lost';
+    const body = race
+      ? won
+        ? `Your run's team beat ${opp}'s in the final duel!`
+        : `${opp}'s team won the final duel.`
+      : won
+        ? `You beat ${opp}!`
+        : `${opp} wins this one.`;
+    showMessage(this, title, body, () => {
+      if (race) {
+        endRace();
+        state.run = null;
+      }
+      this.scene.start('Duel', {});
+    });
   }
 
   // ------------------------------------------------------------ results
@@ -879,8 +894,10 @@ export class BattleScene extends Phaser.Scene {
     this.cancelAuto();
     this.controls.setVisible(false);
     const ab = run.activeBattle!;
-    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1));
-    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0);
+    // Stage races pay double.
+    const raceMult = run.race ? 2 : 1;
+    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult);
+    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0) * raceMult;
     sfx.victory();
     playMusic(null);
     // Bookkeeping happens once, even if the page reloads before the reward choice.

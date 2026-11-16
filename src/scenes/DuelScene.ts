@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
 import { validArenaTeam } from '../logic/arena';
 import { saveMeta } from '../logic/run';
-import { duel, hostStartDuel, leaveDuel, sendHello } from '../net/runtime';
+import { duel, hostStartDuel, hostStartRace, leaveDuel, sendHello } from '../net/runtime';
+import { MAPS, mapUnlocked } from '../data/maps';
 import { CODE_LENGTH, session } from '../net/session';
 import { state } from '../state';
-import { showMessage } from '../ui/picker';
+import { openPicker, showMessage } from '../ui/picker';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, text, W } from '../ui/widgets';
@@ -101,12 +102,29 @@ export class DuelScene extends Phaser.Scene {
     text(this, 20, y + 34, `${opp.name}'s team:`, 13, COLORS.textDim);
     this.drawTeam(y + 58, opp.team.map((p) => [p.speciesId, p.stage] as [string, number]));
     if (session.role === 'host') {
-      button(this, W / 2, y + 170, W - 60, 66, 'Start duel', () => hostStartDuel(), { color: 0x8a2c2c, fontSize: 22, glyph: 'swords' });
+      button(this, W / 2, y + 150, W - 60, 58, 'Arena duel', () => hostStartDuel(), { color: 0x8a2c2c, fontSize: 20, glyph: 'swords', sub: 'Your Lv 50 Arena teams, right now' });
+      button(this, W / 2, y + 216, W - 60, 58, 'Stage race', () => this.pickRaceMap(), {
+        color: 0x2f4a6b,
+        fontSize: 20,
+        sub: 'Both play the same map · double rewards · final duel',
+      });
     } else {
-      const wait = text(this, W / 2, y + 160, `Waiting for ${opp.name} to start the duel…`, 16, COLORS.text).setOrigin(0.5, 0);
+      const wait = text(this, W / 2, y + 160, `Waiting for ${opp.name} to start a duel or a race…`, 16, COLORS.text, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
-    button(this, W / 2, y + 250, 200, 44, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+    button(this, W / 2, y + 290, 200, 44, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+  }
+
+  /** Host: choose the map for a stage race. */
+  private pickRaceMap() {
+    const open = MAPS.filter((m) => mapUnlocked(m, state.meta.wins));
+    openPicker(this, {
+      title: 'Stage race',
+      subtitle: `You and ${duel.opponent?.name ?? 'your friend'} play this map from the same start, with double battle rewards and no passives or Heat. When you're both done, your teams duel.`,
+      options: open.map((m) => ({ label: m.name, sub: m.desc })),
+      onPick: (i) => hostStartRace(open[i].id),
+      onCancel: () => {},
+    });
   }
 
   /** Number pad for typing a friend's code. */
