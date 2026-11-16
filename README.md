@@ -39,7 +39,7 @@ Saves on the installed app live on that device. The claude.ai preview keeps its 
 - **Coins & shops** — earn coins from fights, spend them on heals, training, scrolls, stones, sigils and recruits.
 - **Creature Dex** — forms, moves and elements you've seen; evolutions stay hidden until encountered.
 - **Battles** — 1v1 with switching (costs your turn), 6 elements, dual types, pure-type STAB bonus.
-- **Catching** — after a wild win: take XP *or* catch a raw Lv 1 copy (catch-up XP helps it grow).
+- **Catching** — the last wild creature is left at 1 HP: finish it for XP and coins, *or* catch it (it joins at its own level and evolution).
 - **Team 4 + bench 3** — bench gets 50% XP, is your second life if the team wipes, and is prestige fuel.
 - **Permadeath** — fallen creatures are gone.
 - **Growth** — Level Up (small), Skill tiers (T3 adds an effect), Prestige (★, +15% stats, +3 level cap), Evolve (biggest).

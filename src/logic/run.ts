@@ -15,6 +15,7 @@ import {
   xpToNext,
   creatureTypes,
   isAlive,
+  levelCap,
   stats,
   type Creature,
 } from './creature';
@@ -53,7 +54,7 @@ export type PassiveId =
 export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   mentor: { name: 'Mentor', desc: 'Bench creatures earn full XP instead of half.' },
   medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.' },
-  scout: { name: 'Scout', desc: 'Caught creatures start at level 5.' },
+  scout: { name: 'Scout', desc: 'Caught creatures arrive 3 levels higher.' },
   drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.' },
   haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.' },
   evolutionist: { name: 'Evolutionist', desc: 'Start each run with an Evolution Stone.' },
@@ -452,17 +453,30 @@ export function unclaimedTypes(run: Run): Element[] {
 }
 
 /** Catch: forfeit rewards, add a raw copy of the species. May arrive with a free ★ (see catchBonus). */
+/** Scout passive: extra levels for caught creatures. */
+export const SCOUT_BONUS_LEVELS = 3;
+
+/** The level a caught creature joins at: its own level (+3 with Scout), within its level cap. */
+export function catchLevel(run: Run, enemy: Creature): number {
+  const stars = catchBonus(run, enemy.speciesId) ? 1 : 0;
+  const bonus = run.passive === 'scout' ? SCOUT_BONUS_LEVELS : 0;
+  return Math.min(levelCap({ stage: enemy.stage, stars }), enemy.level + bonus);
+}
+
 export function catchCreature(
   run: Run,
   enemy: Creature,
 ): { c: Creature; bonus: CatchBonus; newlyClaimed: Element[] } | null {
   if (rosterFull(run)) return null;
-  const c = createCreature(enemy.speciesId, run.passive === 'scout' ? 5 : 1);
-  const bonus = catchBonus(run, c.speciesId);
-  if (bonus) {
-    c.stars = 1;
-    c.hp = stats(c).hp;
-  }
+  // It joins as it was in battle: same level, evolution and moves, healed to full.
+  const level = catchLevel(run, enemy);
+  const bonus = catchBonus(run, enemy.speciesId);
+  const c = createCreature(enemy.speciesId, level, enemy.stage);
+  c.moves = enemy.moves.map((m) => ({ ...m }));
+  c.learnIndex = enemy.learnIndex;
+  c.pendingMoves = [];
+  if (bonus) c.stars = 1;
+  c.hp = stats(c).hp;
   const newlyClaimed: Element[] = [];
   if (bonus === 'type')
     for (const t of creatureTypes(c))
