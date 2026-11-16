@@ -4,7 +4,7 @@ import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
+import { readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
 import { BOSSES } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
@@ -104,6 +104,20 @@ describe('creature growth', () => {
     evolve(c);
     expect(c.level).toBe(cap + BANK_LEVELS);
     expect(c.banked).toBe(0);
+  });
+  it('evolving needs Lv 30 / 65 even when a lower floor ceiling caps the creature', () => {
+    setFloorCeiling(45);
+    const c = createCreature('emberkit', 30, 1);
+    addXp(c, 1e7);
+    expect(c.level).toBe(45);
+    expect(readyToEvolve(c)).toBe(false);
+    setFloorCeiling(Infinity);
+    c.level = 65;
+    expect(readyToEvolve(c)).toBe(true);
+    const base = createCreature('emberkit', 29);
+    expect(readyToEvolve(base)).toBe(false);
+    base.level = 30;
+    expect(readyToEvolve(base)).toBe(true);
   });
   it('partial stores release partial levels', () => {
     const c = createCreature('emberkit', 1);

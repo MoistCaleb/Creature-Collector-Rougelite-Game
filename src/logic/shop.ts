@@ -33,7 +33,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   restore: { name: 'Full Restore', desc: 'Heal every creature to full and cure statuses', basePrice: 70, weight: 6, target: 'none' },
   manual: { name: 'Training Manual', desc: 'One creature gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
   scroll: { name: 'Skill Scroll', desc: 'Upgrade one move a tier', basePrice: 55, weight: 8, target: 'move' },
-  stone: { name: 'Evolution Stone', desc: 'Evolve a creature at its level cap', basePrice: 120, weight: 5, target: 'none' },
+  stone: { name: 'Evolution Stone', desc: 'Evolve a creature that has reached Lv 30 (or 65 for its final form)', basePrice: 120, weight: 5, target: 'none' },
   sigil: { name: 'Prestige Sigil', desc: 'Prestige a creature, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
   recruit: { name: 'Recruit', desc: 'A creature joins your party', basePrice: 80, weight: 6, target: 'none' },
   held: { name: 'Held item', desc: 'Give it to a creature from the Team screen', basePrice: 60, weight: 7, target: 'none' },
@@ -160,7 +160,7 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       return `Move upgraded to tier ${target!.moves[moveIndex!].tier}.`;
     case 'stone':
       run.evoStones += 1;
-      return 'Evolution Stone added. Use it from the Team screen on a creature at its level cap.';
+      return 'Evolution Stone added. Use it from the Team screen on a creature at Lv 30 (or 65 for its final form).';
     case 'sigil':
       const lv = target!.level;
       prestigeTracked(run, target!);

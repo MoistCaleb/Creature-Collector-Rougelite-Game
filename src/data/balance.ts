@@ -14,17 +14,19 @@ export const BALANCE = {
   /** Fraction of max HP a caught creature joins with. */
   catchHp: 0.4,
   /** Enemy level = floorBase + progress x floorRamp (+ small random). */
-  floorBaseLevel: [1, 30, 63],
+  floorBaseLevel: [1, 33, 66],
   floorRamp: [22, 30, 32],
   /** >1 keeps early nodes of each floor gentle and ramps up later. */
   rampCurve: 1.2,
   /** Floor boss levels (the lead creature is +2). */
-  bossLevel: [25, 63, 96],
+  bossLevel: [25, 67, 100],
   /** Highest level your creatures can reach on each floor (XP past it is stored for the next floor). */
-  floorLevelCap: [45, 75, 105],
+  floorLevelCap: [45, 70, 100],
   /** Whether each floor boss's lead creature is one evolution ahead. */
   bossLeadEvolves: [false, true, true],
   eliteLevelBonus: 1,
+  /** Chance an enemy picks a random move instead of its best one (lower = smarter). */
+  enemyRandomness: { battle: 0.5, elite: 0.1, boss: 0 } as Record<'battle' | 'elite' | 'boss', number>,
   /** Per floor: each defeated enemy is worth this many of ITS OWN level-ups in XP (steady pacing at any level). */
   xpYield: [3.2, 1.1, 1.4],
   /** XP to next level = 10 + level x xpPerLevelNeeded + level² x xpQuad. */

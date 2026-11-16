@@ -11,7 +11,7 @@ import { DEFAULT_STARTERS, SPECIES } from '../src/data/species';
 import { stabMultiplier, typeMultiplier } from '../src/data/types';
 import { Battle } from '../src/logic/battle';
 import {
-  addLevels, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
+  addLevels, readyToEvolve, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
   allCreatures, usePotion, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, fillTeamFromBench, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
@@ -54,7 +54,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   const enemies = makeEncounter(run, currentNode(run));
   enemyLevels = enemies.map((e) => e.level);
   const boss = kind === 'boss' ? BOSSES[run.map.biome] : null;
-  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName, synergy: synergyMults(run.team), enemySynergy: boss ? synergyMults(enemies) : undefined });
+  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: BALANCE.enemyRandomness[kind as 'battle' | 'elite' | 'boss'], rule: boss?.rule, ruleName: boss?.ruleName, synergy: synergyMults(run.team), enemySynergy: boss ? synergyMults(enemies) : undefined });
   b.start();
   for (let t = 0; t < 500; t++) {
     const o = b.outcome();
@@ -125,7 +125,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
     const n = run.map.nodes[nextId];
     if (process.env.TRACE) console.log(`F${run.floor + 1} ${n.kind.padEnd(8)} p=${n.progress.toFixed(2)} team=${run.team.map((c) => `${c.speciesId}:L${c.level}:${c.hp}/${stats(c).hp}`).join(' ')} bench=${run.bench.length}`);
     // use stones
-    for (const c of allCreatures(run)) if (run.evoStones > 0 && canEvolve(c) && c.level >= levelCap(c)) { run.evoStones--; econ.used++; evolve(c); }
+    for (const c of allCreatures(run)) if (run.evoStones > 0 && readyToEvolve(c)) { run.evoStones--; econ.used++; evolve(c); }
     switch (n.kind) {
       case 'battle': case 'elite': case 'boss': {
         const lastTeam = run.team.map((c) => c.level).join('/');
@@ -139,7 +139,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
         }
         if (n.kind === 'boss') {
           run.bossPending = false;
-          const evo = allCreatures(run).filter(canEvolve).sort((a, b) => b.level - a.level)[0];
+          const evo = allCreatures(run).filter(readyToEvolve).sort((a, b) => b.level - a.level)[0];
           if (evo) evolve(evo); else allCreatures(run).forEach((c) => healFraction(c, 1));
           nodesPerFloor[run.floor].push(run.visited.length);
           if (clearFloor(run)) return finish({ floor: 3, won: true });
