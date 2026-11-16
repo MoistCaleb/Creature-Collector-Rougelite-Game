@@ -448,8 +448,8 @@ describe('roster and move variety', () => {
     const ids = SPECIES.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
-  it('every element has a 10-move pool and every family a signature it learns', () => {
-    for (const e of ELEMENTS) expect(elementPool(e)).toHaveLength(10);
+  it('every element has an 11-move pool and every family a signature it learns', () => {
+    for (const e of ELEMENTS) expect(elementPool(e)).toHaveLength(11);
     for (const s of SPECIES) {
       expect(MOVES[s.signature].signature).toBe(s.id);
       expect(learnset(s).map((l) => l.id)).toContain(s.signature);
@@ -1235,6 +1235,8 @@ describe('battle arena', () => {
     const pool = arenaMovePool('mossling', 1);
     const c = makeArenaCreature({ speciesId: 'mossling', stage: 1, moves: [pool[0], 'not-a-move', pool[1]] });
     expect(c.level).toBe(ARENA_LEVEL);
+    // Mapping picks straight through (index as 2nd argument) must still give Lv 50.
+    expect([{ speciesId: 'mossling', stage: 1, moves: [] }, { speciesId: 'mossling', stage: 1, moves: [] }].map(makeArenaCreature as never).map((x: any) => x.level)).toEqual([ARENA_LEVEL, ARENA_LEVEL]);
     expect(c.stage).toBe(1);
     expect(c.stars).toBe(0);
     expect(c.moves.map((x) => x.id)).toEqual([pool[0], pool[1]]);
@@ -1343,5 +1345,71 @@ describe('saved teams and duel settings', () => {
     const { cleanSettings, DEFAULT_SETTINGS } = await import('../src/net/duel');
     expect(cleanSettings({ bestOf: 3, teamsPerPlayer: 2, teamSize: 3, level: 75 })).toEqual({ bestOf: 3, teamsPerPlayer: 2, teamSize: 3, level: 75 });
     expect(cleanSettings({ bestOf: 99, level: 1 } as never)).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('team moves', () => {
+  const withMoves = (id: string, lv: number, moves: string[]) => {
+    const c = createCreature(id, lv);
+    c.moves = moves.map((m) => ({ id: m, tier: 1 }));
+    return c;
+  };
+  it('team effects cover whoever is out, count down and wear off', async () => {
+    const { teamMoveId, teamFxTurns } = await import('../src/data/moves');
+    const a = withMoves('emberkit', 40, [teamMoveId('Fire'), attackId('Fire', 1)]);
+    const a2 = withMoves('emberkit', 40, [attackId('Fire', 1)]);
+    const foe = withMoves('golemite', 40, [MOVES['Earth:buff'] ? 'Earth:buff' : attackId('Earth', 0)]);
+    foe.hp = 1e6;
+    const b = new Battle([a, a2], [foe], new Rng(4), { enemyRandomness: 0 });
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.hasFx('player', 'rally')).toBe(true);
+    b.takeTurn({ kind: 'swap', index: 1 });
+    expect(b.hasFx('player', 'rally')).toBe(true); // still up after switching
+    for (let i = 0; i < teamFxTurns(1); i++) b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.hasFx('player', 'rally')).toBe(false);
+  });
+  it('rally hits harder, guard takes less, ward blocks status, mend heals the whole team', async () => {
+    const { teamMoveId } = await import('../src/data/moves');
+    const dmg = (fxSide: 'player' | 'enemy' | null, fx: 'rally' | 'guard') => {
+      let total = 0;
+      for (let s = 0; s < 30; s++) {
+        const a = withMoves('emberkit', 40, [attackId('Fire', 1)]);
+        const d = withMoves('golemite', 40, ['Earth:buff']);
+        d.hp = 1e6;
+        const b = new Battle([a], [d], new Rng(s), { enemyRandomness: 0 });
+        if (fxSide) b.teamFx[fxSide][fx] = 3;
+        total += b.takeTurn({ kind: 'move', index: 0 }).filter((e) => e.kind === 'damage' && e.side === 'enemy').reduce((n, e) => n + (e.kind === 'damage' ? e.amount : 0), 0);
+      }
+      return total;
+    };
+    const base = dmg(null, 'rally');
+    expect(dmg('player', 'rally')).toBeGreaterThan(base * 1.15);
+    expect(dmg('enemy', 'guard')).toBeLessThan(base * 0.85);
+    // Ward: no status gets through.
+    const w = withMoves('emberkit', 40, [attackId('Fire', 0)]);
+    const t = withMoves('golemite', 40, ['Earth:buff']);
+    const bw = new Battle([w], [t], new Rng(1));
+    bw.teamFx.enemy.ward = 5;
+    expect((bw as any).inflict(bw.e, 'enemy', 'burn', [])).toBe(false);
+    // Mend heals the bench-side teammates too.
+    const m1 = withMoves('mossling', 40, [teamMoveId('Nature')]);
+    const m2 = withMoves('mossling', 40, [attackId('Nature', 0)]);
+    m1.hp = 10;
+    m2.hp = 10;
+    m2.status = { id: 'poison', turns: 3 };
+    const foe = withMoves('golemite', 40, ['Earth:buff']);
+    new Battle([m1, m2], [foe], new Rng(3), { enemyRandomness: 0 }).takeTurn({ kind: 'move', index: 0 });
+    expect(m1.hp).toBeGreaterThan(10);
+    expect(m2.hp).toBeGreaterThan(10);
+    expect(m2.status).toBeUndefined();
+  });
+  it('creatures get their team move at Lv 26, in level order', async () => {
+    const { teamMoveId } = await import('../src/data/moves');
+    const { teamElement, TEAM_MOVE_LEVEL } = await import('../src/logic/creature');
+    const c = createCreature('steamle', 1);
+    addLevels(c, TEAM_MOVE_LEVEL);
+    const id = teamMoveId(teamElement(SPECIES_BY_ID['steamle']));
+    expect([...c.moves.map((m) => m.id), ...c.pendingMoves]).toContain(id);
+    expect(c.moves[0].id).not.toBe(id);
   });
 });

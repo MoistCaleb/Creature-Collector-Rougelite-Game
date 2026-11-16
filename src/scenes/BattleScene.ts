@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { maxUses, MOVES, moveSummary } from '../data/moves';
+import { maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
@@ -207,6 +207,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.refreshEnemy();
     this.refreshPlayer();
+    this.drawTeamFx();
     const intro = resuming
       ? 'The battle resumes!'
       : this.kind === 'battle'
@@ -310,6 +311,7 @@ export class BattleScene extends Phaser.Scene {
     this.drawControls();
     this.refreshEnemy();
     this.refreshPlayer();
+    this.drawTeamFx();
     const intro = m.duel ? `Duel against ${m.opponent}!` : `${m.opponent} wants to battle!`;
     this.msg.setText(intro);
     this.showActions();
@@ -763,6 +765,10 @@ export class BattleScene extends Phaser.Scene {
           }
           break;
         }
+        case 'team':
+          this.drawTeamFx();
+          if (ev.on) sfx.statUp();
+          break;
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
           if (ev.side === 'enemy' && ev.status && !this.match) trackStat(state.run!, 'statusInflicted');
@@ -799,7 +805,29 @@ export class BattleScene extends Phaser.Scene {
     this.afterTurn();
   }
 
+  /** Team effects up on each side: a colored tag with turns left, by each side's panel. */
+  private fxChips: Phaser.GameObjects.Container | null = null;
+  private drawTeamFx() {
+    this.fxChips?.destroy();
+    this.fxChips = this.add.container(0, 0).setDepth(5);
+    for (const side of ['enemy', 'player'] as const) {
+      let x = W - 16;
+      const y = side === 'enemy' ? 74 : 424;
+      for (const [fx, left] of Object.entries(this.battle.teamFx[side]) as [TeamFxId, number][]) {
+        if (!left) continue;
+        const def = TEAM_FX[fx];
+        const t = text(this, 0, 0, `${def.tag} ${left}`, 11, '#1a1426', { fontStyle: 'bold' });
+        const w = t.width + 10;
+        x -= w;
+        this.fxChips.add(this.add.rectangle(x, y, w, 16, def.color).setOrigin(0));
+        this.fxChips.add(t.setPosition(x + 5, y + 2));
+        x -= 4;
+      }
+    }
+  }
+
   private afterTurn() {
+    this.drawTeamFx();
     const ab = this.match ? null : state.run!.activeBattle;
     if (ab) {
       ab.fought = [...new Set([...(ab.fought ?? []), ...this.battle.fought])];

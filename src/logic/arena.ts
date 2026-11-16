@@ -1,7 +1,7 @@
-import { attackId, MOVES } from '../data/moves';
+import { attackId, MOVES, teamMoveId } from '../data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { TRAINER_CLASSES, TRAINER_NAMES } from '../data/trainers';
-import { createCreature, learnset, MAX_MOVES, type Creature } from './creature';
+import { createCreature, learnset, MAX_MOVES, teamElement, type Creature } from './creature';
 import { hasSeenForm } from './dex';
 import { Rng } from './rng';
 import type { Meta } from './run';
@@ -44,6 +44,9 @@ export function arenaMovePool(speciesId: string, stage: number): string[] {
     const id = d.kind === 'attack' && d.rank >= 0 ? attackId(d.element, Math.min(3, d.rank + stage)) : e.id;
     if (!out.includes(id)) out.push(id);
   }
+  // Every line gets its team move by Lv 26.
+  const team = teamMoveId(teamElement(SPECIES_BY_ID[speciesId]));
+  if (!out.includes(team)) out.push(team);
   // Evolved forms keep the lower ranks they grew out of, too.
   for (const e of learnset(SPECIES_BY_ID[speciesId])) {
     const d = MOVES[e.id];
@@ -64,7 +67,9 @@ export function defaultArenaMoves(speciesId: string, stage: number): string[] {
 }
 
 /** Build the battle-ready creature for a pick: Lv 50 (or `level`), no stars, no item, full HP and uses. */
-export function makeArenaCreature(p: ArenaPick, level = ARENA_LEVEL): Creature {
+export function makeArenaCreature(p: ArenaPick, opts: { level?: number } = {}): Creature {
+  // (An options object, so passing this straight to .map() can't turn the index into a level.)
+  const level = typeof opts === 'object' && opts.level ? opts.level : ARENA_LEVEL;
   const c = createCreature(p.speciesId, level, p.stage);
   const pool = arenaMovePool(p.speciesId, p.stage);
   const moves = p.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);

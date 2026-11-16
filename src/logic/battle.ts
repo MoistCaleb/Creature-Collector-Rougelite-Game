@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { attackValue, effectsAtTier, healAtTier, MAX_STAGE, STAT_LABEL, TIER_POWER, type MoveDef, type StatKey } from '../data/moves';
+import { attackValue, effectsAtTier, healAtTier, MAX_STAGE, mendHeal, STAT_LABEL, TEAM_FX, teamFxTurns, TIER_POWER, type MoveDef, type StatKey, type TeamFxId } from '../data/moves';
 import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
@@ -41,7 +41,9 @@ export type BattleEvent =
   | { kind: 'faint'; side: Side; index: number }
   | { kind: 'enemySend'; index: number; hp: number }
   /** A status condition was gained (or cleared, when null). */
-  | { kind: 'status'; side: Side; status: StatusId | null };
+  | { kind: 'status'; side: Side; status: StatusId | null }
+  /** A team effect went up (or wore off) on a side. */
+  | { kind: 'team'; side: Side; fx: TeamFxId; on: boolean };
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
@@ -64,6 +66,64 @@ export class Battle {
   private permadeath: boolean;
   /** Set for duels between two people (see the constructor option). */
   readonly duel: { player: string; enemy: string } | null;
+  /** Team effects up on each side, with turns left (see TEAM_FX). */
+  teamFx: Record<Side, Partial<Record<TeamFxId, number>>> = { player: {}, enemy: {} };
+
+  hasFx(side: Side, fx: TeamFxId): boolean {
+    return (this.teamFx[side][fx] ?? 0) > 0;
+  }
+
+  private sideOf(x: Combatant): Side {
+    return this.enemy.includes(x) ? 'enemy' : 'player';
+  }
+
+  private teamName(side: Side): string {
+    return this.duel ? `${this.duel[side]}'s team` : side === 'enemy' ? "The enemy's team" : 'Your team';
+  }
+
+  /** A team move: put an effect on the user's side (or, for Mend, heal the whole side now). */
+  private useTeamMove(side: Side, def: MoveDef, tier: number, ev: BattleEvent[]) {
+    const fx = def.team!;
+    const team = side === 'player' ? this.player : this.enemy;
+    if (fx === 'mend') {
+      let any = false;
+      for (const x of team) {
+        if (!isAlive(x.c)) continue;
+        const max = stats(x.c).hp;
+        const healed = x.c.hp < max;
+        x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * mendHeal(tier)));
+        const active = x === (side === 'player' ? this.p : this.e);
+        if (healed && active) ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
+        if (x.status) {
+          if (active) this.cure(x, side, ev);
+          else x.status = null;
+        }
+        any = any || healed;
+      }
+      ev.push({ kind: 'text', text: any ? `${this.teamName(side)} is mended!` : `${this.teamName(side)} is already in good shape.` });
+      return;
+    }
+    const was = this.hasFx(side, fx);
+    this.teamFx[side][fx] = teamFxTurns(tier);
+    ev.push({ kind: 'team', side, fx, on: true });
+    ev.push({ kind: 'stat', side, up: true });
+    ev.push({ kind: 'text', text: was ? `${TEAM_FX[fx].name} is renewed for ${this.teamName(side).toLowerCase()}!` : `${TEAM_FX[fx].name}: ${TEAM_FX[fx].desc.replace('your team', this.teamName(side).toLowerCase())}!` });
+  }
+
+  /** End of turn: team effects count down and wear off. */
+  private tickTeamFx(ev: BattleEvent[]) {
+    for (const side of ['player', 'enemy'] as const) {
+      for (const fx of Object.keys(this.teamFx[side]) as TeamFxId[]) {
+        const left = (this.teamFx[side][fx] ?? 0) - 1;
+        if (left > 0) this.teamFx[side][fx] = left;
+        else {
+          delete this.teamFx[side][fx];
+          ev.push({ kind: 'team', side, fx, on: false });
+          ev.push({ kind: 'text', text: `${TEAM_FX[fx].name} wore off for ${this.teamName(side).toLowerCase()}.` });
+        }
+      }
+    }
+  }
   /** A floor boss's special rule, if any. */
   readonly rule: BossRule | null;
   private ruleName: string;
@@ -350,8 +410,9 @@ export class Battle {
   }
 
   private playerGoesFirst(): boolean {
-    const ps = stats(this.p.c).spd * (this.p.syn?.spd ?? 1) * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1);
-    const es = stats(this.e.c).spd * (this.e.syn?.spd ?? 1) * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1);
+    const wind = (s: Side) => (this.hasFx(s, 'tailwind') ? 1.5 : 1);
+    const ps = stats(this.p.c).spd * (this.p.syn?.spd ?? 1) * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1) * wind('player');
+    const es = stats(this.e.c).spd * (this.e.syn?.spd ?? 1) * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1) * wind('enemy');
     if (ps === es) return this.rng.chance(0.5);
     return ps > es;
   }
@@ -407,6 +468,18 @@ export class Battle {
     const d = moveDef(m);
     const hpFrac = user.c.hp / stats(user.c).hp;
     if (d.kind === 'heal') return hpFrac < 0.5 ? 90 * (1 - hpFrac) : 0;
+    if (d.team) {
+      const side = this.sideOf(user);
+      const team = side === 'player' ? this.player : this.enemy;
+      if (d.team === 'mend') {
+        // Worth it when the team as a whole is hurt or afflicted.
+        const missing = team.filter((x) => isAlive(x.c)).reduce((t, x) => t + (1 - x.c.hp / stats(x.c).hp) + (x.status ? 0.3 : 0), 0);
+        return missing > 0.6 ? 40 + 40 * Math.min(1.5, missing) : 0;
+      }
+      if (this.hasFx(side, d.team) || hpFrac < 0.35) return 0;
+      // Better with teammates still to come who'd benefit too.
+      return 45 + 8 * team.filter((x) => isAlive(x.c)).length;
+    }
     if (hpFrac < 0.4) return 0;
     const holder = d.kind === 'buff' ? user : foe;
     const room = effectsAtTier(d, m.tier).some((e) => {
@@ -455,6 +528,7 @@ export class Battle {
   /** Give a combatant a status. Fails if it already has one, has fainted, or its type is immune. */
   private inflict(x: Combatant, side: Side, id: StatusId, ev: BattleEvent[], prefix = ''): boolean {
     if (!isAlive(x.c) || x.status) return false;
+    if (this.hasFx(this.sideOf(x), 'ward')) return false;
     const def = STATUS[id];
     if (creatureTypes(x.c).some((t) => def.immune.includes(t))) return false;
     if (side === 'player' && this.playerImmune.includes(id)) return false;
@@ -528,7 +602,9 @@ export class Battle {
     ev.push({ kind: 'attack', side, move: def.name, moveId: def.id });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
 
-    if (this.rng.next() * 100 >= (user.c.held === 'lens' ? 100 : def.accuracy)) {
+    const targetSideOf: Side = side === 'player' ? 'enemy' : 'player';
+    const acc = user.c.held === 'lens' ? 100 : def.accuracy * (def.kind === 'attack' && this.hasFx(targetSideOf, 'shroud') ? 0.8 : 1);
+    if (this.rng.next() * 100 >= acc) {
       ev.push({ kind: 'text', text: 'It missed!' });
       return;
     }
@@ -540,6 +616,7 @@ export class Battle {
       if (def.effects.length) this.applyStatus(side, slot, ev);
       return;
     }
+    if (def.team) return this.useTeamMove(side, def, slot.tier, ev);
     if (def.kind !== 'attack') {
       this.applyStatus(side, slot, ev);
       if (def.status && def.kind === 'debuff' && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
@@ -556,7 +633,8 @@ export class Battle {
     let landed = 0;
     for (let h = 0; h < hits && isAlive(target.c) && !this.spared; h++) {
       const r = computeDamage(user, target, def, slot.tier, this.rng, el, powerMult);
-      const raw = side === 'player' ? Math.round(r.dmg * this.playerDamageMult) : r.dmg;
+      const fxMult = (this.hasFx(side, 'rally') ? 1.25 : 1) * (this.hasFx(targetSide, 'guard') ? 0.75 : 1);
+      const raw = Math.max(1, Math.round(r.dmg * (side === 'player' ? this.playerDamageMult : 1) * fxMult));
       const dmg = this.hurt(target, raw);
       total += dmg;
       if (side === 'player') {
@@ -611,6 +689,8 @@ export class Battle {
       if (def.status && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
         this.inflict(target, targetSide, def.status.id, ev);
       }
+      // Venom coat: the side's hits may poison.
+      if (this.hasFx(side, 'venom') && !target.status && this.rng.chance(0.3)) this.inflict(target, targetSide, 'poison', ev);
     }
 
     if (!isAlive(target.c)) this.handleFaint(targetSide, ev);
@@ -745,6 +825,7 @@ export class Battle {
       return;
     }
     this.ruleEndOfTurn(ev);
+    this.tickTeamFx(ev);
     if (this.outcome() === 'ongoing' || this.outcome() === 'needSwitch') this.berries(ev);
     for (const side of ['player', 'enemy'] as const) {
       const x = side === 'player' ? this.p : this.e;

@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, type MoveDef } from '../data/moves';
+import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, teamMoveId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
 import { stabMultiplier, type Element, type TypePair } from '../data/types';
@@ -33,6 +33,8 @@ export interface Creature {
   held?: import('../data/held').HeldId;
   /** XP earned while at the level cap, released when the cap rises (evolve or prestige). */
   banked?: number;
+  /** Has been offered its team move (learned at TEAM_MOVE_LEVEL). */
+  teamOffered?: boolean;
 }
 
 export type Stats = BaseStats;
@@ -155,10 +157,32 @@ function resolveLearn(c: Creature, id: string): string | null {
  * pendingMoves for the player to decide, or (auto, for enemies) replaces its weakest attack.
  * Returns names of moves learned immediately.
  */
+/** Level at which every creature gets its line's team move. */
+export const TEAM_MOVE_LEVEL = 26;
+
+/** Which element's team move a species learns: its own, or (dual types) one picked per family. */
+export function teamElement(sp: Species): Element {
+  const [a, b] = sp.types;
+  return a === b || hashString(sp.id + ':team') % 2 === 0 ? a : b;
+}
+
 export function learnMoves(c: Creature, auto = false): string[] {
   const learned: string[] = [];
   const set = learnset(species(c));
+  // The team move comes on top of the learnset (so older saved creatures' learn order is untouched),
+  // in level order: after anything learned up to Lv 26.
+  const offerTeam = () => {
+    if (c.teamOffered || c.level < TEAM_MOVE_LEVEL) return;
+    c.teamOffered = true;
+    const id = teamMoveId(teamElement(species(c)));
+    if (knows(c, id)) return;
+    if (c.moves.length < MAX_MOVES) {
+      c.moves.push({ id, tier: 1 });
+      learned.push(MOVES[id].name);
+    } else if (!auto && !c.pendingMoves.includes(id)) c.pendingMoves.push(id);
+  };
   while (c.learnIndex < set.length && set[c.learnIndex].level <= c.level) {
+    if (set[c.learnIndex].level > TEAM_MOVE_LEVEL) offerTeam();
     const id = resolveLearn(c, set[c.learnIndex].id);
     c.learnIndex++;
     if (!id) continue;
@@ -181,6 +205,7 @@ export function learnMoves(c: Creature, auto = false): string[] {
       c.pendingMoves.push(id);
     }
   }
+  offerTeam();
   return learned;
 }
 
