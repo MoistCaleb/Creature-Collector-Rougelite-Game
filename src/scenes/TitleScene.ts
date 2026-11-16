@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { clearSavedRun, hasSavedRun, loadRun, PASSIVES } from '../logic/run';
+import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, todayUtc } from '../logic/run';
 import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
@@ -68,7 +68,15 @@ export class TitleScene extends Phaser.Scene {
       { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Passives & achievements', fontSize: 16 },
     );
 
-    button(this, W / 2, 550, 200, 50, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 17 });
+    button(this, W / 2 - 82, 550, 156, 54, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
+    // Daily run: the same seed for everyone today.
+    const today = todayUtc();
+    const best = meta.daily?.date === today ? meta.daily.best : null;
+    button(this, W / 2 + 82, 550, 156, 54, '📅 Daily run', () => this.startDaily(today), {
+      fontSize: 16,
+      color: 0x2f4a6b,
+      sub: best ? `Best: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'New run every day',
+    });
 
     // "Install app" appears when the browser can install the game (or on iPhone, with steps).
     let install: Phaser.GameObjects.Container | null = null;
@@ -120,6 +128,21 @@ export class TitleScene extends Phaser.Scene {
     }
     state.run = run;
     this.scene.start('Map');
+  }
+
+  private startDaily(date: string) {
+    const go = () => this.scene.start('Starter', { daily: date });
+    if (!hasSavedRun()) return go();
+    openPicker(this, {
+      title: 'Abandon your run?',
+      subtitle: 'Starting the daily run ends your current run.',
+      options: [{ label: 'Abandon and play the daily', color: 0x8a2c2c }],
+      onPick: () => {
+        clearSavedRun();
+        go();
+      },
+      onCancel: () => {},
+    });
   }
 
   private confirmNewRun() {

@@ -197,7 +197,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
-    text(this, 14, 38, `${run.map.biome} lands${run.heat ? `  🔥${run.heat}` : ''}`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
+    text(this, 14, 38, `${run.map.biome} lands${run.heat ? `  🔥${run.heat}` : ''}${run.daily ? '  📅' : ''}`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     text(this, 150, 36, `◆ ${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, COLORS.textDim);
     if (run.map.layout === 'rows' && !run.bossPending) {

@@ -25,7 +25,7 @@ import { checkAchievements, emptyStats, track, type MetaStats } from './achievem
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
-import { Rng } from './rng';
+import { hashString, Rng } from './rng';
 
 export const TEAM_MAX = 4;
 export const BENCH_MAX = 3;
@@ -94,6 +94,21 @@ export interface Meta {
   heatUnlocked?: number;
   /** Heat chosen for the next run. */
   heat?: number;
+  /** Today's daily run: best result and how many tries. */
+  daily?: DailyRecord;
+}
+
+export interface DailyResult {
+  won: boolean;
+  floor: number;
+  battlesWon: number;
+  score: number;
+}
+
+export interface DailyRecord {
+  date: string;
+  attempts: number;
+  best: DailyResult | null;
 }
 
 const META_KEY = 'ccr-meta-v1';
@@ -178,6 +193,8 @@ export interface Run {
   eventId: string | null;
   /** Difficulty level of this run (0 = standard). */
   heat?: number;
+  /** Set on a daily run: the UTC date it belongs to. */
+  daily?: string;
   /** Held items not on any creature. */
   bag?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
@@ -204,29 +221,76 @@ export function rollStarterChoices(meta: Meta, rng: Rng): string[] {
   return rng.shuffle([...meta.unlockedStarters]).slice(0, 3);
 }
 
-export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands'): Run {
+// ---------------------------------------------------------------- daily run
+
+/** Today's date in UTC (YYYY-MM-DD): everyone shares the same daily run. */
+export function todayUtc(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** The run seed for a given day. */
+export function dailySeed(date: string): number {
+  return hashString(`daily:${date}`);
+}
+
+/** The day's three starters, drawn from the whole roster (unlocks don't matter). */
+export function dailyStarters(date: string): string[] {
+  return new Rng(hashString(`daily-starters:${date}`)).shuffle(SPECIES.map((s) => s.id)).slice(0, 3);
+}
+
+/** Score: a win beats any loss; then floors reached, then battles won. */
+export function dailyScore(won: boolean, floor: number, battlesWon: number): number {
+  return (won ? 10000 : floor * 1000) + battlesWon;
+}
+
+/** Record a finished daily run. Returns true if it's a new best for the day. */
+export function recordDaily(run: Run, won: boolean): boolean {
+  const meta = run.meta;
+  if (!run.daily) return false;
+  if (meta.daily?.date !== run.daily) meta.daily = { date: run.daily, attempts: 1, best: null };
+  const floor = won ? FLOORS : run.floor;
+  const result: DailyResult = { won, floor, battlesWon: run.log.battlesWon, score: dailyScore(won, floor, run.log.battlesWon) };
+  const better = !meta.daily.best || result.score > meta.daily.best.score;
+  if (better) meta.daily.best = result;
+  saveMeta(meta);
+  return better;
+}
+
+/** Short description of a daily result. */
+export function describeDaily(r: DailyResult): string {
+  return r.won ? `Won! · ${r.battlesWon} battles` : `Floor ${r.floor + 1} · ${r.battlesWon} battles`;
+}
+
+export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string): Run {
   const rng = new Rng(seed);
   const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
   const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
-  meta.lastMap = def.id;
+  if (!daily) meta.lastMap = def.id;
   const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31));
   meta.runs += 1;
+  if (daily) {
+    if (meta.daily?.date !== daily) meta.daily = { date: daily, attempts: 0, best: null };
+    meta.daily.attempts += 1;
+  }
+  // Daily runs are the same for everyone: no passive, standard Heat.
+  const passive = daily ? null : meta.equippedPassive;
   saveMeta(meta);
   return {
-    heat: Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
+    heat: daily ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
+    ...(daily ? { daily } : {}),
     rng,
     seed,
     meta,
-    passive: meta.equippedPassive,
+    passive,
     floor: 0,
     biomes,
     map,
     currentId: map.startId,
     visited: [map.startId],
-    team: [createCreature(starterId, meta.equippedPassive === 'champion' ? 10 : BALANCE.starterLevel)],
+    team: [createCreature(starterId, passive === 'champion' ? 10 : BALANCE.starterLevel)],
     bench: [],
-    evoStones: meta.equippedPassive === 'evolutionist' ? 1 : 0,
-    coins: meta.equippedPassive === 'coinpurse' ? 50 : 0,
+    evoStones: passive === 'evolutionist' ? 1 : 0,
+    coins: passive === 'coinpurse' ? 50 : 0,
     shop: null,
     claimedTypes: [],
     bossPending: false,

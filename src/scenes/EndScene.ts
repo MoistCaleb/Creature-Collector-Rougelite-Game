@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, runMvp, saveMeta } from '../logic/run';
+import { allCreatures, clearSavedRun, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -100,6 +100,11 @@ export class EndScene extends Phaser.Scene {
     roster('Fallen', run.log.fallen ?? [], true);
 
     const extra: string[] = [];
+    if (run.daily) {
+      const best = recordDaily(run, data.won);
+      const rec = state.meta.daily!;
+      extra.push(`📅 Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
+    }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
     const earned = state.meta.newAchievements.splice(0);
     if (earned.length) {
