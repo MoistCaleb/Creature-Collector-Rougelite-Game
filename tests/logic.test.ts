@@ -4,7 +4,7 @@ import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
+import { learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
 import { BOSSES } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
@@ -87,6 +87,29 @@ describe('creature growth', () => {
     evolve(c);
     expect(stats(c).atk).toBeGreaterThan(before);
     expect(c.stage).toBe(1);
+  });
+  it('stores XP earned at the cap, up to a limit, and pours it in when the cap rises', () => {
+    const c = createCreature('emberkit', 1);
+    const first = gainXp(c, 1e6);
+    expect(c.level).toBe(levelCap(c));
+    expect(c.banked).toBe(bankLimit(c));
+    expect(first.overflow).toBeGreaterThan(0);
+    // A full store takes no more.
+    const again = gainXp(c, 500);
+    expect(again).toEqual({ levels: 0, banked: 0, overflow: 500 });
+    const cap = levelCap(c);
+    evolve(c);
+    expect(c.level).toBe(cap + BANK_LEVELS);
+    expect(c.banked).toBe(0);
+  });
+  it('partial stores release partial levels', () => {
+    const c = createCreature('emberkit', 1);
+    addXp(c, 1e6);
+    c.banked = xpToNext(levelCap(c)) + 3;
+    const cap = levelCap(c);
+    prestige(c);
+    expect(c.level).toBe(cap + 1);
+    expect(c.xp).toBe(3);
   });
   it('learns moves as it levels, queueing extras when full', () => {
     const c = createCreature('steamle', 1);
@@ -233,6 +256,21 @@ describe('acquiring creatures', () => {
     bossesDefeated: 0,
     clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('capped creatures turn XP into coins: a little while storing, more once the store is full', () => {
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    const c = run.team[0];
+    addXp(c, 1e6);
+    c.banked = 0;
+    const coins0 = run.coins;
+    const [r1] = grantXp(run, 250, [c.uid]);
+    expect(r1.banked).toBe(250);
+    expect(r1.coins).toBe(Math.round(250 * BALANCE.capCoinRate));
+    c.banked = bankLimit(c);
+    const [r2] = grantXp(run, 250, [c.uid]);
+    expect(r2.full).toBe(true);
+    expect(r2.coins).toBe(Math.round(250 * BALANCE.fullBankCoinRate));
+    expect(run.coins).toBe(coins0 + r1.coins + r2.coins);
   });
   it('first catch of a species arrives prestiged; repeats do not', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);

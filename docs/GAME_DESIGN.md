@@ -186,6 +186,8 @@ Proposed math:
 
 ## Level curve (target)
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★.
+- XP earned at the cap is stored (up to 5 levels' worth) and pours in as soon as the cap rises (evolve or prestige).
+  Capped creatures also turn that XP into coins: 1 per 25 XP while storing, 1 per 10 once the store is full.
 - Floors are ~25-35 nodes per route. Enemy levels ease in then ramp: floor 1 ~1-23 (boss 25),
   floor 2 ~30-60 (boss 63), floor 3 ~63-95 (final boss 96-98). Teams reach ~100 by the final boss.
 - XP per enemy = (3.2 / 1.1 / 1.4 by floor) x that enemy's own level-up cost. Floor 1 is generous so

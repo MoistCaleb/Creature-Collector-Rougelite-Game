@@ -27,6 +27,9 @@ export const BALANCE = {
   xpPerLevelNeeded: 5,
   xpQuad: 0.08,
   benchXpShare: 0.5,
+  /** Coins per XP earned at the level cap: while it's being stored, and once the store is full. */
+  capCoinRate: 1 / 25,
+  fullBankCoinRate: 1 / 10,
   /** XP share for team members who didn't fight. */
   sideXpShare: 0.5,
   catchUpPerLevel: 0.08,

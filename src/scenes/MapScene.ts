@@ -17,7 +17,7 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
+import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
@@ -495,8 +495,9 @@ export class MapScene extends Phaser.Scene {
         allCreatures(run),
         (c) => !canPrestige(c),
         (target) => {
+          const lv = target.level;
           prestigeTracked(run, target);
-          showMessage(this, 'Prestige!', `${creatureName(target)} is now ${'★'.repeat(target.stars)}`, this.done);
+          showMessage(this, 'Prestige!', `${creatureName(target)} is now ${'★'.repeat(target.stars)}${releaseNote(target, lv)}`, this.done);
         },
         true,
       );
@@ -527,8 +528,9 @@ export class MapScene extends Phaser.Scene {
           () => false,
           (sac) => {
             run.bench = run.bench.filter((b) => b !== sac);
+            const lv = target.level;
             prestigeTracked(run, target);
-            showMessage(this, 'Prestige!', `${creatureName(sac)} was sacrificed.\n${creatureName(target)} is now ${'★'.repeat(target.stars)}`, this.done);
+            showMessage(this, 'Prestige!', `${creatureName(sac)} was sacrificed.\n${creatureName(target)} is now ${'★'.repeat(target.stars)}${releaseNote(target, lv)}`, this.done);
           },
           true,
         );

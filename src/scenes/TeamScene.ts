@@ -2,11 +2,11 @@ import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS, elementTextColor } from '../data/types';
 import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
-import { canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { BANK_LEVELS, bankedLevels, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { allCreatures, BENCH_MAX, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
+import { allCreatures, BENCH_MAX, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, releaseNote, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
 import { dex, persist, state } from '../state';
@@ -98,7 +98,14 @@ export class TeamScene extends Phaser.Scene {
     const cap = levelCap(c);
     text(this, 18, y0 + 8, `${creatureName(c)} ${stars(c.stars)}`, 18, COLORS.text, { fontStyle: 'bold' });
     text(this, W - 18, y0 + 10, `Stage ${c.stage + 1}/3`, 13, COLORS.textDim).setOrigin(1, 0);
-    const xpLine = c.level >= cap ? 'MAX (evolve or prestige to raise)' : `XP ${c.xp}/${xpToNext(c.level)}`;
+    const stored = c.banked ?? 0;
+    const full = stored >= bankLimit(c);
+    const xpLine =
+      c.level < cap
+        ? `XP ${c.xp}/${xpToNext(c.level)}`
+        : stored
+          ? `MAX · Stored ${full ? BANK_LEVELS : bankedLevels(c).toFixed(1)}/${BANK_LEVELS} lv${full ? ' (full)' : ''}`
+          : 'MAX · XP is stored and pays coins';
     text(this, 18, y0 + 32, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim);
     text(this, 18, y0 + 50, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text);
     c.moves.forEach((m, i) => {
@@ -137,12 +144,14 @@ export class TeamScene extends Phaser.Scene {
         run.evoStones -= 1;
         const from = creatureName(c);
         const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+        const lv = c.level;
         evolveTracked(run, c);
+        const note = releaseNote(c, lv);
         dex.creature(c, true);
         const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
         playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
           cry(c.speciesId, c.stage);
-          showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!`, () => this.scene.restart({ selected: this.selected }));
+          showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!${note}`, () => this.scene.restart({ selected: this.selected }));
         });
       },
       { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a },

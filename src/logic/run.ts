@@ -7,7 +7,8 @@ import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
 import {
-  addXp,
+  bankLimit,
+  gainXp,
   healFraction,
   catchUpMultiplier,
   createCreature,
@@ -535,6 +536,21 @@ export interface XpResult {
   name: string;
   xp: number;
   levels: number;
+  /** XP stored at the level cap. */
+  banked: number;
+  /** Coins the capped creature turned XP into. */
+  coins: number;
+  /** At the cap with a full store. */
+  full: boolean;
+}
+
+/** Give one creature XP; at the cap it's stored and part of it paid out as coins. */
+function giveXp(run: Run, c: Creature, xp: number): XpResult {
+  const g = gainXp(c, xp);
+  const capped = g.banked + g.overflow;
+  const coins = Math.round(g.banked * BALANCE.capCoinRate + g.overflow * BALANCE.fullBankCoinRate);
+  if (coins > 0) earnCoins(run, coins);
+  return { name: creatureName(c), xp, levels: g.levels, banked: g.banked, coins, full: capped > 0 && (c.banked ?? 0) >= bankLimit(c) };
 }
 
 export function battleCoins(enemies: Creature[], kind: EncounterKind, heat = 0): number {
@@ -558,11 +574,11 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
   for (const c of run.team) {
     const share = !fought || fought.includes(c.uid) ? 1 : BALANCE.sideXpShare;
     const xp = Math.round(amount * share * catchUpMultiplier(c.level, top) * eggMult(c));
-    out.push({ name: creatureName(c), xp, levels: addXp(c, xp) });
+    out.push(giveXp(run, c, xp));
   }
   for (const c of run.bench) {
     const xp = Math.round(amount * benchShare * catchUpMultiplier(c.level, top) * eggMult(c));
-    out.push({ name: creatureName(c), xp, levels: addXp(c, xp) });
+    out.push(giveXp(run, c, xp));
   }
   return out;
 }
@@ -728,6 +744,11 @@ export function evolveTracked(run: Run, c: Creature): boolean {
   track(run.meta, 'evolutions');
   saveMeta(run.meta);
   return true;
+}
+
+/** "Stored XP poured in" line for a creature whose cap just rose, given its level before. */
+export function releaseNote(c: Creature, before: number): string {
+  return c.level > before ? `\nStored XP: +${c.level - before} lv (now Lv ${c.level})` : '';
 }
 
 /** Gain coins (counts toward the Prospector achievement). */
