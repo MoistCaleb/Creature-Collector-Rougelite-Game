@@ -199,7 +199,7 @@ export function reachable(map: FloorMap): Set<string> {
 export const NODE_INFO: Record<NodeKind, { label: string; icon: string; color: number; desc: string }> = {
   start: { label: 'Start', icon: '◆', color: 0x8a8aa8, desc: 'Your entry point' },
   battle: { label: 'Battle', icon: '⚔', color: 0x6a6f8a, desc: 'Fight a wild creature. Win to earn XP or catch it.' },
-  elite: { label: 'Elite', icon: '♛', color: 0xc0392b, desc: 'A tough trainer. Drops an Evolution Stone.' },
+  elite: { label: 'Trainer', icon: '♛', color: 0xc0392b, desc: 'A trainer battle. No catching, but big XP, coins and an Evolution Stone.' },
   levelup: { label: 'Level Up', icon: '▲', color: 0x27ae60, desc: 'Train your creatures.' },
   prestige: { label: 'Prestige', icon: '★', color: 0xe84393, desc: 'Sacrifice a bench creature to prestige another.' },
   skill: { label: 'Skill', icon: '✦', color: 0x8e6bff, desc: 'Buff one of your moves.' },

@@ -3,11 +3,13 @@ import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
+import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, resolvePending, stats } from '../src/logic/creature';
+import { BOSSES } from '../src/data/trainers';
+import type { Element } from '../src/data/types';
 import { elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS } from '../src/logic/events';
-import { clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -513,3 +515,69 @@ describe('more passives', () => {
     expect(luckyOdds(run)).toBe(0.75);
   });
 });
+
+describe('bosses and trainers', () => {
+  const mk = (id: string, level = 30) => {
+    const c = createCreature(id, level);
+    c.hp = stats(c).hp;
+    return c;
+  };
+  const anyOf = (el: Element) => SPECIES.find((s) => s.types[0] === el && s.types[1] === el)!.id;
+
+  it('has a boss for every element', () => {
+    for (const el of ELEMENTS) expect(BOSSES[el].element).toBe(el);
+  });
+
+  it('miasma poisons and whiteout slows creatures as they enter', () => {
+    const b = new Battle([mk(anyOf('Water'))], [mk(anyOf('Toxic'))], new Rng(1), { rule: 'miasma' });
+    b.start();
+    expect(b.p.burn).toBeGreaterThan(0);
+    const w = new Battle([mk(anyOf('Water'))], [mk(anyOf('Frost'))], new Rng(1), { rule: 'whiteout' });
+    w.start();
+    expect(w.p.spdStage).toBe(-1);
+  });
+
+  it('pride buffs only the ace, bulwark buffs every boss creature', () => {
+    const team = () => [mk(anyOf('Dragon')), mk(anyOf('Dragon'))];
+    const p = new Battle([mk(anyOf('Water'))], team(), new Rng(1), { rule: 'pride' });
+    p.start();
+    expect(p.e.atkStage).toBe(0);
+    const bw = new Battle([mk(anyOf('Water'))], team(), new Rng(1), { rule: 'bulwark' });
+    bw.start();
+    expect(bw.e.defStage).toBe(1);
+  });
+
+  it('thorns hurt the attacker and scorch spares Fire types', () => {
+    const me = mk(anyOf('Water'), 40);
+    const t = new Battle([me], [mk(anyOf('Nature'), 40)], new Rng(3), { rule: 'thorns', enemyRandomness: 0 });
+    const atk = me.moves.findIndex((m) => moveDef(m).kind === 'attack');
+    const before = me.hp;
+    t.takeTurn({ kind: 'move', index: atk });
+    expect(me.hp).toBeLessThan(before);
+    const scorched = (lead: string) => {
+      const c = mk(lead, 40);
+      const sc = new Battle([c], [mk(anyOf('Earth'), 40)], new Rng(3), { rule: 'scorch', ruleName: 'Scorched Ground' });
+      const ev = sc.takeTurn({ kind: 'move', index: c.moves.findIndex((m) => moveDef(m).kind === 'attack') });
+      return ev.some((e) => e.kind === 'text' && e.text.includes('is scorched'));
+    };
+    expect(scorched(anyOf('Water'))).toBe(true);
+    expect(scorched(anyOf('Fire'))).toBe(false);
+  });
+
+  it('trainer battles pay far more than wild ones and boss teams match their element', () => {
+    const foes = [mk(anyOf('Fire'), 20)];
+    expect(Math.abs(battleXp(foes, 'elite', 0) - battleXp(foes, 'battle', 0) * 3)).toBeLessThanOrEqual(2);
+    expect(battleCoins(foes, 'elite')).toBe(battleCoins(foes, 'battle') * 4);
+    const run = startRun(mkMetaBoss(), SPECIES[0].id, 9);
+    const boss = run.map.nodes[run.map.bossId];
+    for (const e of makeEncounter(run, boss)) expect(SPECIES_BY_ID[e.speciesId].types).toContain(run.biomes[0]);
+  });
+});
+
+function mkMetaBoss(): Meta {
+  return {
+    unlockedStarters: [], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0,
+    dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  };
+}

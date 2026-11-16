@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
 import { attackValue, effectsAtTier, healAtTier, MAX_STAGE, STAT_LABEL, TIER_POWER, type MoveDef, type StatKey } from '../data/moves';
+import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
 import { creatureName, creatureTypes, isAlive, levelFactor, moveDef, stats, type Creature, type MoveSlot } from './creature';
@@ -43,21 +44,78 @@ export class Battle {
   private playerDamageMult: number;
   /** Chance the enemy picks a random move instead of its best one. */
   private enemyRandomness: number;
+  /** A floor boss's special rule, if any. */
+  readonly rule: BossRule | null;
+  private ruleName: string;
 
   constructor(
     playerTeam: Creature[],
     enemyTeam: Creature[],
     rng: Rng = new Rng(),
-    opts: { playerDamageMult?: number; enemyRandomness?: number } = {},
+    opts: { playerDamageMult?: number; enemyRandomness?: number; rule?: BossRule; ruleName?: string } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
+    this.rule = opts.rule ?? null;
+    this.ruleName = opts.ruleName ?? 'The field';
     this.player = playerTeam.map(fresh);
     this.enemy = enemyTeam.map(fresh);
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
     this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
     if (this.player[this.pActive]) this.fought.add(this.player[this.pActive].c.uid);
     this.rng = rng;
+  }
+
+  /**
+   * Applies entry effects for the opening creatures. Call once when the battle starts.
+   * When resuming a saved battle, pass true to skip effects that cost HP (they already happened).
+   */
+  start(resuming = false): BattleEvent[] {
+    const ev: BattleEvent[] = [];
+    if (this.enemy[this.eActive]) this.onEnter('enemy', ev);
+    if (this.player[this.pActive]) this.onEnter('player', ev, resuming);
+    return ev;
+  }
+
+  /** Boss rules that trigger when a creature enters battle. */
+  private onEnter(side: Side, ev: BattleEvent[], skipHpCost = false) {
+    const r = this.rule;
+    if (!r) return;
+    const x = side === 'player' ? this.p : this.e;
+    if (!isAlive(x.c)) return;
+    if (side === 'enemy') {
+      if (r === 'bulwark') this.ruleBump(x, side, 'def', 1, ev);
+      if (r === 'pride' && this.eActive === this.enemy.length - 1) {
+        this.ruleBump(x, side, 'atk', 1, ev);
+        this.ruleBump(x, side, 'spd', 1, ev);
+      }
+      return;
+    }
+    if (r === 'whiteout') this.ruleBump(x, side, 'spd', -1, ev);
+    if (r === 'dread') this.ruleBump(x, side, 'atk', -1, ev);
+    if (r === 'miasma' && x.burn === 0) {
+      x.burn = 4;
+      x.dot = 'poison';
+      ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(x.c)} was poisoned!` });
+    }
+    if (r === 'riptide' && !skipHpCost) {
+      const max = stats(x.c).hp;
+      const dmg = Math.min(x.c.hp - 1, Math.max(1, Math.floor(max / 8)));
+      if (dmg > 0) {
+        x.c.hp -= dmg;
+        ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
+        ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(x.c)} is battered by the current!` });
+      }
+    }
+  }
+
+  private ruleBump(x: Combatant, side: Side, stat: StatKey, by: number, ev: BattleEvent[]) {
+    const key = stageKey(stat);
+    const before = x[key];
+    x[key] = Math.max(-MAX_STAGE, Math.min(MAX_STAGE, before + by));
+    if (x[key] === before) return;
+    ev.push({ kind: 'stat', side, up: by > 0 });
+    ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(x.c)}'s ${STAT_LABEL[stat]} ${by > 0 ? 'rose' : 'fell'}!` });
   }
 
   get p(): Combatant {
@@ -86,10 +144,12 @@ export class Battle {
     this.pActive = index;
     this.fought.add(this.p.c.uid);
     resetStages(this.p);
-    return [
+    const ev: BattleEvent[] = [
       { kind: 'swap', side: 'player', index },
       { kind: 'text', text: `Go, ${creatureName(this.p.c)}!` },
     ];
+    this.onEnter('player', ev);
+    return ev;
   }
 
   takeTurn(action: PlayerAction): BattleEvent[] {
@@ -104,12 +164,13 @@ export class Battle {
       resetStages(this.p);
       ev.push({ kind: 'swap', side: 'player', index: action.index });
       ev.push({ kind: 'text', text: `Go, ${creatureName(this.p.c)}!` });
-      this.useMove('enemy', enemyMove, ev);
+      this.onEnter('player', ev);
+      if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
     } else {
       const enemyAtStart = this.e;
       const pPri = !!moveDef(this.p.c.moves[action.index]).priority;
       const ePri = !!moveDef(enemyMove).priority;
-      const playerFirst = pPri !== ePri ? pPri : this.playerGoesFirst();
+      const playerFirst = pPri !== ePri ? pPri : this.rule === 'tailwind' ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       for (const side of order) {
         // A freshly sent-in enemy doesn't act on the turn its predecessor fainted.
@@ -246,6 +307,12 @@ export class Battle {
     if (landed > 1) ev.push({ kind: 'text', text: `Hit ${landed} times!` });
 
     const userMax = stats(user.c).hp;
+    if (this.rule === 'thorns' && side === 'player' && total > 0 && isAlive(user.c)) {
+      const th = Math.max(1, Math.round(total * 0.15));
+      user.c.hp = Math.max(0, user.c.hp - th);
+      ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: th });
+      ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(user.c)} is cut by thorns!` });
+    }
     if (def.drain && isAlive(user.c)) {
       user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * def.drain));
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
@@ -361,11 +428,21 @@ export class Battle {
         resetStages(this.e);
         ev.push({ kind: 'enemySend', index: next });
         ev.push({ kind: 'text', text: `The enemy sends out ${creatureName(this.e.c)}!` });
+        this.onEnter('enemy', ev);
+      }
+      if (this.rule === 'curse' && isAlive(this.p.c)) {
+        const max = stats(this.p.c).hp;
+        const dmg = Math.max(1, Math.floor(max / 5));
+        this.p.c.hp = Math.max(0, this.p.c.hp - dmg);
+        ev.push({ kind: 'damage', side: 'player', hp: this.p.c.hp, maxHp: max, amount: dmg });
+        ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(this.p.c)} is struck by the curse!` });
+        if (!isAlive(this.p.c)) this.handleFaint('player', ev);
       }
     }
   }
 
   private endOfTurn(ev: BattleEvent[]) {
+    this.ruleEndOfTurn(ev);
     for (const side of ['player', 'enemy'] as const) {
       const x = side === 'player' ? this.p : this.e;
       if (x.burn > 0 && isAlive(x.c)) {
@@ -376,6 +453,31 @@ export class Battle {
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
         ev.push({ kind: 'text', text: `${creatureName(x.c)} is hurt by its ${x.dot}!` });
         if (!isAlive(x.c)) this.handleFaint(side, ev);
+      }
+    }
+  }
+
+  /** Boss rules that trigger at the end of each turn. */
+  private ruleEndOfTurn(ev: BattleEvent[]) {
+    const r = this.rule;
+    if (!r || this.outcome() === 'win' || this.outcome() === 'lose') return;
+    const p = this.p;
+    const e = this.e;
+    if (r === 'scorch' && isAlive(p.c) && !creatureTypes(p.c).includes('Fire')) {
+      const max = stats(p.c).hp;
+      const dmg = Math.max(1, Math.floor(max / 16));
+      p.c.hp = Math.max(0, p.c.hp - dmg);
+      ev.push({ kind: 'damage', side: 'player', hp: p.c.hp, maxHp: max, amount: dmg });
+      ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(p.c)} is scorched!` });
+      if (!isAlive(p.c)) this.handleFaint('player', ev);
+    }
+    if (r === 'overclock' && isAlive(e.c)) this.ruleBump(e, 'enemy', 'atk', 1, ev);
+    if (r === 'sanctuary' && isAlive(e.c)) {
+      const max = stats(e.c).hp;
+      if (e.c.hp < max) {
+        e.c.hp = Math.min(max, e.c.hp + Math.ceil(max / 12));
+        ev.push({ kind: 'heal', side: 'enemy', hp: e.c.hp, maxHp: max });
+        ev.push({ kind: 'text', text: `${this.ruleName}: Enemy ${creatureName(e.c)} is restored by the light!` });
       }
     }
   }

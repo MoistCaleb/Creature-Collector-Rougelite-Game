@@ -32,6 +32,9 @@ export const BALANCE = {
   levelUpTeam: [3, 4, 5],
   /** Catch-up camp raises creatures to within this many levels of your strongest. */
   levelUpCatchUpGap: 5,
+  /** Trainer (elite) battles: no catching, but XP and coins are multiplied by these. */
+  trainerXpMult: 3,
+  trainerCoinMult: 4,
   /** Shop prices multiply by 1 + this x floor index. */
   shopFloorMarkup: 1.0,
 };

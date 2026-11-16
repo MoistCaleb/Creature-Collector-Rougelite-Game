@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
+import { BOSSES, trainerName } from '../data/trainers';
 import { ELEMENT_COLORS, typeMultiplier } from '../data/types';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
@@ -81,11 +82,16 @@ export class BattleScene extends Phaser.Scene {
     } else {
       this.enemies = makeEncounter(run, run.map.nodes[run.currentId]);
       run.activeBattle = { kind: this.kind, enemies: this.enemies, settled: false, summary: '' };
+      if (this.kind === 'elite') run.activeBattle.trainer = trainerName((xs) => run.rng.pick(xs));
       persist();
     }
+    const boss = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
+    const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: run.passive === 'drill' ? 1.1 : 1,
       enemyRandomness: this.kind === 'battle' ? 0.5 : this.kind === 'elite' ? 0.25 : 0.1,
+      rule: boss?.rule,
+      ruleName: boss?.ruleName,
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -101,8 +107,16 @@ export class BattleScene extends Phaser.Scene {
     this.enemyPanel = this.makePanel(16, 16);
     this.playerPanel = this.makePanel(W - 16 - 270, 446);
     this.pips = text(this, W - 16, 24, '', 16, '#ffc94d').setOrigin(1, 0);
-    const title = this.kind === 'boss' ? 'BOSS' : this.kind === 'elite' ? 'ELITE' : 'WILD';
+    const title = boss ? boss.name.toUpperCase() : this.kind === 'elite' ? 'TRAINER' : 'WILD';
     text(this, W - 16, 48, title, 14, this.kind === 'battle' ? COLORS.textDim : '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
+    if (boss) {
+      // The boss's rule stays on screen for the whole fight.
+      this.add.rectangle(16, 96, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
+      text(this, 24, 101, `☠ ${boss.ruleName}`, 13, '#ff8a7a', { fontStyle: 'bold' });
+      text(this, 24, 119, boss.ruleDesc, 10, COLORS.text, { wordWrap: { width: 200 } });
+    } else if (this.kind === 'elite') {
+      text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' });
+    }
 
     this.add.rectangle(12, 530, W - 24, 62, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.msg = text(this, 24, 540, '', 16, COLORS.text, { wordWrap: { width: W - 48 } });
@@ -115,17 +129,30 @@ export class BattleScene extends Phaser.Scene {
       : this.kind === 'battle'
         ? `A wild ${this.enemies.map(creatureName).join(' and a wild ')} appeared!`
         : this.kind === 'elite'
-          ? 'An elite trainer challenges you!'
-          : 'The floor guardian blocks your way!';
+          ? `${trainer} wants to battle!`
+          : `${boss!.name}, ${boss!.title}, blocks your way!`;
     this.msg.setText(intro);
     this.showActions();
+    // Entry effects of a boss rule (stat drops, poison...).
+    const entry = this.battle.start(resuming);
+    const begin = () => {
+      if (entry.length) this.play(entry);
+    };
     // Resuming after a reload: pick up wherever the battle was left.
     if (resuming) {
       const o = this.battle.outcome();
       if (o === 'win') this.onWin();
       else if (o === 'lose') this.onLose();
       else if (o === 'needSwitch') this.openSwitch(true);
-    }
+      else begin();
+    } else if (boss) {
+      openPicker(this, {
+        title: `${boss.name}, ${boss.title}`,
+        subtitle: `"${boss.quote}"\n\n☠ ${boss.ruleName}\n${boss.ruleDesc}`,
+        options: [{ label: 'Fight!', color: 0x8a2c2c }],
+        onPick: begin,
+      });
+    } else begin();
   }
 
   // ------------------------------------------------------------ panels
@@ -340,7 +367,7 @@ export class BattleScene extends Phaser.Scene {
         run.evoStones += stones;
         earnCoins(run, coins);
         trackStat(run, 'elites');
-        ab.summary = `You found ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'} and ◉ ${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins and ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'}\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);
@@ -388,12 +415,13 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (this.kind === 'elite') {
-      showMessage(this, 'Elite defeated!', ab.summary, () => this.toMap());
+      showMessage(this, 'Trainer defeated!', ab.summary, () => this.toMap());
       return;
     }
 
     // boss
-    showMessage(this, 'Guardian defeated!', ab.summary, () => this.bossReward());
+    const bossDef = BOSSES[run.map.biome];
+    showMessage(this, `${bossDef.name} is defeated!`, ab.summary, () => this.bossReward());
   }
 
   private bossReward() {

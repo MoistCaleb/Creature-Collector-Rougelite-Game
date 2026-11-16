@@ -15,6 +15,7 @@ import {
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
+import { BOSSES } from '../data/trainers';
 import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
@@ -108,7 +109,7 @@ export class MapScene extends Phaser.Scene {
       );
       const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
       const icon = text(this, p.x, p.y - (pointy ? 6 : 8), info.icon, iconSize, '#ffffff').setOrigin(0.5);
-      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? BOSSES[map.biome].name : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
       if (!canGo && !isCurrent) {
         hex.setAlpha(visited ? 0.35 : 0.6);

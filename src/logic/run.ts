@@ -1,3 +1,4 @@
+import { BOSSES } from '../data/trainers';
 import * as storage from '../storage';
 import { BALANCE } from '../data/balance';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
@@ -63,7 +64,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   sage: { name: 'Sage', desc: 'Skill Shrines offer 4 choices instead of 3.' },
   ascendant: { name: 'Ascendant', desc: 'Prestige Altars need no sacrifice.' },
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
-  hunter: { name: 'Big Game Hunter', desc: 'Elites drop 2 Evolution Stones.' },
+  hunter: { name: 'Big Game Hunter', desc: 'Trainers drop 2 Evolution Stones.' },
   naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
   ironwill: { name: 'Iron Will', desc: 'Survivors recover 85% HP after wins.' },
   lucky: { name: 'Lucky Charm', desc: 'Coin-flip events succeed 75% of the time.' },
@@ -165,6 +166,8 @@ export interface Run {
 export interface ActiveBattle {
   kind: EncounterKind;
   enemies: Creature[];
+  /** Opponent's name for trainer battles, e.g. "Ace Trainer Rhea". */
+  trainer?: string;
   /** Win bookkeeping (XP, coins, burials) already done; only the reward choice remains. */
   settled: boolean;
   /** uids of your creatures that took part (full XP). */
@@ -322,10 +325,17 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     kind === 'boss' ? (f === 0 ? 2 : 3) : kind === 'elite' ? (f === 0 ? 2 : 3) : f === 0 ? 1 : rng.chance(0.5) ? 2 : 1;
 
   const enemies: Creature[] = [];
+  const boss = kind === 'boss' ? BOSSES[biome] : null;
   for (let i = 0; i < count; i++) {
     let pool = rng.chance(0.7) ? speciesWithElement(biome) : SPECIES;
+    if (boss) {
+      // Guardians field a themed team; their ace pairs the boss element with its partner.
+      const own = speciesWithElement(biome);
+      const ace = own.filter((sp) => sp.types.includes(boss.partner));
+      pool = i === count - 1 && ace.length ? ace : own;
+    }
     // The run's first battle is always a neutral matchup with your starter.
-    if (run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup);
+    if (!boss && run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup);
     const sp = rng.pick(pool);
     let level = BALANCE.floorBaseLevel[f] + Math.round(Math.pow(node.progress, BALANCE.rampCurve) * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
     let stage = f;
@@ -378,12 +388,12 @@ export interface XpResult {
 }
 
 export function battleCoins(enemies: Creature[], kind: EncounterKind): number {
-  const mult = kind === 'boss' ? 3 : kind === 'elite' ? 2 : 1;
+  const mult = kind === 'boss' ? 3 : kind === 'elite' ? BALANCE.trainerCoinMult : 1;
   return Math.round(enemies.reduce((s, e) => s + BALANCE.coinsBase + e.level * BALANCE.coinsPerEnemyLevel, 0) * mult);
 }
 
 export function battleXp(enemies: Creature[], kind: EncounterKind, floor = 0): number {
-  const mult = kind === 'boss' ? 2 : kind === 'elite' ? 1.5 : 1;
+  const mult = kind === 'boss' ? 2 : kind === 'elite' ? BALANCE.trainerXpMult : 1;
   return Math.round(enemies.reduce((s, e) => s + xpToNext(e.level) * BALANCE.xpYield[floor], 0) * mult);
 }
 

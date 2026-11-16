@@ -36,7 +36,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Node | Effect |
 |---|---|
 | Battle | Wild trainer/creature fight. Win → rewards **or** catch |
-| Elite | Harder fight, better rewards (evolution items) |
+| Trainer | Named trainer's team. No catching; ×3 XP, ×4 coins and an Evolution Stone |
 | Level Up | Focus: one creature +6/+9/+12 levels (by floor) · Team drills: everyone incl. bench +3/+4/+5 · Catch-up camp: raise everyone to within 5 levels of your strongest |
 | Prestige (star) | Prestige a creature |
 | Skill | Choose 1 of 3 skill buffs |
@@ -45,7 +45,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Shop | Spend coins: 5 random items, reroll for a rising fee. At least one per floor |
 | Treasure | Choose: coins or a free item |
 | Event (?) | One of 10 risk/reward events (Blood Bargain, Mysterious Egg, Gambler, Training Dummy, Ancient Tome, Healing Spring, Ambush, Shrine of Fate, Lost Hatchling, Cursed Idol) |
-| Boss | End of floor |
+| Boss | End of floor: a named guardian with a special battle rule (see Bosses) |
 
 ## Team
 - **Start:** pick 1 starter from 3 random choices (from your unlocked starter pool).
@@ -97,6 +97,26 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Level Up | Small | Flat stat buff |
 | Skill Buff | Sideways | Upgrades a skill's tier (numbers → added effect) |
 
+### Bosses
+Each floor's guardian is chosen by the floor's element. Its team is all that element, and its ace
+pairs it with a partner element. Every boss has one rule, shown on an intro card and on screen
+during the fight:
+
+| Element | Boss | Rule |
+|---|---|---|
+| Fire | Ignis, the Kiln Warden | Scorched Ground: your active creature takes 1/16 HP each turn unless Fire type |
+| Frost | Hela, Queen of the Whiteout | Whiteout: your creatures enter with -1 Speed |
+| Nature | Bramble, the Thornmother | Thornwall: hitting her creatures hurts you for 15% of the damage |
+| Earth | Gorran, the Unmoved | Bulwark: his creatures enter with +1 Defense |
+| Storm | Volta, the Living Gale | Tailwind: she always moves first unless you use a priority move |
+| Water | Maren, Keeper of the Undertow | Riptide: creatures you send in take 1/8 HP (never fatal) |
+| Metal | Forge, the Iron Engine | Overclock: his active creature gains +1 Attack every turn |
+| Toxic | Morva, the Plague Bloom | Miasma: your creatures are poisoned on entry |
+| Shadow | Nyx, the Eclipse | Dread: your creatures enter with -1 Attack |
+| Light | Solenne, the Radiant | Sanctuary: her active creature heals 1/12 HP every turn |
+| Spirit | Wraithe, the Hollow King | Death Curse: each of his fainting creatures hits your active one for 1/5 HP |
+| Dragon | Vharos, the Last Wyrm | Dragon's Pride: his ace enters with +1 Attack and +1 Speed |
+
 ### Boss reward (after each floor boss), choose 1
 - Full heal (team + bench)
 - Full team prestige
@@ -134,7 +154,7 @@ Proposed math:
 - Pure types count their type once (no ×2.25 weakness possible) but get a bigger same-type-attack bonus.
 
 ## Coins & shops
-- **Coins** are per-run. Earned from battles (6 + 2 x enemy level each; elites x2, bosses x3).
+- **Coins** are per-run. Earned from battles (10 + 0.8 x enemy level each; trainers x4, bosses x3).
   Catching forfeits coins along with XP.
 - **Shop stock** (5 of): Potion, Full Restore, Training Manual (+2 lv), Skill Scroll (+1 tier),
   Evolution Stone, Prestige Sigil (no sacrifice), Recruit (biome creature at ~60% of your top level;
@@ -191,7 +211,7 @@ Runs unlock:
   | Scholar | Upgrade 15 moves | Sage: Skill Shrines offer 4 choices |
   | Ascension | Earn 10 prestige stars | Ascendant: Prestige Altars need no sacrifice |
   | Second Wind | Survive 3 team wipes | Bodyguard: bench steps in fully healed |
-  | Elite Hunter | Defeat 10 elites | Big Game Hunter: elites drop 2 stones |
+  | Trainer Hunter | Defeat 10 trainers | Big Game Hunter: trainers drop 2 stones |
   | Naturalist | Catch 40 different species | Naturalist: +25% XP from wild battles |
   | Guardian Slayer | Defeat 15 floor bosses | Iron Will: survivors recover 85% after wins |
   | Treasure Hunter | Open 15 treasure chests | Lucky Charm: coin-flip events succeed 75% |

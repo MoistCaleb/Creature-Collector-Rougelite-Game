@@ -181,7 +181,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Fight',
-        sub: () => 'Elite battle · win an Evolution Stone',
+        sub: () => 'Trainer battle · big XP, coins and an Evolution Stone',
         run: () => ({ text: 'Battle!', battle: 'elite' }),
       },
     ],
