@@ -1,5 +1,5 @@
 import { hashString } from '../logic/rng';
-import { registerSignature, SIGNATURE_KINDS, type SignatureKind } from './moves';
+import { registerSignature, type SignatureKind } from './moves';
 import type { Element, TypePair } from './types';
 
 export interface BaseStats {
@@ -19,14 +19,18 @@ export interface Species {
 
 /** Pick a signature's mechanic from the words in its name so the effect matches it. */
 const NAME_KINDS: [RegExp, SignatureKind][] = [
-  [/Pounce|Dive|Step|Dash|Kick|Peck|Sting|Ambush|Talon/, 'ambush'],
+  [/Pounce|Dive|Step|Dash|Kick|Peck|Sting|Ambush|Talon|Strike|Tunnel/, 'ambush'],
   [/Claw|Fang|Bite|Reap|Guillotine|Verdict|Blade|Saber|Lance|Tusk|Rend/, 'finisher'],
-  [/Crash|Slam|Fist|Fall|Quake|Fury|Roar|Hammer|Eruption|Burst$|Firestorm|Overcharge/, 'overdrive'],
-  [/Barrage|Flurry|Spores|Shards|Storm|Swarm|Gale|Cyclone|Monsoon|Pollen|Petal|Dust/, 'frenzy'],
+  [/Crash|Slam|Fist|Fall|Quake|Fury|Roar|Hammer|Eruption|Burst$|Firestorm|Overcharge|Cannon|Crush|Blast/, 'overdrive'],
+  [/Barrage|Flurry|Spores|Shards|Storm|Swarm|Gale|Cyclone|Monsoon|Pollen|Petal|Dust|Breath|Surge/, 'frenzy'],
+  [/Ray|Arc|Gear|Flame|Beam/, 'dualstrike'],
   [/Siphon|Tongue|Gulp|Devour|Drain|Mycelium|Leech|Soul|Bog|Kelp|Snare|Bind|Web|Coil/, 'sap'],
   [/Howl|Glare|Curse|Haunt|Wail|Dazzle|Hex|Pestilence|Nightshade|Lure|Chill|Touch|Whiteout/, 'curse'],
-  [/Will|Shell|Guard|Core|Bloom|Fortress|Halo|Iron|Plate|Lantern|Pearl/, 'fortress'],
+  [/Will|Shell|Guard|Core|Bloom|Fortress|Lantern/, 'fortress'],
 ];
+
+/** Names that match nothing above get an attacking mechanic (never a heal or a debuff). */
+const ATTACK_KINDS: SignatureKind[] = ['dualstrike', 'finisher', 'frenzy', 'sap', 'ambush', 'overdrive'];
 function kindFromName(name: string): SignatureKind | undefined {
   for (const [re, k] of NAME_KINDS) if (re.test(name)) return k;
   return undefined;
@@ -49,7 +53,7 @@ function f(
   kind?: SignatureKind,
 ): Species {
   const n = names.split('/') as [string, string, string];
-  const k = kind ?? kindFromName(sigName) ?? SIGNATURE_KINDS[hashString(id + ':sig') % SIGNATURE_KINDS.length];
+  const k = kind ?? kindFromName(sigName) ?? ATTACK_KINDS[hashString(id + ':sig') % ATTACK_KINDS.length];
   const sig = registerSignature(id, sigName, t1, k);
   return { id, names: n, types: [t1, t2], base: { hp, atk, def, spd }, signature: sig.id };
 }

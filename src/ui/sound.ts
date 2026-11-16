@@ -164,6 +164,94 @@ export const sfx = {
         break;
     }
   },
+  /** The sound of an animation style (bite, wave, roar...). */
+  style(kind: string) {
+    switch (kind) {
+      case 'bite':
+        noise(0.06, { freq: 2500, vol: 0.4, type: 'bandpass', q: 3 });
+        noise(0.08, { freq: 1800, vol: 0.45, type: 'bandpass', q: 3, delay: 0.12 });
+        break;
+      case 'slash':
+        noise(0.16, { freq: 1200, to: 7000, vol: 0.3, type: 'bandpass', q: 2 });
+        break;
+      case 'whip':
+        noise(0.12, { freq: 800, to: 6000, vol: 0.25, type: 'bandpass' });
+        noise(0.04, { freq: 5000, vol: 0.4, type: 'highpass', delay: 0.18 });
+        break;
+      case 'bind':
+        noise(0.35, { freq: 400, to: 1200, vol: 0.2, type: 'bandpass', q: 4 });
+        break;
+      case 'quake':
+        tone(55, 0.6, { type: 'sawtooth', vol: 0.3, slide: 35 });
+        noise(0.6, { freq: 220, vol: 0.45 });
+        break;
+      case 'geyser':
+        noise(0.45, { freq: 300, to: 3000, vol: 0.35, type: 'bandpass' });
+        break;
+      case 'pillar':
+        tone(880, 0.5, { type: 'triangle', vol: 0.18, slide: 1760 });
+        tone(1320, 0.5, { type: 'sine', vol: 0.12 });
+        break;
+      case 'wave':
+        noise(0.6, { freq: 300, to: 1500, vol: 0.35, type: 'lowpass' });
+        break;
+      case 'vortex':
+        noise(0.5, { freq: 600, to: 2400, vol: 0.25, type: 'bandpass', q: 6 });
+        break;
+      case 'rain':
+        for (let i = 0; i < 6; i++) noise(0.05, { freq: 3000 + i * 300, vol: 0.15, type: 'highpass', delay: i * 0.05 });
+        break;
+      case 'breath':
+        noise(0.45, { freq: 900, to: 400, vol: 0.4, type: 'bandpass', q: 0.7 });
+        break;
+      case 'beam':
+        tone(1600, 0.3, { type: 'sawtooth', vol: 0.1, slide: 800 });
+        tone(800, 0.3, { type: 'square', vol: 0.08 });
+        break;
+      case 'gather':
+        tone(300, 0.35, { type: 'sine', vol: 0.18, slide: 1200, attack: 0.1 });
+        break;
+      case 'roar':
+        noise(0.55, { freq: 500, to: 150, vol: 0.5, type: 'bandpass', q: 1.5 });
+        tone(90, 0.5, { type: 'sawtooth', vol: 0.25, slide: 60 });
+        break;
+      case 'zap':
+        tone(2000, 0.12, { type: 'square', vol: 0.12, slide: 400 });
+        noise(0.12, { freq: 6000, vol: 0.2, type: 'highpass' });
+        break;
+      case 'lob':
+        tone(300, 0.35, { type: 'sine', vol: 0.18, slide: 120 });
+        break;
+      case 'volley':
+        for (let i = 0; i < 3; i++) noise(0.05, { freq: 4000, vol: 0.18, type: 'highpass', delay: i * 0.06 });
+        break;
+      case 'cloud':
+        noise(0.5, { freq: 1500, to: 500, vol: 0.18, type: 'lowpass' });
+        break;
+      case 'curse':
+        tone(220, 0.5, { type: 'sine', vol: 0.18, slide: 110 });
+        tone(233, 0.5, { type: 'sine', vol: 0.14, slide: 116 });
+        break;
+      case 'burst':
+        noise(0.4, { freq: 3000, to: 120, vol: 0.5 });
+        break;
+      case 'leap':
+        tone(300, 0.25, { type: 'square', vol: 0.12, slide: 700 });
+        break;
+      case 'dash':
+        noise(0.15, { freq: 400, to: 2500, vol: 0.25, type: 'bandpass' });
+        break;
+      case 'shield':
+        [0, 7, 12].forEach((s, i) => tone(note(s, 880), 0.25, { type: 'triangle', vol: 0.14, delay: i * 0.05 }));
+        break;
+      case 'fade':
+        tone(700, 0.35, { type: 'sine', vol: 0.15, slide: 200 });
+        break;
+      case 'mend':
+        [0, 4, 7, 12].forEach((s, i) => tone(note(s, 784), 0.2, { type: 'sine', vol: 0.14, delay: i * 0.07 }));
+        break;
+    }
+  },
   hit(mult = 1) {
     if (mult > 1.01) {
       noise(0.25, { freq: 3000, to: 200, vol: 0.55 });

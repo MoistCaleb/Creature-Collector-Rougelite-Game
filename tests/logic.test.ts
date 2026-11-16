@@ -5,6 +5,7 @@ import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, 
 import { Battle } from '../src/logic/battle';
 import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, resolvePending, stats } from '../src/logic/creature';
 import { BOSSES } from '../src/data/trainers';
+import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
 import { elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
@@ -581,3 +582,28 @@ function mkMetaBoss(): Meta {
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   };
 }
+
+describe('move animations match their names', () => {
+  const styleOf = (name: string) => moveStyle(Object.values(MOVES).find((m) => m.name === name)!);
+  it('picks the animation from the move name', () => {
+    expect(styleOf('Venom Fang')).toBe('bite');
+    expect(styleOf('Tsunami')).toBe('wave');
+    expect(styleOf('Thunder Crash')).toBe('bolt');
+    expect(styleOf('Wave Crash')).toBe('wave');
+    expect(styleOf('Tusk Lance')).toBe('dash');
+    expect(styleOf('Quake')).toBe('quake');
+    expect(styleOf('Ember Pounce')).toBe('leap');
+    expect(styleOf('Stone Skin')).toBe('shield');
+    expect(styleOf('Photosynthesis')).toBe('mend');
+  });
+  it('gives nearly every move a named animation', () => {
+    const generic = Object.values(MOVES).filter((m) => moveStyle(m) === 'element').map((m) => m.name);
+    expect(generic.length).toBeLessThanOrEqual(3);
+  });
+  it('signature moves named like attacks are attacks', () => {
+    for (const m of Object.values(MOVES)) {
+      if (!m.signature) continue;
+      if (/Cannon|Crush|Strike|Ray|Breath|Blast|Surge|Tunnel|Arc/.test(m.name)) expect(m.kind).toBe('attack');
+    }
+  });
+});

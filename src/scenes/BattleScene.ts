@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
-import { attackImpact, attackTravel, damageNumber, ensureFxTextures, faintFx, healFx, playEvolution, statusFx } from '../ui/fx';
+import { damageNumber, ensureFxTextures, faintFx, healFx, playEvolution, statusFx } from '../ui/fx';
+import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
@@ -289,6 +290,8 @@ export class BattleScene extends Phaser.Scene {
     this.fast = false;
     this.actions.setVisible(false);
     let lastEl: Element = 'Fire';
+    let lastStyle: Style = 'element';
+    let attackerHome: { x: number; y: number } | undefined;
     // "X used Y!" is shown as the attack starts, so the hit lands right as the effect arrives.
     let shownEarly: BattleEvent | null = null;
     for (let idx = 0; idx < events.length; idx++) {
@@ -318,21 +321,14 @@ export class BattleScene extends Phaser.Scene {
           lastEl = def?.element ?? lastEl;
           const s = this.spriteOf(ev.side);
           const target = this.spriteOf(ev.side === 'player' ? 'enemy' : 'player');
-          const dx = ev.side === 'player' ? 30 : -30;
-          const home = { x: s.x, y: s.y };
           const next = events[idx + 1];
           if (next?.kind === 'text') {
             this.msg.setText(next.text);
             shownEarly = next;
           }
-          this.tweens.add({ targets: s, x: home.x + dx, y: home.y + (ev.side === 'player' ? -12 : 12), yoyo: true, duration: 120 });
-          await this.wait(130);
-          if (def?.kind === 'attack') await attackTravel(this, def.element, home, { x: target.x, y: target.y });
-          else if (def) {
-            // Buffs and heals glow on the user; debuffs reach out to the target.
-            sfx.attack(def.element);
-            if (def.kind === 'debuff') await attackTravel(this, def.element, home, { x: target.x, y: target.y });
-          }
+          attackerHome = { x: ev.side === 'player' ? PLAYER_POS.x : ENEMY_POS.x, y: ev.side === 'player' ? PLAYER_POS.y : ENEMY_POS.y };
+          // Each move animates by what its name describes: bites bite, waves crash, roars shake.
+          if (def) lastStyle = await playMove(this, def, s, target);
           // Status moves have no hit to follow, so keep their name up long enough to read.
           if (def?.kind !== 'attack') await this.wait(320);
           break;
@@ -344,7 +340,7 @@ export class BattleScene extends Phaser.Scene {
           if (ev.mult !== undefined) {
             const big = ev.mult > 1.01;
             const weak = ev.mult < 0.99;
-            attackImpact(this, ev.element ?? lastEl, at, big ? 1.7 : weak ? 0.6 : 1);
+            moveImpact(this, lastStyle, ev.element ?? lastEl, at, big ? 1.7 : weak ? 0.6 : 1, attackerHome);
             sfx.hit(ev.mult);
             if (big) {
               // Hit-stop, flash and a heavy shake sell a super-effective blow.
