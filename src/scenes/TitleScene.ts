@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
 import { clearSavedRun, hasSavedRun, loadRun, PASSIVES } from '../logic/run';
 import { state } from '../state';
-import { openPicker } from '../ui/picker';
+import { installOption, onInstallChange, promptInstall } from '../pwa';
+import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { background, button, COLORS, H, muteButton, text, W } from '../ui/widgets';
@@ -57,10 +58,40 @@ export class TitleScene extends Phaser.Scene {
 
     button(this, W / 2, 550, 200, 50, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 17 });
 
+    // "Install app" appears when the browser can install the game (or on iPhone, with steps).
+    let install: Phaser.GameObjects.Container | null = null;
+    const drawInstall = () => {
+      install?.destroy();
+      install = null;
+      const opt = installOption();
+      if (!opt) return;
+      install = button(
+        this,
+        W / 2,
+        612,
+        200,
+        44,
+        '📲 Install app',
+        () => {
+          if (opt === 'prompt') void promptInstall().then(() => this.scene.restart());
+          else
+            showMessage(
+              this,
+              'Install on iPhone',
+              'In Safari, tap the Share button (the square with an arrow), then "Add to Home Screen".\n\nThe game then opens fullscreen from its own icon and works offline.',
+            );
+        },
+        { fontSize: 16, color: 0x2f4a7a },
+      );
+    };
+    drawInstall();
+    const off = onInstallChange(drawInstall);
+    this.events.once('shutdown', off);
+
     text(
       this,
       W / 2,
-      H - 130,
+      H - 90,
       'Climb 3 floors. Pick your path.\nCatch creatures, evolve, prestige.\nDeath is permanent.',
       16,
       COLORS.textDim,

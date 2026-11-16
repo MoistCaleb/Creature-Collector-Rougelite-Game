@@ -1,5 +1,8 @@
 import { startGame } from './boot';
+import { setupPwa } from './pwa';
 import { initStorage } from './storage';
+
+setupPwa();
 
 // Load the save (cloud copy when available) before any game state is read.
 const el = document.getElementById('game');

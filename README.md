@@ -15,6 +15,22 @@ npm test           # logic unit tests
 npx vite-node scripts/simulate.ts 500   # balance simulator: plays 500 runs headlessly
 ```
 
+## Install it as an app
+
+The game is an installable web app (PWA): it opens fullscreen from its own home-screen icon and
+works offline after the first visit. It needs to be served from its own web address:
+
+- **GitHub Pages:** `.github/workflows/deploy.yml` builds and publishes `dist/` on every push to
+  `main`. One-time setup: repository **Settings → Pages → Source: GitHub Actions**. (Pages on a
+  private repository needs a paid GitHub plan; on a public one it's free.)
+- **Any static host** (Netlify, Cloudflare Pages, Vercel…): run `npm run build` and upload `dist/`.
+
+Then open the site on your phone:
+- **Android (Chrome):** tap **📲 Install app** on the title screen.
+- **iPhone (Safari):** tap Share → **Add to Home Screen** (the title screen button explains this).
+
+Saves on the installed app live on that device. The claude.ai preview keeps its own cloud save.
+
 ## What's in the first playable
 
 - **Starter pick** — 3 random from your unlocked pool.
