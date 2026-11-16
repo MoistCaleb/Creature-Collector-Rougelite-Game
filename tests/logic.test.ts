@@ -4,11 +4,11 @@ import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, resolvePending, stats } from '../src/logic/creature';
+import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
 import { BOSSES } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
-import { elementPool, MOVES } from '../src/data/moves';
+import { attackId, elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS } from '../src/logic/events';
 import { battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
@@ -671,5 +671,25 @@ describe('caught creatures keep their level and evolution', () => {
     expect(catchCreature(run, createCreature('frostling', 10))!.c.level).toBe(13);
     const capped = catchCreature(run, createCreature('frostling', 30))!.c; // stage 1 cap is 30
     expect(capped.level).toBe(levelCap(capped));
+  });
+});
+
+describe('learn-move recommendation', () => {
+  const buff = Object.values(MOVES).find((m) => m.kind === 'buff')!.id;
+  it('suggests forgetting the weakest same-element attack for a stronger one', () => {
+    const c = createCreature('emberkit', 30);
+    c.moves = [{ id: attackId('Fire', 0), tier: 1 }, { id: attackId('Fire', 1), tier: 1 }, { id: attackId('Fire', 2), tier: 1 }, { id: buff, tier: 1 }];
+    expect(recommendForget(c, attackId('Fire', 3))).toBe(0);
+  });
+  it('suggests not learning a move that is worse than everything', () => {
+    const c = createCreature('emberkit', 30);
+    c.moves = [{ id: attackId('Fire', 3), tier: 3 }, { id: attackId('Fire', 2), tier: 3 }, { id: attackId('Water', 3), tier: 3 }, { id: buff, tier: 3 }];
+    expect(recommendForget(c, attackId('Fire', 0))).toBeNull();
+  });
+  it('never suggests dropping the only attack for a status move', () => {
+    const c = createCreature('emberkit', 30);
+    const buffs = Object.values(MOVES).filter((m) => m.kind === 'buff').map((m) => m.id);
+    c.moves = [{ id: attackId('Fire', 0), tier: 1 }, { id: buffs[0], tier: 1 }, { id: buffs[1], tier: 1 }, { id: buffs[2], tier: 1 }];
+    expect(recommendForget(c, buffs[3])).not.toBe(0);
   });
 });

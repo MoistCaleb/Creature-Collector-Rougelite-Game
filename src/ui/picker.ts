@@ -11,6 +11,8 @@ export interface PickOption {
   color?: number;
   /** Creature sprite shown at the left of a plain option. */
   icon?: Creature;
+  /** Small gold tag on the option, e.g. "RECOMMENDED". */
+  badge?: string;
 }
 
 /** A read-only line with a creature sprite, listed above the options. */
@@ -92,6 +94,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
           color: o.color,
           fontSize: 17,
           icon: o.icon,
+          badge: o.badge,
         }),
       );
     }
