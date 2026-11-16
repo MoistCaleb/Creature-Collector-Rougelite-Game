@@ -80,6 +80,13 @@ export class TitleScene extends Phaser.Scene {
       sub: best ? `Best: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'New run every day',
     });
 
+    button(this, W / 2, 616, 320, 50, 'Battle Arena', () => this.scene.start('Arena', {}), {
+      fontSize: 17,
+      glyph: 'swords',
+      color: 0x5a2a3a,
+      sub: `Lv 50 teams from your Dex · best ${meta.arenaBest ?? 0}/5`,
+    });
+
     // "Install app" appears when the browser can install the game (or on iPhone, with steps).
     let install: Phaser.GameObjects.Container | null = null;
     const drawInstall = () => {
@@ -90,9 +97,9 @@ export class TitleScene extends Phaser.Scene {
       install = button(
         this,
         W / 2,
-        612,
+        672,
         200,
-        44,
+        40,
         'Install app',
         () => {
           if (opt === 'prompt') void promptInstall().then(() => this.scene.restart({}));

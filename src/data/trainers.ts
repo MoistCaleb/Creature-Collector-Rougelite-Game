@@ -93,8 +93,8 @@ export const BOSSES: Record<Element, BossDef> = {
 
 // ---------------------------------------------------------------- trainers (elite battles)
 
-const TRAINER_CLASSES = ['Ace Trainer', 'Veteran', 'Beast Tamer', 'Ranger', 'Duelist', 'Collector', 'Champion Hopeful', 'Drifter'];
-const TRAINER_NAMES = [
+export const TRAINER_CLASSES = ['Ace Trainer', 'Veteran', 'Beast Tamer', 'Ranger', 'Duelist', 'Collector', 'Champion Hopeful', 'Drifter'];
+export const TRAINER_NAMES = [
   'Rhea', 'Corin', 'Juno', 'Talon', 'Mira', 'Dax', 'Sable', 'Wren', 'Orrin', 'Kestrel',
   'Lyra', 'Bram', 'Petra', 'Silas', 'Nova', 'Quill', 'Rook', 'Isolde', 'Fenn', 'Zara',
 ];

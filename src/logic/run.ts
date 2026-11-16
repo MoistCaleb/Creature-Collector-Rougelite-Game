@@ -109,6 +109,9 @@ export interface Meta {
   heatUnlocked?: number;
   /** Heat chosen for the next run. */
   heat?: number;
+  /** Battle Arena team (Lv 50 mode) and best ladder result (rounds won). */
+  arenaTeam?: import('./arena').ArenaPick[];
+  arenaBest?: number;
   /** Heat levels (1-8) won on each map, for the map's Heat tokens. */
   mapHeats?: Record<string, number[]>;
   /** Today's daily run: best result and how many tries. */

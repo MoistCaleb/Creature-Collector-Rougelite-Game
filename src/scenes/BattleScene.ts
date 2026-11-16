@@ -14,8 +14,11 @@ import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
+import { Rng } from '../logic/rng';
 import {
   canEvolve,
+  getFloorCeiling,
+  setFloorCeiling,
   fallbackMove,
   hasUses,
   outOfMoves,
@@ -80,6 +83,24 @@ interface SidePanel {
   held: Phaser.GameObjects.Image;
 }
 
+/**
+ * A battle outside a run (the Lv 50 Arena, and later multiplayer): both teams are given, nothing is
+ * saved or rewarded, and `onEnd` decides what happens next.
+ */
+export interface BattleMatch {
+  team: Creature[];
+  enemies: Creature[];
+  seed: number;
+  /** Shown top-right, e.g. "ARENA". */
+  title: string;
+  /** Opponent's name, shown under the title and in the intro. */
+  opponent: string;
+  /** Chance the opponent picks a random move (lower = smarter). */
+  randomness: number;
+  background: number;
+  onEnd: (won: boolean) => void;
+}
+
 const ENEMY_POS = { x: 320, y: 200 };
 const PLAYER_POS = { x: 120, y: 370 };
 
@@ -100,12 +121,16 @@ export class BattleScene extends Phaser.Scene {
   /** Speed and auto-battle toggles, always on screen during the fight. */
   private controls!: Phaser.GameObjects.Container;
   private autoTimer: Phaser.Time.TimerEvent | null = null;
+  /** Set for battles outside a run (see BattleMatch). */
+  private match: BattleMatch | null = null;
 
   constructor() {
     super('Battle');
   }
 
-  create(data: { kind: EncounterKind }) {
+  create(data: { kind: EncounterKind; match?: BattleMatch }) {
+    this.match = data.match ?? null;
+    if (this.match) return this.createMatch(this.match);
     const run = state.run!;
     this.kind = data.kind;
     this.busy = false;
@@ -228,6 +253,67 @@ export class BattleScene extends Phaser.Scene {
         } else begin();
       })();
     }
+  }
+
+  /** A battle outside a run: same field, panels and animations; no rewards, potions or saving. */
+  private createMatch(m: BattleMatch) {
+    this.kind = 'elite';
+    this.busy = false;
+    this.enemies = m.enemies;
+    // Lv 50 stays Lv 50: a run's floor level cap doesn't apply here.
+    const ceiling = getFloorCeiling();
+    setFloorCeiling(Infinity);
+    this.events.once('shutdown', () => setFloorCeiling(ceiling));
+    this.battle = new Battle(m.team, m.enemies, new Rng(m.seed), {
+      enemyRandomness: m.randomness,
+      permadeath: false,
+      synergy: synergyMults(m.team),
+      enemySynergy: synergyMults(m.enemies),
+    });
+    this.input.on('pointerdown', () => {
+      if (this.busy) this.fast = true;
+    });
+    background(this, m.background);
+    this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
+    this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
+    this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
+    this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
+    this.enemyPanel = this.makePanel(16, 16);
+    this.playerPanel = this.makePanel(W - 16 - 270, 446);
+    this.pips = text(this, W - 16, 24, '', 16, '#ffc94d').setOrigin(1, 0);
+    text(this, W - 16, 48, m.title, 14, '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
+    text(this, 16, 96, m.opponent, 13, '#ffc94d', { fontStyle: 'bold' });
+    this.add.rectangle(12, 530, W - 24, 62, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    this.msg = text(this, 24, 540, '', 16, COLORS.text, { wordWrap: { width: W - 48 } });
+    this.actions = this.add.container(0, 0);
+    this.controls = this.add.container(0, 0);
+    this.drawControls();
+    this.refreshEnemy();
+    this.refreshPlayer();
+    const intro = `${m.opponent} wants to battle!`;
+    this.msg.setText(intro);
+    this.showActions();
+    ensureFxTextures(this);
+    playMusic('battle');
+    const entry = this.battle.start();
+    this.enemySprite.setVisible(false);
+    this.playerSprite.setVisible(false);
+    this.actions.setVisible(false);
+    this.busy = true;
+    void (async () => {
+      await this.wait(250);
+      await this.enterEnemy();
+      await this.wait(200);
+      this.msg.setText(`Go, ${creatureName(this.battle.p.c)}!`);
+      await this.enterPlayer();
+      this.busy = false;
+      this.fast = false;
+      this.setSpeed();
+      this.msg.setText(intro);
+      this.actions.setVisible(true);
+      if (entry.length) this.play(entry);
+      else this.maybeAuto();
+    })();
   }
 
   /** The enemy's current creature takes the field: wild ones burst out of the terrain, others from a hexagon. */
@@ -362,6 +448,8 @@ export class BattleScene extends Phaser.Scene {
     });
     const canSwap = this.battle.player.some((x, i) => i !== this.battle.pActive && isAlive(x.c));
     this.actions.add(button(this, W / 2 - 56, 768, 106, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));
+    // No potions outside a run.
+    if (this.match) return;
     const potions = state.run!.potions ?? 0;
     const hurt = this.battle.player.some((x) => needsPotion(x.c));
     this.actions.add(
@@ -572,7 +660,7 @@ export class BattleScene extends Phaser.Scene {
         }
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
-          if (ev.side === 'enemy' && ev.status) trackStat(state.run!, 'statusInflicted');
+          if (ev.side === 'enemy' && ev.status && !this.match) trackStat(state.run!, 'statusInflicted');
           this.setStatus(panel, ev.status);
           if (ev.status) {
             const s = this.spriteOf(ev.side);
@@ -607,12 +695,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private afterTurn() {
-    const ab = state.run!.activeBattle;
+    const ab = this.match ? null : state.run!.activeBattle;
     if (ab) {
       ab.fought = [...new Set([...(ab.fought ?? []), ...this.battle.fought])];
       if (this.battle.spared) ab.spared = true;
     }
-    persist();
+    if (!this.match) persist();
     switch (this.battle.outcome()) {
       case 'ongoing':
         this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
@@ -624,10 +712,20 @@ export class BattleScene extends Phaser.Scene {
         this.openSwitch(true);
         return;
       case 'win':
-        return this.onWin();
+        return this.match ? this.endMatch(true) : this.onWin();
       case 'lose':
-        return this.onLose();
+        return this.match ? this.endMatch(false) : this.onLose();
     }
+  }
+
+  private endMatch(won: boolean) {
+    this.cancelAuto();
+    this.controls.setVisible(false);
+    this.actions.setVisible(false);
+    playMusic(null);
+    if (won) sfx.victory();
+    else sfx.defeat();
+    this.match!.onEnd(won);
   }
 
   // ------------------------------------------------------------ results
