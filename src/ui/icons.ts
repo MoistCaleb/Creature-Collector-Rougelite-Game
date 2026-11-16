@@ -307,6 +307,19 @@ const ICONS = {
     '....CCBB....',
     '.....BB.....',
   ],
+  // Evolution Stone: a faceted violet gem with a bright core.
+  stone: [
+    '.....pp.....',
+    '....pPPp....',
+    '...pPWPPp...',
+    '..pPWSPPPp..',
+    '.pPPSPPPPPp.',
+    '.pPPPPPPPpp.',
+    '..pPPPPPpp..',
+    '...pPPPpp...',
+    '....pPpp....',
+    '.....pp.....',
+  ],
   crystal: [
     '.....BB.....',
     '....BCCB....',

@@ -146,7 +146,7 @@ export class TeamScene extends Phaser.Scene {
       by,
       100,
       28,
-      'Evolve ◆',
+      'Evolve',
       () => {
         run.evoStones -= 1;
         const from = creatureName(c);
@@ -161,7 +161,7 @@ export class TeamScene extends Phaser.Scene {
           showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!${note}`, () => this.scene.restart({ selected: this.selected }));
         });
       },
-      { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a },
+      { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a, glyph: 'stone' },
     );
     const ref = this.selected!;
     const canMove = ref.list === 'team' ? run.bench.length < BENCH_MAX && run.team.length > 1 : run.team.length < TEAM_MAX;

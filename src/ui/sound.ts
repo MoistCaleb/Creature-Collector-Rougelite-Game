@@ -398,6 +398,12 @@ export const sfx = {
   evolveTick(i: number) {
     tone(note(i, 440), 0.06, { type: 'square', vol: 0.08 });
   },
+  stone() {
+    // A bright, ringing chime that climbs.
+    [0, 7, 12, 16, 19, 24].forEach((s, i) => tone(note(s, 659), 0.22, { type: 'triangle', vol: 0.16, delay: i * 0.07 }));
+    tone(note(24, 659), 0.9, { type: 'sine', vol: 0.1, delay: 0.42 });
+    noise(0.5, { freq: 7000, to: 2500, vol: 0.08, type: 'highpass' });
+  },
   evolveDone() {
     [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(note(s, 523), 0.18, { type: 'square', vol: 0.14, delay: i * 0.06 }));
     noise(0.6, { freq: 6000, to: 800, vol: 0.2, type: 'highpass' });
@@ -521,6 +527,7 @@ const HAPTICS: Partial<Record<keyof typeof sfx, (...args: never[]) => number | n
   bossRoar: () => [80, 40, 160],
   levelUp: () => [15, 40, 15],
   evolveDone: () => [40, 40, 40, 40, 120],
+  stone: () => [25, 40, 25, 40, 90],
 };
 for (const [key, pattern] of Object.entries(HAPTICS)) {
   const k = key as keyof typeof sfx;

@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
+import { stoneReveal } from '../ui/stoneReveal';
 import { MAX_TIER, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
@@ -162,8 +163,14 @@ export class MapScene extends Phaser.Scene {
       });
       showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', after);
     };
-    if (data.banner) showMessage(this, `Floor ${run.floor + 1}`, data.banner, next);
-    else next();
+    const afterBanner = () => (data.banner ? showMessage(this, `Floor ${run.floor + 1}`, data.banner, next) : next());
+    // New Evolution Stones since the map was last shown get their own moment.
+    const gained = run.evoStones - (run.stonesSeen ?? run.evoStones);
+    run.stonesSeen = run.evoStones;
+    if (gained > 0) {
+      persist();
+      stoneReveal(this, gained, run.evoStones, afterBanner);
+    } else afterBanner();
   }
 
   /** Creatures that leveled into a new move with a full move list ask what to forget. */
@@ -189,7 +196,7 @@ export class MapScene extends Phaser.Scene {
       onPick: (i) => {
         resolvePending(c, id, i < c.moves.length ? i : null);
         dex.move(id);
-        this.scene.restart();
+        this.scene.restart({});
       },
     });
   }
@@ -208,7 +215,8 @@ export class MapScene extends Phaser.Scene {
     }
     if (run.daily) pixelIcon(this, mx, 46, 'calendar', 16);
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
-    text(this, 150, 36, `◆ ${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, COLORS.textDim);
+    pixelIcon(this, 158, 45, 'stone', 16);
+    text(this, 170, 36, `${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: run.evoStones ? 'bold' : 'normal' });
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 67, 'skull', 14);
@@ -270,7 +278,7 @@ export class MapScene extends Phaser.Scene {
         persist();
         return this.openShop();
       default:
-        this.scene.restart();
+        this.scene.restart({});
     }
   }
 
@@ -379,7 +387,7 @@ export class MapScene extends Phaser.Scene {
     run.eventId = null;
     run.treasure = null;
     persist();
-    this.scene.restart();
+    this.scene.restart({});
   };
 
   private doHeal() {
@@ -572,14 +580,14 @@ export class MapScene extends Phaser.Scene {
         if (i === shop.slots.length) {
           pay(run, reroll);
           run.shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
-          return this.scene.restart();
+          return this.scene.restart({});
         }
         this.buy(shop.slots[i]);
       },
       cancelLabel: 'Leave shop',
       onCancel: () => {
         run.shop = null;
-        this.scene.restart();
+        this.scene.restart({});
       },
     });
   }

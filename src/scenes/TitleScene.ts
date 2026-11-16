@@ -95,7 +95,7 @@ export class TitleScene extends Phaser.Scene {
         44,
         'Install app',
         () => {
-          if (opt === 'prompt') void promptInstall().then(() => this.scene.restart());
+          if (opt === 'prompt') void promptInstall().then(() => this.scene.restart({}));
           else
             showMessage(
               this,
@@ -125,7 +125,7 @@ export class TitleScene extends Phaser.Scene {
     const run = loadRun(state.meta);
     if (!run) {
       clearSavedRun();
-      this.scene.restart();
+      this.scene.restart({});
       return;
     }
     state.run = run;
