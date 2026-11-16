@@ -168,6 +168,8 @@ export interface ActiveBattle {
   enemies: Creature[];
   /** Opponent's name for trainer battles, e.g. "Ace Trainer Rhea". */
   trainer?: string;
+  /** Wild battle won with the last creature left at 1 HP, awaiting catch or finish. */
+  spared?: boolean;
   /** Win bookkeeping (XP, coins, burials) already done; only the reward choice remains. */
   settled: boolean;
   /** uids of your creatures that took part (full XP). */

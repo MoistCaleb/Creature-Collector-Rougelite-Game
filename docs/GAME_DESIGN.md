@@ -61,9 +61,12 @@ Working doc. Items marked **[OPEN]** still need a decision.
   with no neutral opponent in the roster, it falls back to an enemy with no advantage over you.
 
 ### Catching
-- After winning a battle against a wild creature you choose:
-  - **Take the rewards** (XP, currency, items), or
-  - **Catch it** — forfeit all rewards, gain a **raw level 1** copy of that creature.
+- In wild battles the **last** wild creature can't faint: any damage that would knock it out leaves it
+  at **1 HP** and ends the battle (earlier wild creatures in a 2-creature fight faint normally).
+  The move buttons then become the choice:
+  - **Continue** — finish it off and take the rewards (XP, coins), or
+  - **Catch it** — forfeit all rewards, gain a **raw level 1** copy (bond crystal animation).
+- Trainers' and bosses' creatures always faint and can't be caught.
 - **First catch:** the first time you ever catch a species (tracked in the Dex) it arrives with a free ★.
 - **After the Dex is complete:** the bonus goes per element, per run. A catch earns ★ if at least one of its
   elements hasn't earned it yet this run, and uses up whichever of its elements were new. E.g. Fire/Water

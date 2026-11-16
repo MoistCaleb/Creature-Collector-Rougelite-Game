@@ -95,6 +95,9 @@ export class BattleScene extends Phaser.Scene {
       enemyRandomness: this.kind === 'battle' ? 0.5 : this.kind === 'elite' ? 0.25 : 0.1,
       rule: boss?.rule,
       ruleName: boss?.ruleName,
+      // Wild creatures are left at 1 HP at the end so you can choose to catch them.
+      spareLast: this.kind === 'battle',
+      spared: run.activeBattle.spared,
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -401,7 +404,10 @@ export class BattleScene extends Phaser.Scene {
 
   private afterTurn() {
     const ab = state.run!.activeBattle;
-    if (ab) ab.fought = [...new Set([...(ab.fought ?? []), ...this.battle.fought])];
+    if (ab) {
+      ab.fought = [...new Set([...(ab.fought ?? []), ...this.battle.fought])];
+      if (this.battle.spared) ab.spared = true;
+    }
     persist();
     switch (this.battle.outcome()) {
       case 'ongoing':
@@ -467,50 +473,7 @@ export class BattleScene extends Phaser.Scene {
     const fallen = ab.summary;
 
     if (this.kind === 'battle') {
-      const full = rosterFull(run);
-      openPicker(this, {
-        title: 'Victory!',
-        subtitle: `Take the spoils, or catch a creature and forfeit them.${full ? '\n(Your roster is full: release one to catch.)' : ''}${fallen}`,
-        options: [
-          { label: 'Take rewards', sub: `+${xp} XP for the team · +${coins} coins`, color: 0x3b6d4a },
-          ...this.enemies.map((e) => ({
-            label: `Catch ${creatureName(e)}`,
-            sub: `Forfeit XP and coins · raw Lv ${run.passive === 'scout' ? 5 : 1} copy${{ species: ' · ★ first catch!', type: ' · ★ new type bonus!', none: '' }[catchBonus(run, e.speciesId) ?? 'none']}`,
-            disabled: full,
-            color: 0x3a4f7a,
-          })),
-        ],
-        onPick: (i) => {
-          if (i === 0) {
-            earnCoins(run, coins);
-            sfx.coin();
-            showMessage(this, 'Rewards', `◉ +${coins} coins\n\n${this.xpLines(grantXp(run, xp, ab.fought))}`, () => this.toMap());
-          } else {
-            const wasStarter = isUnlockedStarter(run, this.enemies[i - 1].speciesId);
-            const { c, bonus: kind, newlyClaimed } = catchCreature(run, this.enemies[i - 1])!;
-            const where = run.team.includes(c) ? 'team' : 'bench';
-            const bonus =
-              kind === 'species'
-                ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.`
-                : kind === 'type'
-                  ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
-                  : '';
-            const starterNote = wasStarter ? '' : `\n\nNew starter unlocked: ${species(c).names[0]}!`;
-            persist();
-            const wild = this.enemies[i - 1];
-            playCatch(
-              this,
-              ensureCreatureTexture(this, wild.speciesId, wild.stage),
-              (this.kind === 'boss' ? 6 : 5) * SPRITE_FIT,
-              { x: PLAYER_POS.x + 30, y: PLAYER_POS.y - 30 },
-              ENEMY_POS,
-              ELEMENT_COLORS[creatureTypes(wild)[0]],
-              kind === 'species' || kind === 'type',
-              () => showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}`, () => this.toMap()),
-            );
-          }
-        },
-      });
+      this.catchChoice(xp, coins, fallen);
       return;
     }
 
@@ -522,6 +485,109 @@ export class BattleScene extends Phaser.Scene {
     // boss
     const bossDef = BOSSES[run.map.biome];
     showMessage(this, `${bossDef.name} is defeated!`, ab.summary, () => this.bossReward());
+  }
+
+  /**
+   * Wild battle won: the last creature is left at 1 HP. The move buttons become a choice:
+   * catch it (forfeit rewards) or finish it (take XP and coins).
+   */
+  private catchChoice(xp: number, coins: number, fallen: string) {
+    const run = state.run!;
+    const wild = this.enemies.find((e) => isAlive(e)) ?? null;
+    this.actions.removeAll(true);
+    this.actions.setVisible(true);
+    this.msg.setText(
+      wild ? `The wild ${creatureName(wild)} is barely standing! Catch it, or finish it for the rewards.` : 'Victory!',
+    );
+    if (wild) {
+      // It sways, weakened.
+      this.tweens.add({ targets: this.enemySprite, angle: 6, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
+      this.enemySprite.setAlpha(0.85);
+    }
+    const full = rosterFull(run);
+    const bonusTag = wild ? { species: ' · ★ first catch!', type: ' · ★ new type bonus!', none: '' }[catchBonus(run, wild.speciesId) ?? 'none'] : '';
+    const level = run.passive === 'scout' ? 5 : 1;
+    let chosen = false;
+    if (wild) {
+      this.actions.add(
+        button(this, W / 2, 652, W - 24, 72, `◈ Catch ${creatureName(wild)}`, () => {
+          if (chosen) return;
+          chosen = true;
+          this.doCatch(wild, fallen);
+        }, {
+          color: 0x3a4f7a,
+          fontSize: 20,
+          sub: full ? 'Your party is full (release one from the Team screen first)' : `Forfeit the rewards · joins at Lv ${level}${bonusTag}`,
+          enabled: !full,
+        }),
+      );
+    }
+    this.actions.add(
+      button(this, W / 2, wild ? 738 : 690, W - 24, 72, wild ? '⚔ Continue' : 'Take rewards', () => {
+        if (chosen) return;
+        chosen = true;
+        this.finishWild(wild, xp, coins, fallen);
+      }, { color: 0x3b6d4a, fontSize: 20, sub: `${wild ? 'Finish it · ' : ''}+${xp} XP for the team · +${coins} coins` }),
+    );
+  }
+
+  private doCatch(wild: Creature, fallen: string) {
+    const run = state.run!;
+    this.actions.setVisible(false);
+    this.tweens.killTweensOf(this.enemySprite);
+    this.enemySprite.setVisible(false);
+    const wasStarter = isUnlockedStarter(run, wild.speciesId);
+    const { c, bonus: kind, newlyClaimed } = catchCreature(run, wild)!;
+    const where = run.team.includes(c) ? 'team' : 'bench';
+    const bonus =
+      kind === 'species'
+        ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.`
+        : kind === 'type'
+          ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
+          : '';
+    const starterNote = wasStarter ? '' : `\n\nNew starter unlocked: ${species(c).names[0]}!`;
+    run.activeBattle = null;
+    persist();
+    this.msg.setText(`You throw a bond crystal at ${creatureName(wild)}!`);
+    playCatch(
+      this,
+      ensureCreatureTexture(this, wild.speciesId, wild.stage),
+      5 * SPRITE_FIT,
+      { x: PLAYER_POS.x + 30, y: PLAYER_POS.y - 30 },
+      ENEMY_POS,
+      ELEMENT_COLORS[creatureTypes(wild)[0]],
+      kind === 'species' || kind === 'type',
+      () => showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}${fallen}`, () => this.toMap()),
+    );
+  }
+
+  private finishWild(wild: Creature | null, xp: number, coins: number, fallen: string) {
+    const run = state.run!;
+    const ab = run.activeBattle!;
+    this.actions.setVisible(false);
+    const reward = () => {
+      earnCoins(run, coins);
+      sfx.coin();
+      const lines = this.xpLines(grantXp(run, xp, ab.fought));
+      run.activeBattle = null;
+      persist();
+      showMessage(this, 'Victory!', `◉ +${coins} coins\n\n${lines}${fallen}`, () => this.toMap());
+    };
+    if (!wild) return reward();
+    // Finish it: the final blow and the faint.
+    wild.hp = 0;
+    const s = this.enemySprite;
+    this.tweens.killTweensOf(s);
+    s.setAngle(0);
+    this.msg.setText(`The wild ${creatureName(wild)} fainted!`);
+    this.enemyPanel.bar.set(0, stats(wild).hp, true);
+    sfx.hit(1);
+    sfx.faint();
+    s.setTintFill(0xffffff);
+    faintFx(this, s, ELEMENT_COLORS[creatureTypes(wild)[0]]);
+    this.tweens.add({ targets: s, alpha: 0, y: s.y + 40, scaleY: s.scaleY * 0.2, duration: 450 });
+    this.pips.setText('○'.repeat(this.battle.enemy.length));
+    this.time.delayedCall(700, reward);
   }
 
   private bossReward() {

@@ -607,3 +607,42 @@ describe('move animations match their names', () => {
     }
   });
 });
+
+describe('wild creatures are left at 1 HP to catch', () => {
+  const mk = (id: string, level: number) => {
+    const c = createCreature(id, level);
+    c.hp = stats(c).hp;
+    return c;
+  };
+  const atk = (c: ReturnType<typeof mk>) => c.moves.findIndex((m) => moveDef(m).kind === 'attack');
+
+  it('stops the last wild creature at 1 HP and ends the battle', () => {
+    const me = mk(SPECIES[0].id, 60);
+    const wild = mk(SPECIES[5].id, 2);
+    const b = new Battle([me], [wild], new Rng(4), { spareLast: true });
+    for (let t = 0; t < 10 && b.outcome() === 'ongoing'; t++) b.takeTurn({ kind: 'move', index: atk(me) });
+    expect(b.outcome()).toBe('win');
+    expect(b.spared).toBe(true);
+    expect(wild.hp).toBe(1);
+  });
+
+  it('only spares the last one: earlier wild creatures faint normally', () => {
+    const me = mk(SPECIES[0].id, 60);
+    const first = mk(SPECIES[5].id, 2);
+    const second = mk(SPECIES[9].id, 2);
+    const b = new Battle([me], [first, second], new Rng(4), { spareLast: true });
+    for (let t = 0; t < 20 && b.outcome() === 'ongoing'; t++) b.takeTurn({ kind: 'move', index: atk(me) });
+    expect(first.hp).toBe(0);
+    expect(second.hp).toBe(1);
+    expect(b.outcome()).toBe('win');
+  });
+
+  it('trainer and boss creatures still faint', () => {
+    const me = mk(SPECIES[0].id, 60);
+    const foe = mk(SPECIES[5].id, 2);
+    const b = new Battle([me], [foe], new Rng(4));
+    for (let t = 0; t < 10 && b.outcome() === 'ongoing'; t++) b.takeTurn({ kind: 'move', index: atk(me) });
+    expect(foe.hp).toBe(0);
+    expect(b.spared).toBe(false);
+  });
+});

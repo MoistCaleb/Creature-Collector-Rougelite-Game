@@ -48,17 +48,23 @@ export class Battle {
   /** A floor boss's special rule, if any. */
   readonly rule: BossRule | null;
   private ruleName: string;
+  /** Wild battles: the last enemy is left at 1 HP instead of fainting, so it can be caught. */
+  private spareLast: boolean;
+  /** The last enemy has been worn down to 1 HP: the battle is won and it awaits catch or finish. */
+  spared: boolean;
 
   constructor(
     playerTeam: Creature[],
     enemyTeam: Creature[],
     rng: Rng = new Rng(),
-    opts: { playerDamageMult?: number; enemyRandomness?: number; rule?: BossRule; ruleName?: string } = {},
+    opts: { playerDamageMult?: number; enemyRandomness?: number; rule?: BossRule; ruleName?: string; spareLast?: boolean; spared?: boolean } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
     this.rule = opts.rule ?? null;
     this.ruleName = opts.ruleName ?? 'The field';
+    this.spareLast = opts.spareLast ?? false;
+    this.spared = opts.spared ?? false;
     this.player = playerTeam.map(fresh);
     this.enemy = enemyTeam.map(fresh);
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
@@ -130,7 +136,7 @@ export class Battle {
   outcome(): BattleOutcome {
     // A double knockout (e.g. recoil on the final blow) counts as a loss.
     if (this.player.every((x) => !isAlive(x.c))) return 'lose';
-    if (this.enemy.every((x) => !isAlive(x.c))) return 'win';
+    if (this.spared || this.enemy.every((x) => !isAlive(x.c))) return 'win';
     if (!isAlive(this.p.c)) return 'needSwitch';
     return 'ongoing';
   }
@@ -174,6 +180,8 @@ export class Battle {
       const playerFirst = pPri !== ePri ? pPri : this.rule === 'tailwind' ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       for (const side of order) {
+        // A spared creature is too weak to act; the battle is over.
+        if (this.spared) break;
         // A freshly sent-in enemy doesn't act on the turn its predecessor fainted.
         if (side === 'enemy' && this.e !== enemyAtStart) continue;
         const actor = side === 'player' ? this.p : this.e;
@@ -292,10 +300,10 @@ export class Battle {
     if (slot.tier >= 3 && def.element === 'Storm' && this.rng.chance(0.35)) hits += 1;
     let total = 0;
     let landed = 0;
-    for (let h = 0; h < hits && isAlive(target.c); h++) {
+    for (let h = 0; h < hits && isAlive(target.c) && !this.spared; h++) {
       const r = computeDamage(user, target, def, slot.tier, this.rng, el, powerMult);
-      const dmg = side === 'player' ? Math.round(r.dmg * this.playerDamageMult) : r.dmg;
-      target.c.hp = Math.max(0, target.c.hp - dmg);
+      const raw = side === 'player' ? Math.round(r.dmg * this.playerDamageMult) : r.dmg;
+      const dmg = this.hurt(target, raw);
       total += dmg;
       landed++;
       ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el });
@@ -319,9 +327,8 @@ export class Battle {
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
       ev.push({ kind: 'text', text: `${who} drained energy!` });
     }
-    if (def.recoil && isAlive(user.c)) {
-      const rc = Math.max(1, Math.round(total * def.recoil));
-      user.c.hp = Math.max(0, user.c.hp - rc);
+    if (def.recoil && isAlive(user.c) && !(this.spared && side === 'enemy')) {
+      const rc = this.hurt(user, Math.max(1, Math.round(total * def.recoil)));
       ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: rc });
       ev.push({ kind: 'text', text: `${who} is hurt by recoil!` });
     }
@@ -442,14 +449,31 @@ export class Battle {
     }
   }
 
+  /**
+   * Applies damage to a combatant and returns what was dealt. In wild battles the last enemy
+   * standing stops at 1 HP and is marked spared (ready to catch) instead of fainting.
+   */
+  private hurt(x: Combatant, dmg: number): number {
+    const isLastEnemy =
+      this.spareLast && this.enemy.includes(x) && this.enemy.every((o) => o === x || !isAlive(o.c));
+    const floor = isLastEnemy ? 1 : 0;
+    const before = x.c.hp;
+    x.c.hp = Math.max(floor, x.c.hp - dmg);
+    if (isLastEnemy && x.c.hp === 1 && before - dmg <= 0) this.spared = true;
+    return before - x.c.hp;
+  }
+
   private endOfTurn(ev: BattleEvent[]) {
+    if (this.spared) {
+      ev.push({ kind: 'text', text: `The wild ${creatureName(this.e.c)} is too weak to fight on!` });
+      return;
+    }
     this.ruleEndOfTurn(ev);
     for (const side of ['player', 'enemy'] as const) {
       const x = side === 'player' ? this.p : this.e;
       if (x.burn > 0 && isAlive(x.c)) {
         const max = stats(x.c).hp;
-        const dmg = Math.max(1, Math.floor(max / 12));
-        x.c.hp = Math.max(0, x.c.hp - dmg);
+        const dmg = this.hurt(x, Math.max(1, Math.floor(max / 12)));
         x.burn -= 1;
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
         ev.push({ kind: 'text', text: `${creatureName(x.c)} is hurt by its ${x.dot}!` });
