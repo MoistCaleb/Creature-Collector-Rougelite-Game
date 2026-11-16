@@ -16,6 +16,8 @@ import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
   canEvolve,
+  evolveLevel,
+  readyToEvolve,
   canPrestige,
   creatureName,
   creatureTypes,
@@ -115,7 +117,7 @@ export class BattleScene extends Phaser.Scene {
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: run.passive === 'drill' ? 1.1 : 1,
-      enemyRandomness: this.kind === 'battle' ? 0.5 : this.kind === 'elite' ? 0.25 : 0.1,
+      enemyRandomness: BALANCE.enemyRandomness[this.kind],
       rule: boss?.rule,
       ruleName: boss?.ruleName,
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
@@ -812,7 +814,7 @@ export class BattleScene extends Phaser.Scene {
 
   private bossReward() {
     const run = state.run!;
-    const evolvable = allCreatures(run).filter(canEvolve);
+    const evolvable = allCreatures(run).filter(readyToEvolve);
     const full = rosterFull(run);
     openPicker(this, {
       title: 'Choose a boon',
@@ -820,7 +822,7 @@ export class BattleScene extends Phaser.Scene {
       options: [
         { label: 'Full heal', sub: 'Heal your team and bench to full', color: 0x16614f },
         { label: 'Team prestige', sub: 'Every creature on your main team gains ★', color: 0x7a2a5a },
-        { label: 'Evolve one', sub: 'Evolve any single creature now', color: 0x4a2f7a, disabled: evolvable.length === 0 },
+        { label: 'Evolve one', sub: evolvable.length ? 'Evolve a creature that has reached its evolution level' : 'No creature has reached its evolution level (Lv 30 / 65)', color: 0x4a2f7a, disabled: evolvable.length === 0 },
         {
           label: 'Claim a guardian',
           sub: full ? 'Joins at Lv 1, already evolved (release one to make room)' : 'One of its creatures joins you at Lv 1, already evolved',
@@ -841,7 +843,7 @@ export class BattleScene extends Phaser.Scene {
         } else if (i === 2) {
           openPicker(this, {
             title: 'Evolve which creature?',
-            options: allCreatures(run).map((c) => ({ creature: c, disabled: !canEvolve(c) })),
+            options: allCreatures(run).map((c) => ({ creature: c, disabled: !readyToEvolve(c), note: canEvolve(c) && !readyToEvolve(c) ? `Evolves at Lv ${evolveLevel(c)}` : undefined })),
             onPick: (k) => {
               const c = allCreatures(run)[k];
               const from = creatureName(c);

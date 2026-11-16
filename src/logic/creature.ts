@@ -368,6 +368,12 @@ export function canEvolve(c: Creature): boolean {
   return c.stage < MAX_STAGE;
 }
 
+/** Level a creature must reach before it can evolve: 30 for the first evolution, 65 for the second. */
+export const evolveLevel = (c: Pick<Creature, 'stage'>) => STAGE_CAPS[c.stage];
+
+/** Has another evolution and has reached the level for it (floor ceilings and stars don't change this). */
+export const readyToEvolve = (c: Creature) => canEvolve(c) && c.level >= evolveLevel(c);
+
 /** Evolve: big stat jump, each attack upgrades to the next rank it doesn't know, HP keeps its missing amount. */
 export function evolve(c: Creature): boolean {
   if (!canEvolve(c)) return false;

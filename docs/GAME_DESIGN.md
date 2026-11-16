@@ -185,8 +185,10 @@ Proposed math:
   `/tools/sheet.html`).
 
 ## Level curve (target)
-- Level caps: 30 / 65 / 100 by evolution stage, +5 per ★.
-- Each floor also has a level ceiling (45 / 75 / 105) so you can't outgrow it; XP past the ceiling is stored
+- Level caps: 30 / 65 / 100 by evolution stage, +5 per ★. Evolving needs Lv 30 (first) / Lv 65 (second),
+  whatever the cap (a floor ceiling or stars don't change it), including the boss's "Evolve one" boon.
+- Enemy move choice: wild creatures pick a random move 50% of the time, trainers 10%, bosses never.
+- Each floor also has a level ceiling (45 / 70 / 100) so you can't outgrow it; XP past the ceiling is stored
   and coins are paid as at the stage cap, and the stored XP pours in when the next floor opens.
 - Healing from attacks is a small share of the damage dealt: drain moves 20%, Nature rank-3 15%, Water rank-3 15%.
 - XP earned at the cap is stored (up to 5 levels' worth) and pours in as soon as the cap rises (evolve or prestige).

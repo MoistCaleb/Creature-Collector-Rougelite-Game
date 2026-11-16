@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { moveSummary } from '../data/moves';
 import { ELEMENT_COLORS, elementTextColor } from '../data/types';
 import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
-import { BANK_LEVELS, bankedLevels, floorCapped, getFloorCeiling, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { evolveLevel, readyToEvolve, BANK_LEVELS, bankedLevels, floorCapped, getFloorCeiling, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -142,7 +142,7 @@ export class TeamScene extends Phaser.Scene {
     );
 
     const by = y0 + 176;
-    const stoneOk = run.evoStones > 0 && canEvolve(c) && c.level >= cap;
+    const stoneOk = run.evoStones > 0 && readyToEvolve(c);
     button(
       this,
       58,
@@ -221,7 +221,7 @@ export class TeamScene extends Phaser.Scene {
       { enabled: potions > 0 && needsPotion(c), fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
     );
     if (!stoneOk && run.evoStones > 0 && canEvolve(c))
-      text(this, 226, y0 + 145, 'Reach the level cap to use a stone.', 11, '#ffc94d', { wordWrap: { width: W - 244 } }).setOrigin(0, 0.5);
+      text(this, 226, y0 + 145, `Evolves at Lv ${evolveLevel(c)}.`, 11, '#ffc94d', { wordWrap: { width: W - 244 } }).setOrigin(0, 0.5);
   }
 
   /** Give, swap or take off a held item. */
