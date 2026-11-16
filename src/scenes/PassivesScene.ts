@@ -77,7 +77,7 @@ export class PassivesScene extends Phaser.Scene {
       lineSpacing: 2,
       wordWrap: { width: W - 130 },
     });
-    button(this, W - 50, 30, 80, 40, 'Back', () => this.scene.start('Title'), { fontSize: 15 });
+    button(this, W - 50, 30, 80, 40, 'Back', () => this.scene.start('Title', {}), { fontSize: 15 });
 
     // Drag / wheel to scroll, with flick momentum. A drag never counts as tapping a passive.
     const min = Math.min(TOP, H - this.listH - 16);

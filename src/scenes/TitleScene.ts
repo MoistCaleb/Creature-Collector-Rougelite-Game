@@ -51,7 +51,7 @@ export class TitleScene extends Phaser.Scene {
       button(this, W / 2, 360, 280, 64, 'CONTINUE RUN', () => this.continueRun(), { color: 0x3b6d4a, fontSize: 24 });
       button(this, W / 2, 420, 200, 40, 'New run', () => this.confirmNewRun(), { fontSize: 15 });
     } else {
-      button(this, W / 2, 380, 280, 70, 'START RUN', () => this.scene.start('MapSelect'), { color: 0x3b6d4a, fontSize: 26 });
+      button(this, W / 2, 380, 280, 70, 'START RUN', () => this.scene.start('MapSelect', {}), { color: 0x3b6d4a, fontSize: 26 });
     }
 
     const passiveLabel = () => {
@@ -65,7 +65,7 @@ export class TitleScene extends Phaser.Scene {
       320,
       58,
       passiveLabel(),
-      () => this.scene.start('Passives'),
+      () => this.scene.start('Passives', {}),
       { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Passives & achievements', fontSize: 16 },
     );
 
@@ -129,7 +129,7 @@ export class TitleScene extends Phaser.Scene {
       return;
     }
     state.run = run;
-    this.scene.start('Map');
+    this.scene.start('Map', {});
   }
 
   private startDaily(date: string) {
@@ -154,7 +154,7 @@ export class TitleScene extends Phaser.Scene {
       options: [{ label: 'Abandon and start fresh', color: 0x8a2c2c }],
       onPick: () => {
         clearSavedRun();
-        this.scene.start('MapSelect');
+        this.scene.start('MapSelect', {});
       },
       onCancel: () => {},
     });

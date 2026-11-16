@@ -448,6 +448,17 @@ export function buryFallen(run: Run): string[] {
   return fallen.map(creatureName);
 }
 
+/** Fill empty main-team slots from the front of the bench. Returns who stepped up. */
+export function fillTeamFromBench(run: Run): Creature[] {
+  const moved: Creature[] = [];
+  while (run.team.length < TEAM_MAX && run.bench.length) {
+    const c = run.bench.shift()!;
+    run.team.push(c);
+    moved.push(c);
+  }
+  return moved;
+}
+
 /** Main team wiped: bench becomes the team. Returns false if the run is over. */
 export function promoteBench(run: Run): boolean {
   buryFallen(run);

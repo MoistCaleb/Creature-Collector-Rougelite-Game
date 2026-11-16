@@ -117,7 +117,7 @@ export class EndScene extends Phaser.Scene {
 
     button(this, W / 2, 752, 260, 56, 'Back to title', () => {
       state.run = null;
-      this.scene.start('Title');
+      this.scene.start('Title', {});
     }, { color: 0x3b6d4a, fontSize: 20 });
   }
 }

@@ -73,6 +73,6 @@ export class StarterScene extends Phaser.Scene {
     state.run = this.daily
       ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
       : startRun(state.meta, id, Date.now(), this.mapId);
-    this.scene.start('Map');
+    this.scene.start('Map', {});
   }
 }

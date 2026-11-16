@@ -19,7 +19,7 @@ export class MapSelectScene extends Phaser.Scene {
     const meta = state.meta;
     text(this, W / 2 + 20, 30, 'Choose a map', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2 + 20, 60, `Runs won: ${meta.wins}`, 14, COLORS.textDim).setOrigin(0.5);
-    button(this, 40, 28, 64, 36, '', () => this.scene.start('Title'), { fontSize: 15, glyph: 'back' });
+    button(this, 40, 28, 64, 36, '', () => this.scene.start('Title', {}), { fontSize: 15, glyph: 'back' });
     // Heat (difficulty) picker, once the first run is won.
     const unlocked = meta.heatUnlocked ?? 0;
     if (unlocked > 0) {

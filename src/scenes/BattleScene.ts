@@ -31,6 +31,7 @@ import {
   battleCoins,
   battleXp,
   buryFallen,
+  fillTeamFromBench,
   catchCreature,
   clearFloor,
   grantXp,
@@ -620,7 +621,10 @@ export class BattleScene extends Phaser.Scene {
 
   private fallenNote(): string {
     const fallen = buryFallen(state.run!);
-    return fallen.length ? `\n\nLost forever: ${fallen.join(', ')}` : '';
+    if (!fallen.length) return '';
+    // Bench creatures step up to fill the empty slots.
+    const up = fillTeamFromBench(state.run!).map(creatureName);
+    return `\n\nLost forever: ${fallen.join(', ')}${up.length ? `\nFrom the bench: ${up.join(', ')} joined the team` : ''}`;
   }
 
   private onWin() {
