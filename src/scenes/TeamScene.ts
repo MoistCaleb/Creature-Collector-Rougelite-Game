@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { moveSummary } from '../data/moves';
+import { maxUses, moveSummary } from '../data/moves';
 import { ELEMENT_COLORS, elementTextColor } from '../data/types';
 import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
-import { evolveLevel, readyToEvolve, BANK_LEVELS, bankedLevels, floorCapped, getFloorCeiling, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
+import { usesLeft, evolveLevel, readyToEvolve, BANK_LEVELS, bankedLevels, floorCapped, getFloorCeiling, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -123,7 +123,9 @@ export class TeamScene extends Phaser.Scene {
       // One move per row, full width; long effect lists shrink to fit rather than overlap.
       const y = y0 + 68 + i * 16;
       this.add.rectangle(18, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
-      const line = text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · T${m.tier}`, 11, COLORS.text);
+      const left = usesLeft(m);
+      const uses = Number.isFinite(left) ? ` · ${left}/${maxUses(d)} uses` : '';
+      const line = text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · T${m.tier}${uses}`, 11, left === 0 ? '#e0524a' : COLORS.text);
       const room = W - 48;
       if (line.width > room) line.setScale(room / line.width, 1);
     });

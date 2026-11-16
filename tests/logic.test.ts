@@ -4,11 +4,11 @@ import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
+import { fallbackMove, hasUses, outOfMoves, restoreUses, usesLeft, readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
 import { BOSSES } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
-import { attackId, elementPool, MOVES } from '../src/data/moves';
+import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
 import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
@@ -1166,5 +1166,36 @@ describe('favorite line', () => {
     toggleFavorite(m, 'emberkit');
     toggleFavorite(m, 'emberkit');
     expect(m.favorite).toBeUndefined();
+  });
+});
+
+describe('limited move uses', () => {
+  it('basic attacks are unlimited; strong attacks, heals and status moves are limited', () => {
+    expect(maxUses(MOVES[attackId('Fire', 0)])).toBe(null);
+    expect(maxUses(MOVES[attackId('Fire', 1)])).toBe(null);
+    expect(maxUses(MOVES[attackId('Fire', 2)])).toBe(15);
+    expect(maxUses(MOVES[attackId('Fire', 3)])).toBe(10);
+    expect(maxUses(MOVES['Nature:extra'])).toBe(10); // Photosynthesis heal
+    expect(maxUses(MOVES['Fire:buff'])).toBe(20);
+  });
+  it('battles spend uses, empty moves fall back to a basic attack, and uses can be restored', () => {
+    const c = createCreature('emberkit', 40, 2);
+    c.moves = [{ id: attackId('Fire', 3), tier: 1, used: 9 }];
+    const foe = createCreature('mossling', 40, 2);
+    foe.hp = 1e6;
+    const b = new Battle([c], [foe], new Rng(3), { enemyRandomness: 0 });
+    b.start();
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(usesLeft(c.moves[0])).toBe(0);
+    expect(outOfMoves(c)).toBe(true);
+    // Still able to fight with the basic attack.
+    const evs = b.takeTurn({ kind: 'move', index: 0 });
+    expect(evs.some((e) => e.kind === 'attack' && e.side === 'player' && e.moveId === fallbackMove(c).id)).toBe(true);
+    expect(b.bestMove('player')).toBe(-1);
+    restoreUses(c, 0.25);
+    expect(usesLeft(c.moves[0])).toBe(3);
+    restoreUses(c);
+    expect(hasUses(c.moves[0])).toBe(true);
+    expect(usesLeft(c.moves[0])).toBe(10);
   });
 });

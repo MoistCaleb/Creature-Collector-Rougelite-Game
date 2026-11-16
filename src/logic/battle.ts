@@ -3,7 +3,7 @@ import { attackValue, effectsAtTier, healAtTier, MAX_STAGE, STAT_LABEL, TIER_POW
 import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
-import { creatureName, creatureTypes, isAlive, levelFactor, moveDef, stats, type Creature, type MoveSlot } from './creature';
+import { creatureName, creatureTypes, fallbackMove, hasUses, isAlive, levelFactor, moveDef, spendUse, stats, usesLeft, type Creature, type MoveSlot } from './creature';
 import { Rng } from './rng';
 import { STATUS, type StatusId } from '../data/status';
 
@@ -227,7 +227,10 @@ export class Battle {
       if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
     } else {
       const enemyAtStart = this.e;
-      const pPri = !!moveDef(this.p.c.moves[action.index]).priority || this.clawProc(this.p);
+      // A move with no uses left (or index -1) falls back to the creature's basic attack.
+      const chosen = this.p.c.moves[action.index];
+      const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
+      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p);
       const ePri = !!moveDef(enemyMove).priority || this.clawProc(this.e);
       const playerFirst = pPri !== ePri ? pPri : this.rule === 'tailwind' ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
@@ -240,7 +243,7 @@ export class Battle {
         if (!isAlive(actor.c)) continue;
         const target = side === 'player' ? this.e : this.p;
         if (!isAlive(target.c)) continue;
-        const slot = side === 'player' ? this.p.c.moves[action.index] : enemyMove;
+        const slot = side === 'player' ? pSlot : enemyMove;
         this.useMove(side, slot, ev);
       }
     }
@@ -262,21 +265,32 @@ export class Battle {
   }
 
   private chooseEnemyMove(): MoveSlot {
-    const moves = this.e.c.moves;
+    const moves = this.e.c.moves.filter(hasUses);
+    if (!moves.length) return fallbackMove(this.e.c);
     // Mostly pick the best expected damage, sometimes random.
     if (this.rng.chance(this.enemyRandomness)) return this.rng.pick(moves);
-    return moves[this.bestMove('enemy')];
+    return this.e.c.moves[this.bestMove('enemy')];
   }
 
-  /** Index of the move the AI rates highest for this side right now (used by auto-battle too). */
+  /**
+   * Index of the move the AI rates highest for this side right now (used by auto-battle too), or -1
+   * when every move is out of uses (the basic-attack fallback). Your side saves limited moves for
+   * when they matter: a super-effective hit or a chance to finish the foe.
+   */
   bestMove(side: Side): number {
     const user = side === 'player' ? this.p : this.e;
     const foe = side === 'player' ? this.e : this.p;
-    let best = 0;
+    let best = -1;
     let bestScore = -1;
     user.c.moves.forEach((m, i) => {
+      if (!hasUses(m)) return;
       const d = moveDef(m);
-      const score = d.kind !== 'attack' ? this.statusScore(m, user, foe) : this.attackScore(user, foe, m);
+      let score = d.kind !== 'attack' ? this.statusScore(m, user, foe) : this.attackScore(user, foe, m);
+      if (side === 'player' && Number.isFinite(usesLeft(m)) && d.kind === 'attack') {
+        const el = attackElement(d, user, foe);
+        const matters = typeMultiplier(el, creatureTypes(foe.c)) > 1 || foe.c.hp / stats(foe.c).hp < 0.35;
+        if (!matters) score *= 0.75;
+      }
       if (score > bestScore) {
         bestScore = score;
         best = i;
@@ -408,6 +422,7 @@ export class Battle {
   private useMove(side: Side, slot: MoveSlot, ev: BattleEvent[]) {
     const user = side === 'player' ? this.p : this.e;
     if (!this.canAct(user, side, ev)) return;
+    spendUse(slot);
     const target = side === 'player' ? this.e : this.p;
     const targetSide: Side = side === 'player' ? 'enemy' : 'player';
     const def = moveDef(slot);

@@ -368,3 +368,19 @@ export function attackValue(m: MoveDef, tier = 1): number {
   if (m.kind !== 'attack') return 0;
   return m.power * TIER_POWER[tier] * (m.hits ?? 1) * (m.accuracy / 100) * (m.recoil ? 0.9 : 1);
 }
+
+// ---------------------------------------------------------------- limited uses
+
+/**
+ * How many times a move can be used before it needs restoring (rest nodes, the bench, beating a
+ * floor boss, Full Restore), or null for unlimited. Basic attacks are always unlimited, so a
+ * creature never runs dry; strong attacks, signatures and heals are limited.
+ */
+export function maxUses(d: MoveDef): number | null {
+  if (d.kind === 'heal') return 10;
+  if (d.kind === 'buff' || d.kind === 'debuff') return 20;
+  if (d.rank === 0 || d.rank === 1) return null;
+  if (d.rank === 3 || d.power >= 100) return 10;
+  if (d.rank === 2 || d.signature || d.drain || d.power >= 55) return 15;
+  return null;
+}

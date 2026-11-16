@@ -187,6 +187,12 @@ Proposed math:
 ## Level curve (target)
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★. Evolving needs Lv 30 (first) / Lv 65 (second),
   whatever the cap (a floor ceiling or stars don't change it), including the boss's "Evolve one" boon.
+- **Move uses:** basic attacks (ranks 1-2 of the main line, quick/multi/sap/boost specials) are unlimited.
+  Mid attacks, drain moves and signatures have 15 uses; top-rank and 100+ power attacks and heals 10; buffs and
+  debuffs 20. Uses carry between battles. Restored fully at rest nodes, on a new floor and by Full Restore;
+  bench creatures get 25% back after each battle. A creature with every move spent uses a basic attack of its
+  own type. Enemies start each battle with full uses. Auto-battle saves limited attacks for super-effective
+  hits or finishing blows.
 - Enemy prestige: on floors 2 and 3, enemies carry stars matching your main team's average (wild: same or one
   less; trainers and guardians: same), at most 3 on floor 2 and 5 on floor 3. Caught creatures don't keep them.
 - Enemy move choice: wild creatures pick a random move 50% of the time, trainers 10%, bosses never.
