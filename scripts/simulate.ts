@@ -71,6 +71,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
     const xp = battleXp(enemies, kind, run.floor);
     if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
     else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind, run.heat ?? 0); }
+    if (kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) run.evoStones++;
     if (kind === 'elite') {
       run.evoStones++;
       // Trainer prize: a held item, handed to the first team member without one.

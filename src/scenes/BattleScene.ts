@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
+import { BALANCE } from '../data/balance';
 import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
@@ -188,30 +189,31 @@ export class BattleScene extends Phaser.Scene {
     return { root, name, chips, bar };
   }
 
-  private fillPanel(p: SidePanel, c: Creature) {
+  private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
     p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}${c.held ? ` ${HELD[c.held].icon}` : ''}`);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
-    p.bar.set(c.hp, stats(c).hp);
+    p.bar.set(hp, stats(c).hp);
   }
 
-  private refreshEnemy() {
+  /** hp: what the bar should show now (during playback the logic may already be ahead). */
+  private refreshEnemy(hp?: number) {
     const e = this.battle.e.c;
     dex.creature(e);
     this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
-    this.fillPanel(this.enemyPanel, e);
+    this.fillPanel(this.enemyPanel, e, hp);
     const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
     this.pips.setText('●'.repeat(alive) + '○'.repeat(this.battle.enemy.length - alive));
   }
 
-  private refreshPlayer() {
+  private refreshPlayer(hp?: number) {
     const p = this.battle.p.c;
     dex.creature(p, true);
     this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
-    this.fillPanel(this.playerPanel, p);
+    this.fillPanel(this.playerPanel, p, hp);
   }
 
   /** A creature pops in from nothing with a little puff. */
@@ -437,12 +439,12 @@ export class BattleScene extends Phaser.Scene {
           break;
         }
         case 'swap':
-          this.refreshPlayer();
+          this.refreshPlayer(ev.hp);
           this.entrance(this.playerSprite, 'player');
           await this.wait(300);
           break;
         case 'enemySend':
-          this.refreshEnemy();
+          this.refreshEnemy(ev.hp);
           this.entrance(this.enemySprite, 'enemy');
           await this.wait(300);
           break;
@@ -511,6 +513,11 @@ export class BattleScene extends Phaser.Scene {
       const fallen = this.fallenNote();
       postBattleRecover(run);
       ab.summary = fallen;
+      // Wild creatures sometimes leave an Evolution Stone behind.
+      if (this.kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) {
+        run.evoStones += 1;
+        ab.summary = `\n\n◆ It dropped an Evolution Stone!${fallen}`;
+      }
       if (this.kind === 'elite') {
         const stones = run.passive === 'hunter' ? 2 : 1;
         run.evoStones += stones;

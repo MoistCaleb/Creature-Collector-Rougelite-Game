@@ -23,14 +23,15 @@ export type PlayerAction = { kind: 'move'; index: number } | { kind: 'swap'; ind
 
 export type BattleEvent =
   | { kind: 'text'; text: string }
-  | { kind: 'swap'; side: Side; index: number }
+  /** hp: the newcomer's HP at the moment it enters (later events in the turn may change it). */
+  | { kind: 'swap'; side: Side; index: number; hp: number }
   | { kind: 'attack'; side: Side; move: string; moveId: string }
   | { kind: 'stat'; side: Side; up: boolean }
   /** `mult` is the type multiplier for attack hits; absent for recoil, poison and field damage. */
   | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number; mult?: number; element?: Element }
   | { kind: 'heal'; side: Side; hp: number; maxHp: number }
   | { kind: 'faint'; side: Side; index: number }
-  | { kind: 'enemySend'; index: number };
+  | { kind: 'enemySend'; index: number; hp: number };
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
@@ -154,7 +155,7 @@ export class Battle {
     this.fought.add(this.p.c.uid);
     resetStages(this.p);
     const ev: BattleEvent[] = [
-      { kind: 'swap', side: 'player', index },
+      { kind: 'swap', side: 'player', index, hp: this.p.c.hp },
       { kind: 'text', text: `Go, ${creatureName(this.p.c)}!` },
     ];
     this.onEnter('player', ev);
@@ -171,7 +172,7 @@ export class Battle {
       this.pActive = action.index;
       this.fought.add(this.p.c.uid);
       resetStages(this.p);
-      ev.push({ kind: 'swap', side: 'player', index: action.index });
+      ev.push({ kind: 'swap', side: 'player', index: action.index, hp: this.p.c.hp });
       ev.push({ kind: 'text', text: `Go, ${creatureName(this.p.c)}!` });
       this.onEnter('player', ev);
       if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
@@ -463,7 +464,7 @@ export class Battle {
       if (next >= 0) {
         this.eActive = next;
         resetStages(this.e);
-        ev.push({ kind: 'enemySend', index: next });
+        ev.push({ kind: 'enemySend', index: next, hp: this.e.c.hp });
         ev.push({ kind: 'text', text: `The enemy sends out ${creatureName(this.e.c)}!` });
         this.onEnter('enemy', ev);
       }
