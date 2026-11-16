@@ -19,6 +19,13 @@ export class BagScene extends Phaser.Scene {
     super('Bag');
   }
 
+  /** Where the back button returns to (the map, or the Team screen it was opened from). */
+  private from: 'Map' | 'Team' = 'Map';
+
+  init(data: { from?: 'Map' | 'Team' }) {
+    this.from = data.from ?? 'Map';
+  }
+
   create() {
     const run = state.run!;
     background(this);
@@ -67,7 +74,7 @@ export class BagScene extends Phaser.Scene {
         button(this, W - 60, y + 24, 88, 32, 'Take off', () => {
           unequipHeld(run, c);
           persist();
-          this.scene.restart({});
+          this.scene.restart({ from: this.from });
         }, { fontSize: 13, color: 0x3a3450 }),
       );
       y += 54;
@@ -88,7 +95,11 @@ export class BagScene extends Phaser.Scene {
     this.add.rectangle(0, 0, W, HEADER - 6, COLORS.bg).setOrigin(0).setDepth(4).setInteractive();
     const head = (o: Phaser.GameObjects.GameObject & { setDepth(d: number): unknown }) => o.setDepth(5);
     head(text(this, 16, 14, 'Bag', 26, '#ffc94d', { fontStyle: 'bold' }));
-    head(button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' }));
+    head(
+      this.from === 'Team'
+        ? button(this, W - 60, 30, 100, 42, 'Team', () => this.scene.start('Team', {}), { fontSize: 17, glyph: 'back' })
+        : button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' }),
+    );
     const card = (x: number, iconId: 'potion' | 'stone', title: string, sub: string, color: string) => {
       head(this.add.rectangle(x, 62, (W - 36) / 2, 110, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
       head(pixelIcon(this, x + 26, 92, iconId, 32));
@@ -118,7 +129,7 @@ export class BagScene extends Phaser.Scene {
       onPick: (k) => {
         if (usePotion(run, all[k])) sfx.heal();
         persist();
-        this.scene.restart({});
+        this.scene.restart({ from: this.from });
       },
       onCancel: () => {},
     });
@@ -135,7 +146,7 @@ export class BagScene extends Phaser.Scene {
       onPick: (k) => {
         equipHeld(run, all[k], id);
         persist();
-        this.scene.restart({});
+        this.scene.restart({ from: this.from });
       },
       onCancel: () => {},
     });
