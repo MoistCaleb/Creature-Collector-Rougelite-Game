@@ -23,7 +23,40 @@ export type Next =
   | { phase: 'waitSwitch' }
   | { phase: 'end'; won: boolean };
 
+/** The host's choices for a duel session. */
+export interface DuelSettings {
+  /** Battles in the series: first to win a majority takes it. */
+  bestOf: number;
+  /** Teams each player brings; before each battle they pick one of them. */
+  teamsPerPlayer: number;
+  /** Creatures from the chosen team that fight (the first N). */
+  teamSize: number;
+  level: number;
+}
+
+export const DEFAULT_SETTINGS: DuelSettings = { bestOf: 1, teamsPerPlayer: 1, teamSize: 4, level: 50 };
+
+/** The values each setting cycles through. */
+export const SETTING_CHOICES: Record<keyof DuelSettings, number[]> = {
+  bestOf: [1, 3, 5],
+  teamsPerPlayer: [1, 2, 3],
+  teamSize: [1, 2, 3, 4],
+  level: [25, 50, 75, 100],
+};
+
+/** Keep settings from the other phone within the allowed choices. */
+export function cleanSettings(s: Partial<DuelSettings> | undefined): DuelSettings {
+  const out = { ...DEFAULT_SETTINGS };
+  for (const k of Object.keys(SETTING_CHOICES) as (keyof DuelSettings)[]) {
+    const v = Number(s?.[k]);
+    if (SETTING_CHOICES[k].includes(v)) out[k] = v;
+  }
+  return out;
+}
+
 export interface StartInfo {
+  /** Creature level for Arena-style duels (default 50). */
+  level?: number;
   seed: number;
   hostName: string;
   guestName: string;
@@ -52,7 +85,12 @@ export interface RaceProgress {
 }
 
 export type DuelMsg =
-  | { t: 'hello'; v: number; name: string; team: ArenaPick[] }
+  | { t: 'hello'; v: number; name: string; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean }
+  | { t: 'settings'; s: DuelSettings }
+  /** Host: start a series with these settings (both go pick a team for battle 1). */
+  | { t: 'series'; s: DuelSettings }
+  /** Guest: the team it picked for the next battle. */
+  | { t: 'pick'; index: number }
   | { t: 'start'; info: StartInfo }
   | { t: 'act'; a: PlayerAction }
   | { t: 'switch'; index: number }
@@ -138,8 +176,9 @@ export function flipEvents(events: BattleEvent[]): BattleEvent[] {
 
 /** Build a duel battle from one player's point of view (host: player = host team). */
 export function duelBattle(info: StartInfo, role: 'host' | 'guest'): Battle {
-  const host = info.hostCreatures ? info.hostCreatures.map(readyForDuel) : info.hostTeam.map(makeArenaCreature);
-  const guest = info.guestCreatures ? info.guestCreatures.map(readyForDuel) : info.guestTeam.map(makeArenaCreature);
+  const level = info.level ?? 50;
+  const host = info.hostCreatures ? info.hostCreatures.map(readyForDuel) : info.hostTeam.map((p) => makeArenaCreature(p, level));
+  const guest = info.guestCreatures ? info.guestCreatures.map(readyForDuel) : info.guestTeam.map((p) => makeArenaCreature(p, level));
   const [mine, theirs] = role === 'host' ? [host, guest] : [guest, host];
   const names = role === 'host' ? { player: info.hostName, enemy: info.guestName } : { player: info.guestName, enemy: info.hostName };
   return new Battle(mine, theirs, new Rng(info.seed), {

@@ -63,9 +63,9 @@ export function defaultArenaMoves(speciesId: string, stage: number): string[] {
   return natural.slice(0, MAX_MOVES);
 }
 
-/** Build the battle-ready creature for a pick: Lv 50, no stars, no item, full HP and uses. */
-export function makeArenaCreature(p: ArenaPick): Creature {
-  const c = createCreature(p.speciesId, ARENA_LEVEL, p.stage);
+/** Build the battle-ready creature for a pick: Lv 50 (or `level`), no stars, no item, full HP and uses. */
+export function makeArenaCreature(p: ArenaPick, level = ARENA_LEVEL): Creature {
+  const c = createCreature(p.speciesId, level, p.stage);
   const pool = arenaMovePool(p.speciesId, p.stage);
   const moves = p.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
   c.moves = (moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage)).map((id) => ({ id, tier: 1 }));
@@ -108,4 +108,38 @@ export function arenaOpponent(round: number, seed: number): ArenaOpponent {
   }
   const title = round === ARENA_ROUNDS - 1 ? 'Arena Champion' : rng.pick(TRAINER_CLASSES);
   return { name: `${title} ${rng.pick(TRAINER_NAMES)}`, team, randomness: [0.35, 0.25, 0.15, 0.05, 0][round] ?? 0 };
+}
+
+// ---------------------------------------------------------------- saved teams
+
+export const MAX_SAVED_TEAMS = 6;
+
+export interface SavedTeam {
+  name: string;
+  picks: ArenaPick[];
+}
+
+/** All saved teams (moving an old single Arena team into the list the first time). */
+export function savedTeams(meta: Meta): SavedTeam[] {
+  if (!meta.arenaTeams?.length) {
+    meta.arenaTeams = [{ name: 'Team 1', picks: meta.arenaTeam ?? [] }];
+    meta.arenaTeamIndex = 0;
+  }
+  return meta.arenaTeams;
+}
+
+export function activeTeamIndex(meta: Meta): number {
+  const n = savedTeams(meta).length;
+  return Math.max(0, Math.min(n - 1, meta.arenaTeamIndex ?? 0));
+}
+
+/** The team the Arena ladder uses (still-valid picks only). */
+export function activeTeam(meta: Meta): ArenaPick[] {
+  return validArenaTeam(meta, savedTeams(meta)[activeTeamIndex(meta)].picks);
+}
+
+/** A name that isn't taken yet: "Team 2", "Team 3"... */
+export function nextTeamName(meta: Meta): string {
+  const names = new Set(savedTeams(meta).map((t) => t.name));
+  for (let i = 1; ; i++) if (!names.has(`Team ${i}`)) return `Team ${i}`;
 }

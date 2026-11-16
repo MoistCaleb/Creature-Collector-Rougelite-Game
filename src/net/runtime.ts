@@ -3,7 +3,7 @@ import type { ArenaPick } from '../logic/arena';
 import { SPECIES_BY_ID } from '../data/species';
 import { MOVES } from '../data/moves';
 import type { BattleMatch } from '../scenes/BattleScene';
-import { applySnap, DUEL_VERSION, DuelController, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type StartInfo } from './duel';
+import { applySnap, cleanSettings, DEFAULT_SETTINGS, DUEL_VERSION, DuelController, type DuelSettings, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type StartInfo } from './duel';
 import { SPECIES } from '../data/species';
 import { HELD } from '../data/held';
 import { Rng } from '../logic/rng';
@@ -15,9 +15,25 @@ import { session } from './session';
  * and starting (or resuming) the battle screen for it.
  */
 
+export interface BroughtTeam {
+  name: string;
+  picks: ArenaPick[];
+}
+
+/** A player in the session: name and the teams they're bringing. */
 export interface Opponent {
   name: string;
-  team: ArenaPick[];
+  teams: BroughtTeam[];
+}
+
+/** A series in progress: settings, which battle we're on, the score, and each side's pick. */
+export interface Series {
+  settings: DuelSettings;
+  game: number;
+  mine: number;
+  theirs: number;
+  myPick: number | null;
+  theirPick: number | null;
 }
 
 export const duel = {
@@ -25,8 +41,13 @@ export const duel = {
   opponent: null as Opponent | null,
   /** The duel in progress, if any. */
   controller: null as DuelController | null,
-  /** Our own name and team for this session. */
+  /** Our own name and teams for this session. */
   me: null as Opponent | null,
+  /** Session settings (the host's; the guest gets a copy). */
+  settings: { ...DEFAULT_SETTINGS } as DuelSettings,
+  /** Which saved teams we're bringing (indexes into our saved teams). */
+  bring: [] as number[],
+  series: null as Series | null,
   /** Set by the lobby so incoming messages can change screens. */
   game: null as Phaser.Game | null,
   /** Lobby redraw hook. */
@@ -130,23 +151,89 @@ function cleanTeam(team: unknown): ArenaPick[] {
     .slice(0, 4);
 }
 
-/** Say hello: our name and team. */
+/** Say hello: our name and the teams we're bringing. */
 export function sendHello() {
-  if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, team: duel.me.team });
+  if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, teams: duel.me.teams });
 }
 
-/** Host: start a duel with the connected guest. */
-export function hostStartDuel() {
+/** Host: change a session setting and tell the guest. */
+export function hostSetSettings(s: DuelSettings) {
+  duel.settings = s;
+  session.send({ t: 'settings', s });
+  duel.onChange?.();
+}
+
+/** Host: start a series with the current settings. Both players then pick a team for battle 1. */
+export function hostStartSeries() {
   if (session.role !== 'host' || !duel.me || !duel.opponent) return;
+  session.send({ t: 'series', s: duel.settings });
+  beginSeries(duel.settings);
+}
+
+function beginSeries(s: DuelSettings) {
+  duel.series = { settings: s, game: 1, mine: 0, theirs: 0, myPick: null, theirPick: null };
+  toPick();
+}
+
+/** Go pick a team for the next battle (straight in when there's only one to choose). */
+function toPick() {
+  const sr = duel.series!;
+  sr.myPick = null;
+  sr.theirPick = null;
+  goTo('Duel', { pick: true });
+  if (sr.settings.teamsPerPlayer <= 1) setTimeout(() => submitPick(0), 50);
+}
+
+/** Your team for the next battle. */
+export function submitPick(index: number) {
+  const sr = duel.series;
+  if (!sr) return;
+  sr.myPick = index;
+  if (session.role === 'guest') session.send({ t: 'pick', index });
+  else tryStartGame();
+  duel.onChange?.();
+}
+
+/** Host: both picked, so start the battle. */
+function tryStartGame() {
+  const sr = duel.series;
+  if (!sr || sr.myPick === null || sr.theirPick === null || !duel.me || !duel.opponent) return;
+  const size = sr.settings.teamSize;
   const info: StartInfo = {
     seed: Math.floor(Math.random() * 1e9),
+    level: sr.settings.level,
     hostName: duel.me.name,
     guestName: duel.opponent.name,
-    hostTeam: duel.me.team,
-    guestTeam: duel.opponent.team,
+    hostTeam: (duel.me.teams[sr.myPick]?.picks ?? []).slice(0, size),
+    guestTeam: (duel.opponent.teams[sr.theirPick]?.picks ?? []).slice(0, size),
   };
   session.send({ t: 'start', info });
-  beginDuel(new DuelController('host', info, session));
+  setTimeout(() => beginDuel(new DuelController('host', info, session)), 60);
+}
+
+/**
+ * A series battle ended: update the score. Returns the series result once someone has won a
+ * majority (or every battle is played), otherwise null and the next battle is up.
+ */
+export function recordSeriesGame(won: boolean): 'won' | 'lost' | 'draw' | null {
+  const sr = duel.series;
+  if (!sr) return null;
+  if (won) sr.mine++;
+  else sr.theirs++;
+  const need = Math.floor(sr.settings.bestOf / 2) + 1;
+  if (sr.mine >= need) return 'won';
+  if (sr.theirs >= need) return 'lost';
+  if (sr.game >= sr.settings.bestOf) return sr.mine === sr.theirs ? 'draw' : sr.mine > sr.theirs ? 'won' : 'lost';
+  sr.game++;
+  return null;
+}
+
+/** After a series battle's result screen: next battle, or back to the lobby. */
+export function afterSeriesGame(over: boolean) {
+  if (over || !duel.series) {
+    duel.series = null;
+    goTo('Duel', {});
+  } else toPick();
 }
 
 function beginDuel(controller: DuelController, initialNext?: Next) {
@@ -180,10 +267,32 @@ function goTo(key: string, data: object) {
 session.onMessage((msg: DuelMsg) => {
   switch (msg.t) {
     case 'hello':
-      duel.opponent = { name: String(msg.name || 'Friend').slice(0, 16), team: cleanTeam(msg.team) };
-      // The host answers with its own hello so the guest sees who it's facing.
-      if (session.role === 'host') sendHello();
+      duel.opponent = {
+        name: String(msg.name || 'Friend').slice(0, 16),
+        teams: (Array.isArray(msg.teams) ? msg.teams : []).slice(0, 3).map((t) => ({ name: String(t?.name ?? 'Team').slice(0, 18), picks: cleanTeam(t?.picks) })),
+      };
+      // The host answers with its own hello (and the settings) so the guest sees the whole setup.
+      if (session.role === 'host' && !msg.reply) {
+        if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, teams: duel.me.teams, reply: true });
+        session.send({ t: 'settings', s: duel.settings });
+      }
       duel.onChange?.();
+      return;
+    case 'settings':
+      if (session.role === 'guest') {
+        duel.settings = cleanSettings(msg.s);
+        duel.onChange?.();
+      }
+      return;
+    case 'series':
+      if (session.role === 'guest') beginSeries(cleanSettings(msg.s));
+      return;
+    case 'pick':
+      if (session.role === 'host' && duel.series) {
+        duel.series.theirPick = Math.max(0, Math.min(2, Math.round(Number(msg.index) || 0)));
+        tryStartGame();
+        duel.onChange?.();
+      }
       return;
     case 'start':
       if (session.role === 'guest') {
@@ -229,6 +338,8 @@ export function leaveDuel() {
   duel.controller = null;
   duel.opponent = null;
   duel.race = null;
+  duel.series = null;
+  duel.settings = { ...DEFAULT_SETTINGS };
   session.close();
 }
 

@@ -111,6 +111,9 @@ export interface Meta {
   heat?: number;
   /** Battle Arena team (Lv 50 mode) and best ladder result (rounds won). */
   arenaTeam?: import('./arena').ArenaPick[];
+  /** Saved teams for the Arena and duels (replaces arenaTeam), and which one is active. */
+  arenaTeams?: import('./arena').SavedTeam[];
+  arenaTeamIndex?: number;
   arenaBest?: number;
   /** Name shown to the other player in duels. */
   duelName?: string;
