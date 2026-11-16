@@ -30,7 +30,11 @@ export class StarterScene extends Phaser.Scene {
       this,
       W / 2 + 20,
       64,
-      this.daily ? 'Same starters and map for everyone today' : 'Three picked at random from your unlocked pool',
+      this.daily
+        ? 'Same starters and map for everyone today'
+        : state.meta.favorite && state.meta.unlockedStarters.includes(state.meta.favorite)
+          ? 'Your favorite plus two random picks'
+          : 'Three picked at random from your unlocked pool',
       14,
       COLORS.textDim,
     ).setOrigin(0.5);
@@ -49,6 +53,10 @@ export class StarterScene extends Phaser.Scene {
       const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0)).setScale(4 * SPRITE_FIT);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
       text(this, 175, y + 16, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
+      if (!this.daily && state.meta.favorite === id) {
+        pixelIcon(this, W - 48, y + 22, 'star', 18);
+        text(this, W - 60, y + 14, 'Favorite', 12, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);
+      }
       typeChips(this, 175, y + 56, sp.types);
       text(this, 175, y + 76, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 15, COLORS.textDim, { lineSpacing: 4 });
       text(this, 175, y + 122, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 13, COLORS.textDim, {

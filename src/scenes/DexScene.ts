@@ -9,6 +9,7 @@ import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
 import { createCreature, levelCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
+import { toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
 
 type Tab = 'creatures' | 'moves' | 'elements';
@@ -199,7 +200,19 @@ export class DexScene extends Phaser.Scene {
     row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
-    if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 8, '● Caught', 12, '#8fe08a').setOrigin(1, 0));
+    if (dex.caught.includes(sp.id)) row.add(text(this, W - 138, y + 10, '● Caught', 12, '#8fe08a').setOrigin(1, 0));
+    // Favorite: this line always shows up among your starter choices.
+    const meta = state.meta;
+    const fav = meta.favorite === sp.id;
+    const canFav = meta.unlockedStarters.includes(sp.id);
+    row.add(
+      button(this, W - 74, y + 20, 104, 28, fav ? 'Favorite' : canFav ? 'Set favorite' : 'Catch to favorite', () => {
+        toggleFavorite(meta, sp.id);
+        for (const c of this.live.values()) c.destroy();
+        this.live.clear();
+        this.refreshRows();
+      }, { fontSize: 12, glyph: 'star', color: fav ? 0x7a5a1c : 0x3a3450, enabled: canFav || fav }),
+    );
     for (let s = 0; s < 3; s++) {
       const sy = y + 38 + s * 136;
       const seen = hasSeenForm(dex, sp.id, s);
@@ -236,6 +249,7 @@ export class DexScene extends Phaser.Scene {
       const anySeen = [0, 1, 2].some((s) => hasSeenForm(dex, sp.id, s));
       this.tapArea(row, y, rowH, i, anySeen);
       if (anySeen) row.add(icon(this, W - 30, y + rowH - 22, 'arrowUp', 12).setAngle(180).setAlpha(0.45));
+      if (state.meta.favorite === sp.id) row.add(icon(this, W - 100, y + 13, 'star', 14));
       row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
       if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
       if (anySeen) {

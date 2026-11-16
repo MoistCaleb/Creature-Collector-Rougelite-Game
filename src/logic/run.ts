@@ -107,6 +107,8 @@ export interface Meta {
   heat?: number;
   /** Today's daily run: best result and how many tries. */
   daily?: DailyRecord;
+  /** Favorite evolution line (species id): always one of the starter choices. */
+  favorite?: string;
 }
 
 export interface DailyResult {
@@ -230,8 +232,20 @@ export interface ActiveBattle {
   summary: string;
 }
 
+/** Three starter choices: the favorite (if unlocked) plus random others from the unlocked pool. */
 export function rollStarterChoices(meta: Meta, rng: Rng): string[] {
-  return rng.shuffle([...meta.unlockedStarters]).slice(0, 3);
+  const fav = meta.favorite && meta.unlockedStarters.includes(meta.favorite) ? meta.favorite : null;
+  const others = rng.shuffle(meta.unlockedStarters.filter((id) => id !== fav));
+  return fav ? [fav, ...others.slice(0, 2)] : others.slice(0, 3);
+}
+
+/** Favorite a line (or clear it by passing the current favorite). Only unlocked starters can be favorites. */
+export function toggleFavorite(meta: Meta, speciesId: string): boolean {
+  if (meta.favorite === speciesId) meta.favorite = undefined;
+  else if (meta.unlockedStarters.includes(speciesId)) meta.favorite = speciesId;
+  else return false;
+  saveMeta(meta);
+  return true;
 }
 
 // ---------------------------------------------------------------- daily run
