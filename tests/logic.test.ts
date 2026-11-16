@@ -330,6 +330,19 @@ describe('acquiring creatures', () => {
     run.floor = 2;
     expect(enemyStars(run, 'boss', rng)).toBe(5);
   });
+  it('winning a run at a Heat lights that Heat token on the map', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', 5, 'wildlands');
+    run.heat = 3;
+    run.floor = 2;
+    expect(clearFloor(run)).toBe(true);
+    expect(meta.mapHeats?.wildlands).toEqual([3]);
+    const again = startRun(meta, 'emberkit', 6, 'wildlands');
+    again.heat = 1;
+    again.floor = 2;
+    clearFloor(again);
+    expect(meta.mapHeats?.wildlands).toEqual([1, 3]);
+  });
   it('with a full party, catching releases the chosen creature and takes its spot', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
     while (run.team.length < 4) run.team.push(createCreature('mossling', 5));

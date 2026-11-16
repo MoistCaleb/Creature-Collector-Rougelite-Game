@@ -109,6 +109,8 @@ export interface Meta {
   heatUnlocked?: number;
   /** Heat chosen for the next run. */
   heat?: number;
+  /** Heat levels (1-8) won on each map, for the map's Heat tokens. */
+  mapHeats?: Record<string, number[]>;
   /** Today's daily run: best result and how many tries. */
   daily?: DailyRecord;
   /** Favorite evolution line (species id): always one of the starter choices. */
@@ -849,6 +851,16 @@ export function clearFloor(run: Run): boolean {
     }
     for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);
+    // A Heat token for this map.
+    if (heat > 0 && !run.daily) {
+      meta.mapHeats = meta.mapHeats ?? {};
+      const won = (meta.mapHeats[run.mapId] = meta.mapHeats[run.mapId] ?? []);
+      if (!won.includes(heat)) {
+        won.push(heat);
+        won.sort((a, b) => a - b);
+        run.unlockedThisRun.push(`Heat ${heat} token: ${MAP_BY_ID[run.mapId]?.name ?? run.mapId}`);
+      }
+    }
     for (const a of checkAchievements(meta)) run.unlockedThisRun.push(`Passive: ${PASSIVES[a.passive].name}`);
     saveMeta(meta);
     return true;
