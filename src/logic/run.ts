@@ -1,3 +1,4 @@
+import * as storage from '../storage';
 import { BALANCE } from '../data/balance';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
@@ -106,7 +107,7 @@ export function loadMeta(): Meta {
     newAchievements: [],
   };
   try {
-    const raw = localStorage.getItem(META_KEY);
+    const raw = storage.getItem(META_KEY);
     if (!raw) return fallback;
     const saved = JSON.parse(raw);
     const meta: Meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
@@ -120,7 +121,7 @@ export function loadMeta(): Meta {
 
 export function saveMeta(meta: Meta) {
   try {
-    localStorage.setItem(META_KEY, JSON.stringify(meta));
+    storage.setItem(META_KEY, JSON.stringify(meta));
   } catch {
     /* storage unavailable: progress just won't persist */
   }
@@ -219,7 +220,7 @@ export function saveRun(run: Run) {
   try {
     const { meta: _m, rng, ...rest } = run;
     void _m;
-    localStorage.setItem(RUN_KEY, JSON.stringify({ ...rest, rngState: rng.getState() }));
+    storage.setItem(RUN_KEY, JSON.stringify({ ...rest, rngState: rng.getState() }));
   } catch {
     /* storage unavailable */
   }
@@ -227,7 +228,7 @@ export function saveRun(run: Run) {
 
 export function hasSavedRun(): boolean {
   try {
-    return !!localStorage.getItem(RUN_KEY);
+    return !!storage.getItem(RUN_KEY);
   } catch {
     return false;
   }
@@ -235,7 +236,7 @@ export function hasSavedRun(): boolean {
 
 export function loadRun(meta: Meta): Run | null {
   try {
-    const raw = localStorage.getItem(RUN_KEY);
+    const raw = storage.getItem(RUN_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
     const rng = new Rng(0);
@@ -252,7 +253,7 @@ export function loadRun(meta: Meta): Run | null {
 
 export function clearSavedRun() {
   try {
-    localStorage.removeItem(RUN_KEY);
+    storage.removeItem(RUN_KEY);
   } catch {
     /* ignore */
   }
