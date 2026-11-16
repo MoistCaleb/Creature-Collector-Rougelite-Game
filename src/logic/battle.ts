@@ -61,6 +61,7 @@ export class Battle {
   private reserve: Creature[];
   /** Chance the enemy picks a random move instead of its best one. */
   private enemyRandomness: number;
+  private permadeath: boolean;
   /** A floor boss's special rule, if any. */
   readonly rule: BossRule | null;
   private ruleName: string;
@@ -76,6 +77,8 @@ export class Battle {
     opts: {
       playerDamageMult?: number;
       enemyRandomness?: number;
+      /** Your fainted creatures are gone for good (runs); off for Arena and duels. */
+      permadeath?: boolean;
       rule?: BossRule;
       ruleName?: string;
       spareLast?: boolean;
@@ -94,6 +97,7 @@ export class Battle {
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
+    this.permadeath = opts.permadeath ?? true;
     this.rule = opts.rule ?? null;
     this.ruleName = opts.ruleName ?? 'The field';
     this.spareLast = opts.spareLast ?? false;
@@ -598,7 +602,7 @@ export class Battle {
     ev.push({ kind: 'faint', side, index: idx });
     ev.push({
       kind: 'text',
-      text: side === 'player' ? `${creatureName(c)} has fallen... forever.` : `Enemy ${creatureName(c)} fainted!`,
+      text: side === 'player' ? `${creatureName(c)} ${this.permadeath ? 'has fallen... forever' : 'fainted'}.` : `Enemy ${creatureName(c)} fainted!`,
     });
     if (side === 'enemy') {
       const next = this.enemy.findIndex((x) => isAlive(x.c));

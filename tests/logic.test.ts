@@ -1216,3 +1216,38 @@ describe('limited move uses', () => {
     expect(usesLeft(c.moves[0])).toBe(10);
   });
 });
+
+describe('battle arena', () => {
+  const meta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0,
+    dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands',
+    stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('lets you bring caught species in forms you have seen, at Lv 50 with legal moves only', async () => {
+    const { arenaRoster, arenaForms, arenaMovePool, makeArenaCreature, validArenaTeam, ARENA_LEVEL } = await import('../src/logic/arena');
+    const m = meta();
+    m.dex.caught.push('mossling');
+    expect(arenaRoster(m)).toContain('mossling');
+    expect(arenaRoster(m)).toContain(DEFAULT_STARTERS[0]);
+    expect(arenaForms(m, 'mossling')).toEqual([0]);
+    m.dex.forms.push('mossling:1');
+    expect(arenaForms(m, 'mossling')).toEqual([0, 1]);
+    const pool = arenaMovePool('mossling', 1);
+    const c = makeArenaCreature({ speciesId: 'mossling', stage: 1, moves: [pool[0], 'not-a-move', pool[1]] });
+    expect(c.level).toBe(ARENA_LEVEL);
+    expect(c.stage).toBe(1);
+    expect(c.stars).toBe(0);
+    expect(c.moves.map((x) => x.id)).toEqual([pool[0], pool[1]]);
+    // Unseen forms and uncaught species are dropped from a saved team.
+    expect(validArenaTeam(m, [{ speciesId: 'mossling', stage: 2, moves: [] }, { speciesId: 'emberkit', stage: 0, moves: [] }]).map((p) => p.speciesId)).toEqual(['emberkit']);
+  });
+  it('ladder opponents get tougher and are fixed by the seed', async () => {
+    const { arenaOpponent, ARENA_ROUNDS } = await import('../src/logic/arena');
+    const first = arenaOpponent(0, 42);
+    const last = arenaOpponent(ARENA_ROUNDS - 1, 42);
+    expect(first.team.length).toBeLessThanOrEqual(last.team.length);
+    expect(last.team.every((c) => c.stage === 2)).toBe(true);
+    expect(last.randomness).toBeLessThan(first.randomness);
+    expect(arenaOpponent(2, 42).team.map((c) => c.speciesId)).toEqual(arenaOpponent(2, 42).team.map((c) => c.speciesId));
+  });
+});

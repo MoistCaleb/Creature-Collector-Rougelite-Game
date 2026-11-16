@@ -1,0 +1,111 @@
+import { attackId, MOVES } from '../data/moves';
+import { SPECIES, SPECIES_BY_ID } from '../data/species';
+import { TRAINER_CLASSES, TRAINER_NAMES } from '../data/trainers';
+import { createCreature, learnset, MAX_MOVES, type Creature } from './creature';
+import { hasSeenForm } from './dex';
+import { Rng } from './rng';
+import type { Meta } from './run';
+
+/**
+ * The Battle Arena: raw battling at a fixed level. Build a team from creatures you've caught (any
+ * form you've seen, moves of your choice), everyone at Lv 50 with no stars or items, then climb a
+ * ladder of computer opponents. Also the "fair team" rules multiplayer duels use.
+ */
+export const ARENA_LEVEL = 50;
+export const ARENA_ROUNDS = 5;
+export const ARENA_TEAM = 4;
+
+export interface ArenaPick {
+  speciesId: string;
+  stage: number;
+  moves: string[];
+}
+
+/** Species you can bring: everything you've caught, plus your starters. */
+export function arenaRoster(meta: Meta): string[] {
+  const have = new Set([...meta.dex.caught, ...meta.unlockedStarters]);
+  return SPECIES.filter((s) => have.has(s.id)).map((s) => s.id);
+}
+
+/** Forms of a species you can bring: the base form, and any evolution you've seen. */
+export function arenaForms(meta: Meta, speciesId: string): number[] {
+  return [0, 1, 2].filter((st) => st === 0 || hasSeenForm(meta.dex, speciesId, st));
+}
+
+/**
+ * Moves this form can know at Lv 50: everything in its learnset up to Lv 50, with line attacks
+ * shifted up a rank per evolution (as they are when a creature evolves).
+ */
+export function arenaMovePool(speciesId: string, stage: number): string[] {
+  const out: string[] = [];
+  for (const e of learnset(SPECIES_BY_ID[speciesId])) {
+    if (e.level > ARENA_LEVEL) continue;
+    const d = MOVES[e.id];
+    const id = d.kind === 'attack' && d.rank >= 0 ? attackId(d.element, Math.min(3, d.rank + stage)) : e.id;
+    if (!out.includes(id)) out.push(id);
+  }
+  // Evolved forms keep the lower ranks they grew out of, too.
+  for (const e of learnset(SPECIES_BY_ID[speciesId])) {
+    const d = MOVES[e.id];
+    if (e.level > ARENA_LEVEL || d.kind !== 'attack' || d.rank < 0) continue;
+    for (let r = d.rank; r < Math.min(3, d.rank + stage); r++) {
+      const id = attackId(d.element, r);
+      if (!out.includes(id)) out.push(id);
+    }
+  }
+  return out;
+}
+
+/** The moves this form would naturally know at Lv 50 (a sensible default pick). */
+export function defaultArenaMoves(speciesId: string, stage: number): string[] {
+  const pool = arenaMovePool(speciesId, stage);
+  const natural = createCreature(speciesId, ARENA_LEVEL, stage).moves.map((m) => m.id).filter((id) => pool.includes(id));
+  return natural.slice(0, MAX_MOVES);
+}
+
+/** Build the battle-ready creature for a pick: Lv 50, no stars, no item, full HP and uses. */
+export function makeArenaCreature(p: ArenaPick): Creature {
+  const c = createCreature(p.speciesId, ARENA_LEVEL, p.stage);
+  const pool = arenaMovePool(p.speciesId, p.stage);
+  const moves = p.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
+  c.moves = (moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage)).map((id) => ({ id, tier: 1 }));
+  c.pendingMoves = [];
+  c.learnIndex = learnset(SPECIES_BY_ID[p.speciesId]).length;
+  return c;
+}
+
+/** Keep only picks that are still valid for this player (caught species, seen forms, legal moves). */
+export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): ArenaPick[] {
+  const roster = arenaRoster(meta);
+  return (picks ?? [])
+    .filter((p) => roster.includes(p.speciesId) && arenaForms(meta, p.speciesId).includes(p.stage))
+    .map((p) => ({ ...p, moves: p.moves.filter((id) => arenaMovePool(p.speciesId, p.stage).includes(id)).slice(0, MAX_MOVES) }))
+    .slice(0, ARENA_TEAM);
+}
+
+export interface ArenaOpponent {
+  name: string;
+  team: Creature[];
+  /** Chance it picks a random move instead of its best. */
+  randomness: number;
+}
+
+/**
+ * Ladder opponents grow tougher each round: more creatures, more evolved, upgraded moves and
+ * sharper play. Seeded so a ladder is fixed once started.
+ */
+export function arenaOpponent(round: number, seed: number): ArenaOpponent {
+  const rng = new Rng(seed + round * 7919);
+  const count = round === 0 ? 3 : 4;
+  const stage = round < 2 ? 1 : 2;
+  const team: Creature[] = [];
+  const pool = [...SPECIES];
+  for (let i = 0; i < count; i++) {
+    const sp = pool.splice(rng.int(0, pool.length - 1), 1)[0];
+    const c = createCreature(sp.id, ARENA_LEVEL, stage);
+    if (round >= 3) for (const m of c.moves) m.tier = round >= 4 ? 3 : 2;
+    team.push(c);
+  }
+  const title = round === ARENA_ROUNDS - 1 ? 'Arena Champion' : rng.pick(TRAINER_CLASSES);
+  return { name: `${title} ${rng.pick(TRAINER_NAMES)}`, team, randomness: [0.35, 0.25, 0.15, 0.05, 0][round] ?? 0 };
+}
