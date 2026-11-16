@@ -79,7 +79,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
     else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind, run.heat ?? 0); }
     if (kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) run.evoStones++;
     if (kind === 'elite') {
-      run.evoStones++;
+      if (run.rng.chance(BALANCE.eliteStoneChance)) run.evoStones++;
       // Trainer prize: a held item, handed to the first team member without one.
       const prize = rollHeld(run.rng);
       stash(run, prize);
@@ -92,14 +92,26 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   return 'lose';
 }
 
+// Economy tracking (per run, reset in simulate()).
+let econ = { earned: [0, 0, 0], spent: [0, 0, 0], stones: { drop: 0, elite: 0, shop: 0 }, used: 0 };
+const econRuns: { won: boolean; econ: typeof econ; coinsLeft: number; stonesLeft: number; floor: number }[] = [];
+
 function simulate(seed: number): { floor: number; won: boolean; diedAt?: string } {
   const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] };
   meta.dex.caught = process.env.VET ? SPECIES.map((s) => s.id) : [];
+  econ = { earned: [0, 0, 0], spent: [0, 0, 0], stones: { drop: 0, elite: 0, shop: 0 }, used: 0 };
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);
   run.heat = Number(process.env.HEAT ?? 0);
+  const finish = <T extends { floor: number; won: boolean }>(r: T): T => {
+    econRuns.push({ won: r.won, econ: { ...econ, capCoins: run.log.coins ?? 0 } as typeof econ, coinsLeft: run.coins, stonesLeft: run.evoStones, floor: r.floor });
+    return r;
+  };
   for (let step = 0; step < 600; step++) {
     const node = currentNode(run);
+    const coins0 = run.coins;
+    const stones0 = run.evoStones;
+    const fl = run.floor;
     let nextId: string;
     if (run.bossPending) nextId = run.currentId;
     else {
@@ -113,14 +125,15 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
     const n = run.map.nodes[nextId];
     if (process.env.TRACE) console.log(`F${run.floor + 1} ${n.kind.padEnd(8)} p=${n.progress.toFixed(2)} team=${run.team.map((c) => `${c.speciesId}:L${c.level}:${c.hp}/${stats(c).hp}`).join(' ')} bench=${run.bench.length}`);
     // use stones
-    for (const c of allCreatures(run)) if (run.evoStones > 0 && canEvolve(c) && c.level >= levelCap(c)) { run.evoStones--; evolve(c); }
+    for (const c of allCreatures(run)) if (run.evoStones > 0 && canEvolve(c) && c.level >= levelCap(c)) { run.evoStones--; econ.used++; evolve(c); }
     switch (n.kind) {
       case 'battle': case 'elite': case 'boss': {
         const lastTeam = run.team.map((c) => c.level).join('/');
         if (n.kind === 'boss' && !run.bossPending) bossLevels[run.floor].push(Math.max(...run.team.map((c) => c.level)));
         const r = fight(run, n.kind);
+        if (run.evoStones > stones0) econ.stones[n.kind === 'elite' ? 'elite' : 'drop'] += run.evoStones - stones0;
         if (r === 'lose') {
-          if (!promoteBench(run)) return { floor: run.floor, won: false, diedAt: `${n.kind}@${n.progress.toFixed(1)} L${Math.max(...enemyLevels)}vs${lastTeam}` };
+          if (!promoteBench(run)) return finish({ floor: run.floor, won: false, diedAt: `${n.kind}@${n.progress.toFixed(1)} L${Math.max(...enemyLevels)}vs${lastTeam}` });
           if (n.kind === 'boss') run.bossPending = true;
           break;
         }
@@ -129,7 +142,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
           const evo = allCreatures(run).filter(canEvolve).sort((a, b) => b.level - a.level)[0];
           if (evo) evolve(evo); else allCreatures(run).forEach((c) => healFraction(c, 1));
           nodesPerFloor[run.floor].push(run.visited.length);
-          if (clearFloor(run)) return { floor: 3, won: true };
+          if (clearFloor(run)) return finish({ floor: 3, won: true });
         }
         break;
       }
@@ -148,7 +161,8 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
           if (id === 'restore' && run.team.every((c) => c.hp / stats(c).hp > 0.6)) continue;
           const tgt = eligibleTargets(run, id).sort((a, b) => b.level - a.level)[0];
           const mi = tgt ? tgt.moves.findIndex((m) => m.tier < 3) : -1;
-          pay(run, sl.price); sl.sold = true;
+          pay(run, sl.price); sl.sold = true; econ.spent[run.floor] += sl.price;
+          if (id === 'stone') econ.stones.shop++;
           applyItem(run, sl, tgt, mi >= 0 ? mi : undefined);
         }
         break;
@@ -156,6 +170,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
       case 'levelup': allCreatures(run).forEach((c) => addLevels(c, BALANCE.levelUpTeam[run.floor])); break;
       case 'skill': { const c = run.team[0]; const m = c.moves.find((m) => m.tier < 3); if (m) m.tier++; break; }
     }
+    if (run.coins > coins0) econ.earned[fl] += run.coins - coins0;
     // move team/bench: keep strongest 4 in team
     const all = allCreatures(run).sort((a, b) => b.level - a.level);
     run.team = all.slice(0, 4); run.bench = all.slice(4);
@@ -179,4 +194,10 @@ const med = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor
 const pct = (a: number[], q: number) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length * q)] : 0);
 console.log('top level arriving at boss (p25 / median / p75):', bossLevels.map((a, i) => `F${i + 1}: ${pct(a, 0.25)}/${med(a)}/${pct(a, 0.75)} (n=${a.length})`).join('  '));
 console.log('median nodes walked per floor:', nodesPerFloor.map((a, i) => `F${i + 1}: ${med(a)}`).join('  '));
+{
+  const wonRuns = econRuns.filter((r) => r.won);
+  const avg = (f: (r: (typeof econRuns)[number]) => number, rs = wonRuns) => (rs.length ? (rs.reduce((t, r) => t + f(r), 0) / rs.length).toFixed(0) : '-');
+  console.log(`economy (winning runs, n=${wonRuns.length}): earned/floor ${[0, 1, 2].map((i) => avg((r) => r.econ.earned[i])).join('/')}  spent/floor ${[0, 1, 2].map((i) => avg((r) => r.econ.spent[i])).join('/')}  coins left at end ${avg((r) => r.coinsLeft)}  from cap XP ${avg((r) => (r.econ as any).capCoins)}`);
+  console.log(`stones (winning runs): drops ${avg((r) => r.econ.stones.drop)}  elites ${avg((r) => r.econ.stones.elite)}  shop ${avg((r) => r.econ.stones.shop)}  used ${avg((r) => r.econ.used)}  left ${avg((r) => r.stonesLeft)}`);
+}
 console.log('deaths:', Object.entries(deaths).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join('  '));

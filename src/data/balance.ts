@@ -5,7 +5,9 @@ export const BALANCE = {
   damageScale: 0.45,
   /** Fraction of max HP survivors recover after winning a battle. */
   /** Chance a won wild battle drops an Evolution Stone, by floor. */
-  stoneDropChance: [0.05, 0.07, 0.09],
+  stoneDropChance: [0.03, 0.04, 0.05],
+  /** Chance a trainer (elite) pays out an Evolution Stone (Stone Hunter: always, plus this chance of a second). */
+  eliteStoneChance: 0.5,
   postBattleHeal: 0.4,
   /** Iron Will passive's post-battle recovery instead. */
   ironWillHeal: 0.7,
@@ -29,15 +31,18 @@ export const BALANCE = {
   xpPerLevelNeeded: 5,
   xpQuad: 0.08,
   benchXpShare: 0.5,
-  /** Coins per XP earned at the level cap: while it's being stored, and once the store is full. */
-  capCoinRate: 1 / 25,
-  fullBankCoinRate: 1 / 10,
+  /**
+   * Coins for XP earned at the level cap, per level's worth of that XP (so it stays modest at any
+   * level): while it's being stored, and once the store is full.
+   */
+  capCoinsPerLevel: 1,
+  fullBankCoinsPerLevel: 2,
   /** XP share for team members who didn't fight. */
   sideXpShare: 0.5,
   catchUpPerLevel: 0.08,
   catchUpMax: 2,
   coinsBase: 10,
-  coinsPerEnemyLevel: 0.8,
+  coinsPerEnemyLevel: 0.35,
   /** Level Up node: levels for Focus (one creature) and Team drills (everyone), per floor. */
   levelUpFocus: [6, 9, 12],
   levelUpTeam: [3, 4, 5],
@@ -45,7 +50,7 @@ export const BALANCE = {
   levelUpCatchUpGap: 5,
   /** Trainer (elite) battles: no catching, but XP and coins are multiplied by these. */
   trainerXpMult: 3,
-  trainerCoinMult: 4,
+  trainerCoinMult: 3,
   /** Shop prices multiply by 1 + this x floor index. */
-  shopFloorMarkup: 1.0,
+  shopFloorMarkup: 1.25,
 };

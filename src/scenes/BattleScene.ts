@@ -650,7 +650,8 @@ export class BattleScene extends Phaser.Scene {
         ab.summary = `\n\n◆ It dropped an Evolution Stone!${fallen}`;
       }
       if (this.kind === 'elite') {
-        const stones = run.passive === 'hunter' ? 2 : 1;
+        // Half the time a trainer pays a stone; Big Game Hunter always gets one on top.
+        const stones = (run.passive === 'hunter' ? 1 : 0) + (run.rng.chance(BALANCE.eliteStoneChance) ? 1 : 0);
         run.evoStones += stones;
         earnCoins(run, coins);
         trackStat(run, 'elites');
@@ -658,7 +659,7 @@ export class BattleScene extends Phaser.Scene {
         const theirs = this.enemies.map((e) => e.held).filter((h) => !!h);
         const prize = theirs.length ? run.rng.pick(theirs)! : rollHeld(run.rng);
         stash(run, prize);
-        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'} and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);
