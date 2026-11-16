@@ -17,7 +17,7 @@ import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { Rng } from '../logic/rng';
 import type { DuelController, Next } from '../net/duel';
 import { session } from '../net/session';
-import { duel, endRace, leaveDuel, sendHello } from '../net/runtime';
+import { afterSeriesGame, duel, endRace, leaveDuel, recordSeriesGame, sendHello } from '../net/runtime';
 import {
   canEvolve,
   getFloorCeiling,
@@ -844,21 +844,28 @@ export class BattleScene extends Phaser.Scene {
     const opp = this.match!.opponent;
     const race = !!this.match!.duel!.info.hostCreatures;
     duel.controller = null;
-    const title = race ? (won ? 'You won the race!' : `${opp} won the race`) : won ? 'You win!' : 'You lost';
-    const body = race
-      ? won
-        ? `Your run's team beat ${opp}'s in the final duel!`
-        : `${opp}'s team won the final duel.`
-      : won
-        ? `You beat ${opp}!`
-        : `${opp} wins this one.`;
-    showMessage(this, title, body, () => {
-      if (race) {
+    if (race) {
+      const title = won ? 'You won the race!' : `${opp} won the race`;
+      const body = won ? `Your run's team beat ${opp}'s in the final duel!` : `${opp}'s team won the final duel.`;
+      return showMessage(this, title, body, () => {
         endRace();
         state.run = null;
-      }
-      this.scene.start('Duel', {});
-    });
+        this.scene.start('Duel', {});
+      });
+    }
+    // Arena duels are a series (best of 1, 3 or 5).
+    const sr = duel.series;
+    const result = recordSeriesGame(won);
+    const score = sr && sr.settings.bestOf > 1 ? `\n\nYou ${sr.mine} – ${sr.theirs} ${opp}` : '';
+    let title = won ? 'You win!' : 'You lost';
+    let body = (won ? `You beat ${opp}!` : `${opp} wins this one.`) + score;
+    if (sr && sr.settings.bestOf > 1) {
+      if (result === 'won') title = 'You win the series!';
+      else if (result === 'lost') title = `${opp} wins the series`;
+      else if (result === 'draw') title = 'The series is a draw';
+      else body += `\n\nNext: battle ${sr.game} of ${sr.settings.bestOf}.`;
+    }
+    showMessage(this, title, body, () => afterSeriesGame(result !== null));
   }
 
   // ------------------------------------------------------------ results

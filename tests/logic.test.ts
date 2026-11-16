@@ -1324,3 +1324,24 @@ describe('stage races', () => {
     expect(c.hp).toBe(1);
   });
 });
+
+describe('saved teams and duel settings', () => {
+  it('moves an old single Arena team into the saved list and names new teams', async () => {
+    const { savedTeams, activeTeam, nextTeamName } = await import('../src/logic/arena');
+    const m: Meta = {
+      unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0,
+      dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands',
+      stats: emptyStats(), achievements: [], newAchievements: [],
+      arenaTeam: [{ speciesId: DEFAULT_STARTERS[0], stage: 0, moves: [] }],
+    };
+    expect(savedTeams(m)).toHaveLength(1);
+    expect(savedTeams(m)[0].name).toBe('Team 1');
+    expect(activeTeam(m).map((p) => p.speciesId)).toEqual([DEFAULT_STARTERS[0]]);
+    expect(nextTeamName(m)).toBe('Team 2');
+  });
+  it('keeps settings from the other phone within the allowed choices', async () => {
+    const { cleanSettings, DEFAULT_SETTINGS } = await import('../src/net/duel');
+    expect(cleanSettings({ bestOf: 3, teamsPerPlayer: 2, teamSize: 3, level: 75 })).toEqual({ bestOf: 3, teamsPerPlayer: 2, teamSize: 3, level: 75 });
+    expect(cleanSettings({ bestOf: 99, level: 1 } as never)).toEqual(DEFAULT_SETTINGS);
+  });
+});

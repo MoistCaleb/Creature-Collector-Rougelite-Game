@@ -11,7 +11,9 @@ import {
   arenaRoster,
   defaultArenaMoves,
   makeArenaCreature,
-  validArenaTeam,
+  activeTeam,
+  activeTeamIndex,
+  savedTeams,
   type ArenaPick,
 } from '../logic/arena';
 import { createCreature, creatureName, creatureTypes, getFloorCeiling, MAX_MOVES, setFloorCeiling } from '../logic/creature';
@@ -49,13 +51,15 @@ export class ArenaScene extends Phaser.Scene {
     const ceiling = getFloorCeiling();
     setFloorCeiling(Infinity);
     this.events.once('shutdown', () => setFloorCeiling(ceiling));
-    this.team = validArenaTeam(meta, meta.arenaTeam);
+    this.team = activeTeam(meta);
     background(this);
     playMusic('title');
     button(this, 40, 28, 64, 36, '', () => this.scene.start('Title', {}), { fontSize: 15, glyph: 'back' });
     text(this, W / 2 + 20, 18, 'Battle Arena', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     text(this, W / 2 + 20, 54, `Everyone Lv ${ARENA_LEVEL} · no stars or items · best ${meta.arenaBest ?? 0}/${ARENA_ROUNDS}`, 13, COLORS.textDim).setOrigin(0.5, 0);
-    text(this, 16, 78, `Your team (${this.team.length}/${ARENA_TEAM}) · tap a slot to edit`, 14, COLORS.text);
+    const name = savedTeams(meta)[activeTeamIndex(meta)].name;
+    text(this, 16, 78, `${name} (${this.team.length}/${ARENA_TEAM}) · tap to edit`, 14, COLORS.text);
+    button(this, W - 60, 86, 96, 28, `Teams (${savedTeams(meta).length})`, () => this.scene.start('Teams', {}), { fontSize: 13, color: 0x2f4a6b });
 
     for (let i = 0; i < ARENA_TEAM; i++) this.drawSlot(i);
 
@@ -78,8 +82,9 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private save() {
-    state.meta.arenaTeam = this.team;
-    saveMeta(state.meta);
+    const meta = state.meta;
+    savedTeams(meta)[activeTeamIndex(meta)].picks = this.team;
+    saveMeta(meta);
   }
 
   // ------------------------------------------------------------ team slots
