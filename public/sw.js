@@ -1,10 +1,17 @@
 // Offline support for the installed app.
-// Pages: network first (so updates arrive), falling back to the cached copy offline.
-// Everything else (the game bundle, icons): cache first, filled as it's fetched.
-const CACHE = 'creature-roguelite-v1';
+// Pages: always ask the network first, bypassing the browser's HTTP cache, so a new version
+// arrives on the next launch; fall back to the cached copy offline.
+// Everything else (the game bundle, icons): cache first. Bundle files have content hashes in
+// their names, so a new version always fetches fresh files.
+const CACHE = 'creature-roguelite-v2';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest'])).catch(() => {}));
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll([new Request('./', { cache: 'reload' }), new Request('./manifest.webmanifest', { cache: 'reload' })]))
+      .catch(() => {}),
+  );
   self.skipWaiting();
 });
 
@@ -22,13 +29,15 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-store' })
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./index.html', copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('./', copy));
+          }
           return res;
         })
-        .catch(() => caches.match('./index.html')),
+        .catch(() => caches.match('./')),
     );
     return;
   }
