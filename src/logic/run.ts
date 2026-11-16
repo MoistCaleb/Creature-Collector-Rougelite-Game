@@ -76,7 +76,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   sage: { name: 'Sage', desc: 'Skill Shrines offer 4 choices instead of 3.' },
   ascendant: { name: 'Ascendant', desc: 'Prestige Altars need no sacrifice.' },
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
-  hunter: { name: 'Big Game Hunter', desc: 'Trainers drop 2 Evolution Stones.' },
+  hunter: { name: 'Big Game Hunter', desc: 'Trainers always drop an Evolution Stone, sometimes 2.' },
   naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
   ironwill: { name: 'Iron Will', desc: 'Survivors heal 70% after wins, not 40%.' },
   lucky: { name: 'Lucky Charm', desc: 'Coin-flip events succeed 75% of the time.' },
@@ -576,7 +576,8 @@ export interface XpResult {
 function giveXp(run: Run, c: Creature, xp: number): XpResult {
   const g = gainXp(c, xp);
   const capped = g.banked + g.overflow;
-  const coins = Math.round(g.banked * BALANCE.capCoinRate + g.overflow * BALANCE.fullBankCoinRate);
+  const level = xpToNext(c.level);
+  const coins = Math.round((g.banked * BALANCE.capCoinsPerLevel + g.overflow * BALANCE.fullBankCoinsPerLevel) / level);
   if (coins > 0) earnCoins(run, coins);
   return { name: creatureName(c), xp, levels: g.levels, banked: g.banked, coins, full: capped > 0 && (c.banked ?? 0) >= bankLimit(c) };
 }

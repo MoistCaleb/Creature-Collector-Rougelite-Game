@@ -36,7 +36,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 | Node | Effect |
 |---|---|
 | Battle | Wild trainer/creature fight. Win → rewards **or** catch |
-| Trainer | Named trainer's team. No catching; ×3 XP, ×4 coins and an Evolution Stone |
+| Trainer | Named trainer's team. No catching; ×3 XP, ×3 coins, a held item and a 50% chance of an Evolution Stone |
 | Level Up | Focus: one creature +6/+9/+12 levels (by floor) · Team drills: everyone incl. bench +3/+4/+5 · Catch-up camp: raise everyone to within 5 levels of your strongest |
 | Prestige (star) | Prestige a creature |
 | Skill | Choose 1 of 3 skill buffs |
@@ -158,12 +158,12 @@ Proposed math:
 - Pure types count their type once (no ×2.25 weakness possible) but get a bigger same-type-attack bonus.
 
 ## Coins & shops
-- **Coins** are per-run. Earned from battles (10 + 0.8 x enemy level each; trainers x4, bosses x3).
+- **Coins** are per-run. Earned from battles (10 + 0.35 x enemy level each; trainers x3, bosses x3).
   Catching forfeits coins along with XP.
 - **Shop stock** (5 of): Potion, Full Restore, Training Manual (+2 lv), Skill Scroll (+1 tier),
   Evolution Stone, Prestige Sigil (no sacrifice), Recruit (biome creature at ~60% of your top level;
   name hidden unless it's in your Dex). Items apply on purchase.
-- Prices scale +100% per floor. **Haggler** passive (-25%) unlocks after spending 500 coins total.
+- Prices scale +125% per floor. **Haggler** passive (-25%) unlocks after spending 500 coins total.
 
 ## Creature Dex
 - Persistent across runs: forms seen (per evolution stage), moves seen, elements seen.
@@ -190,7 +190,7 @@ Proposed math:
   and coins are paid as at the stage cap, and the stored XP pours in when the next floor opens.
 - Healing from attacks is a small share of the damage dealt: drain moves 20%, Nature rank-3 15%, Water rank-3 15%.
 - XP earned at the cap is stored (up to 5 levels' worth) and pours in as soon as the cap rises (evolve or prestige).
-  Capped creatures also turn that XP into coins: 1 per 25 XP while storing, 1 per 10 once the store is full.
+  Capped creatures also turn that XP into coins: 1 per level's worth while storing, 2 once the store is full.
 - Floors are ~25-35 nodes per route. Enemy levels ease in then ramp: floor 1 ~1-23 (boss 25),
   floor 2 ~30-60 (boss 63), floor 3 ~63-95 (final boss 96-98). Teams reach ~100 by the final boss.
 - XP per enemy = (3.2 / 1.1 / 1.4 by floor) x that enemy's own level-up cost. Floor 1 is generous so
@@ -220,7 +220,7 @@ Runs unlock:
   | Scholar | Upgrade 15 moves | Sage: Skill Shrines offer 4 choices |
   | Ascension | Earn 10 prestige stars | Ascendant: Prestige Altars need no sacrifice |
   | Second Wind | Survive 3 team wipes | Bodyguard: bench steps in fully healed |
-  | Trainer Hunter | Defeat 10 trainers | Big Game Hunter: trainers drop 2 stones |
+  | Trainer Hunter | Defeat 10 trainers | Big Game Hunter: trainers always drop a stone, sometimes 2 |
   | Naturalist | Catch 40 different species | Naturalist: +25% XP from wild battles |
   | Guardian Slayer | Defeat 15 floor bosses | Iron Will: survivors recover 70% after wins (normally 40%) |
   | Treasure Hunter | Open 15 treasure chests | Lucky Charm: coin-flip events succeed 75% |
@@ -253,6 +253,6 @@ Runs unlock:
   on a switch); wild creatures burst out of something matching their first element: grass (Nature), flames (Fire),
   rocks (Earth), scrap (Metal), ice shards (Frost), dragon stones (Dragon), water (Water), sludge (Toxic), a shadow
   pool (Shadow), a lightning strike (Storm), a sunburst (Light) or gathering mist (Spirit).
-- **Evolution Stones** also drop from won wild battles: 5% / 7% / 9% by floor.
+- **Evolution Stones** also drop from won wild battles: 3% / 4% / 5% by floor.
 
 ## Open questions

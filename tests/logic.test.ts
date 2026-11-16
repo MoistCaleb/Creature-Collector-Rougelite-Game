@@ -268,11 +268,11 @@ describe('acquiring creatures', () => {
     const coins0 = run.coins;
     const [r1] = grantXp(run, 250, [c.uid]);
     expect(r1.banked).toBe(250);
-    expect(r1.coins).toBe(Math.round(250 * BALANCE.capCoinRate));
+    expect(r1.coins).toBe(Math.round((250 * BALANCE.capCoinsPerLevel) / xpToNext(c.level)));
     c.banked = bankLimit(c);
     const [r2] = grantXp(run, 250, [c.uid]);
     expect(r2.full).toBe(true);
-    expect(r2.coins).toBe(Math.round(250 * BALANCE.fullBankCoinRate));
+    expect(r2.coins).toBe(Math.round((250 * BALANCE.fullBankCoinsPerLevel) / xpToNext(c.level)));
     expect(run.coins).toBe(coins0 + r1.coins + r2.coins);
   });
   it('after a battle, bench creatures fill the slots of the fallen', async () => {
@@ -666,7 +666,7 @@ describe('bosses and trainers', () => {
   it('trainer battles pay far more than wild ones and boss teams match their element', () => {
     const foes = [mk(anyOf('Fire'), 20)];
     expect(Math.abs(battleXp(foes, 'elite', 0) - battleXp(foes, 'battle', 0) * 3)).toBeLessThanOrEqual(2);
-    expect(battleCoins(foes, 'elite')).toBe(battleCoins(foes, 'battle') * 4);
+    expect(battleCoins(foes, 'elite')).toBe(battleCoins(foes, 'battle') * BALANCE.trainerCoinMult);
     const run = startRun(mkMetaBoss(), SPECIES[0].id, 9);
     const boss = run.map.nodes[run.map.bossId];
     for (const e of makeEncounter(run, boss)) expect(SPECIES_BY_ID[e.speciesId].types).toContain(run.biomes[0]);
