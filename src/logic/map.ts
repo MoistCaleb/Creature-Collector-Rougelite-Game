@@ -203,7 +203,7 @@ export const NODE_INFO: Record<NodeKind, { label: string; color: number; desc: s
   levelup: { label: 'Level Up', color: 0x27ae60, desc: 'Train your creatures.' },
   prestige: { label: 'Prestige', color: 0xe84393, desc: 'Sacrifice a bench creature to prestige another.' },
   skill: { label: 'Skill', color: 0x8e6bff, desc: 'Buff one of your moves.' },
-  heal: { label: 'Rest', color: 0x16a085, desc: 'Heal your team 50%.' },
+  heal: { label: 'Rest', color: 0x16a085, desc: 'Heal your team 50% and cure status conditions.' },
   shop: { label: 'Shop', color: 0xb8862b, desc: 'Spend coins on items and recruits.' },
   treasure: { label: 'Treasure', color: 0x9c6b2f, desc: 'A chest: coins or an item.' },
   event: { label: 'Event', color: 0x2f6b9c, desc: 'Something unexpected.' },

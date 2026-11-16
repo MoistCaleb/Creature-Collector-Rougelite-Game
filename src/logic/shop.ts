@@ -29,8 +29,8 @@ export interface ItemDef {
 }
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  potion: { name: 'Potion', desc: 'Carry it with you · heals 50%, even mid-battle', basePrice: 15, weight: 10, target: 'none' },
-  restore: { name: 'Full Restore', desc: 'Heal every creature to full', basePrice: 70, weight: 6, target: 'none' },
+  potion: { name: 'Potion', desc: 'Carry it · heals 50% and cures status, even mid-battle', basePrice: 15, weight: 10, target: 'none' },
+  restore: { name: 'Full Restore', desc: 'Heal every creature to full and cure statuses', basePrice: 70, weight: 6, target: 'none' },
   manual: { name: 'Training Manual', desc: 'One creature gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
   scroll: { name: 'Skill Scroll', desc: 'Upgrade one move a tier', basePrice: 55, weight: 8, target: 'move' },
   stone: { name: 'Evolution Stone', desc: 'Evolve a creature at its level cap', basePrice: 120, weight: 5, target: 'none' },
@@ -127,7 +127,7 @@ export function eligibleTargets(run: Run, item: ItemId): Creature[] {
 export function unusableReason(run: Run, slot: ShopSlot): string | null {
   const def = ITEMS[slot.item];
   if (def.target !== 'none' && eligibleTargets(run, slot.item).length === 0) return 'No creature can use this';
-  if (slot.item === 'restore' && allCreatures(run).every((c) => c.hp >= stats(c).hp)) return 'Everyone is at full HP';
+  if (slot.item === 'restore' && allCreatures(run).every((c) => c.hp >= stats(c).hp && !c.status)) return 'Everyone is healthy';
   if (slot.item === 'recruit' && rosterFull(run)) return 'Your party is full';
   if (slot.item === 'potion' && (run.potions ?? 0) >= maxPotions(run)) return `Your pouch is full (${maxPotions(run)} potions)`;
   return null;

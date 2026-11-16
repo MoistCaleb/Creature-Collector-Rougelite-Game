@@ -557,6 +557,9 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
 export const maxPotions = (run: Run) => (run.passive === 'apothecary' ? 8 : 5);
 export const potionHeal = (run: Run) => (run.passive === 'apothecary' ? 0.75 : 0.5);
 
+/** A potion helps a living creature that's hurt or has a status condition. */
+export const needsPotion = (c: Creature) => isAlive(c) && (c.hp < stats(c).hp || !!c.status);
+
 /** Count a potion drunk (for the Chemist achievement). */
 export function notePotion(run: Run) {
   trackStat(run, 'potionsUsed');
@@ -564,9 +567,10 @@ export function notePotion(run: Run) {
 
 /** Drink a carried potion. Returns false if there's none or it wouldn't help. */
 export function usePotion(run: Run, c: Creature): boolean {
-  if ((run.potions ?? 0) < 1 || !isAlive(c) || c.hp >= stats(c).hp) return false;
+  if ((run.potions ?? 0) < 1 || !needsPotion(c)) return false;
   run.potions! -= 1;
   healFraction(c, potionHeal(run));
+  c.status = undefined;
   notePotion(run);
   return true;
 }

@@ -40,6 +40,7 @@ import {
   stash,
   potionHeal,
   notePotion,
+  needsPotion,
   earnCoins,
   evolveTracked,
   prestigeTracked,
@@ -220,7 +221,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
-    this.setStatus(p, null);
+    this.setStatus(p, c.status?.id ?? null);
     p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
     p.held.setVisible(!!c.held);
     if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.width + 12);
@@ -297,7 +298,7 @@ export class BattleScene extends Phaser.Scene {
     const canSwap = this.battle.player.some((x, i) => i !== this.battle.pActive && isAlive(x.c));
     this.actions.add(button(this, W / 2 - 56, 768, 106, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));
     const potions = state.run!.potions ?? 0;
-    const hurt = this.battle.player.some((x) => isAlive(x.c) && x.c.hp < stats(x.c).hp);
+    const hurt = this.battle.player.some((x) => needsPotion(x.c));
     this.actions.add(
       button(this, W / 2 + 56, 768, 106, 44, `Potion ${potions}`, () => this.openPotion(), {
         enabled: potions > 0 && hurt,
@@ -353,11 +354,11 @@ export class BattleScene extends Phaser.Scene {
     const list = this.battle.player;
     openPicker(this, {
       title: `Use a Potion (${run.potions ?? 0} left)`,
-      subtitle: `Heals ${Math.round(potionHeal(run) * 100)}% of max HP. Uses your turn.`,
+      subtitle: `Heals ${Math.round(potionHeal(run) * 100)}% of max HP and cures status conditions. Uses your turn.`,
       options: list.map((x) => ({
         creature: x.c,
-        disabled: !isAlive(x.c) || x.c.hp >= stats(x.c).hp,
-        note: !isAlive(x.c) ? 'Fallen' : x.c.hp >= stats(x.c).hp ? 'Full HP' : undefined,
+        disabled: !needsPotion(x.c),
+        note: !isAlive(x.c) ? 'Fallen' : !needsPotion(x.c) ? 'Healthy' : undefined,
       })),
       onPick: (i) => {
         run.potions = Math.max(0, (run.potions ?? 0) - 1);

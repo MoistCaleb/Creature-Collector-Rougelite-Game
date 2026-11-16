@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { HELD } from '../data/held';
+import { STATUS } from '../data/status';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
 import { isMuted, setMuted, sfx } from './sound';
@@ -206,7 +207,16 @@ export function creatureRow(
   cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage)).setScale(1.8 * SPRITE_FIT));
   const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16);
   cont.add(nameText);
-  if (c.held) cont.add(iconImage(scene, 66 + nameText.width + 12, 16, HELD[c.held].icon, 18));
+  let tagX = 66 + nameText.width + 8;
+  if (c.held) {
+    cont.add(iconImage(scene, tagX + 4, 16, HELD[c.held].icon, 18));
+    tagX += 24;
+  }
+  if (c.status) {
+    const def = STATUS[c.status.id];
+    cont.add(scene.add.rectangle(tagX, 8, 34, 15, def.color).setOrigin(0));
+    cont.add(text(scene, tagX + 17, 15.5, def.tag, 10, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
+  }
   const cap = levelCap(c);
   cont.add(text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
   const chips = scene.add.container(66, 34);
