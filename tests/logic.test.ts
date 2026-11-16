@@ -314,6 +314,22 @@ describe('acquiring creatures', () => {
     clearFloor(run);
     expect(c.level).toBe(Math.min(stageCap(c), BALANCE.floorLevelCap[0] + BANK_LEVELS));
   });
+  it('enemy stars follow your team on later floors, up to the floor maximum', async () => {
+    const { enemyStars } = await import('../src/logic/run');
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    run.team.push(createCreature('mossling', 5), createCreature('mossling', 5));
+    run.team.forEach((c) => (c.stars = 2));
+    const rng = new Rng(1);
+    expect(enemyStars(run, 'boss', rng)).toBe(0); // floor 1: never starred
+    run.floor = 1;
+    expect(enemyStars(run, 'elite', rng)).toBe(2);
+    expect(enemyStars(run, 'boss', rng)).toBe(2 + BALANCE.bossStarBonus);
+    for (let i = 0; i < 20; i++) expect([1, 2]).toContain(enemyStars(run, 'battle', rng));
+    run.team.forEach((c) => (c.stars = 5));
+    expect(enemyStars(run, 'boss', rng)).toBe(BALANCE.enemyStarMax[1]);
+    run.floor = 2;
+    expect(enemyStars(run, 'boss', rng)).toBe(5);
+  });
   it('with a full party, catching releases the chosen creature and takes its spot', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
     while (run.team.length < 4) run.team.push(createCreature('mossling', 5));
