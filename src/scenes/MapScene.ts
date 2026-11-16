@@ -19,7 +19,7 @@ import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
 import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
+import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
@@ -288,14 +288,14 @@ export class MapScene extends Phaser.Scene {
       persist();
     }
     const offer = run.treasure;
-    const slot: ShopSlot = { item: offer.item, price: 0, sold: false };
+    const slot: ShopSlot = { item: offer.item, price: 0, sold: false, held: offer.held };
     const reason = unusableReason(run, slot);
     openPicker(this, {
       title: 'Treasure',
       subtitle: 'The chest holds two things. You can only carry one.',
       options: [
         { label: `◉ ${offer.coins} coins`, color: 0x6b5a1c },
-        { label: ITEMS[offer.item].name, sub: reason ?? ITEMS[offer.item].desc, disabled: !!reason, color: 0x4a3a1c },
+        { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c },
       ],
       onPick: (i) => {
         if (i === 0) {
@@ -530,7 +530,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     const shop = run.shop!;
     const label = (sl: ShopSlot) => {
-      if (sl.item !== 'recruit') return ITEMS[sl.item].name;
+      if (sl.item !== 'recruit') return slotName(sl);
       const c = sl.recruit!;
       const name = hasSeenForm(state.meta.dex, c.speciesId, c.stage) ? creatureName(c) : 'Mystery creature';
       return `Recruit: ${name} Lv ${c.level}`;
@@ -545,7 +545,7 @@ export class MapScene extends Phaser.Scene {
           const poor = !canAfford(run, sl.price);
           return {
             label: `${label(sl)}   ◉ ${sl.price}`,
-            sub: reason ?? (poor ? `${ITEMS[sl.item].desc} · not enough coins` : ITEMS[sl.item].desc),
+            sub: reason ?? (poor ? `${slotDesc(sl)} · not enough coins` : slotDesc(sl)),
             disabled: sl.sold || !!reason || poor,
             color: 0x4a3a1c,
           };
@@ -580,7 +580,7 @@ export class MapScene extends Phaser.Scene {
         registerJoin(run, slot.recruit!);
       }
       const who = target ? `${creatureName(target)}: ` : '';
-      showMessage(this, ITEMS[slot.item].name, who + result, this.done);
+      showMessage(this, slotName(slot), who + result, this.done);
     };
     const def = ITEMS[slot.item];
     if (def.target === 'none') return finish();

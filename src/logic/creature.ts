@@ -22,6 +22,11 @@ export interface Creature {
   learnIndex: number;
   /** Moves the creature wants to learn but has no free slot for (player decides). */
   pendingMoves: string[];
+  /** Damage dealt and knockouts this run (for the run summary). */
+  dealt?: number;
+  kos?: number;
+  /** The one item this creature carries. */
+  held?: import('../data/held').HeldId;
 }
 
 export type Stats = BaseStats;

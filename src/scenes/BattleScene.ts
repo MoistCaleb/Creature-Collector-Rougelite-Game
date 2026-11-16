@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
+import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
 import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
+import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import {
   canEvolve,
@@ -30,6 +32,8 @@ import {
   postBattleRecover,
   promoteBench,
   claimGuardian,
+  rollHeld,
+  stash,
   earnCoins,
   evolveTracked,
   prestigeTracked,
@@ -70,6 +74,9 @@ export class BattleScene extends Phaser.Scene {
   private busy = false;
   /** Tap during playback to speed it up. */
   private fast = false;
+  /** Speed and auto-battle toggles, always on screen during the fight. */
+  private controls!: Phaser.GameObjects.Container;
+  private autoTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super('Battle');
@@ -128,6 +135,8 @@ export class BattleScene extends Phaser.Scene {
     this.add.rectangle(12, 530, W - 24, 62, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.msg = text(this, 24, 540, '', 16, COLORS.text, { wordWrap: { width: W - 48 } });
     this.actions = this.add.container(0, 0);
+    this.controls = this.add.container(0, 0);
+    this.drawControls();
 
     this.refreshEnemy();
     this.refreshPlayer();
@@ -148,6 +157,7 @@ export class BattleScene extends Phaser.Scene {
     const begin = () => {
       if (boss && !resuming) this.bossEntrance();
       if (entry.length) this.play(entry);
+      else this.maybeAuto();
     };
     // Resuming after a reload: pick up wherever the battle was left.
     if (resuming) {
@@ -179,7 +189,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fillPanel(p: SidePanel, c: Creature) {
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}${c.held ? ` ${HELD[c.held].icon}` : ''}`);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
@@ -253,7 +263,46 @@ export class BattleScene extends Phaser.Scene {
     this.actions.add(button(this, W / 2, 768, 200, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 17 }));
   }
 
+  /** Auto-battle and battle speed, on either side of the Switch button. */
+  private drawControls() {
+    this.controls.removeAll(true);
+    const auto = prefs.autoBattle;
+    this.controls.add(
+      button(this, 62, 768, 100, 44, auto ? '▶ Auto ON' : '▶ Auto', () => {
+        prefs.autoBattle = !prefs.autoBattle;
+        this.drawControls();
+        if (prefs.autoBattle) this.maybeAuto();
+        else this.cancelAuto();
+      }, { fontSize: 15, color: auto ? 0x3b6d4a : undefined }),
+    );
+    const speed = prefs.battleSpeed;
+    this.controls.add(
+      button(this, W - 62, 768, 100, 44, `⏩ ${speed}×`, () => {
+        const i = BATTLE_SPEEDS.indexOf(speed as (typeof BATTLE_SPEEDS)[number]);
+        prefs.battleSpeed = BATTLE_SPEEDS[(i + 1) % BATTLE_SPEEDS.length];
+        this.drawControls();
+        this.setSpeed();
+      }, { fontSize: 15, color: speed > 1 ? 0x3a4f7a : undefined }),
+    );
+  }
+
+  /** With auto-battle on, pick the best-rated move after a short beat. */
+  private maybeAuto() {
+    if (!prefs.autoBattle || this.busy || this.autoTimer || this.battle.outcome() !== 'ongoing') return;
+    this.autoTimer = this.time.delayedCall(450, () => {
+      this.autoTimer = null;
+      if (!prefs.autoBattle || this.busy || this.battle.outcome() !== 'ongoing') return;
+      this.act({ kind: 'move', index: this.battle.bestMove('player') });
+    });
+  }
+
+  private cancelAuto() {
+    this.autoTimer?.remove();
+    this.autoTimer = null;
+  }
+
   private openSwitch(forced: boolean) {
+    this.cancelAuto();
     const list = this.battle.player;
     openPicker(this, {
       title: forced ? 'Choose your next creature' : 'Switch creature',
@@ -267,12 +316,13 @@ export class BattleScene extends Phaser.Scene {
         if (forced) this.play(this.battle.forcedSwitch(i));
         else this.act({ kind: 'swap', index: i });
       },
-      onCancel: forced ? undefined : () => {},
+      onCancel: forced ? undefined : () => this.maybeAuto(),
     });
   }
 
   private act(a: PlayerAction) {
     if (this.busy) return;
+    this.cancelAuto();
     this.play(this.battle.takeTurn(a));
   }
 
@@ -284,7 +334,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private setSpeed() {
-    const k = this.fast ? 3 : 1;
+    const base = prefs.battleSpeed;
+    const k = this.fast ? Math.max(3, base * 2) : base;
     this.time.timeScale = k;
     this.tweens.timeScale = k;
   }
@@ -351,7 +402,7 @@ export class BattleScene extends Phaser.Scene {
               this.cameras.main.shake(260, 0.016);
               this.cameras.main.flash(120, 255, 255, 255, true);
               this.tweens.timeScale = 0.05;
-              await new Promise<void>((r) => setTimeout(r, this.fast ? 20 : 70));
+              await new Promise<void>((r) => setTimeout(r, this.fast ? 20 : 70 / prefs.battleSpeed));
               this.setSpeed();
             } else if (!weak) this.cameras.main.shake(120, 0.005);
           } else sfx.dot();
@@ -415,6 +466,7 @@ export class BattleScene extends Phaser.Scene {
         this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
         this.showActions();
         this.actions.setVisible(true);
+        this.maybeAuto();
         return;
       case 'needSwitch':
         this.openSwitch(true);
@@ -445,6 +497,8 @@ export class BattleScene extends Phaser.Scene {
 
   private onWin() {
     const run = state.run!;
+    this.cancelAuto();
+    this.controls.setVisible(false);
     const ab = run.activeBattle!;
     const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1));
     const coins = battleCoins(this.enemies, this.kind);
@@ -462,7 +516,11 @@ export class BattleScene extends Phaser.Scene {
         run.evoStones += stones;
         earnCoins(run, coins);
         trackStat(run, 'elites');
-        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins and ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'}\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        // The trainer hands over one of their held items (or a random one).
+        const theirs = this.enemies.map((e) => e.held).filter((h) => !!h);
+        const prize = theirs.length ? run.rng.pick(theirs)! : rollHeld(run.rng);
+        stash(run, prize);
+        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆' : 'an Evolution Stone ◆'} and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);
@@ -577,6 +635,8 @@ export class BattleScene extends Phaser.Scene {
     if (!wild) return reward();
     // Finish it: the final blow and the faint.
     wild.hp = 0;
+    const finisher = this.battle.p.c;
+    finisher.kos = (finisher.kos ?? 0) + 1;
     const s = this.enemySprite;
     this.tweens.killTweensOf(s);
     s.setAngle(0);
@@ -670,7 +730,16 @@ export class BattleScene extends Phaser.Scene {
 
   private onLose() {
     const run = state.run!;
+    this.cancelAuto();
+    this.controls.setVisible(false);
     const fallen = run.team.filter((c) => !isAlive(c)).map(creatureName);
+    const foe = this.battle.e.c;
+    const bossDef = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
+    run.log.endedBy = {
+      label: bossDef ? `${bossDef.name}, ${bossDef.title}` : this.kind === 'elite' ? `${run.activeBattle?.trainer ?? 'A trainer'}'s ${creatureName(foe)}` : `a wild ${creatureName(foe)}`,
+      speciesId: foe.speciesId,
+      stage: foe.stage,
+    };
     run.activeBattle = null;
     playMusic(null);
     sfx.defeat();

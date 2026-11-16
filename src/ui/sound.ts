@@ -5,6 +5,8 @@ import type { Element } from '../data/types';
  * Audio starts on the first tap (browsers block it until then). Mute is remembered per device.
  */
 
+import { buzz } from './haptics';
+
 const MUTE_KEY = 'ccr-audio-muted';
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -433,6 +435,28 @@ function startTheme(theme: Theme) {
   };
   schedule();
   timer = setInterval(schedule, 60);
+}
+
+// Matching vibrations for the moments that should be felt (vibration has its own on/off).
+const HAPTICS: Partial<Record<keyof typeof sfx, (...args: never[]) => number | number[]>> = {
+  hit: (mult: number = 1) => (mult > 1.01 ? [35, 30, 45] : mult < 0.99 ? 8 : 18),
+  faint: () => 70,
+  crystalLand: () => 15,
+  wobble: () => 12,
+  catch: () => [30, 50, 30, 50, 60],
+  victory: () => [20, 60, 40],
+  defeat: () => [120, 80, 200],
+  bossRoar: () => [80, 40, 160],
+  levelUp: () => [15, 40, 15],
+  evolveDone: () => [40, 40, 40, 40, 120],
+};
+for (const [key, pattern] of Object.entries(HAPTICS)) {
+  const k = key as keyof typeof sfx;
+  const play = sfx[k] as (...args: unknown[]) => void;
+  (sfx as Record<string, unknown>)[k] = (...args: unknown[]) => {
+    play(...args);
+    buzz((pattern as (...a: unknown[]) => number | number[])(...args));
+  };
 }
 
 // Browsers only allow audio after a gesture: unlock on the first tap anywhere.

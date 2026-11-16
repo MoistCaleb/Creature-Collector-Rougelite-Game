@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { HELD } from '../data/held';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
 import { isMuted, setMuted, sfx } from './sound';
@@ -185,7 +186,7 @@ export function creatureRow(
     .setStrokeStyle(2, opts.highlight ? COLORS.accent : COLORS.stroke);
   cont.add(bg);
   cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage)).setScale(1.8 * SPRITE_FIT));
-  cont.add(text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16));
+  cont.add(text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}${c.held ? `  ${HELD[c.held].icon}` : ''}`, 16));
   const cap = levelCap(c);
   cont.add(text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
   const chips = scene.add.container(66, 34);

@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { HELD, heldName, type HeldId } from '../data/held';
 import { MAX_TIER } from '../data/moves';
 import { speciesWithElement } from '../data/species';
 import {
@@ -11,9 +12,9 @@ import {
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, BENCH_MAX, highestLevel, prestigeTracked, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, highestLevel, prestigeTracked, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
-export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit';
+export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held';
 
 /** What the buyer has to pick after paying. */
 export type Target = 'none' | 'creature' | 'move';
@@ -34,7 +35,18 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   stone: { name: 'Evolution Stone', desc: 'Evolve a creature at its level cap', basePrice: 120, weight: 5, target: 'none' },
   sigil: { name: 'Prestige Sigil', desc: 'Prestige a creature, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
   recruit: { name: 'Recruit', desc: 'A creature joins your party', basePrice: 80, weight: 6, target: 'none' },
+  held: { name: 'Held item', desc: 'Give it to a creature from the Team screen', basePrice: 60, weight: 7, target: 'none' },
 };
+
+/** Display name of a slot (held items show which item). */
+export function slotName(slot: { item: ItemId; held?: HeldId }): string {
+  return slot.item === 'held' && slot.held ? heldName(slot.held) : ITEMS[slot.item].name;
+}
+
+/** Description of a slot. */
+export function slotDesc(slot: { item: ItemId; held?: HeldId }): string {
+  return slot.item === 'held' && slot.held ? `${HELD[slot.held].desc} · equip from the Team screen` : ITEMS[slot.item].desc;
+}
 
 export interface ShopSlot {
   item: ItemId;
@@ -42,6 +54,8 @@ export interface ShopSlot {
   sold: boolean;
   /** For recruits: the creature on offer (rolled up front so rerolls can't be dodged). */
   recruit?: Creature;
+  /** For held items: which one. */
+  held?: HeldId;
 }
 
 export interface Shop {
@@ -76,6 +90,7 @@ export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop
       const level = Math.max(1, Math.round(highestLevel(run) * 0.6));
       slot.recruit = createCreature(run.rng.pick(pool).id, level);
     }
+    if (item === 'held') slot.held = rollHeld(run.rng);
     return slot;
   });
   return { slots, rerolls, guaranteed };
@@ -142,6 +157,9 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
     case 'sigil':
       prestigeTracked(run, target!);
       return `Prestiged to ${'★'.repeat(target!.stars)}.`;
+    case 'held':
+      stash(run, slot.held ?? rollHeld(run.rng));
+      return 'Added to your bag. Give it to a creature from the Team screen.';
     case 'recruit': {
       const c = slot.recruit!;
       if (run.team.length < TEAM_MAX) run.team.push(c);
