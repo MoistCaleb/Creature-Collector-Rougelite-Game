@@ -208,16 +208,23 @@ export class Battle {
     const moves = this.e.c.moves;
     // Mostly pick the best expected damage, sometimes random.
     if (this.rng.chance(this.enemyRandomness)) return this.rng.pick(moves);
-    let best = moves[0];
+    return moves[this.bestMove('enemy')];
+  }
+
+  /** Index of the move the AI rates highest for this side right now (used by auto-battle too). */
+  bestMove(side: Side): number {
+    const user = side === 'player' ? this.p : this.e;
+    const foe = side === 'player' ? this.e : this.p;
+    let best = 0;
     let bestScore = -1;
-    for (const m of moves) {
+    user.c.moves.forEach((m, i) => {
       const d = moveDef(m);
-      const score = d.kind !== 'attack' ? this.statusScore(m) : this.attackScore(this.e, this.p, m);
+      const score = d.kind !== 'attack' ? this.statusScore(m, user, foe) : this.attackScore(user, foe, m);
       if (score > bestScore) {
         bestScore = score;
-        best = m;
+        best = i;
       }
-    }
+    });
     return best;
   }
 
@@ -233,12 +240,12 @@ export class Battle {
   }
 
   /** How attractive a status move is to the AI right now (comparable to attack power). */
-  private statusScore(m: MoveSlot): number {
+  private statusScore(m: MoveSlot, user: Combatant, foe: Combatant): number {
     const d = moveDef(m);
-    const hpFrac = this.e.c.hp / stats(this.e.c).hp;
+    const hpFrac = user.c.hp / stats(user.c).hp;
     if (d.kind === 'heal') return hpFrac < 0.5 ? 90 * (1 - hpFrac) : 0;
     if (hpFrac < 0.4) return 0;
-    const holder = d.kind === 'buff' ? this.e : this.p;
+    const holder = d.kind === 'buff' ? user : foe;
     const room = effectsAtTier(d, m.tier).some((e) => {
       const cur = holder[stageKey(e.stat)];
       return e.stages > 0 ? cur < 2 : cur > -2;

@@ -6,6 +6,8 @@ import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
+import { buzz, canVibrate } from '../ui/haptics';
+import { prefs } from '../ui/prefs';
 import { background, button, COLORS, H, muteButton, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
@@ -18,6 +20,15 @@ export class TitleScene extends Phaser.Scene {
     playMusic('title');
     text(this, 8, H - 8, `build ${__BUILD__}`, 10, '#4a4068').setOrigin(0, 1);
     muteButton(this, W - 30, 30);
+    if (canVibrate) {
+      // Vibration toggle (only on devices that can vibrate).
+      const label = () => (prefs.haptics ? '📳' : '📴');
+      const b = button(this, W - 78, 30, 40, 40, label(), () => {
+        prefs.haptics = !prefs.haptics;
+        (b.list[1] as Phaser.GameObjects.Text).setText(label());
+        buzz(30);
+      }, { fontSize: 18 });
+    }
     const meta = state.meta;
 
     // Parade of creatures you've unlocked as starters
