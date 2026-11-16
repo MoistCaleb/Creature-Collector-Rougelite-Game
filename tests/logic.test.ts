@@ -272,6 +272,20 @@ describe('acquiring creatures', () => {
     expect(r2.coins).toBe(Math.round(250 * BALANCE.fullBankCoinRate));
     expect(run.coins).toBe(coins0 + r1.coins + r2.coins);
   });
+  it('with a full party, catching releases the chosen creature and takes its spot', () => {
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    while (run.team.length < 4) run.team.push(createCreature('mossling', 5));
+    while (run.bench.length < 3) run.bench.push(createCreature('mossling', 5));
+    const out = run.team[2];
+    out.held = 'band';
+    expect(catchCreature(run, createCreature('puddlet', 4))).toBe(null);
+    const got = catchCreature(run, createCreature('puddlet', 4), out)!;
+    expect(run.team[2]).toBe(got.c);
+    expect(allCreatures(run)).not.toContain(out);
+    expect(run.team).toHaveLength(4);
+    expect(run.bench).toHaveLength(3);
+    expect(run.bag).toContain('band');
+  });
   it('first catch of a species arrives prestiged; repeats do not', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);
     const wild = createCreature('mossling', 4);

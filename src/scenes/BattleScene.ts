@@ -706,13 +706,14 @@ export class BattleScene extends Phaser.Scene {
         button(this, W / 2, 652, W - 24, 72, `Catch ${creatureName(wild)}`, () => {
           if (chosen) return;
           chosen = true;
-          this.doCatch(wild, fallen);
+          if (!full) return this.doCatch(wild, fallen);
+          // Party full: release one to make room, or back out and keep deciding.
+          this.pickRelease(`Catch ${creatureName(wild)}`, (out) => this.doCatch(wild, fallen, out), () => (chosen = false));
         }, {
           color: 0x3a4f7a,
           fontSize: 20,
           glyph: 'crystal',
-          sub: full ? 'Your party is full (release one from the Team screen first)' : `Forfeit the rewards · joins at Lv ${level}${bonusTag}`,
-          enabled: !full,
+          sub: full ? `Party full: release one to make room · Lv ${level}${bonusTag}` : `Forfeit the rewards · joins at Lv ${level}${bonusTag}`,
         }),
       );
     }
@@ -725,14 +726,29 @@ export class BattleScene extends Phaser.Scene {
     );
   }
 
-  private doCatch(wild: Creature, fallen: string) {
+  /** Choose a creature to release so a newcomer can take its place. */
+  private pickRelease(title: string, onPick: (out: Creature) => void, onCancel: () => void) {
+    const run = state.run!;
+    const all = allCreatures(run);
+    openPicker(this, {
+      title,
+      subtitle: 'Your party is full. Release one to make room; it leaves for good and the newcomer takes its spot. Held items go back to your bag.',
+      options: all.map((c) => ({ creature: c, note: run.team.includes(c) ? 'Team' : 'Bench' })),
+      onPick: (k) => onPick(all[k]),
+      onCancel,
+    });
+  }
+
+  private doCatch(wild: Creature, fallen: string, release?: Creature) {
     const run = state.run!;
     this.actions.setVisible(false);
     this.tweens.killTweensOf(this.enemySprite);
     this.enemySprite.setVisible(false);
     const wasStarter = isUnlockedStarter(run, wild.speciesId);
-    const { c, bonus: kind, newlyClaimed } = catchCreature(run, wild)!;
+    const releasedName = release ? creatureName(release) : '';
+    const { c, bonus: kind, newlyClaimed } = catchCreature(run, wild, release)!;
     const where = run.team.includes(c) ? 'team' : 'bench';
+    const releasedNote = release ? `${releasedName} was released.\n\n` : '';
     const bonus =
       kind === 'species'
         ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.`
@@ -753,7 +769,7 @@ export class BattleScene extends Phaser.Scene {
       kind === 'species' || kind === 'type',
       () => {
         cry(c.speciesId, c.stage);
-        showMessage(this, 'Caught!', `${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}${fallen}`, () => this.toMap());
+        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}${fallen}`, () => this.toMap());
       },
     );
   }
@@ -802,9 +818,8 @@ export class BattleScene extends Phaser.Scene {
         { label: 'Evolve one', sub: 'Evolve any single creature now', color: 0x4a2f7a, disabled: evolvable.length === 0 },
         {
           label: 'Claim a guardian',
-          sub: full ? 'Your party is full' : 'One of its creatures joins you at Lv 1, already evolved',
+          sub: full ? 'Joins at Lv 1, already evolved (release one to make room)' : 'One of its creatures joins you at Lv 1, already evolved',
           color: 0x2f4a7a,
-          disabled: full,
         },
       ],
       onPick: (i) => {
@@ -851,10 +866,15 @@ export class BattleScene extends Phaser.Scene {
             subtitle: 'It joins at Lv 1 but keeps its evolved form and higher level cap.',
             options: previews.map((p) => ({ creature: p })),
             onPick: (k) => {
-              const c = claimGuardian(run, guardians[k])!;
-              dex.creature(c, true);
-              const where = run.team.includes(c) ? 'team' : 'bench';
-              this.finishFloor(`${creatureName(c)} joined your ${where}!`);
+              const claim = (release?: Creature) => {
+                const releasedNote = release ? `${creatureName(release)} was released.\n` : '';
+                const c = claimGuardian(run, guardians[k], release)!;
+                dex.creature(c, true);
+                const where = run.team.includes(c) ? 'team' : 'bench';
+                this.finishFloor(`${releasedNote}${creatureName(c)} joined your ${where}!`);
+              };
+              if (!full) return claim();
+              this.pickRelease(`Claim ${creatureName(guardians[k])}`, claim, () => this.bossReward());
             },
           });
         }

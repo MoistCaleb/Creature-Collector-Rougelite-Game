@@ -640,11 +640,22 @@ export function rosterFull(run: Run): boolean {
   return run.team.length >= TEAM_MAX && run.bench.length >= BENCH_MAX;
 }
 
-function addToParty(run: Run, c: Creature) {
-  if (run.team.length < TEAM_MAX) run.team.push(c);
+/**
+ * Add a creature to the party. With `release`, that creature leaves for good (its item goes back
+ * to the bag) and the newcomer takes its exact spot.
+ */
+function addToParty(run: Run, c: Creature, release?: Creature) {
+  const list = release ? (run.team.includes(release) ? run.team : run.bench.includes(release) ? run.bench : null) : null;
+  if (release && list) {
+    unequipHeld(run, release);
+    list[list.indexOf(release)] = c;
+  } else if (run.team.length < TEAM_MAX) run.team.push(c);
   else run.bench.push(c);
   registerJoin(run, c);
 }
+
+/** Room for one more, either free or by releasing someone. */
+export const canMakeRoom = (run: Run, release?: Creature) => !rosterFull(run) || (!!release && allCreatures(run).includes(release));
 
 export function dexComplete(run: Run): boolean {
   return SPECIES.every((s) => run.meta.dex.caught.includes(s.id));
@@ -682,8 +693,9 @@ export function catchLevel(run: Run, enemy: Creature): number {
 export function catchCreature(
   run: Run,
   enemy: Creature,
+  release?: Creature,
 ): { c: Creature; bonus: CatchBonus; newlyClaimed: Element[] } | null {
-  if (rosterFull(run)) return null;
+  if (!canMakeRoom(run, release)) return null;
   // It joins as it was in battle: same level, evolution and moves, still recovering (partial HP).
   const level = catchLevel(run, enemy);
   const bonus = catchBonus(run, enemy.speciesId);
@@ -700,7 +712,7 @@ export function catchCreature(
         run.claimedTypes.push(t);
         newlyClaimed.push(t);
       }
-  addToParty(run, c);
+  addToParty(run, c, release);
   run.log.caught += 1;
   track(run.meta, 'caught');
   saveMeta(run.meta);
@@ -708,10 +720,10 @@ export function catchCreature(
 }
 
 /** Boss boon: one of the guardian's creatures joins at Lv 1, keeping its evolved form. */
-export function claimGuardian(run: Run, boss: Creature): Creature | null {
-  if (rosterFull(run)) return null;
+export function claimGuardian(run: Run, boss: Creature, release?: Creature): Creature | null {
+  if (!canMakeRoom(run, release)) return null;
   const c = createCreature(boss.speciesId, 1, boss.stage);
-  addToParty(run, c);
+  addToParty(run, c, release);
   return c;
 }
 
