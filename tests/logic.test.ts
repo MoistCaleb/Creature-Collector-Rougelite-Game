@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { BALANCE } from '../src/data/balance';
 import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
+import { setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
 import { BOSSES } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
@@ -17,6 +17,9 @@ import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
 import { Rng } from '../src/logic/rng';
 import { SPECIES } from '../src/data/species';
+
+// The floor level ceiling is module state set by runs; start every test without one.
+beforeEach(() => setFloorCeiling(Infinity));
 
 describe('types', () => {
   it('each element is strong vs 3 and weak to 3', () => {
@@ -285,6 +288,17 @@ describe('acquiring creatures', () => {
     expect(fillTeamFromBench(run)).toEqual([b1, b2]);
     expect(run.team).toHaveLength(3);
     expect(run.bench).toHaveLength(0);
+  });
+  it('each floor has a level ceiling; XP past it is stored and released on the next floor', () => {
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    const c = run.team[0];
+    evolve(c);
+    addXp(c, 1e7);
+    expect(stageCap(c)).toBe(65);
+    expect(c.level).toBe(BALANCE.floorLevelCap[0]);
+    expect(c.banked).toBeGreaterThan(0);
+    clearFloor(run);
+    expect(c.level).toBe(Math.min(stageCap(c), BALANCE.floorLevelCap[0] + BANK_LEVELS));
   });
   it('with a full party, catching releases the chosen creature and takes its spot', () => {
     const run = startRun(mkMeta(), 'emberkit', 5);

@@ -186,6 +186,9 @@ Proposed math:
 
 ## Level curve (target)
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★.
+- Each floor also has a level ceiling (45 / 75 / 105) so you can't outgrow it; XP past the ceiling is stored
+  and coins are paid as at the stage cap, and the stored XP pours in when the next floor opens.
+- Healing from attacks is a small share of the damage dealt: drain moves 20%, Nature rank-3 15%, Water rank-3 15%.
 - XP earned at the cap is stored (up to 5 levels' worth) and pours in as soon as the cap rises (evolve or prestige).
   Capped creatures also turn that XP into coins: 1 per 25 XP while storing, 1 per 10 once the store is full.
 - Floors are ~25-35 nodes per route. Enemy levels ease in then ramp: floor 1 ~1-23 (boss 25),
