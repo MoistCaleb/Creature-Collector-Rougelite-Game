@@ -17,6 +17,9 @@ export class DexScene extends Phaser.Scene {
   private contentH = 0;
   private dragStart = 0;
   private startY = 0;
+  /** Every row of the current tab: where it sits and how to draw it. Only rows near the screen exist. */
+  private rows: { y: number; h: number; build: (c: Phaser.GameObjects.Container) => void }[] = [];
+  private live = new Map<number, Phaser.GameObjects.Container>();
 
   constructor() {
     super('Dex');
@@ -32,12 +35,15 @@ export class DexScene extends Phaser.Scene {
     const dex = state.meta.dex;
 
     this.content = this.add.container(0, TOP);
+    this.rows = [];
+    this.live = new Map();
     const maskShape = this.make.graphics({}).fillRect(0, TOP, W, H - TOP);
     this.content.setMask(maskShape.createGeometryMask());
 
     if (this.tab === 'creatures') this.drawCreatures();
     else if (this.tab === 'moves') this.drawMoves();
     else this.drawElements();
+    this.refreshRows();
 
     // Header drawn last so it sits on top.
     this.add.rectangle(0, 0, W, TOP, COLORS.bg).setOrigin(0);
@@ -74,47 +80,78 @@ export class DexScene extends Phaser.Scene {
       if (!p.isDown) return;
       const min = Math.min(TOP, H - this.contentH - 20);
       this.content.y = Phaser.Math.Clamp(this.startY + p.y / ZOOM - this.dragStart, min, TOP);
+      this.refreshRows();
     });
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       const min = Math.min(TOP, H - this.contentH - 20);
       this.content.y = Phaser.Math.Clamp(this.content.y - dy, min, TOP);
+      this.refreshRows();
     });
   }
 
+  /** Builds rows that are on (or near) the screen and removes ones that scrolled far away. */
+  private refreshRows() {
+    const margin = 400;
+    this.rows.forEach((r, i) => {
+      const top = this.content.y + r.y;
+      const near = top + r.h > TOP - margin && top < H + margin;
+      const row = this.live.get(i);
+      if (near && !row) {
+        const c = this.add.container(0, 0);
+        r.build(c);
+        this.content.add(c);
+        this.live.set(i, c);
+      } else if (!near && row) {
+        row.destroy();
+        this.live.delete(i);
+      }
+    });
+  }
+
+  private addRow(y: number, h: number, build: (c: Phaser.GameObjects.Container) => void) {
+    this.rows.push({ y, h, build });
+  }
+
   private drawCreatures() {
-    const dex = state.meta.dex;
     const rowH = 124;
     SPECIES.forEach((sp, i) => {
       const y = i * rowH + 8;
+      this.addRow(y, rowH, (row) => this.drawCreatureRow(row, sp, i, y, rowH));
+    });
+    this.contentH = SPECIES.length * rowH + 16;
+  }
+
+  private drawCreatureRow(row: Phaser.GameObjects.Container, sp: (typeof SPECIES)[number], i: number, y: number, rowH: number) {
+    const dex = state.meta.dex;
+    {
       const anySeen = [0, 1, 2].some((s) => hasSeenForm(dex, sp.id, s));
-      this.content.add(this.add.rectangle(12, y, W - 24, rowH - 8, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
-      this.content.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
-      if (dex.caught.includes(sp.id)) this.content.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
+      row.add(this.add.rectangle(12, y, W - 24, rowH - 8, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+      row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
+      if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
       if (anySeen) {
         const t = sp.types;
-        (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => this.content.add(typeChip(this, 70 + k * 54, y + 14, el, true)));
+        (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 54, y + 14, el, true)));
       }
       for (let s = 0; s < 3; s++) {
         const cx = 70 + s * 130;
         const cy = y + 54;
         if (hasSeenForm(dex, sp.id, s)) {
-          this.content.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s)).setScale(1.7 * SPRITE_FIT));
+          row.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s)).setScale(1.7 * SPRITE_FIT));
         } else {
-          this.content.add(this.add.rectangle(cx, cy, 52, 52, 0x15111f).setStrokeStyle(1, COLORS.stroke));
-          this.content.add(text(this, cx, cy, '?', 24, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
+          row.add(this.add.rectangle(cx, cy, 52, 52, 0x15111f).setStrokeStyle(1, COLORS.stroke));
+          row.add(text(this, cx, cy, '?', 24, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
         }
-        this.content.add(text(this, cx, y + 86, formName(dex, sp.id, s), 12, hasSeenForm(dex, sp.id, s) ? COLORS.text : '#4a4068').setOrigin(0.5, 0));
+        row.add(text(this, cx, y + 86, formName(dex, sp.id, s), 12, hasSeenForm(dex, sp.id, s) ? COLORS.text : '#4a4068').setOrigin(0.5, 0));
         if (s === 2) {
           const sig = MOVES[sp.signature];
           const seenSig = dex.moves.includes(sig.id);
-          this.content.add(
+          row.add(
             text(this, 22, y + 102, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)}` : 'Signature: ???', 11, seenSig ? '#ffc94d' : '#4a4068'),
           );
         }
-        if (s < 2) this.content.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
+        if (s < 2) row.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
       }
-    });
-    this.contentH = SPECIES.length * rowH + 16;
+    }
   }
 
   private drawMoves() {
@@ -122,23 +159,29 @@ export class DexScene extends Phaser.Scene {
     let y = 8;
     for (const el of ELEMENTS) {
       const elSeen = dex.elements.includes(el);
-      if (elSeen) this.content.add(typeChip(this, 16, y + 12, el));
-      else this.content.add(text(this, 16, y + 2, '??? element', 14, '#4a4068'));
+      const hy = y;
+      this.addRow(hy, 30, (row) => {
+        if (elSeen) row.add(typeChip(this, 16, hy + 12, el));
+        else row.add(text(this, 16, hy + 2, '??? element', 14, '#4a4068'));
+      });
       y += 30;
       const ids = elementPool(el);
       for (const id of ids) {
         const m = MOVES[id];
         const seen = dex.moves.includes(id);
-        this.content.add(this.add.rectangle(12, y, W - 24, 34, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
-        if (seen) {
-          const kind = m.kind === 'attack' ? 'Attack' : m.kind === 'buff' ? 'Boost' : 'Hinder';
-          this.content.add(this.add.rectangle(22, y + 17, 8, 8, ELEMENT_COLORS[el]));
-          this.content.add(text(this, 34, y + 9, m.name, 14, COLORS.text));
-          this.content.add(text(this, 170, y + 10, kind, 12, COLORS.textDim));
-          this.content.add(text(this, W - 22, y + 10, `${moveSummary(m, 1)} · ${m.accuracy}%`, 12, COLORS.textDim).setOrigin(1, 0));
-        } else {
-          this.content.add(text(this, 34, y + 9, '???', 14, '#4a4068'));
-        }
+        const my = y;
+        this.addRow(my, 38, (row) => {
+          row.add(this.add.rectangle(12, my, W - 24, 34, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+          if (seen) {
+            const kind = m.kind === 'attack' ? 'Attack' : m.kind === 'buff' ? 'Boost' : 'Hinder';
+            row.add(this.add.rectangle(22, my + 17, 8, 8, ELEMENT_COLORS[el]));
+            row.add(text(this, 34, my + 9, m.name, 14, COLORS.text));
+            row.add(text(this, 170, my + 10, kind, 12, COLORS.textDim));
+            row.add(text(this, W - 22, my + 10, `${moveSummary(m, 1)} · ${m.accuracy}%`, 12, COLORS.textDim).setOrigin(1, 0));
+          } else {
+            row.add(text(this, 34, my + 9, '???', 14, '#4a4068'));
+          }
+        });
         y += 38;
       }
       y += 12;
@@ -151,15 +194,17 @@ export class DexScene extends Phaser.Scene {
     const name = (e: Element) => (dex.elements.includes(e) ? e : '???');
     ELEMENTS.forEach((el, i) => {
       const y = 8 + i * 96;
-      this.content.add(this.add.rectangle(12, y, W - 24, 86, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
-      if (!dex.elements.includes(el)) {
-        this.content.add(text(this, 24, y + 32, '??? Not yet encountered', 15, '#4a4068'));
-        return;
-      }
-      this.content.add(typeChip(this, 24, y + 20, el));
-      const weakTo = ELEMENTS.filter((a) => STRONG_AGAINST[a].includes(el));
-      this.content.add(text(this, 24, y + 40, `Strong against: ${STRONG_AGAINST[el].map(name).join(', ')}`, 14, '#8fe08a'));
-      this.content.add(text(this, 24, y + 60, `Weak to: ${weakTo.map(name).join(', ')}`, 14, '#f08a80'));
+      this.addRow(y, 96, (row) => {
+        row.add(this.add.rectangle(12, y, W - 24, 86, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+        if (!dex.elements.includes(el)) {
+          row.add(text(this, 24, y + 32, '??? Not yet encountered', 15, '#4a4068'));
+          return;
+        }
+        row.add(typeChip(this, 24, y + 20, el));
+        const weakTo = ELEMENTS.filter((a) => STRONG_AGAINST[a].includes(el));
+        row.add(text(this, 24, y + 40, `Strong against: ${STRONG_AGAINST[el].map(name).join(', ')}`, 14, '#8fe08a'));
+        row.add(text(this, 24, y + 60, `Weak to: ${weakTo.map(name).join(', ')}`, 14, '#f08a80'));
+      });
     });
     this.contentH = ELEMENTS.length * 96 + 16;
   }
