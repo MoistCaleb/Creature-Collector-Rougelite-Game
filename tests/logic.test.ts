@@ -11,7 +11,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1023,5 +1023,38 @@ describe('creature cries', () => {
       sigs.add(JSON.stringify(v0.syllables));
     }
     expect(sigs.size).toBe(SPECIES.length);
+  });
+});
+
+describe('favorite line', () => {
+  const meta = (): Meta => ({
+    unlockedStarters: ['emberkit', 'frostling', 'sproutle', 'pebblin', 'zapling', 'puddlet'],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('the favorite is always one of three different starter choices', () => {
+    const m = meta();
+    expect(toggleFavorite(m, 'puddlet')).toBe(true);
+    for (let s = 1; s <= 40; s++) {
+      const picks = rollStarterChoices(m, new Rng(s));
+      expect(picks).toHaveLength(3);
+      expect(picks).toContain('puddlet');
+      expect(new Set(picks).size).toBe(3);
+    }
+  });
+  it('only unlocked lines can be favorites, and tapping again clears it', () => {
+    const m = meta();
+    expect(toggleFavorite(m, 'drakelet')).toBe(false);
+    expect(m.favorite).toBeUndefined();
+    toggleFavorite(m, 'emberkit');
+    toggleFavorite(m, 'emberkit');
+    expect(m.favorite).toBeUndefined();
   });
 });
