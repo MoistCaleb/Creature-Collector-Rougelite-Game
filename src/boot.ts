@@ -10,7 +10,7 @@ import { TeamScene } from './scenes/TeamScene';
 import { TitleScene } from './scenes/TitleScene';
 import { loadMeta } from './logic/run';
 import { state } from './state';
-import { COLORS, H, W } from './ui/widgets';
+import { COLORS, H, W, ZOOM } from './ui/widgets';
 
 /** Start the game. Call once the save storage is ready. */
 export function startGame() {
@@ -18,8 +18,8 @@ export function startGame() {
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
-    width: W,
-    height: H,
+    width: Math.round(W * ZOOM),
+    height: Math.round(H * ZOOM),
     backgroundColor: COLORS.bg,
     pixelArt: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },

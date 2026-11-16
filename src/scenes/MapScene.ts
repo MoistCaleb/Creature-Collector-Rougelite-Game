@@ -25,7 +25,7 @@ import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } fr
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
-import { background, button, COLORS, H, HpBar, muteButton, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, HpBar, muteButton, text, W, ZOOM } from '../ui/widgets';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
@@ -135,14 +135,14 @@ export class MapScene extends Phaser.Scene {
     const cur = pos(currentNode(run));
     this.layer.y = Phaser.Math.Clamp(TOP_BAR + viewH * 0.7 - cur.y, this.minScroll, this.maxScroll);
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      this.dragStartY = ptr.y;
+      this.dragStartY = ptr.y / ZOOM;
       this.layerStartY = this.layer.y;
       this.dragging = false;
     });
     this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
       if (!ptr.isDown) return;
-      if (Math.abs(ptr.y - this.dragStartY) > 8) this.dragging = true;
-      if (this.dragging) this.layer.y = Phaser.Math.Clamp(this.layerStartY + ptr.y - this.dragStartY, this.minScroll, this.maxScroll);
+      if (Math.abs(ptr.y / ZOOM - this.dragStartY) > 8) this.dragging = true;
+      if (this.dragging) this.layer.y = Phaser.Math.Clamp(this.layerStartY + ptr.y / ZOOM - this.dragStartY, this.minScroll, this.maxScroll);
     });
 
     this.drawTopBar();

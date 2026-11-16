@@ -5,7 +5,7 @@ import { ELEMENT_COLORS, ELEMENTS, STRONG_AGAINST, type Element } from '../data/
 import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
+import { background, button, COLORS, H, text, typeChip, W, ZOOM } from '../ui/widgets';
 
 type Tab = 'creatures' | 'moves' | 'elements';
 const TOP = 132;
@@ -67,13 +67,13 @@ export class DexScene extends Phaser.Scene {
 
     // Drag to scroll
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.dragStart = p.y;
+      this.dragStart = p.y / ZOOM;
       this.startY = this.content.y;
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!p.isDown) return;
       const min = Math.min(TOP, H - this.contentH - 20);
-      this.content.y = Phaser.Math.Clamp(this.startY + p.y - this.dragStart, min, TOP);
+      this.content.y = Phaser.Math.Clamp(this.startY + p.y / ZOOM - this.dragStart, min, TOP);
     });
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       const min = Math.min(TOP, H - this.contentH - 20);
