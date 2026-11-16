@@ -75,7 +75,7 @@ export class MapSelectScene extends Phaser.Scene {
       onPick: (i) => {
         meta.heat = i;
         saveMeta(meta);
-        this.scene.restart();
+        this.scene.restart({});
       },
       onCancel: () => {},
       rowHeight: 58,

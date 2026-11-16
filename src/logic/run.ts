@@ -179,6 +179,8 @@ export interface Run {
   team: Creature[];
   bench: Creature[];
   evoStones: number;
+  /** Stone count the player has already been shown (a rise triggers the "Evolution Stone!" reveal). */
+  stonesSeen?: number;
   coins: number;
   /** Open shop at the current node, if any. */
   shop: Shop | null;
@@ -318,6 +320,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     team: [createCreature(starterId, passive === 'champion' ? 10 : BALANCE.starterLevel)],
     bench: [],
     evoStones: passive === 'evolutionist' ? 1 : 0,
+    stonesSeen: passive === 'evolutionist' ? 1 : 0,
     coins: passive === 'coinpurse' ? 50 : 0,
     potions: passive === 'apothecary' ? 2 : 0,
     bag: passive === 'quartermaster' ? [rollHeld(rng), rollHeld(rng)] : [],

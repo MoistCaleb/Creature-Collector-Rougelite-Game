@@ -63,7 +63,7 @@ export class PassivesScene extends Phaser.Scene {
           if (this.scroller.moved) return;
           meta.equippedPassive = equipped ? null : id;
           saveMeta(meta);
-          this.scene.restart();
+          this.scene.restart({});
         });
       }
     });
