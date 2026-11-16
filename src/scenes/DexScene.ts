@@ -7,7 +7,7 @@ import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
-import { createCreature, stats } from '../logic/creature';
+import { createCreature, levelCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
 import { icon } from '../ui/icons';
 
@@ -206,11 +206,13 @@ export class DexScene extends Phaser.Scene {
       row.add(this.add.rectangle(24, sy, 112, 124, 0x15111f).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       if (seen) {
         row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s)).setScale(3.4 * SPRITE_FIT));
-        const c = createCreature(sp.id, 50, s);
+        // Stats at this form's level cap (no prestige stars).
+        const c = createCreature(sp.id, 1, s);
+        c.level = levelCap(c);
         const st = stats(c);
         row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
         row.add(text(this, 150, sy + 34, STAGE_LABEL[s], 12, '#8e86ad'));
-        row.add(text(this, 150, sy + 54, `At Lv 50:\nHP ${st.hp}   ATK ${st.atk}\nDEF ${st.def}   SPD ${st.spd}`, 13, COLORS.textDim, { lineSpacing: 2 }));
+        row.add(text(this, 150, sy + 54, `At level cap (Lv ${c.level}):\nHP ${st.hp}   ATK ${st.atk}\nDEF ${st.def}   SPD ${st.spd}`, 13, COLORS.textDim, { lineSpacing: 2 }));
         row.add(button(this, W - 70, sy + 18, 80, 30, 'Cry', () => cry(sp.id, s), { fontSize: 13, glyph: 'sound', color: 0x2f4a6b }));
       } else {
         row.add(text(this, 80, sy + 62, '?', 40, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
