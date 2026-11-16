@@ -65,7 +65,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
   at **1 HP** and ends the battle (earlier wild creatures in a 2-creature fight faint normally).
   The move buttons then become the choice:
   - **Continue** — finish it off and take the rewards (XP, coins), or
-  - **Catch it** — forfeit all rewards; it joins **at its own level and evolution, with its moves**, healed to full
+  - **Catch it** — forfeit all rewards; it joins **at its own level and evolution, with its moves**, at 40% HP
     (bond crystal animation). Scout passive: +3 levels, within the level cap.
 - Trainers' and bosses' creatures always faint and can't be caught.
 - **First catch:** the first time you ever catch a species (tracked in the Dex) it arrives with a free ★.
@@ -217,7 +217,7 @@ Runs unlock:
   | Second Wind | Survive 3 team wipes | Bodyguard: bench steps in fully healed |
   | Trainer Hunter | Defeat 10 trainers | Big Game Hunter: trainers drop 2 stones |
   | Naturalist | Catch 40 different species | Naturalist: +25% XP from wild battles |
-  | Guardian Slayer | Defeat 15 floor bosses | Iron Will: survivors recover 85% after wins |
+  | Guardian Slayer | Defeat 15 floor bosses | Iron Will: survivors recover 70% after wins (normally 40%) |
   | Treasure Hunter | Open 15 treasure chests | Lucky Charm: coin-flip events succeed 75% |
 
 ## Open questions
