@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
-import { synergyMults, teamSynergy } from '../logic/synergy';
+import { SYNERGY_LABEL, synergyMults, teamSynergy } from '../logic/synergy';
 import { ensureIcon, icon } from '../ui/icons';
 import { STATUS, type StatusId } from '../data/status';
 import { HELD, heldName } from '../data/held';
@@ -117,6 +117,8 @@ export class BattleScene extends Phaser.Scene {
       spareLast: this.kind === 'battle',
       spared: run.activeBattle.spared,
       synergy: synergyMults(run.team, run.passive === 'harmonist' ? 2 : 1),
+      // Guardians' themed teams get synergy too.
+      enemySynergy: boss ? synergyMults(this.enemies) : undefined,
       playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
       playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
     });
@@ -142,6 +144,11 @@ export class BattleScene extends Phaser.Scene {
       icon(this, 32, 109, 'skull', 15);
       text(this, 44, 101, boss.ruleName, 13, '#ff8a7a', { fontStyle: 'bold' });
       text(this, 24, 119, boss.ruleDesc, 10, COLORS.text, { wordWrap: { width: 200 } });
+      const syn = teamSynergy(this.enemies);
+      if (syn.length) {
+        const line = syn.map((s) => `${s.element} ×${s.count} ${SYNERGY_LABEL[s.stat]} +${Math.round(s.bonus * 100)}%`).join(' · ');
+        text(this, 16, 160, `Synergy: ${line}`, 10, '#ff8a7a', { wordWrap: { width: 214 } });
+      }
     } else if (this.kind === 'elite') {
       text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' });
     }
