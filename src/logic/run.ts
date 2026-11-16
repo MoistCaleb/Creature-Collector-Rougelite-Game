@@ -170,6 +170,8 @@ export interface Run {
   activeBattle: ActiveBattle | null;
   /** The event on offer at the current node, if any. */
   eventId: string | null;
+  /** Events already offered this run (so they don't repeat). */
+  eventsSeen?: string[];
   /** The open treasure chest's contents, fixed once rolled. */
   treasure: { coins: number; item: import('./shop').ItemId } | null;
 }

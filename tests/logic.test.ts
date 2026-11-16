@@ -10,8 +10,8 @@ import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
 import { attackId, elementPool, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
-import { EVENTS } from '../src/logic/events';
-import { battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { EVENTS, rollEvent } from '../src/logic/events';
+import { allCreatures, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -426,12 +426,16 @@ describe('saving runs, maps and events', () => {
       for (const o of ev.options) {
         const run = startRun(mkMeta(), 'emberkit', 3);
         run.coins = 500;
+        run.evoStones = 1;
+        addLevels(run.team[0], 20);
         run.team[0].hp = Math.round(run.team[0].hp * 0.8);
-        const target = run.team[0];
-        if (o.blocked?.(run)) continue;
-        if (o.target && !(o.eligible?.(run, target) ?? true)) continue;
-        const res = o.run(run, o.target ? target : undefined);
+        run.bench.push(createCreature('mossling', 3));
+        if (o.blocked?.(run)) throw new Error(`${ev.id}: ${o.label} blocked`);
+        const target = o.target ? allCreatures(run).find((c) => o.eligible?.(run, c) ?? true) : undefined;
+        if (o.target && !target) throw new Error(`${ev.id}: ${o.label} has no eligible creature`);
+        const res = o.run(run, target);
         expect(res.text.length).toBeGreaterThan(0);
+        for (const c of allCreatures(run)) expect(c.hp).toBeGreaterThan(0);
       }
     }
     const run = startRun(mkMeta(), 'emberkit', 4);
@@ -439,6 +443,19 @@ describe('saving runs, maps and events', () => {
     const egg = EVENTS.find((e) => e.id === 'egg')!;
     egg.options[0].run(run);
     expect(run.team.length).toBe(2);
+  });
+  it('events do not repeat until every one has been seen', () => {
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    const ids = EVENTS.map(() => rollEvent(run).id);
+    expect(new Set(ids).size).toBe(EVENTS.length);
+  });
+  it('the stone circle trades a bench creature for a star', () => {
+    const run = startRun(mkMeta(), 'emberkit', 6);
+    const benched = createCreature('mossling', 3);
+    run.bench.push(benched);
+    EVENTS.find((e) => e.id === 'circle')!.options[0].run(run, benched);
+    expect(run.bench).not.toContain(benched);
+    expect(run.team[0].stars).toBe(1);
   });
 });
 
