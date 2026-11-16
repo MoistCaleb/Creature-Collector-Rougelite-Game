@@ -43,7 +43,7 @@ export class TitleScene extends Phaser.Scene {
     text(this, W / 2, 70, 'CREATURE', 44, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2, 115, 'ROGUELITE', 30, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
-    text(this, W / 2, 270, `Runs: ${meta.runs}   Wins: ${meta.wins}`, 16, COLORS.textDim).setOrigin(0.5);
+    text(this, W / 2, 270, `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   🔥 Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
     text(this, W / 2, 294, `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
 
     if (hasSavedRun()) {

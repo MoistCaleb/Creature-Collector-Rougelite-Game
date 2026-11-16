@@ -31,6 +31,8 @@ export interface PickConfig {
   onPick: (index: number) => void;
   cancelLabel?: string;
   onCancel?: () => void;
+  /** Height of each option row (default 76; smaller fits long lists). */
+  rowHeight?: number;
 }
 
 /** Full-screen modal list of choices, drawn on top of the current scene. */
@@ -41,7 +43,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
 
   const close = () => root.destroy();
 
-  const rowH = cfg.options.some((o) => o.creature) ? 72 : 76;
+  const rowH = cfg.rowHeight ?? (cfg.options.some((o) => o.creature) ? 72 : 76);
   const rowHeight = (r: PickRow) => (r.big ? 84 : 48);
   const infoH = (cfg.rows ?? []).reduce((h, r) => h + rowHeight(r), 0) + (cfg.rows?.length ? 10 : 0);
   const listH = cfg.options.length * rowH + infoH;
@@ -92,7 +94,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
           sub: o.sub,
           enabled: !o.disabled,
           color: o.color,
-          fontSize: 17,
+          fontSize: rowH < 70 ? 15 : 17,
           icon: o.icon,
           badge: o.badge,
         }),

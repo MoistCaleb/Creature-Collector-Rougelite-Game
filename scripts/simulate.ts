@@ -70,7 +70,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
     postBattleRecover(run);
     const xp = battleXp(enemies, kind, run.floor);
     if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
-    else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind); }
+    else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind, run.heat ?? 0); }
     if (kind === 'elite') {
       run.evoStones++;
       // Trainer prize: a held item, handed to the first team member without one.
@@ -79,7 +79,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
       const free = run.team.find((c) => !c.held);
       if (free) equipHeld(run, free, prize);
     }
-    if (kind !== 'battle') { run.coins += battleCoins(enemies, kind); grantXp(run, xp, [...b.fought]); }
+    if (kind !== 'battle') { run.coins += battleCoins(enemies, kind, run.heat ?? 0); grantXp(run, xp, [...b.fought]); }
     return 'win';
   }
   return 'lose';
@@ -90,6 +90,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
   meta.dex.caught = process.env.VET ? SPECIES.map((s) => s.id) : [];
   const rng = new Rng(seed);
   const run = startRun(meta, rng.pick(DEFAULT_STARTERS), seed);
+  run.heat = Number(process.env.HEAT ?? 0);
   for (let step = 0; step < 600; step++) {
     const node = currentNode(run);
     let nextId: string;

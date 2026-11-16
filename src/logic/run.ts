@@ -2,6 +2,7 @@ import { BOSSES } from '../data/trainers';
 import * as storage from '../storage';
 import { BALANCE } from '../data/balance';
 import { HELD, HELD_IDS, type HeldId } from '../data/held';
+import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
@@ -89,6 +90,10 @@ export interface Meta {
   achievements: string[];
   /** Achievements earned but not yet announced. */
   newAchievements: string[];
+  /** Highest Heat level unlocked (win at your top Heat to unlock the next). */
+  heatUnlocked?: number;
+  /** Heat chosen for the next run. */
+  heat?: number;
 }
 
 const META_KEY = 'ccr-meta-v1';
@@ -171,6 +176,8 @@ export interface Run {
   activeBattle: ActiveBattle | null;
   /** The event on offer at the current node, if any. */
   eventId: string | null;
+  /** Difficulty level of this run (0 = standard). */
+  heat?: number;
   /** Held items not on any creature. */
   bag?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
@@ -206,6 +213,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
   meta.runs += 1;
   saveMeta(meta);
   return {
+    heat: Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
     rng,
     seed,
     meta,
@@ -328,7 +336,7 @@ export function runMvp(run: Run): { speciesId: string; stage: number; level: num
 
 /** Survivors catch their breath after a win. */
 export function postBattleRecover(run: Run) {
-  const frac = run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal;
+  const frac = (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult;
   for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * frac));
 }
 
@@ -370,6 +378,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
 
   const enemies: Creature[] = [];
   const boss = kind === 'boss' ? BOSSES[biome] : null;
+  const heat = heatRules(run.heat ?? 0, f);
   for (let i = 0; i < count; i++) {
     let pool = rng.chance(0.7) ? speciesWithElement(biome) : SPECIES;
     if (boss) {
@@ -383,9 +392,10 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     const sp = rng.pick(pool);
     let level = BALANCE.floorBaseLevel[f] + Math.round(Math.pow(node.progress, BALANCE.rampCurve) * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
     let stage = f;
-    if (kind === 'elite') level += BALANCE.eliteLevelBonus;
+    level += heat.enemyLevels;
+    if (kind === 'elite') level += BALANCE.eliteLevelBonus + heat.eliteLevels;
     if (kind === 'boss') {
-      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0);
+      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0) + heat.enemyLevels + heat.bossLevels;
       stage = Math.min(2, f + (i === count - 1 && BALANCE.bossLeadEvolves[f] ? 1 : 0));
     }
     const c = createCreature(sp.id, Math.max(1, level), stage);
@@ -394,7 +404,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     }
     if (kind === 'boss' && f === 2) for (const m of c.moves) m.tier = Math.max(m.tier, 2);
     // Trainers and guardians carry held items (the guardian's ace always, trainers sometimes from floor 2).
-    const holds = boss ? i === count - 1 : kind === 'elite' && f > 0 && rng.chance(0.4);
+    const holds = boss ? i === count - 1 || heat.bossTeamItems : kind === 'elite' && (heat.eliteItems || (f > 0 && rng.chance(0.4)));
     if (holds) c.held = rollHeld(rng);
     c.hp = stats(c).hp;
     enemies.push(c);
@@ -434,8 +444,8 @@ export interface XpResult {
   levels: number;
 }
 
-export function battleCoins(enemies: Creature[], kind: EncounterKind): number {
-  const mult = kind === 'boss' ? 3 : kind === 'elite' ? BALANCE.trainerCoinMult : 1;
+export function battleCoins(enemies: Creature[], kind: EncounterKind, heat = 0): number {
+  const mult = (kind === 'boss' ? 3 : kind === 'elite' ? BALANCE.trainerCoinMult : 1) * heatRules(heat).coinMult;
   return Math.round(enemies.reduce((s, e) => s + BALANCE.coinsBase + e.level * BALANCE.coinsPerEnemyLevel, 0) * mult);
 }
 
@@ -637,6 +647,11 @@ export function clearFloor(run: Run): boolean {
     // Winning a run unlocks the next map and the next passive.
     const before = unlockedMaps(meta).length;
     meta.wins += 1;
+    const heat = run.heat ?? 0;
+    if (heat >= (meta.heatUnlocked ?? 0) && heat < MAX_HEAT) {
+      meta.heatUnlocked = heat + 1;
+      run.unlockedThisRun.push(`🔥 Heat ${heat + 1}`);
+    }
     for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);
     for (const a of checkAchievements(meta)) run.unlockedThisRun.push(`Passive: ${PASSIVES[a.passive].name}`);

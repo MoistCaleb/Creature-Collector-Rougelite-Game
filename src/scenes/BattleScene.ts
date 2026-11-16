@@ -501,7 +501,7 @@ export class BattleScene extends Phaser.Scene {
     this.controls.setVisible(false);
     const ab = run.activeBattle!;
     const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1));
-    const coins = battleCoins(this.enemies, this.kind);
+    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0);
     sfx.victory();
     playMusic(null);
     // Bookkeeping happens once, even if the page reloads before the reward choice.

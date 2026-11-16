@@ -781,3 +781,50 @@ describe('held items', () => {
     expect(res[1].xp).toBeGreaterThan(res[0].xp);
   });
 });
+
+describe('heat', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('a run never starts above the unlocked heat', () => {
+    const meta = mkMeta();
+    meta.heat = 5;
+    expect(startRun(meta, 'emberkit', 1).heat).toBe(0);
+    meta.heatUnlocked = 3;
+    expect(startRun(meta, 'emberkit', 1).heat).toBe(3);
+  });
+  it('winning at your top heat unlocks the next one', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', 2);
+    run.floor = 2;
+    expect(clearFloor(run)).toBe(true);
+    expect(meta.heatUnlocked).toBe(1);
+    const run2 = startRun(meta, 'emberkit', 3);
+    run2.floor = 2;
+    clearFloor(run2); // played at heat 0 again: no new unlock
+    expect(meta.heatUnlocked).toBe(1);
+  });
+  it('heat raises enemy levels and prices', () => {
+    const meta = mkMeta();
+    meta.heatUnlocked = 8;
+    const lv = (heat: number) => {
+      meta.heat = heat;
+      const run = startRun(meta, 'emberkit', 4);
+      const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
+      return { level: makeEncounter(run, node)[0].level, price: rollShop(run).slots[0].price };
+    };
+    const cold = lv(0);
+    const hot = lv(8);
+    expect(hot.level).toBe(cold.level + 2);
+    expect(hot.price).toBeGreaterThan(cold.price);
+  });
+});
