@@ -8,6 +8,7 @@ import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
+import { icon as pixelIcon } from '../ui/icons';
 import { background, button, COLORS, text, typeChips, W } from '../ui/widgets';
 
 export class StarterScene extends Phaser.Scene {
@@ -23,7 +24,8 @@ export class StarterScene extends Phaser.Scene {
     this.mapId = this.daily ? 'wildlands' : data.mapId ?? state.meta.lastMap ?? 'wildlands';
     background(this);
     playMusic('title');
-    text(this, W / 2 + 20, 34, this.daily ? `📅 Daily run · ${this.daily}` : 'Choose your starter', this.daily ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    const title = text(this, W / 2 + 20, 34, this.daily ? `Daily run · ${this.daily}` : 'Choose your starter', this.daily ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    if (this.daily) pixelIcon(this, title.x - title.width / 2 - 16, 34, 'calendar', 22);
     text(
       this,
       W / 2 + 20,
@@ -56,7 +58,7 @@ export class StarterScene extends Phaser.Scene {
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 
-    button(this, 40, 28, 64, 36, '◀', () => this.scene.start(this.daily ? 'Title' : 'MapSelect'), { fontSize: 15 });
+    button(this, 40, 28, 64, 36, '', () => this.scene.start(this.daily ? 'Title' : 'MapSelect'), { fontSize: 15, glyph: 'back' });
   }
 
   private pick(id: string) {

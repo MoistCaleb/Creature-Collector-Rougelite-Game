@@ -13,7 +13,7 @@ import {
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, BENCH_MAX, highestLevel, prestigeTracked, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, maxPotions, BENCH_MAX, highestLevel, prestigeTracked, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held';
 
@@ -29,7 +29,7 @@ export interface ItemDef {
 }
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  potion: { name: 'Potion', desc: 'Heal one creature 50%', basePrice: 15, weight: 10, target: 'creature' },
+  potion: { name: 'Potion', desc: 'Carry it with you · heals 50%, even mid-battle', basePrice: 15, weight: 10, target: 'none' },
   restore: { name: 'Full Restore', desc: 'Heal every creature to full', basePrice: 70, weight: 6, target: 'none' },
   manual: { name: 'Training Manual', desc: 'One creature gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
   scroll: { name: 'Skill Scroll', desc: 'Upgrade one move a tier', basePrice: 55, weight: 8, target: 'move' },
@@ -42,6 +42,13 @@ export const ITEMS: Record<ItemId, ItemDef> = {
 /** Display name of a slot (held items show which item). */
 export function slotName(slot: { item: ItemId; held?: HeldId }): string {
   return slot.item === 'held' && slot.held ? heldName(slot.held) : ITEMS[slot.item].name;
+}
+
+/** Pixel icon for a slot, if it has one. */
+export function slotGlyph(slot: { item: ItemId; held?: HeldId }): import('../ui/icons').IconId | undefined {
+  if (slot.item === 'held' && slot.held) return HELD[slot.held].icon;
+  const map: Partial<Record<ItemId, import('../ui/icons').IconId>> = { potion: 'potion', restore: 'cross', stone: 'gem', sigil: 'star', manual: 'arrowUp', scroll: 'sparkle' };
+  return map[slot.item];
 }
 
 /** Description of a slot. */
@@ -105,8 +112,6 @@ export function canAfford(run: Run, price: number): boolean {
 export function eligibleTargets(run: Run, item: ItemId): Creature[] {
   const all = allCreatures(run);
   switch (item) {
-    case 'potion':
-      return all.filter((c) => c.hp < stats(c).hp);
     case 'manual':
       return all.filter((c) => c.level < levelCap(c));
     case 'scroll':
@@ -124,6 +129,7 @@ export function unusableReason(run: Run, slot: ShopSlot): string | null {
   if (def.target !== 'none' && eligibleTargets(run, slot.item).length === 0) return 'No creature can use this';
   if (slot.item === 'restore' && allCreatures(run).every((c) => c.hp >= stats(c).hp)) return 'Everyone is at full HP';
   if (slot.item === 'recruit' && rosterFull(run)) return 'Your party is full';
+  if (slot.item === 'potion' && (run.potions ?? 0) >= maxPotions(run)) return `Your pouch is full (${maxPotions(run)} potions)`;
   return null;
 }
 
@@ -139,8 +145,8 @@ export function pay(run: Run, price: number) {
 export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex?: number): string {
   switch (slot.item) {
     case 'potion':
-      healFraction(target!, 0.5);
-      return 'Healed 50%.';
+      run.potions = (run.potions ?? 0) + 1;
+      return `Potion added to your pouch (${run.potions}/${maxPotions(run)}). Use it from the battle screen or the Team screen.`;
     case 'restore':
       for (const c of allCreatures(run)) healFraction(c, 1);
       return 'Everyone is fully healed.';

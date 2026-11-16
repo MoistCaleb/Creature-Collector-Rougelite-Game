@@ -4,6 +4,8 @@ export const BALANCE = {
   /** Damage = power x (atk/def) x levelFactor x this. */
   damageScale: 0.45,
   /** Fraction of max HP survivors recover after winning a battle. */
+  /** Chance a won wild battle drops an Evolution Stone, by floor. */
+  stoneDropChance: [0.05, 0.07, 0.09],
   postBattleHeal: 0.4,
   /** Iron Will passive's post-battle recovery instead. */
   ironWillHeal: 0.7,

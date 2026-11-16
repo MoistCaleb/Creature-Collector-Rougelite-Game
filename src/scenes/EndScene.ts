@@ -28,7 +28,7 @@ export class EndScene extends Phaser.Scene {
       W / 2,
       86,
       (data.won ? `${run.map.biome} lands conquered. All three floors cleared.` : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`) +
-        (run.heat ? `  🔥 Heat ${run.heat}` : ''),
+        (run.heat ? `  ·  Heat ${run.heat}` : ''),
       15,
       COLORS.textDim,
       { align: 'center', wordWrap: { width: W - 40 } },
@@ -103,7 +103,7 @@ export class EndScene extends Phaser.Scene {
     if (run.daily) {
       const best = recordDaily(run, data.won);
       const rec = state.meta.daily!;
-      extra.push(`📅 Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
+      extra.push(`Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
     }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
     const earned = state.meta.newAchievements.splice(0);

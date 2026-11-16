@@ -7,8 +7,9 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { buzz, canVibrate } from '../ui/haptics';
+import type { IconId } from '../ui/icons';
 import { prefs } from '../ui/prefs';
-import { background, button, COLORS, H, muteButton, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, muteButton, setGlyph, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -22,12 +23,12 @@ export class TitleScene extends Phaser.Scene {
     muteButton(this, W - 30, 30);
     if (canVibrate) {
       // Vibration toggle (only on devices that can vibrate).
-      const label = () => (prefs.haptics ? '📳' : '📴');
-      const b = button(this, W - 78, 30, 40, 40, label(), () => {
+      const glyph = (): IconId => (prefs.haptics ? 'vibe' : 'vibeOff');
+      const b = button(this, W - 78, 30, 40, 40, '', () => {
         prefs.haptics = !prefs.haptics;
-        (b.list[1] as Phaser.GameObjects.Text).setText(label());
+        setGlyph(b, glyph());
         buzz(30);
-      }, { fontSize: 18 });
+      }, { fontSize: 20, glyph: glyph() });
     }
     const meta = state.meta;
 
@@ -43,7 +44,7 @@ export class TitleScene extends Phaser.Scene {
     text(this, W / 2, 70, 'CREATURE', 44, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, W / 2, 115, 'ROGUELITE', 30, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
-    text(this, W / 2, 270, `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   🔥 Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
+    text(this, W / 2, 270, `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
     text(this, W / 2, 294, `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
 
     if (hasSavedRun()) {
@@ -72,8 +73,9 @@ export class TitleScene extends Phaser.Scene {
     // Daily run: the same seed for everyone today.
     const today = todayUtc();
     const best = meta.daily?.date === today ? meta.daily.best : null;
-    button(this, W / 2 + 82, 550, 156, 54, '📅 Daily run', () => this.startDaily(today), {
+    button(this, W / 2 + 82, 550, 156, 54, 'Daily run', () => this.startDaily(today), {
       fontSize: 16,
+      glyph: 'calendar',
       color: 0x2f4a6b,
       sub: best ? `Best: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'New run every day',
     });
@@ -91,7 +93,7 @@ export class TitleScene extends Phaser.Scene {
         612,
         200,
         44,
-        '📲 Install app',
+        'Install app',
         () => {
           if (opt === 'prompt') void promptInstall().then(() => this.scene.restart());
           else
@@ -101,7 +103,7 @@ export class TitleScene extends Phaser.Scene {
               'In Safari, tap the Share button (the square with an arrow), then "Add to Home Screen".\n\nThe game then opens fullscreen from its own icon and works offline.',
             );
         },
-        { fontSize: 16, color: 0x2f4a7a },
+        { fontSize: 16, color: 0x2f4a7a, glyph: 'phone' },
       );
     };
     drawInstall();

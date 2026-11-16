@@ -4,6 +4,7 @@ import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
 import { isMuted, setMuted, sfx } from './sound';
 import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
+import { ensureIcon, icon as iconImage, type IconId } from './icons';
 
 /** The game is laid out on a 450x800 board... */
 export const W = 450;
@@ -55,6 +56,8 @@ export interface ButtonOpts {
   icon?: Creature;
   /** A small gold tag on the top-right corner (e.g. "RECOMMENDED"), with a gold outline. */
   badge?: string;
+  /** A pixel icon drawn just left of the label (or alone, when the label is empty). */
+  glyph?: IconId;
 }
 
 export function button(
@@ -78,6 +81,15 @@ export function button(
     wordWrap: { width: w - 12 - iconW },
   }).setOrigin(0.5);
   c.add([bg, t]);
+  if (opts.glyph) {
+    const size = Math.round((opts.fontSize ?? 18) * 1.25);
+    const gap = label ? 6 : 0;
+    const total = size + gap + (label ? t.width : 0);
+    const left = tx - total / 2;
+    const g = iconImage(scene, left + size / 2, t.y, opts.glyph, size).setName('glyph');
+    t.setX(left + size + gap + t.width / 2);
+    c.add(g);
+  }
   if (opts.icon) c.add(creatureSprite(scene, -w / 2 + 32, -8, opts.icon, 1.6));
   if (opts.sub) c.add(text(scene, tx, 12, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 - iconW } }).setOrigin(0.5));
   if (opts.badge) {
@@ -106,12 +118,18 @@ export function button(
 
 /** A small speaker toggle for sound and music. */
 export function muteButton(scene: Phaser.Scene, x: number, y: number, size = 40) {
-  const label = () => (isMuted() ? '🔇' : '🔊');
-  const b = button(scene, x, y, size, size, label(), () => {
+  const glyph = (): IconId => (isMuted() ? 'mute' : 'sound');
+  const b = button(scene, x, y, size, size, '', () => {
     setMuted(!isMuted());
-    (b.list[1] as Phaser.GameObjects.Text).setText(label());
-  }, { fontSize: Math.round(size * 0.45) });
+    setGlyph(b, glyph());
+  }, { fontSize: Math.round(size * 0.5), glyph: glyph() });
   return b;
+}
+
+/** Swap the pixel icon on a button made with `glyph`. */
+export function setGlyph(b: Phaser.GameObjects.Container, id: IconId) {
+  const g = b.getByName('glyph') as Phaser.GameObjects.Image | null;
+  g?.setTexture(ensureIcon(b.scene, id));
 }
 
 export function typeChip(scene: Phaser.Scene, x: number, y: number, el: Element, small = false): Phaser.GameObjects.Container {
@@ -186,7 +204,9 @@ export function creatureRow(
     .setStrokeStyle(2, opts.highlight ? COLORS.accent : COLORS.stroke);
   cont.add(bg);
   cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage)).setScale(1.8 * SPRITE_FIT));
-  cont.add(text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}${c.held ? `  ${HELD[c.held].icon}` : ''}`, 16));
+  const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16);
+  cont.add(nameText);
+  if (c.held) cont.add(iconImage(scene, 66 + nameText.width + 12, 16, HELD[c.held].icon, 18));
   const cap = levelCap(c);
   cont.add(text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
   const chips = scene.add.container(66, 34);

@@ -8,6 +8,7 @@ import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Spec
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
 import {
   addXp,
+  healFraction,
   catchUpMultiplier,
   createCreature,
   creatureName,
@@ -34,6 +35,11 @@ export const FLOORS = 3;
 // ---------------------------------------------------------------- passives
 
 export type PassiveId =
+  | 'apothecary'
+  | 'quartermaster'
+  | 'afflicter'
+  | 'tempered'
+  | 'harmonist'
   | 'mentor'
   | 'medic'
   | 'scout'
@@ -69,8 +75,13 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
   hunter: { name: 'Big Game Hunter', desc: 'Trainers drop 2 Evolution Stones.' },
   naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
-  ironwill: { name: 'Iron Will', desc: 'Survivors recover 70% HP after wins (normally 40%).' },
+  ironwill: { name: 'Iron Will', desc: 'Survivors heal 70% after wins, not 40%.' },
   lucky: { name: 'Lucky Charm', desc: 'Coin-flip events succeed 75% of the time.' },
+  apothecary: { name: 'Apothecary', desc: '2 starting potions, carry 8, they heal 75%.' },
+  quartermaster: { name: 'Quartermaster', desc: 'Start each run with two random held items.' },
+  afflicter: { name: 'Afflicter', desc: 'Your moves inflict statuses twice as often.' },
+  tempered: { name: 'Tempered', desc: 'Your creatures can\u2019t be burned or poisoned.' },
+  harmonist: { name: 'Harmonist', desc: 'Team synergy bonuses are doubled.' },
 };
 
 // ---------------------------------------------------------------- meta save
@@ -195,6 +206,8 @@ export interface Run {
   heat?: number;
   /** Set on a daily run: the UTC date it belongs to. */
   daily?: string;
+  /** Potions carried (usable any time, including mid-battle). */
+  potions?: number;
   /** Held items not on any creature. */
   bag?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
@@ -291,6 +304,8 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     bench: [],
     evoStones: passive === 'evolutionist' ? 1 : 0,
     coins: passive === 'coinpurse' ? 50 : 0,
+    potions: passive === 'apothecary' ? 2 : 0,
+    bag: passive === 'quartermaster' ? [rollHeld(rng), rollHeld(rng)] : [],
     shop: null,
     claimedTypes: [],
     bossPending: false,
@@ -538,6 +553,24 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
   return out;
 }
 
+/** How many potions this run can carry, and how much each heals. */
+export const maxPotions = (run: Run) => (run.passive === 'apothecary' ? 8 : 5);
+export const potionHeal = (run: Run) => (run.passive === 'apothecary' ? 0.75 : 0.5);
+
+/** Count a potion drunk (for the Chemist achievement). */
+export function notePotion(run: Run) {
+  trackStat(run, 'potionsUsed');
+}
+
+/** Drink a carried potion. Returns false if there's none or it wouldn't help. */
+export function usePotion(run: Run, c: Creature): boolean {
+  if ((run.potions ?? 0) < 1 || !isAlive(c) || c.hp >= stats(c).hp) return false;
+  run.potions! -= 1;
+  healFraction(c, potionHeal(run));
+  notePotion(run);
+  return true;
+}
+
 const eggMult = (c: Creature) => (c.held === 'egg' ? 1.4 : 1);
 
 /** A random held item, weighted by rarity. */
@@ -559,6 +592,7 @@ export function equipHeld(run: Run, c: Creature, id: HeldId) {
   if (c.held) bag.push(c.held);
   c.held = id;
   run.bag = bag;
+  trackStat(run, 'heldEquipped');
 }
 
 /** Take a creature's item back into the bag. */
@@ -714,7 +748,7 @@ export function clearFloor(run: Run): boolean {
     const heat = run.heat ?? 0;
     if (heat >= (meta.heatUnlocked ?? 0) && heat < MAX_HEAT) {
       meta.heatUnlocked = heat + 1;
-      run.unlockedThisRun.push(`🔥 Heat ${heat + 1}`);
+      run.unlockedThisRun.push(`Heat ${heat + 1}`);
     }
     for (const m of unlockedMaps(meta).slice(before)) run.unlockedThisRun.push(`Map: ${m.name}`);
     if (!meta.clearedMaps.includes(run.mapId)) meta.clearedMaps.push(run.mapId);

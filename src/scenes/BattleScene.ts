@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 import { MOVES, moveSummary } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
+import { BALANCE } from '../data/balance';
+import { synergyMults, teamSynergy } from '../logic/synergy';
+import { ensureIcon, icon } from '../ui/icons';
+import { STATUS, type StatusId } from '../data/status';
 import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
@@ -34,6 +38,8 @@ import {
   claimGuardian,
   rollHeld,
   stash,
+  potionHeal,
+  notePotion,
   earnCoins,
   evolveTracked,
   prestigeTracked,
@@ -55,6 +61,10 @@ interface SidePanel {
   name: Phaser.GameObjects.Text;
   chips: Phaser.GameObjects.Container;
   bar: HpBar;
+  /** Status tag (BRN, PSN...) at the top right. */
+  status: Phaser.GameObjects.Container;
+  /** Held item icon, just after the name. */
+  held: Phaser.GameObjects.Image;
 }
 
 const ENEMY_POS = { x: 320, y: 200 };
@@ -106,6 +116,9 @@ export class BattleScene extends Phaser.Scene {
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
       spareLast: this.kind === 'battle',
       spared: run.activeBattle.spared,
+      synergy: synergyMults(run.team, run.passive === 'harmonist' ? 2 : 1),
+      playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
+      playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -126,7 +139,8 @@ export class BattleScene extends Phaser.Scene {
     if (boss) {
       // The boss's rule stays on screen for the whole fight.
       this.add.rectangle(16, 96, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
-      text(this, 24, 101, `☠ ${boss.ruleName}`, 13, '#ff8a7a', { fontStyle: 'bold' });
+      icon(this, 32, 109, 'skull', 15);
+      text(this, 44, 101, boss.ruleName, 13, '#ff8a7a', { fontStyle: 'bold' });
       text(this, 24, 119, boss.ruleDesc, 10, COLORS.text, { wordWrap: { width: 200 } });
     } else if (this.kind === 'elite') {
       text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' });
@@ -169,7 +183,7 @@ export class BattleScene extends Phaser.Scene {
     } else if (boss) {
       openPicker(this, {
         title: `${boss.name}, ${boss.title}`,
-        subtitle: `"${boss.quote}"\n\n☠ ${boss.ruleName}\n${boss.ruleDesc}`,
+        subtitle: `"${boss.quote}"\n\n${boss.ruleName}\n${boss.ruleDesc}`,
         options: [{ label: 'Fight!', color: 0x8a2c2c }],
         onPick: begin,
       });
@@ -184,34 +198,48 @@ export class BattleScene extends Phaser.Scene {
     const name = text(this, 12, 8, '', 17, COLORS.text, { fontStyle: 'bold' });
     const chips = this.add.container(12, 40);
     const bar = new HpBar(this, 140, 40, 118, 10, true);
-    root.add([name, chips, ...bar.objects()]);
-    return { root, name, chips, bar };
+    const status = this.add.container(262, 9);
+    const held = icon(this, 0, 18, 'bag', 18).setVisible(false);
+    root.add([name, chips, ...bar.objects(), status, held]);
+    return { root, name, chips, bar, status, held };
   }
 
-  private fillPanel(p: SidePanel, c: Creature) {
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}${c.held ? ` ${HELD[c.held].icon}` : ''}`);
+  private setStatus(p: SidePanel, id: StatusId | null) {
+    p.status.removeAll(true);
+    if (!id) return;
+    const def = STATUS[id];
+    p.status.add(this.add.rectangle(0, 0, 40, 18, def.color).setOrigin(1, 0));
+    p.status.add(text(this, -20, 9, def.tag, 11, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
+  }
+
+  private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
+    this.setStatus(p, null);
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.held.setVisible(!!c.held);
+    if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.width + 12);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
-    p.bar.set(c.hp, stats(c).hp);
+    p.bar.set(hp, stats(c).hp);
   }
 
-  private refreshEnemy() {
+  /** hp: what the bar should show now (during playback the logic may already be ahead). */
+  private refreshEnemy(hp?: number) {
     const e = this.battle.e.c;
     dex.creature(e);
     this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
-    this.fillPanel(this.enemyPanel, e);
+    this.fillPanel(this.enemyPanel, e, hp);
     const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
     this.pips.setText('●'.repeat(alive) + '○'.repeat(this.battle.enemy.length - alive));
   }
 
-  private refreshPlayer() {
+  private refreshPlayer(hp?: number) {
     const p = this.battle.p.c;
     dex.creature(p, true);
     this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
-    this.fillPanel(this.playerPanel, p);
+    this.fillPanel(this.playerPanel, p, hp);
   }
 
   /** A creature pops in from nothing with a little puff. */
@@ -260,7 +288,17 @@ export class BattleScene extends Phaser.Scene {
       );
     });
     const canSwap = this.battle.player.some((x, i) => i !== this.battle.pActive && isAlive(x.c));
-    this.actions.add(button(this, W / 2, 768, 200, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 17 }));
+    this.actions.add(button(this, W / 2 - 56, 768, 106, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));
+    const potions = state.run!.potions ?? 0;
+    const hurt = this.battle.player.some((x) => isAlive(x.c) && x.c.hp < stats(x.c).hp);
+    this.actions.add(
+      button(this, W / 2 + 56, 768, 106, 44, `Potion ${potions}`, () => this.openPotion(), {
+        enabled: potions > 0 && hurt,
+        glyph: 'potion',
+        fontSize: 15,
+        color: 0x2f5a4a,
+      }),
+    );
   }
 
   /** Auto-battle and battle speed, on either side of the Switch button. */
@@ -268,21 +306,21 @@ export class BattleScene extends Phaser.Scene {
     this.controls.removeAll(true);
     const auto = prefs.autoBattle;
     this.controls.add(
-      button(this, 62, 768, 100, 44, auto ? '▶ Auto ON' : '▶ Auto', () => {
+      button(this, 62, 768, 100, 44, auto ? 'Auto ON' : 'Auto', () => {
         prefs.autoBattle = !prefs.autoBattle;
         this.drawControls();
         if (prefs.autoBattle) this.maybeAuto();
         else this.cancelAuto();
-      }, { fontSize: 15, color: auto ? 0x3b6d4a : undefined }),
+      }, { fontSize: 15, color: auto ? 0x3b6d4a : undefined, glyph: 'play' }),
     );
     const speed = prefs.battleSpeed;
     this.controls.add(
-      button(this, W - 62, 768, 100, 44, `⏩ ${speed}×`, () => {
+      button(this, W - 62, 768, 100, 44, `${speed}×`, () => {
         const i = BATTLE_SPEEDS.indexOf(speed as (typeof BATTLE_SPEEDS)[number]);
         prefs.battleSpeed = BATTLE_SPEEDS[(i + 1) % BATTLE_SPEEDS.length];
         this.drawControls();
         this.setSpeed();
-      }, { fontSize: 15, color: speed > 1 ? 0x3a4f7a : undefined }),
+      }, { fontSize: 15, color: speed > 1 ? 0x3a4f7a : undefined, glyph: 'fast' }),
     );
   }
 
@@ -299,6 +337,28 @@ export class BattleScene extends Phaser.Scene {
   private cancelAuto() {
     this.autoTimer?.remove();
     this.autoTimer = null;
+  }
+
+  /** Use a carried potion on any party member (uses your turn). */
+  private openPotion() {
+    this.cancelAuto();
+    const run = state.run!;
+    const list = this.battle.player;
+    openPicker(this, {
+      title: `Use a Potion (${run.potions ?? 0} left)`,
+      subtitle: `Heals ${Math.round(potionHeal(run) * 100)}% of max HP. Uses your turn.`,
+      options: list.map((x) => ({
+        creature: x.c,
+        disabled: !isAlive(x.c) || x.c.hp >= stats(x.c).hp,
+        note: !isAlive(x.c) ? 'Fallen' : x.c.hp >= stats(x.c).hp ? 'Full HP' : undefined,
+      })),
+      onPick: (i) => {
+        run.potions = Math.max(0, (run.potions ?? 0) - 1);
+        notePotion(run);
+        this.act({ kind: 'potion', index: i, heal: potionHeal(run) });
+      },
+      onCancel: () => this.maybeAuto(),
+    });
   }
 
   private openSwitch(forced: boolean) {
@@ -436,13 +496,27 @@ export class BattleScene extends Phaser.Scene {
           }
           break;
         }
+        case 'status': {
+          const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
+          if (ev.side === 'enemy' && ev.status) trackStat(state.run!, 'statusInflicted');
+          this.setStatus(panel, ev.status);
+          if (ev.status) {
+            const s = this.spriteOf(ev.side);
+            sfx.statDown();
+            s.setTint(STATUS[ev.status].color);
+            this.tweens.add({ targets: s, scaleX: s.scaleX * 1.08, scaleY: s.scaleY * 0.92, yoyo: true, repeat: 1, duration: 90 });
+            await this.wait(320);
+            s.clearTint();
+          }
+          break;
+        }
         case 'swap':
-          this.refreshPlayer();
+          this.refreshPlayer(ev.hp);
           this.entrance(this.playerSprite, 'player');
           await this.wait(300);
           break;
         case 'enemySend':
-          this.refreshEnemy();
+          this.refreshEnemy(ev.hp);
           this.entrance(this.enemySprite, 'enemy');
           await this.wait(300);
           break;
@@ -508,9 +582,15 @@ export class BattleScene extends Phaser.Scene {
     if (!ab.settled) {
       run.log.battlesWon += 1;
       trackStat(run, 'battlesWon');
+      if (teamSynergy(run.team).length) trackStat(run, 'synergyWins');
       const fallen = this.fallenNote();
       postBattleRecover(run);
       ab.summary = fallen;
+      // Wild creatures sometimes leave an Evolution Stone behind.
+      if (this.kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) {
+        run.evoStones += 1;
+        ab.summary = `\n\n◆ It dropped an Evolution Stone!${fallen}`;
+      }
       if (this.kind === 'elite') {
         const stones = run.passive === 'hunter' ? 2 : 1;
         run.evoStones += stones;
@@ -569,24 +649,25 @@ export class BattleScene extends Phaser.Scene {
     let chosen = false;
     if (wild) {
       this.actions.add(
-        button(this, W / 2, 652, W - 24, 72, `◈ Catch ${creatureName(wild)}`, () => {
+        button(this, W / 2, 652, W - 24, 72, `Catch ${creatureName(wild)}`, () => {
           if (chosen) return;
           chosen = true;
           this.doCatch(wild, fallen);
         }, {
           color: 0x3a4f7a,
           fontSize: 20,
+          glyph: 'crystal',
           sub: full ? 'Your party is full (release one from the Team screen first)' : `Forfeit the rewards · joins at Lv ${level}${bonusTag}`,
           enabled: !full,
         }),
       );
     }
     this.actions.add(
-      button(this, W / 2, wild ? 738 : 690, W - 24, 72, wild ? '⚔ Continue' : 'Take rewards', () => {
+      button(this, W / 2, wild ? 738 : 690, W - 24, 72, wild ? 'Continue' : 'Take rewards', () => {
         if (chosen) return;
         chosen = true;
         this.finishWild(wild, xp, coins, fallen);
-      }, { color: 0x3b6d4a, fontSize: 20, sub: `${wild ? 'Finish it · ' : ''}+${xp} XP for the team · +${coins} coins` }),
+      }, { color: 0x3b6d4a, fontSize: 20, sub: `${wild ? 'Finish it · ' : ''}+${xp} XP for the team · +${coins} coins`, glyph: wild ? 'swords' : 'coin' }),
     );
   }
 

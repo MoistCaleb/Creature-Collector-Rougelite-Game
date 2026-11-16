@@ -14,6 +14,10 @@ export interface MetaStats {
   wipes: number;
   elites: number;
   treasures: number;
+  potionsUsed: number;
+  heldEquipped: number;
+  statusInflicted: number;
+  synergyWins: number;
 }
 
 export const emptyStats = (): MetaStats => ({
@@ -29,9 +33,13 @@ export const emptyStats = (): MetaStats => ({
   wipes: 0,
   elites: 0,
   treasures: 0,
+  potionsUsed: 0,
+  heldEquipped: 0,
+  statusInflicted: 0,
+  synergyWins: 0,
 });
 
-export type StatKey = keyof MetaStats | 'coinsSpent' | 'wins' | 'bossesDefeated' | 'speciesCaught';
+export type StatKey = keyof MetaStats | 'coinsSpent' | 'wins' | 'bossesDefeated' | 'speciesCaught' | 'heatUnlocked';
 
 export interface Achievement {
   id: string;
@@ -60,6 +68,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'naturalist', name: 'Naturalist', desc: 'Catch 40 different species', stat: 'speciesCaught', goal: 40, passive: 'naturalist' },
   { id: 'guardian-slayer', name: 'Guardian Slayer', desc: 'Defeat 15 floor bosses', stat: 'bossesDefeated', goal: 15, passive: 'ironwill' },
   { id: 'treasure-hunter', name: 'Treasure Hunter', desc: 'Open 15 treasure chests', stat: 'treasures', goal: 15, passive: 'lucky' },
+  { id: 'chemist', name: 'Chemist', desc: 'Use 15 potions', stat: 'potionsUsed', goal: 15, passive: 'apothecary' },
+  { id: 'outfitter', name: 'Outfitter', desc: 'Give your creatures 10 held items', stat: 'heldEquipped', goal: 10, passive: 'quartermaster' },
+  { id: 'hexer', name: 'Hexer', desc: 'Inflict 30 status conditions', stat: 'statusInflicted', goal: 30, passive: 'afflicter' },
+  { id: 'trial-by-fire', name: 'Trial by Fire', desc: 'Win a run at Heat 2', stat: 'heatUnlocked', goal: 2, passive: 'tempered' },
+  { id: 'in-tune', name: 'In Tune', desc: 'Win 25 battles with a team synergy active', stat: 'synergyWins', goal: 25, passive: 'harmonist' },
 ];
 
 export function achievementFor(passive: PassiveId): Achievement | undefined {
@@ -71,6 +84,8 @@ export function progress(meta: Meta, a: Achievement): number {
   if (a.stat === 'wins') return meta.wins;
   if (a.stat === 'bossesDefeated') return meta.bossesDefeated;
   if (a.stat === 'speciesCaught') return meta.dex.caught.length;
+  // Highest Heat won at (winning at Heat N unlocks N+1).
+  if (a.stat === 'heatUnlocked') return Math.max(0, (meta.heatUnlocked ?? 0) - 1);
   return meta.stats[a.stat];
 }
 

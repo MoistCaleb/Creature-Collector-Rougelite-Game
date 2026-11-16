@@ -3,6 +3,7 @@
  * Usage: npx vite-node scripts/simulate.ts [runs]
  */
 import { BALANCE } from '../src/data/balance';
+import { synergyMults } from '../src/logic/synergy';
 import { BOSSES } from '../src/data/trainers';
 import { emptyStats } from '../src/logic/achievements';
 import { TIER_POWER } from '../src/data/moves';
@@ -13,7 +14,7 @@ import {
   addLevels, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
-  allCreatures, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
+  allCreatures, usePotion, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
   moveTo, postBattleRecover, promoteBench, type Meta, type Run, startRun,
 } from '../src/logic/run';
 import { Rng } from '../src/logic/rng';
@@ -53,7 +54,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   const enemies = makeEncounter(run, currentNode(run));
   enemyLevels = enemies.map((e) => e.level);
   const boss = kind === 'boss' ? BOSSES[run.map.biome] : null;
-  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName });
+  const b = new Battle(run.team, enemies, run.rng, { enemyRandomness: kind === 'battle' ? 0.5 : kind === 'elite' ? 0.25 : 0.1, rule: boss?.rule, ruleName: boss?.ruleName, synergy: synergyMults(run.team) });
   b.start();
   for (let t = 0; t < 500; t++) {
     const o = b.outcome();
@@ -68,9 +69,15 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
   if (o === 'win') {
     buryFallen(run);
     postBattleRecover(run);
+    // Drink carried potions on anyone below half HP.
+    for (;;) {
+      const low = run.team.find((c) => c.hp > 0 && c.hp / stats(c).hp < 0.5);
+      if (!low || !usePotion(run, low)) break;
+    }
     const xp = battleXp(enemies, kind, run.floor);
     if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
     else { grantXp(run, xp, [...b.fought]); run.coins += battleCoins(enemies, kind, run.heat ?? 0); }
+    if (kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) run.evoStones++;
     if (kind === 'elite') {
       run.evoStones++;
       // Trainer prize: a held item, handed to the first team member without one.
