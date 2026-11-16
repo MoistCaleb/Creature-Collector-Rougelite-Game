@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
-import { branchiness, generateFloor, reachable } from '../src/logic/map';
+import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
 import { learnset, addLevels, addXp, catchUpMultiplier, createCreature, evolve, levelCap, prestige, resolvePending, stats } from '../src/logic/creature';
 import { elementPool, MOVES } from '../src/data/moves';
@@ -50,10 +50,22 @@ describe('map', () => {
           if (n.kind !== 'boss') expect(n.next.length).toBeGreaterThan(0);
           for (const nx of n.next) expect(m.nodes[nx].y).toBeLessThan(n.y); // always forward
         }
-        expect(branchiness(m)).toBeGreaterThanOrEqual(1.7);
+        expect(branchiness(m)).toBeGreaterThanOrEqual(MIN_BRANCHINESS);
         // Every route into the boss passes the pre-boss row: shops on floor 1, rests later.
         const preBoss = Object.values(m.nodes).filter((n) => n.next.includes(m.bossId));
         for (const n of preBoss) expect(n.kind).toBe(f === 0 ? 'shop' : 'heal');
+      }
+    }
+  });
+
+  it('every route to the boss has the same length', () => {
+    for (let seed = 1; seed < 100; seed++) {
+      for (let f = 0; f < 3; f++) {
+        const m = generateFloor(f, 'Fire', seed);
+        // Every move climbs exactly one row, so every route is as long as the start's distance.
+        for (const n of Object.values(m.nodes))
+          for (const nx of n.next) expect(stepsToBoss(m, nx)).toBe(stepsToBoss(m, n.id) - 1);
+        expect(stepsToBoss(m, m.startId)).toBe(ROUTE_LENGTHS[f]);
       }
     }
   });

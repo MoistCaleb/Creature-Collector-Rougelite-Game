@@ -23,11 +23,13 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - A run = **3 floors**. Clearing the boss of floor 3 = win.
 - Each floor is a **hex-lattice map** climbed bottom → top:
   - Single start tile, boss at the top.
-  - You may move to any hex **connected above** your current one (never sideways/back).
-  - One path per floor, but branching choices at every step.
-  - Floors get wider/denser as you go (floor 1 narrow, floor 3 wide with more elites).
-- Generated as a honeycomb: most of a 5/6/7-column grid is filled, then pruned to cells that are
-  reachable and lead to the boss. Every node branches ~2 ways on average, with gaps that split lanes.
+  - Pointy-top hexes in horizontal rows. You move to either hex **touching yours from the row
+    above** (never sideways/back), so every move climbs exactly one row.
+  - **Every route to the boss is the same length** (25 / 29 / 32 nodes on floors 1 / 2 / 3), so the
+    choice is which nodes you visit, not how many. The top bar shows "Boss in N steps".
+  - Floors get wider as you go (5 / 6 / 7 hexes per row) with more elites.
+- Generated as a honeycomb: ~88% of the grid is filled, then pruned to cells that are reachable and
+  lead to the boss. Most nodes offer 2 moves (≥1.55 on average), with gaps that split lanes.
 - Bare-bones first version: colored hexes with icons/letters.
 
 ### Node types (draft)

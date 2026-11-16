@@ -14,7 +14,7 @@ import {
   stats,
   type Creature,
 } from '../logic/creature';
-import { NODE_INFO, type MapNode } from '../logic/map';
+import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { allCreatures, canMoveTo, currentNode, highestLevel, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, unusableReason, type ShopSlot } from '../logic/shop';
@@ -25,11 +25,12 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
 
-const TOP_BAR = 64;
+const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
 
-function hexPoints(w: number, h: number): number[] {
-  // flat-top hex in a w x h box
+function hexPoints(w: number, h: number, pointy: boolean): number[] {
+  // pointy-top (rows layout) or flat-top (older saved maps) hex in a w x h box
+  if (pointy) return [w / 2, 0, w, h * 0.25, w, h * 0.75, w / 2, h, 0, h * 0.75, 0, h * 0.25];
   return [w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2];
 }
 
@@ -58,14 +59,18 @@ export class MapScene extends Phaser.Scene {
     // ---- map layer
     this.layer = this.add.container(0, 0);
     const cols = map.cols;
-    const hexW = Math.min(112, (W - 30) / ((cols - 1) * 0.75 + 1));
-    const hexH = hexW * 0.866;
+    const pointy = map.layout === 'rows';
+    // Pointy-top: half-hex columns, one row per step. Flat-top: the older half-row lattice.
+    const hexW = pointy ? Math.min(90, (W - 24) / ((cols - 1) / 2 + 1)) : Math.min(112, (W - 30) / ((cols - 1) * 0.75 + 1));
+    const hexH = pointy ? hexW * 1.1547 : hexW * 0.866;
+    const colStep = pointy ? hexW / 2 : hexW * 0.75;
+    const rowStep = pointy ? hexH * 0.75 : hexH / 2;
     const nodes = Object.values(map.nodes);
     const minY = Math.min(...nodes.map((n) => n.y));
-    const gridW = (cols - 1) * 0.75 * hexW;
+    const gridW = (cols - 1) * colStep;
     const pos = (n: MapNode) => ({
-      x: W / 2 - gridW / 2 + n.col * 0.75 * hexW,
-      y: 40 + (n.y - minY) * (hexH / 2),
+      x: W / 2 - gridW / 2 + n.col * colStep,
+      y: 50 + (n.y - minY) * rowStep,
     });
 
     const reachableIds = new Set<string>();
@@ -94,15 +99,16 @@ export class MapScene extends Phaser.Scene {
       const isCurrent = n.id === run.currentId;
       const canGo = reachableIds.has(n.id);
       const size = n.kind === 'boss' ? 1.25 : 1;
-      const hw = (hexW - 6) * size;
-      const hh = (hexH - 5) * size;
-      const hex = this.add.polygon(p.x, p.y, hexPoints(hw, hh), info.color).setStrokeStyle(
+      const hw = (hexW - (pointy ? 4 : 6)) * size;
+      const hh = (hexH - (pointy ? 4 : 5)) * size;
+      const hex = this.add.polygon(p.x, p.y, hexPoints(hw, hh, pointy), info.color).setStrokeStyle(
         isCurrent ? 4 : canGo ? 3 : 2,
         isCurrent ? 0xffc94d : canGo ? 0xffffff : 0x000000,
         isCurrent || canGo ? 1 : 0.5,
       );
-      const icon = text(this, p.x, p.y - 8, info.icon, n.kind === 'boss' ? 34 : 26, '#ffffff').setOrigin(0.5);
-      const label = text(this, p.x, p.y + hh * 0.26, info.label, 11, '#ffffff').setOrigin(0.5);
+      const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
+      const icon = text(this, p.x, p.y - (pointy ? 6 : 8), info.icon, iconSize, '#ffffff').setOrigin(0.5);
+      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
       if (!canGo && !isCurrent) {
         hex.setAlpha(visited ? 0.35 : 0.6);
@@ -111,7 +117,7 @@ export class MapScene extends Phaser.Scene {
       }
       if (canGo) {
         this.tweens.add({ targets: [hex], scale: 1.07, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
-        hex.setInteractive(new Phaser.Geom.Polygon(hexPoints(hw, hh)), Phaser.Geom.Polygon.Contains);
+        hex.setInteractive(new Phaser.Geom.Polygon(hexPoints(hw, hh, pointy)), Phaser.Geom.Polygon.Contains);
         hex.on('pointerup', () => {
           if (!this.dragging) this.enterNode(n);
         });
@@ -119,7 +125,7 @@ export class MapScene extends Phaser.Scene {
     }
 
     // scrolling
-    const mapH = 40 + (map.maxY - minY) * (hexH / 2) + hexH;
+    const mapH = 50 + (map.maxY - minY) * rowStep + hexH;
     const viewH = H - TOP_BAR - BOTTOM_BAR;
     this.minScroll = Math.min(TOP_BAR, TOP_BAR + viewH - mapH);
     this.maxScroll = TOP_BAR;
@@ -191,6 +197,10 @@ export class MapScene extends Phaser.Scene {
     text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     text(this, 150, 36, `◆ ${run.evoStones} stone${run.evoStones === 1 ? '' : 's'}`, 13, COLORS.textDim);
+    if (run.map.layout === 'rows' && !run.bossPending) {
+      const steps = stepsToBoss(run.map, run.currentId);
+      text(this, 14, 60, steps === 1 ? 'Boss is next' : `☠ Boss in ${steps} steps`, 12, '#c9a3dd');
+    }
     button(this, W - 134, TOP_BAR / 2, 70, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
     button(this, W - 50, TOP_BAR / 2, 84, 44, 'Team', () => this.scene.start('Team'), { fontSize: 17 });
   }
