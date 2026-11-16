@@ -187,6 +187,8 @@ Proposed math:
 ## Level curve (target)
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★. Evolving needs Lv 30 (first) / Lv 65 (second),
   whatever the cap (a floor ceiling or stars don't change it), including the boss's "Evolve one" boon.
+- Enemy prestige: on floors 2 and 3, enemies carry stars matching your main team's average (wild: same or one
+  less; trainers and guardians: same), at most 3 on floor 2 and 5 on floor 3. Caught creatures don't keep them.
 - Enemy move choice: wild creatures pick a random move 50% of the time, trainers 10%, bosses never.
 - Each floor also has a level ceiling (45 / 70 / 100) so you can't outgrow it; XP past the ceiling is stored
   and coins are paid as at the stage cap, and the stored XP pours in when the next floor opens.

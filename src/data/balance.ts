@@ -14,14 +14,21 @@ export const BALANCE = {
   /** Fraction of max HP a caught creature joins with. */
   catchHp: 0.4,
   /** Enemy level = floorBase + progress x floorRamp (+ small random). */
-  floorBaseLevel: [1, 33, 66],
+  floorBaseLevel: [1, 26, 56],
   floorRamp: [22, 30, 32],
   /** >1 keeps early nodes of each floor gentle and ramps up later. */
   rampCurve: 1.2,
   /** Floor boss levels (the lead creature is +2). */
-  bossLevel: [25, 67, 100],
+  bossLevel: [25, 59, 90],
   /** Highest level your creatures can reach on each floor (XP past it is stored for the next floor). */
   floorLevelCap: [45, 70, 100],
+  /**
+   * Most prestige stars enemies can carry on each floor. Enemies follow your main team's average
+   * stars (wild: same or one less, trainers and guardians: same, + bossStarBonus), up to this.
+   */
+  enemyStarMax: [0, 3, 5],
+  /** Extra stars guardians get over your team's average. */
+  bossStarBonus: 0,
   /** Whether each floor boss's lead creature is one evolution ahead. */
   bossLeadEvolves: [false, true, true],
   eliteLevelBonus: 1,

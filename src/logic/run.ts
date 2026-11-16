@@ -490,6 +490,19 @@ export function promoteBench(run: Run): boolean {
 
 export type EncounterKind = 'battle' | 'elite' | 'boss';
 
+/**
+ * Enemies on later floors are prestiged to match your team, so stars don't simply outclass them:
+ * your main team's average stars (wild: same or one less, trainers: same, guardians: same plus
+ * BALANCE.bossStarBonus), capped per floor by BALANCE.enemyStarMax.
+ */
+export function enemyStars(run: Run, kind: EncounterKind, rng: Rng): number {
+  const max = BALANCE.enemyStarMax[run.floor] ?? 0;
+  if (!max || !run.team.length) return 0;
+  const avg = Math.round(run.team.reduce((t, c) => t + c.stars, 0) / run.team.length);
+  const n = avg + (kind === 'boss' ? BALANCE.bossStarBonus : kind === 'battle' ? rng.int(-1, 0) : 0);
+  return Math.max(0, Math.min(max, n));
+}
+
 export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const kind = node.kind as EncounterKind;
   const rng = run.rng;
@@ -521,6 +534,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
       stage = Math.min(2, f + (i === count - 1 && BALANCE.bossLeadEvolves[f] ? 1 : 0));
     }
     const c = createCreature(sp.id, Math.max(1, level), stage);
+    c.stars = enemyStars(run, kind, rng);
     if (kind !== 'battle' && f > 0) {
       for (const m of c.moves) if (rng.chance(0.4)) m.tier = 2;
     }

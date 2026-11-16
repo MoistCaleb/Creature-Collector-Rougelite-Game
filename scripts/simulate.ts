@@ -11,7 +11,7 @@ import { DEFAULT_STARTERS, SPECIES } from '../src/data/species';
 import { stabMultiplier, typeMultiplier } from '../src/data/types';
 import { Battle } from '../src/logic/battle';
 import {
-  addLevels, readyToEvolve, canEvolve, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
+  addLevels, readyToEvolve, canEvolve, canPrestige, prestige, sharesType, creatureTypes, evolve, healFraction, isAlive, levelCap, moveDef, stats,
 } from '../src/logic/creature';
 import {
   allCreatures, usePotion, equipHeld, rollHeld, stash, battleCoins, battleXp, buryFallen, fillTeamFromBench, catchCreature, clearFloor, currentNode, grantXp, makeEncounter,
@@ -93,6 +93,7 @@ function fight(run: Run, kind: 'battle' | 'elite' | 'boss'): 'win' | 'lose' {
 }
 
 // Economy tracking (per run, reset in simulate()).
+const bossStars: number[][] = [[], [], []];
 let econ = { earned: [0, 0, 0], spent: [0, 0, 0], stones: { drop: 0, elite: 0, shop: 0 }, used: 0 };
 const econRuns: { won: boolean; econ: typeof econ; coinsLeft: number; stonesLeft: number; floor: number }[] = [];
 
@@ -130,6 +131,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
       case 'battle': case 'elite': case 'boss': {
         const lastTeam = run.team.map((c) => c.level).join('/');
         if (n.kind === 'boss' && !run.bossPending) bossLevels[run.floor].push(Math.max(...run.team.map((c) => c.level)));
+        if (n.kind === 'boss' && !run.bossPending) bossStars[run.floor].push(run.team.reduce((t, c) => t + c.stars, 0) / run.team.length);
         const r = fight(run, n.kind);
         if (run.evoStones > stones0) econ.stones[n.kind === 'elite' ? 'elite' : 'drop'] += run.evoStones - stones0;
         if (r === 'lose') {
@@ -140,7 +142,7 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
         if (n.kind === 'boss') {
           run.bossPending = false;
           const evo = allCreatures(run).filter(readyToEvolve).sort((a, b) => b.level - a.level)[0];
-          if (evo) evolve(evo); else allCreatures(run).forEach((c) => healFraction(c, 1));
+          if (evo) evolve(evo); else run.team.forEach((c) => canPrestige(c) && prestige(c));
           nodesPerFloor[run.floor].push(run.visited.length);
           if (clearFloor(run)) return finish({ floor: 3, won: true });
         }
@@ -149,6 +151,16 @@ function simulate(seed: number): { floor: number; won: boolean; diedAt?: string 
       case 'heal': allCreatures(run).forEach((c) => healFraction(c, 0.5)); break;
       case 'treasure': run.coins += 30 * (1 + run.floor); break;
       case 'event': break;
+      case 'prestige': {
+        // Prestige Altar: sacrifice the weakest bench creature sharing a type with the strongest it can empower.
+        if (process.env.NOALTAR) break;
+        const target = allCreatures(run).filter((t) => canPrestige(t) && run.bench.some((b) => b !== t && sharesType(b, t))).sort((a, b) => b.level - a.level)[0];
+        if (!target) break;
+        const sac = run.bench.filter((b) => b !== target && sharesType(b, target)).sort((a, b) => a.level - b.level)[0];
+        run.bench = run.bench.filter((b) => b !== sac);
+        prestige(target);
+        break;
+      }
       case 'shop': {
         // Greedy: buy whatever helps most that we can afford, in priority order.
         const pre = run.floor === 0 && n.next.includes(run.map.bossId);
@@ -193,6 +205,7 @@ console.log('ended on floor:', floors.slice(0, 3).map((n, i) => `F${i + 1}: ${n}
 const med = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0);
 const pct = (a: number[], q: number) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length * q)] : 0);
 console.log('top level arriving at boss (p25 / median / p75):', bossLevels.map((a, i) => `F${i + 1}: ${pct(a, 0.25)}/${med(a)}/${pct(a, 0.75)} (n=${a.length})`).join('  '));
+console.log('avg team stars at boss:', bossStars.map((a, i) => `F${i + 1}: ${a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1) : '-'}`).join('  '));
 console.log('median nodes walked per floor:', nodesPerFloor.map((a, i) => `F${i + 1}: ${med(a)}`).join('  '));
 {
   const wonRuns = econRuns.filter((r) => r.won);
