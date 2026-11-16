@@ -986,3 +986,25 @@ describe('lasting statuses', () => {
     expect(a.status).toBeUndefined();
   });
 });
+
+describe('statuses off the field', () => {
+  it('benched and waiting creatures keep taking status damage and their timers run, but never faint from it', () => {
+    const active = createCreature('mossling', 20);
+    const waiting = createCreature('mossling', 20);
+    const benched = createCreature('mossling', 20);
+    waiting.status = { id: 'poison', turns: 2 };
+    benched.status = { id: 'burn', turns: 9 };
+    benched.hp = 2;
+    const e = createCreature('emberkit', 5);
+    e.hp = 100000;
+    const b = new Battle([active, waiting], [e], new Rng(3), { reserve: [benched] });
+    const before = waiting.hp;
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(waiting.hp).toBeLessThan(before);
+    expect(waiting.status?.turns).toBe(1);
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(waiting.status).toBeUndefined();
+    expect(benched.hp).toBe(1);
+    expect(benched.status?.turns).toBe(7);
+  });
+});

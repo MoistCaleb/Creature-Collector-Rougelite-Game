@@ -227,8 +227,9 @@ Runs unlock:
 
 ## Battle systems (later additions)
 
-- **Status conditions** (one per creature; each lasts 3–5 turns of that creature being in battle, and carries over
-  between battles until it runs out; potions, Full Restores, Rest nodes and full heals cure it). Moves named for a
+- **Status conditions** (one per creature; each lasts 3–5 battle turns and carries over between battles until it runs
+  out). The timer also runs for creatures waiting or benched during a battle, and burn/poison still hurt them, but
+  never below 1 HP off the field. Potions, Full Restores, Rest nodes and full heals cure it. Moves named for a
   condition can inflict it (Spark → paralysis, Acid Spit → poison...): attacks 10–20%, debuff moves 40%.
   | Status | Effect | Immune |
   |---|---|---|
@@ -244,7 +245,9 @@ Runs unlock:
 - **Potions** are carried (5, or 8 with Apothecary) and used from the battle screen (costs the turn) or the
   Team screen.
 - **Entrances**: your creatures and trainers'/guardians' are released from a glowing hexagon (and recalled into it
-  on a switch); wild creatures burst out of grass, rocks (Earth, Metal, Fire, Dragon) or water (Water, Frost).
+  on a switch); wild creatures burst out of something matching their first element: grass (Nature), flames (Fire),
+  rocks (Earth), scrap (Metal), ice shards (Frost), dragon stones (Dragon), water (Water), sludge (Toxic), a shadow
+  pool (Shadow), a lightning strike (Storm), a sunburst (Light) or gathering mist (Spirit).
 - **Evolution Stones** also drop from won wild battles: 5% / 7% / 9% by floor.
 
 ## Open questions
