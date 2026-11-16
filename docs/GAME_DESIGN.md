@@ -65,7 +65,8 @@ Working doc. Items marked **[OPEN]** still need a decision.
   at **1 HP** and ends the battle (earlier wild creatures in a 2-creature fight faint normally).
   The move buttons then become the choice:
   - **Continue** — finish it off and take the rewards (XP, coins), or
-  - **Catch it** — forfeit all rewards, gain a **raw level 1** copy (bond crystal animation).
+  - **Catch it** — forfeit all rewards; it joins **at its own level and evolution, with its moves**, healed to full
+    (bond crystal animation). Scout passive: +3 levels, within the level cap.
 - Trainers' and bosses' creatures always faint and can't be caught.
 - **First catch:** the first time you ever catch a species (tracked in the Dex) it arrives with a free ★.
 - **After the Dex is complete:** the bonus goes per element, per run. A catch earns ★ if at least one of its
@@ -203,7 +204,7 @@ Runs unlock:
   |---|---|---|
   | — | — | Mentor: bench earns full XP (default) |
   | First Aid | Rest at 10 Rest nodes | Field Medic: Rest heals fully |
-  | Collector | Catch 10 creatures | Scout: catches start at Lv 5 |
+  | Collector | Catch 10 creatures | Scout: caught creatures arrive 3 levels higher |
   | Veteran | Win 50 battles | Drill Sergeant: +10% damage |
   | Big Spender | Spend 500 coins | Haggler: 25% off shops |
   | Metamorphosis | Evolve 5 creatures | Evolutionist: start with an Evolution Stone |

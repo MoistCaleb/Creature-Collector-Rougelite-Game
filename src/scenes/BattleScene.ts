@@ -38,6 +38,7 @@ import {
   catchBonus,
   rosterFull,
   type EncounterKind,
+  catchLevel,
   type XpResult,
 } from '../logic/run';
 import { dex, persist, state } from '../state';
@@ -506,7 +507,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const full = rosterFull(run);
     const bonusTag = wild ? { species: ' · ★ first catch!', type: ' · ★ new type bonus!', none: '' }[catchBonus(run, wild.speciesId) ?? 'none'] : '';
-    const level = run.passive === 'scout' ? 5 : 1;
+    const level = wild ? catchLevel(run, wild) : 1;
     let chosen = false;
     if (wild) {
       this.actions.add(

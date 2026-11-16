@@ -239,7 +239,7 @@ describe('acquiring creatures', () => {
     const a = catchCreature(run, wild)!;
     expect(a.bonus).toBe('species');
     expect(a.c.stars).toBe(1);
-    expect(a.c.level).toBe(1);
+    expect(a.c.level).toBe(4); // joins at the level it was in battle
     const b = catchCreature(run, wild)!;
     expect(b.bonus).toBe(null);
     expect(b.c.stars).toBe(0);
@@ -644,5 +644,31 @@ describe('wild creatures are left at 1 HP to catch', () => {
     for (let t = 0; t < 10 && b.outcome() === 'ongoing'; t++) b.takeTurn({ kind: 'move', index: atk(me) });
     expect(foe.hp).toBe(0);
     expect(b.spared).toBe(false);
+  });
+});
+
+describe('caught creatures keep their level and evolution', () => {
+  const meta = (): Meta => ({
+    unlockedStarters: [], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0,
+    dex: { forms: [], moves: [], elements: [], caught: [] }, coinsSpent: 0, bossesDefeated: 0, clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('joins at the same level, stage and moves, at full HP', () => {
+    const run = startRun(meta(), 'emberkit', 11);
+    const wild = createCreature('frostling', 40, 1);
+    wild.hp = 1;
+    const { c } = catchCreature(run, wild)!;
+    expect(c.level).toBe(40);
+    expect(c.stage).toBe(1);
+    expect(c.moves.map((m) => m.id)).toEqual(wild.moves.map((m) => m.id));
+    expect(c.uid).not.toBe(wild.uid);
+    expect(c.hp).toBe(stats(c).hp);
+  });
+  it('Scout adds 3 levels, never past the level cap', () => {
+    const run = startRun({ ...meta(), equippedPassive: 'scout', unlockedPassives: ['scout'] }, 'emberkit', 12);
+    run.passive = 'scout';
+    expect(catchCreature(run, createCreature('frostling', 10))!.c.level).toBe(13);
+    const capped = catchCreature(run, createCreature('frostling', 30))!.c; // stage 1 cap is 30
+    expect(capped.level).toBe(levelCap(capped));
   });
 });
