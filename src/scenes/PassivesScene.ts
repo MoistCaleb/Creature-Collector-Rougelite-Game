@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { achievementFor, progress } from '../logic/achievements';
 import { PASSIVES, saveMeta, type PassiveId } from '../logic/run';
 import { state } from '../state';
-import { background, button, COLORS, H, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, text, W, ZOOM } from '../ui/widgets';
 
 const TOP = 84;
 
@@ -83,14 +83,14 @@ export class PassivesScene extends Phaser.Scene {
     // Drag / wheel to scroll
     const min = Math.min(TOP, H - this.listH - 16);
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      this.dragStart = ptr.y;
+      this.dragStart = ptr.y / ZOOM;
       this.startY = this.list.y;
       this.dragged = false;
     });
     this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
       if (!ptr.isDown) return;
-      if (Math.abs(ptr.y - this.dragStart) > 8) this.dragged = true;
-      if (this.dragged) this.list.y = Phaser.Math.Clamp(this.startY + ptr.y - this.dragStart, min, TOP);
+      if (Math.abs(ptr.y / ZOOM - this.dragStart) > 8) this.dragged = true;
+      if (this.dragged) this.list.y = Phaser.Math.Clamp(this.startY + ptr.y / ZOOM - this.dragStart, min, TOP);
     });
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       this.list.y = Phaser.Math.Clamp(this.list.y - dy, min, TOP);

@@ -4,8 +4,20 @@ import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../
 import { isMuted, setMuted, sfx } from './sound';
 import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
 
+/** The game is laid out on a 450x800 board... */
 export const W = 450;
 export const H = 800;
+
+/**
+ * ...but rendered at the screen's real pixel density so it stays sharp on phones. The canvas is
+ * ZOOM times larger and every scene's camera zooms by ZOOM (see `background`), so layout code
+ * keeps using 450x800 coordinates. Capped at 3 to keep the canvas a sensible size.
+ */
+export const ZOOM = (() => {
+  if (typeof window === 'undefined') return 1;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  return Math.min(3, Math.max(1, (window.devicePixelRatio || 1) * fit));
+})();
 export const FONT = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';
 
 export const COLORS = {
@@ -29,7 +41,7 @@ export function text(
   color = COLORS.text,
   style: Partial<Phaser.Types.GameObjects.Text.TextStyle> = {},
 ): Phaser.GameObjects.Text {
-  return scene.add.text(x, y, str, { fontFamily: FONT, fontSize: `${size}px`, color, ...style });
+  return scene.add.text(x, y, str, { fontFamily: FONT, fontSize: `${size}px`, color, resolution: ZOOM, ...style });
 }
 
 export interface ButtonOpts {
@@ -186,5 +198,7 @@ export function creatureRow(
 }
 
 export function background(scene: Phaser.Scene, color = COLORS.bg) {
+  // Every scene draws its background first, so this is where the camera gets its zoom.
+  scene.cameras.main.setOrigin(0, 0).setZoom(ZOOM);
   scene.add.rectangle(0, 0, W, H, color).setOrigin(0);
 }

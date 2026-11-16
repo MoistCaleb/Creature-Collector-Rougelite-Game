@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { sfx } from './sound';
+import { H, W, ZOOM } from './widgets';
 
 /**
  * Battle visual effects, all drawn in code: per-element projectiles and impacts, status
@@ -297,6 +298,7 @@ export function damageNumber(scene: Phaser.Scene, at: Pt, amount: number, mult =
       color: big ? '#ffd23f' : weak ? '#b8b4c8' : '#ffffff',
       stroke: '#000000',
       strokeThickness: 5,
+      resolution: ZOOM,
     })
     .setOrigin(0.5)
     .setDepth(60)
@@ -336,8 +338,6 @@ export function playCatch(
   onDone: () => void,
 ) {
   ensureFxTextures(scene);
-  const W = scene.scale.width;
-  const H = scene.scale.height;
   const dim = scene.add.rectangle(0, 0, W, H, 0x000000, 0.35).setOrigin(0).setDepth(1500).setInteractive();
   const mon = scene.add.image(at.x, at.y, creatureKey).setScale(scale).setDepth(1501).setAlpha(0);
   const gem = crystal(scene, color).setDepth(1503).setPosition(from.x, from.y).setScale(0.8);
@@ -405,7 +405,7 @@ export function playCatch(
               if (special) {
                 // A golden star rises for a bonus catch.
                 const star = scene.add
-                  .text(at.x, groundY - 40, '★', { fontFamily: 'system-ui', fontSize: '44px', color: '#ffd23f', stroke: '#000', strokeThickness: 4 })
+                  .text(at.x, groundY - 40, '★', { fontFamily: 'system-ui', fontSize: '44px', color: '#ffd23f', stroke: '#000', strokeThickness: 4, resolution: ZOOM })
                   .setOrigin(0.5)
                   .setDepth(1505)
                   .setScale(0.2);
@@ -438,8 +438,6 @@ export function playEvolution(
   onDone: () => void,
 ) {
   ensureFxTextures(scene);
-  const W = scene.scale.width;
-  const H = scene.scale.height;
   const root = scene.add.container(0, 0).setDepth(2000);
   const dim = scene.add.rectangle(0, 0, W, H, 0x05040a, 0.92).setOrigin(0).setInteractive();
   root.add(dim);
