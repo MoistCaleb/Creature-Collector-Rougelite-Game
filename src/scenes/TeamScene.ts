@@ -97,7 +97,8 @@ export class TeamScene extends Phaser.Scene {
     const sp = species(c);
     const cap = levelCap(c);
     text(this, 18, y0 + 8, `${creatureName(c)} ${stars(c.stars)}`, 18, COLORS.text, { fontStyle: 'bold' });
-    text(this, W - 18, y0 + 10, `Stage ${c.stage + 1}/3`, 13, COLORS.textDim).setOrigin(1, 0);
+    const next = c.stage < 2 ? `next: ${formName(state.meta.dex, sp.id, c.stage + 1)}` : 'final form';
+    text(this, W - 18, y0 + 12, `Stage ${c.stage + 1}/3 · ${next}`, 12, COLORS.textDim).setOrigin(1, 0);
     const stored = c.banked ?? 0;
     const full = stored >= bankLimit(c);
     const xpLine =
@@ -106,39 +107,39 @@ export class TeamScene extends Phaser.Scene {
         : stored
           ? `MAX · Stored ${full ? BANK_LEVELS : bankedLevels(c).toFixed(1)}/${BANK_LEVELS} lv${full ? ' (full)' : ''}`
           : 'MAX · XP is stored and pays coins';
-    text(this, 18, y0 + 32, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim);
-    text(this, 18, y0 + 50, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text);
+    text(this, 18, y0 + 31, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim);
+    text(this, 18, y0 + 47, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text);
     c.moves.forEach((m, i) => {
       const d = moveDef(m);
-      const x = 18 + (i % 2) * 210;
-      const y = y0 + 72 + Math.floor(i / 2) * 20;
-      this.add.rectangle(x, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
-      text(this, x + 12, y, `${d.name} · ${moveSummary(d, m.tier)} · T${m.tier}`, 11, COLORS.text);
+      // One move per row, full width; long effect lists shrink to fit rather than overlap.
+      const y = y0 + 68 + i * 16;
+      this.add.rectangle(18, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
+      const line = text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · T${m.tier}`, 11, COLORS.text);
+      const room = W - 48;
+      if (line.width > room) line.setScale(room / line.width, 1);
     });
-    const next = c.stage < 2 ? `Evolves into ${formName(state.meta.dex, sp.id, c.stage + 1)}` : 'Final form';
-    text(this, 18, y0 + 116, next, 12, '#8e86ad');
 
     // Held item.
     const bag = run.bag ?? [];
     button(
       this,
-      W - 112,
-      y0 + 126,
+      116,
+      y0 + 145,
       196,
-      32,
+      24,
       c.held ? heldName(c.held) : bag.length ? `Give item (${bag.length})` : 'No items',
       () => this.itemPicker(c),
       { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a, glyph: c.held ? HELD[c.held].icon : 'bag' },
     );
 
-    const by = y0 + 168;
+    const by = y0 + 176;
     const stoneOk = run.evoStones > 0 && canEvolve(c) && c.level >= cap;
     button(
       this,
       58,
       by,
       100,
-      36,
+      28,
       'Evolve ◆',
       () => {
         run.evoStones -= 1;
@@ -163,7 +164,7 @@ export class TeamScene extends Phaser.Scene {
       166,
       by,
       104,
-      36,
+      28,
       ref.list === 'team' ? 'To bench' : 'To team',
       () => {
         const from = run[ref.list];
@@ -178,7 +179,7 @@ export class TeamScene extends Phaser.Scene {
       270,
       by,
       92,
-      36,
+      28,
       'Release',
       () =>
         openPicker(this, {
@@ -201,7 +202,7 @@ export class TeamScene extends Phaser.Scene {
       374,
       by,
       100,
-      36,
+      28,
       `Potion ${potions}`,
       () => {
         usePotion(run, c);
@@ -211,7 +212,7 @@ export class TeamScene extends Phaser.Scene {
       { enabled: potions > 0 && needsPotion(c), fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
     );
     if (!stoneOk && run.evoStones > 0 && canEvolve(c))
-      text(this, 18, y0 + 136, 'Reach the level cap to use a stone.', 11, '#ffc94d');
+      text(this, 226, y0 + 145, 'Reach the level cap to use a stone.', 11, '#ffc94d', { wordWrap: { width: W - 244 } }).setOrigin(0, 0.5);
   }
 
   /** Give, swap or take off a held item. */
