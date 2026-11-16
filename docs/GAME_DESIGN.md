@@ -37,7 +37,7 @@ Working doc. Items marked **[OPEN]** still need a decision.
 |---|---|
 | Battle | Wild trainer/creature fight. Win → rewards **or** catch |
 | Trainer | Named trainer's team. No catching; ×3 XP, ×3 coins, a held item and a 50% chance of an Evolution Stone |
-| Level Up | Focus: one creature +6/+9/+12 levels (by floor) · Team drills: everyone incl. bench +3/+4/+5 · Catch-up camp: raise everyone to within 5 levels of your strongest |
+| Level Up | Focus: one creature +6/+9/+12 levels (by floor) · Team drills: everyone incl. bench +3/+4/+5 |
 | Prestige (star) | Prestige a creature |
 | Skill | Choose 1 of 3 skill buffs |
 | Heal | Restore HP |
