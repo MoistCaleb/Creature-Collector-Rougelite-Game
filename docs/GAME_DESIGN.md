@@ -250,6 +250,10 @@ Proposed math:
   (rain, lightning), Water beach (bubbles), Metal factory (sparks), Toxic swamp (spores), Shadow ruins at
   night (motes), Light sunlit temple (glints), Spirit graveyard under the moon (wisps), Dragon crimson peaks
   (ash). The controls sit on a shaded strip below (upright) or to the right (sideways).
+- **Stage variants:** each battle picks a stage at random: time of day (day, dusk, night or fog, as fits the
+  element), one of two prop sets and range shapes, which side the sun/moon is on, and a fresh layout. Two
+  battles in a row in the same element never share a time of day. The stage is saved with the battle, so
+  resuming or rotating the phone keeps it.
 - **Menus:** a soft glow and honeycomb with big element-colored hexagons drifting up and rising sparks; the
   title screen adds a glowing arcade floor.
 

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
-import { battleBackdrop, battlePad, onField } from '../ui/backdrops';
+import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
@@ -96,6 +96,8 @@ interface SidePanel {
  * saved or rewarded, and `onEnd` decides what happens next.
  */
 export interface BattleMatch {
+  /** The battle stage variant (picked on first draw, kept when the screen restarts). */
+  stage?: number;
   team: Creature[];
   enemies: Creature[];
   seed: number;
@@ -249,7 +251,9 @@ export class BattleScene extends Phaser.Scene {
 
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[run.map.biome]).darken(78).color);
     useLayout();
-    this.drawField(run.map.biome);
+    // The stage is picked once per battle and saved, so resuming or rotating keeps it.
+    run.activeBattle!.stage ??= pickStage(run.map.biome);
+    this.drawField(run.map.biome, run.activeBattle!.stage);
     this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
@@ -427,10 +431,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** The element's environment behind the field, and a pad under each side. */
-  private drawField(el: Element) {
-    battleBackdrop(this, el, W, H, L.field);
-    battlePad(this, el, ENEMY_POS.x, ENEMY_POS.y + 72);
-    battlePad(this, el, PLAYER_POS.x, PLAYER_POS.y + 72);
+  private drawField(el: Element, stage: number) {
+    battleBackdrop(this, el, stage, W, H, L.field);
+    battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72);
+    battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72);
   }
 
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
@@ -488,7 +492,9 @@ export class BattleScene extends Phaser.Scene {
     background(this, m.background);
     useLayout();
     // Outside a run, the field is the opponent's lead creature's home ground.
-    this.drawField(creatureTypes(this.enemies[0])[0]);
+    const el = creatureTypes(this.enemies[0])[0];
+    m.stage ??= pickStage(el);
+    this.drawField(el, m.stage);
     this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
