@@ -3,7 +3,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { dailySeed, dailyStarters, rollStarterChoices, startRun } from '../logic/run';
+import { dailyPassives, dailySeed, dailyStarters, PASSIVES, rollStarterChoices, startRun } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -44,7 +44,7 @@ export class StarterScene extends Phaser.Scene {
       this.race
         ? `${MAP_BY_ID[this.mapId]?.name ?? 'Map'} · double battle rewards · same starters for both`
         : this.daily
-        ? 'Same starters and map for everyone today'
+        ? 'Same starters, map and passives for everyone'
         : state.meta.favorite && state.meta.unlockedStarters.includes(state.meta.favorite)
           ? 'Your favorite plus two random picks'
           : 'Three picked at random from your unlocked pool',
@@ -55,6 +55,8 @@ export class StarterScene extends Phaser.Scene {
     // The roll is kept until you pick or leave, so turning the phone doesn't reroll it.
     rolled ??= rollStarterChoices(state.meta, new Rng());
     const choices = this.race ? this.race.starters : this.daily ? dailyStarters(this.daily) : rolled;
+    // Daily runs: each starter comes with a passive that suits it.
+    const passives = this.daily ? dailyPassives(this.daily) : null;
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       dex.form(id, 0);
@@ -80,7 +82,11 @@ export class StarterScene extends Phaser.Scene {
         text(this, mid, y + 180, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
         text(this, mid, y + 226, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
         text(this, mid, y + 262, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
-        button(this, mid, y + 320, cw - 40, 36, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
+        if (passives?.[id]) {
+          const pv = PASSIVES[passives[id]];
+          text(this, mid, y + 280, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
+        }
+        button(this, mid, y + 328, cw - 40, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
         return;
       }
       const y = 100 + i * 228;
@@ -101,6 +107,12 @@ export class StarterScene extends Phaser.Scene {
         wordWrap: { width: W - 215 },
       });
       text(this, 175, y + 146, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 12, '#8e86ad', { wordWrap: { width: W - 215 } });
+      if (passives?.[id]) {
+        const pv = PASSIVES[passives[id]];
+        pixelIcon(this, 42, y + 177, 'star', 14);
+        text(this, 54, y + 168, `Passive: ${pv.name}`, 13, '#ffc94d', { fontStyle: 'bold' });
+        text(this, 36, y + 186, pv.desc, 11, COLORS.textDim, { wordWrap: { width: W - 186 } });
+      }
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 

@@ -267,6 +267,34 @@ Proposed math:
 - **Menus:** a soft glow and honeycomb with big element-colored hexagons drifting up and rising sparks; the
   title screen adds a glowing arcade floor.
 
+## Daily runs
+
+- One run per day, the same for everyone: the same 3 starters, map (Wildlands, seeded by the date) and Heat 0.
+  Play today's or any missed day from the calendar; your best result per day is kept.
+- **Each starter comes with a passive that suits it** (your own equipped passive isn't used). Every element
+  has three fitting passives, and a starter draws from its elements' lists, seeded by the date, with the
+  three starters getting different passives:
+  | Element | Passives |
+  |---|---|
+  | Fire | Drill Sergeant, Afflicter, Coin Purse |
+  | Frost | Iron Will, Tempered, Bodyguard |
+  | Nature | Field Medic, Naturalist, Harmonist |
+  | Earth | Bodyguard, Iron Will, Personal Trainer |
+  | Storm | Drill Sergeant, Afflicter, Lucky Charm |
+  | Water | Apothecary, Field Medic, Iron Will |
+  | Metal | Quartermaster, Haggler, Tempered |
+  | Toxic | Afflicter, Tempered, Apothecary |
+  | Shadow | Big Game Hunter, Afflicter, Lucky Charm |
+  | Light | Field Medic, Sage, Explorer |
+  | Spirit | Sage, Lucky Charm, Mentor |
+  | Dragon | Champion, Evolutionist, Drill Sergeant |
+
+## Vibration
+
+- Android: the browser vibration API, with patterns per moment (hits, catches, wins, evolutions...).
+- iPhone (iOS 18+): Safari has no vibration API, so a hidden system switch is toggled to get the system's
+  light haptic tick; each buzz in a pattern becomes a tick. On/off in Settings.
+
 ## Help, settings and records
 
 - **Settings** (gear on the title screen, or Menu in a run or battle): music and sound-effect volume (0-10),

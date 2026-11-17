@@ -11,7 +11,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
+import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1598,5 +1598,23 @@ describe('shiny Hexlings and run history', () => {
     expect(m.streak).toBe(4);
     expect(m.bestStreak).toBe(4);
     expect(mostUsed(m)).toEqual({ speciesId: DEFAULT_STARTERS[0], runs: 25 });
+  });
+});
+
+describe('daily passives', () => {
+  it('each daily starter brings a passive that suits its elements, distinct across the three', () => {
+    for (let d = 1; d <= 28; d++) {
+      const date = `2026-02-${String(d).padStart(2, '0')}`;
+      const pv = dailyPassives(date);
+      const ids = dailyStarters(date);
+      for (const id of ids) {
+        const [t1, t2] = SPECIES_BY_ID[id].types;
+        expect([...ELEMENT_PASSIVES[t1], ...ELEMENT_PASSIVES[t2]]).toContain(pv[id]);
+      }
+      expect(new Set(ids.map((id) => pv[id])).size).toBe(3);
+      expect(dailyPassives(date)).toEqual(pv);
+      const m = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: 'drill', runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] } as Meta;
+      expect(startRun(m, ids[0], dailySeed(date), 'wildlands', date).passive).toBe(pv[ids[0]]);
+    }
   });
 });
