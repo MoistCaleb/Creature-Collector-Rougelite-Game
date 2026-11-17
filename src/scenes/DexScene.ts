@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { openGildedMilestones } from '../ui/gildedUi';
 import { accText, allMoveIds, elementPool, MOVES, moveSummary } from '../data/moves';
 import { SPECIES } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
@@ -70,7 +71,12 @@ export class DexScene extends Phaser.Scene {
     // Shinies unlocked (any form of a line unlocks the whole line).
     const nShiny = (state.meta.shinyOwned ?? []).length;
     icon(this, hx.x + hx.width + 16, 28, 'sparkle', 16);
-    text(this, hx.x + hx.width + 28, 20, `${nShiny}/${SPECIES.length} gilded`, 14, nShiny ? '#ffd86b' : COLORS.textDim, { fontStyle: 'bold' });
+    // Tap for the Gilded milestones (titles and outfits).
+    text(this, hx.x + hx.width + 28, 20, `${nShiny}/${SPECIES.length} gilded ›`, 14, nShiny ? '#ffd86b' : COLORS.textDim, { fontStyle: 'bold' })
+      .setPadding(6, 8, 6, 8)
+      .setPosition(hx.x + hx.width + 22, 12)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => openGildedMilestones(this, state.meta));
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
     button(this, W - 156, 30, 96, 40, 'Chart', () => openElementChart(this), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
     const totalForms = SPECIES.length * 3;

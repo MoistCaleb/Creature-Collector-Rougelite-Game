@@ -7,9 +7,12 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { myLook, myName } from '../data/trainerLook';
+import { myTitle } from '../logic/gilded';
 import { playMusic } from '../ui/sound';
 import { openSettings } from '../ui/settings';
 import { openHowToPlay } from '../ui/howto';
+import { openCredits, maybeShowWhatsNew } from '../ui/credits';
+import { APP_VERSION } from '../data/changelog';
 import { background, button, COLORS, H, LANDSCAPE, muteButton, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
@@ -20,7 +23,12 @@ export class TitleScene extends Phaser.Scene {
   create() {
     background(this, COLORS.bg, 'title');
     playMusic('title');
-    text(this, 8, H - 8, `build ${__BUILD__}`, 10, '#4a4068').setOrigin(0, 1);
+    // Version (tap for credits).
+    text(this, 8, H - 8, `v${APP_VERSION} · build ${__BUILD__}  ·  Credits`, 11, '#6d6390')
+      .setOrigin(0, 1)
+      .setPadding(4, 6, 12, 2)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => openCredits(this));
     muteButton(this, W - 30, 30);
     // Settings: volumes, battle speed, tips, erasing progress.
     button(this, W - 78, 30, 40, 40, '', () => openSettings(this, () => this.scene.restart({})), { fontSize: 20, glyph: 'gear' });
@@ -36,7 +44,10 @@ export class TitleScene extends Phaser.Scene {
     tb.add(this.add.image(-38, 0, ensureTrainerTexture(this, myLook(meta))).setScale(1.15));
     const nm = text(this, 12, -8, myName(meta), 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
     if (nm.width > 76) nm.setScale(76 / nm.width);
-    tb.add([nm, text(this, 12, 10, 'Edit trainer', 10, COLORS.textDim).setOrigin(0.5)]);
+    const ttl = myTitle(meta);
+    const sub = text(this, 12, 10, ttl ? `✦ ${ttl}` : 'Edit trainer', 10, ttl ? '#ffd86b' : COLORS.textDim).setOrigin(0.5);
+    if (sub.width > 78) sub.setScale(78 / sub.width);
+    tb.add([nm, sub]);
 
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);
@@ -79,7 +90,7 @@ export class TitleScene extends Phaser.Scene {
     // Daily run: the same seed for everyone today.
     const today = todayUtc();
     const best = dailyPlayed(meta, today)?.best ?? null;
-    button(this, cx + 82, ry(550), 156, 54, 'Daily runs', () => this.scene.start('Daily', {}), {
+    button(this, cx + 82, ry(550), 156, 54, 'Daily & weekly', () => this.scene.start('Daily', {}), {
       fontSize: 16,
       glyph: 'calendar',
       color: 0x2f4a6b,
@@ -128,6 +139,9 @@ export class TitleScene extends Phaser.Scene {
     drawInstall();
     const off = onInstallChange(drawInstall);
     this.events.once('shutdown', off);
+
+    // After an update: what changed (once).
+    maybeShowWhatsNew(this, meta.runs > 0);
 
     // How to play and Records (sideways: under the title, on the left).
     const hx = LANDSCAPE ? lx : cx;

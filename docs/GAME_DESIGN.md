@@ -22,6 +22,10 @@ Working doc. Items marked **[OPEN]** still need a decision.
 
 ## Saving
 - The run in progress saves after every map step, battle turn and choice (localStorage).
+- **Save transfer** (Settings): the whole save (progress plus the run in progress) as one text code,
+  `HEXB1.<deflate, base64url>.<checksum>` (`HEXB0.` uncompressed where the browser can't compress). A cut-off
+  or edited code is rejected by the checksum. Loading asks first (showing the code's runs, wins, catches and
+  Gilded), replaces everything, waits for the cloud copy to save, then reloads. `logic/saveCode.ts`.
 - "Continue run" resumes exactly: mid-battle with current HP, open shops, unresolved node choices, events
   and treasure (contents are fixed once rolled, so reloading can't re-roll them).
 
@@ -310,6 +314,26 @@ Proposed math:
   | Spirit | Sage, Lucky Charm, Mentor |
   | Dragon | Champion, Evolutionist, Drill Sergeant |
 
+## Weekly challenge
+
+- One run a week (Monday to Sunday, UTC), the same for everyone: fixed seed, 3 starters with suited passives
+  (as dailies), Heat 0, and a **twist**. Twists rotate weekly: **Element Duo** (two elements only: every
+  floor, wild Hexling, trainer and starter), **Swarm** (every wild battle is two Hexlings), **Glass Cannon**
+  (both sides deal +50% damage), **Lean Times** (half healing after battles, +50% coins), **Gilded Week**
+  (1 wild Hexling in 15 is Gilded). From the Daily & weekly screen. Best result and attempts per week are kept
+  (`meta.weeklies`); no Gilded Hunt after a weekly. The crown on the map bar shows the twist.
+
+## Gilded milestones
+
+- Owning Gilded species unlocks trainer rewards: **5** title *Gilded Seeker* + Gilded laurel (hat), **15**
+  Gilded coat + Gilded boots, **30** *Gilded Collector* + Gilded crown, **60** *Gilded Legend* + the Gilded
+  clothing color, **120** *Gilded Master* + Golden glow aura (gold outline and sparkles).
+- Locked pieces show dimmed in the trainer editor with what unlocks them. NPC trainers and guardians never
+  wear them. Reaching a milestone is announced on the map (and listed on the end screen); the first title is
+  worn automatically. Titles show under your name on the title screen, in the trainer editor and in Records,
+  and online they're sent with your hello and shown in your opponent's cut-in. The Hexlidex's gilded count
+  opens the milestone list. `logic/gilded.ts`.
+
 ## Vibration
 
 - Removed. iPhone Safari has no vibration API, and the iOS 18 haptic-switch workaround didn't produce any
@@ -357,8 +381,15 @@ Proposed math:
 ## Help, settings and records
 
 - **Settings** (gear on the title screen, or Menu in a run or battle): music and sound-effect volume (0-10),
-  all sound on/off, first-time tips, battle speed, How to play, the
-  element chart, and Erase all progress (asks twice).
+  all sound on/off, first-time tips, **reduce motion**, battle speed, How to play, the element chart,
+  Save transfer, Credits & version, and Erase all progress (asks twice).
+- **Reduce motion** turns off camera shakes and full-screen flashes everywhere, the cut-in strip flashes and
+  punch zooms, the boss card's jolt, and slows the evolution flicker so it never strobes. It starts on when
+  the device asks for reduced motion.
+- **Credits & version** (also the version line on the title screen): who made it, the version and build,
+  and the **What's new** list (`data/changelog.ts`). After an update, What's new pops up once.
+- **Updates (installed app)**: the app checks `version.json` on launch, on returning to the app and every
+  30 minutes; a newer build shows a "New version ready · Update" bar instead of reloading by itself.
 - **First-time tips**: a short card the first time you reach the map, the bench, a battle, a guardian, a
   catch, a shop, an event and a Prestige Altar. "No more tips" turns them off; Settings turns them back on
   (and shows them all again).
@@ -470,5 +501,11 @@ Runs unlock:
   rocks (Earth), scrap (Metal), ice shards (Frost), dragon stones (Dragon), water (Water), sludge (Toxic), a shadow
   pool (Shadow), a lightning strike (Storm), a sunburst (Light) or gathering mist (Spirit).
 - **Evolution Stones** also drop from won wild battles: 3% / 4% / 5% by floor.
+
+## Balance report
+
+`scripts/balance.ts` has a bot play about 10,000 runs and writes `docs/BALANCE_REPORT.md`: win rate by
+Heat, where runs end, every starter at Heat 0 (and by element), guardian and extra-rule loss rates, Gilded
+Hunt depth and the weekly twists. The bot is simple, so its numbers are for comparing, not absolute.
 
 ## Open questions

@@ -82,6 +82,12 @@ function pushCloud(key: string, value: string | null) {
   writing.set(key, loop());
 }
 
+/** Wait (up to a few seconds) for pending cloud writes, e.g. before reloading the page. */
+export async function flushCloud(): Promise<void> {
+  const until = Date.now() + 6000;
+  while (writing.size && Date.now() < until) await timeout(Promise.all([...writing.values()]), 6000);
+}
+
 function timeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
 }

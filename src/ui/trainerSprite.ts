@@ -14,6 +14,7 @@ export type TrainerPose = 'stand' | 'command' | 'back' | 'backCommand';
 const OUTLINE = 0x16101e;
 const GOLD = 0xf0c838;
 const LENS = 0x9adcf0;
+const GOLD_LIGHT = 0xfff0a0;
 const BLUSH = 0xf08a9a;
 const INK = 0x2a2230;
 
@@ -110,6 +111,15 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(15, 29, 17, 30, shoeC);
     round(9, 31, 12, 32, shoeC, 1);
     round(15, 31, 18, 32, shoeC, 1);
+  } else if (look.shoes === 3) {
+    rect(10, 28, 12, 30, GOLD); // gilded boots: tall gold boots, soles in the shoe color
+    rect(15, 28, 17, 30, GOLD);
+    round(9, 31, 12, 32, GOLD, 1);
+    round(15, 31, 18, 32, GOLD, 1);
+    rect(9, 32, 12, 32, shoeC);
+    rect(15, 32, 18, 32, shoeC);
+    put(11, 28, GOLD_LIGHT);
+    put(16, 28, GOLD_LIGHT);
   } else if (look.shoes === 2) {
     rect(9, 31, 12, 32, skin); // sandals: a strap and a sole
     rect(15, 31, 18, 32, skin);
@@ -133,7 +143,21 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(12, 19, 12, 21, acc);
     rect(15, 19, 15, 21, acc);
   }
-  if (top === 3 || top === 8) round(8, 19, 19, 30, topC, 1); // long coat / robe over the legs
+  if (top === 3 || top === 8 || top === 13) round(8, 19, 19, 30, topC, 1); // long coat / robe over the legs
+  if (top === 13) {
+    // Gilded coat: gold trim down the front and along the hem, gold buttons and shoulders.
+    rect(13, 27, 14, 30, legC);
+    rect(8, 30, 12, 30, GOLD);
+    rect(15, 30, 19, 30, GOLD);
+    if (!back) {
+      rect(12, 19, 12, 26, GOLD);
+      rect(15, 19, 15, 26, GOLD);
+      for (const y of [21, 23, 25]) put(13, y, GOLD_LIGHT);
+    } else {
+      round(11, 21, 16, 24, GOLD, 1); // an emblem on the back
+      rect(13, 22, 14, 23, acc);
+    }
+  }
   if (top === 3) {
     rect(13, 27, 14, 30, legC);
     if (!back) rect(13, 19, 14, 26, acc);
@@ -183,7 +207,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       rect(13, 22, 14, 23, 0xd8443a);
     }
   }
-  if (![3, 7, 8, 11].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
+  if (![3, 7, 8, 11, 13].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
 
   // ---- arms
   const bare = top === 5;
@@ -204,6 +228,10 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     if (sleeveEnd < 22) rect(22, 20, 25, 21, skin);
     round(25, 19, 27, 22, skin, 1);
   } else armDown(19);
+  if (top === 13) {
+    round(6, 18, 9, 19, GOLD, 1); // gold epaulettes
+    round(18, 18, 21, 19, GOLD, 1);
+  }
   if (top === 4) {
     round(5, 18, 9, 20, acc, 1); // shoulder pads
     round(18, 18, 22, 20, acc, 1);
@@ -466,6 +494,28 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           put(x + 2 * d, Y0 - 4, hatC);
         }
         break;
+      case 18: // gilded laurel: a gold leaf wreath
+        rect(X0, Y0 + 1, X1, Y0 + 1, GOLD);
+        for (let x = X0; x <= X1; x += 3) {
+          put(x, Y0, GOLD_LIGHT);
+          put(x + 1, Y0, GOLD);
+        }
+        rect(X0 - 1, Y0 + 2, X0 - 1, Y0 + 4, GOLD);
+        rect(X1 + 1, Y0 + 2, X1 + 1, Y0 + 4, GOLD);
+        put(X0 - 2, Y0 + 3, GOLD_LIGHT);
+        put(X1 + 2, Y0 + 3, GOLD_LIGHT);
+        break;
+      case 19: // gilded crown: tall, with jewels
+        rect(X0 + 1, Y0 - 3, X1 - 1, Y0 + 1, GOLD);
+        for (const x of [X0 + 1, X0 + 4, 13, 14, X1 - 4, X1 - 1]) rect(x, Y0 - 6, x, Y0 - 4, GOLD);
+        for (const x of [X0 + 1, 13, X1 - 1]) put(x, Y0 - 7, GOLD_LIGHT);
+        rect(X0 + 1, Y0, X1 - 1, Y0, shade(GOLD, 0.8));
+        if (!back) {
+          put(X0 + 3, Y0 - 2, acc);
+          rect(13, Y0 - 2, 14, Y0 - 1, hatC);
+          put(X1 - 3, Y0 - 2, acc);
+        }
+        break;
       case 17: // propeller cap
         round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);
         rect(X0 + 1, Y0 - 3, 13, Y0 - 1, acc);
@@ -484,13 +534,23 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     for (let x = 0; x < TRAINER_W; x++) {
       const c = g[y][x];
       if (c === null) {
-        if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) out[y][x] = OUTLINE;
+        if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) out[y][x] = look.aura ? 0xc08a10 : OUTLINE;
         continue;
       }
       if (c === 0xffffff) continue;
       if (!filled(x + 1, y)) out[y][x] = shade(c, 0.78);
       else if (!filled(x, y + 1)) out[y][x] = shade(c, 0.86);
       else if (!filled(x - 1, y) || !filled(x, y - 1)) out[y][x] = shade(c, 1.08);
+    }
+  }
+  if (look.aura) {
+    // Golden glow: a gold outline (above) and a few sparkles around the trainer.
+    for (const [sx, sy] of [[2, 6], [28, 3], [29, 20], [1, 24]]) {
+      for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = sx + dx;
+        const y = sy + dy;
+        if (x >= 0 && x < TRAINER_W && y >= 0 && y < TRAINER_H && out[y][x] === null) out[y][x] = dx || dy ? GOLD : 0xffffff;
+      }
     }
   }
   for (let y = 0; y < TRAINER_H; y++) {
@@ -504,7 +564,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
 }
 
 export function trainerTextureKey(look: TrainerLook, pose: TrainerPose): string {
-  return `trainer3:${pose}:${Object.values(look).join('.')}`;
+  return `trainer3:${pose}:${Object.values(look).join('.')}`; // (a look's parts, in order)
 }
 
 /** Make (once) and return the texture for this look and pose. */

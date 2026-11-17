@@ -69,6 +69,21 @@ export const prefs = {
   set tipsSeen(v: string[]) {
     set('ccr-tips-seen', v.join(','));
   },
+  /** Tone down screen shake, flashes and zooms. Starts on when the device asks for reduced motion. */
+  get reduceMotion(): boolean {
+    const os = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return get('ccr-reduce-motion', os ? '1' : '0') === '1';
+  },
+  set reduceMotion(v: boolean) {
+    set('ccr-reduce-motion', v ? '1' : '0');
+  },
+  /** The last game version whose What's new you've seen. */
+  get lastVersion(): string | null {
+    return get('ccr-last-version', '') || null;
+  },
+  set lastVersion(v: string | null) {
+    set('ccr-last-version', v ?? '');
+  },
 };
 
 function vol(s: string): number {

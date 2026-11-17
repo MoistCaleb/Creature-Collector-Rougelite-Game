@@ -127,6 +127,8 @@ export interface BattleMatch {
   tactics?: { potions: number };
   /** How the opponent's trainer looks (online: theirs; otherwise made from their name). */
   opponentLook?: TrainerLook;
+  /** Their trainer title (online), shown in the cut-in. */
+  opponentTitle?: string;
 }
 
 /** Where everything goes on the battle screen: upright (450x800) or wide (800x450). */
@@ -238,7 +240,8 @@ export class BattleScene extends Phaser.Scene {
     const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
-      playerDamageMult: run.passive === 'drill' ? 1.1 : 1,
+      playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? 1.5 : 1),
+      enemyDamageMult: run.twist === 'glass' ? 1.5 : 1,
       enemyRandomness: BALANCE.enemyRandomness[this.kind],
       rules: rules.map((r) => ({ rule: r.rule, name: r.name })),
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
@@ -566,7 +569,7 @@ export class BattleScene extends Phaser.Scene {
       {
         await trainerCutIn(this, {
           name: m.opponent,
-          sub: m.duel ? 'Online duel' : `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
+          sub: m.duel ? `Online duel${m.opponentTitle ? ` · ✦ ${m.opponentTitle}` : ''}` : `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
           look: m.opponentLook ?? lookForName(m.opponent),
           team: this.enemies,
           accent: ELEMENT_COLORS[creatureTypes(this.enemies[0])[0]],
@@ -1297,7 +1300,7 @@ export class BattleScene extends Phaser.Scene {
     // Stage races pay double.
     const raceMult = run.race ? 2 : 1;
     const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult);
-    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0) * raceMult;
+    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult;
     sfx.victory();
     playMusic(null);
     // Bookkeeping happens once, even if the page reloads before the reward choice.

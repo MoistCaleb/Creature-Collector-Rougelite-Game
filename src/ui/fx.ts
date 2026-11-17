@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { calm } from './motion';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { sfx } from './sound';
 import { fullRect, H, W, ZOOM } from './widgets';
@@ -450,7 +451,8 @@ export function playEvolution(
   // Flicker between forms, faster and faster.
   let delay = 0;
   let step = 0;
-  for (let gap = 340; gap > 40; gap *= 0.82) {
+  // Reduce motion: a slower flicker that never strobes.
+  for (let gap = 340; gap > (calm() ? 170 : 40); gap *= 0.82) {
     const showNew = step % 2 === 0;
     scene.time.delayedCall(delay, () => {
       img.setTexture(showNew ? toKey : fromKey).setTintFill(0xffffff);
