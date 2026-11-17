@@ -10,7 +10,7 @@ import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
-import { ensureTrainerTexture } from '../ui/trainerSprite';
+import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFx } from '../ui/trainerFx';
 import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, guardianRules, trainerName } from '../data/trainers';
@@ -421,11 +421,20 @@ export class BattleScene extends Phaser.Scene {
     this.trainers = {};
     const mine = myLook(state.meta);
     const rest = ensureTrainerTexture(this, mine, 'back');
-    this.trainers.player = { img: place(L.playerTrainer.x, L.playerTrainer.y, rest, 3.1, 0), rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
+    const act = ensureTrainerTexture(this, mine, 'backCommand');
+    // Wide gear (wings, a jetpack, a greatsword) reaches the sprite's edges: step in so it stays on screen.
+    const left = Math.min(trainerSpan(this, rest)[0], trainerSpan(this, act)[0]);
+    const px = Math.max(L.playerTrainer.x, 4 - OX + (TRAINER_W / 2 - left) * 3.1);
+    this.trainers.player = { img: place(px, L.playerTrainer.y, rest, 3.1, 0), rest, act };
     trainerFx(this, this.trainers.player.img, mine, { back: true });
     if (enemy) {
       const eRest = ensureTrainerTexture(this, enemy, 'stand');
-      const them = place(L.enemyTrainer.x, L.enemyTrainer.y, eRest, 2.8, 450).setFlipX(true);
+      // Mirrored, so the sprite's left edge is on the right: keep it on screen too.
+      const eLeft = Math.min(trainerSpan(this, eRest)[0], trainerSpan(this, ensureTrainerTexture(this, enemy, 'command'))[0]);
+      // (Sideways, the field ends where the message column starts.)
+      const rightEdge = LANDSCAPE ? L.field.w - 6 : W + OX - 4;
+      const ex = Math.min(L.enemyTrainer.x, rightEdge - (TRAINER_W / 2 - eLeft) * 2.8);
+      const them = place(ex, L.enemyTrainer.y, eRest, 2.8, 450).setFlipX(true);
       this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command') };
       trainerFx(this, them, enemy);
     }
