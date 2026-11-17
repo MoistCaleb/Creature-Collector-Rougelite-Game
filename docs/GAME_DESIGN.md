@@ -68,8 +68,10 @@ Working doc. Items marked **[OPEN]** still need a decision.
   - **Catch it** — forfeit all rewards; it joins **at its own level and evolution, with its moves**, at 40% HP
     (bond crystal animation). Scout passive: +3 levels, within the level cap.
 - Trainers' and bosses' creatures always faint and can't be caught.
-- **First catch:** the first time you ever catch a species (tracked in the Dex) it arrives with a free ★.
-- **After the Dex is complete:** the bonus goes per element, per run. A catch earns ★ if at least one of its
+- **Catches keep their prestige:** a wild creature keeps the ★ it had in battle (floor 2–3 wilds carry 1–5 ★),
+  so catching on higher floors pays off.
+- **First catch:** the first time you ever catch a species (tracked in the Dex) it gets **+1 ★** on top (max 5).
+- **After the Dex is complete:** the +1 ★ bonus goes per element, per run. A catch earns ★ if at least one of its
   elements hasn't earned it yet this run, and uses up whichever of its elements were new. E.g. Fire/Water
   earns it (uses Fire + Water); then Water/Earth still earns it for Earth; then Fire/Earth does not.
   Resets every run. Starters don't use up elements.
@@ -249,6 +251,10 @@ Runs unlock:
   | Hexer | Inflict 30 status conditions | Afflicter: your moves inflict statuses twice as often |
   | Trial by Fire | Win a run at Heat 2 | Tempered: your creatures can't be burned or poisoned |
   | In Tune | Win 25 battles with a synergy active | Harmonist: team synergy bonuses doubled |
+- **Saved loadouts:** at the end of a normal run (won or lost), any surviving creature can be saved as a
+  loadout (its form and moves, up to 40 kept). In the Arena team builder, a creature with saved loadouts
+  shows "N SAVED"; open it and tap **Loadouts** to use one (moves not allowed in the Arena are swapped
+  for defaults, and an unseen form falls back to the nearest one you've seen).
 
 ## Battle systems (later additions)
 

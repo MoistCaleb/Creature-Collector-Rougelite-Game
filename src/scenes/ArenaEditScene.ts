@@ -10,6 +10,8 @@ import {
   defaultArenaMoves,
   savedTeams,
   validArenaTeam,
+  applyLoadout,
+  loadoutsFor,
   type ArenaPick,
 } from '../logic/arena';
 import { createCreature, creatureTypes, getFloorCeiling, MAX_MOVES, setFloorCeiling, stats } from '../logic/creature';
@@ -92,6 +94,13 @@ export class ArenaEditScene extends Phaser.Scene {
     typeChips(this, 150, 112, creatureTypes(c), true);
     text(this, 150, 130, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3 });
     button(this, W - 74, 92, 104, 30, 'Change', () => this.scene.start('ArenaPick', { slot: this.slot }), { fontSize: 13, color: 0x2f4a6b, sub: undefined });
+    // Loadouts saved from runs for this species.
+    const saved = loadoutsFor(state.meta, p.speciesId);
+    button(this, W - 74, 130, 104, 30, `Loadouts (${saved.length})`, () => this.openLoadouts(picks), {
+      fontSize: 12,
+      color: saved.length ? 0x5b3c8a : 0x2a2440,
+      enabled: saved.length > 0,
+    });
     const forms = arenaForms(state.meta, p.speciesId);
     const tw = (W - 48) / 3;
     [0, 1, 2].forEach((st) => {
@@ -188,6 +197,48 @@ export class ArenaEditScene extends Phaser.Scene {
 
   /** Set while the current touch is a scroll drag, so it doesn't also tap a row. */
   private dragged = false;
+
+  /** Loadouts saved from runs: apply one (form + moves), or delete it. */
+  private openLoadouts(picks: ArenaPick[]) {
+    const meta = state.meta;
+    const p = picks[this.slot];
+    const list = loadoutsFor(meta, p.speciesId);
+    const sp = SPECIES_BY_ID[p.speciesId];
+    openPicker(this, {
+      title: `${sp.names[0]} loadouts`,
+      subtitle: 'Saved at the end of your runs. Moves the Arena doesn\u2019t allow are swapped for defaults.',
+      options: list.map((l) => ({
+        label: `${sp.names[l.stage]} · ${l.label}`,
+        sub: l.moves.map((id) => MOVES[id]?.name ?? '?').join(', '),
+        color: 0x2f4a6b,
+      })),
+      onPick: (k) => {
+        const l = list[k];
+        openPicker(this, {
+          title: `${sp.names[l.stage]} · ${l.label}`,
+          subtitle: l.moves.map((id) => MOVES[id]?.name ?? '?').join(', '),
+          options: [
+            { label: 'Use this loadout', color: 0x3b6d4a, glyph: 'play' },
+            { label: 'Delete it', color: 0x5a2a2a },
+          ],
+          onPick: (i) => {
+            if (i === 0) {
+              picks[this.slot] = applyLoadout(meta, l);
+              this.save(picks);
+            } else {
+              meta.loadouts = (meta.loadouts ?? []).filter((x) => x.id !== l.id);
+              saveMeta(meta);
+              this.scene.restart({ slot: this.slot });
+            }
+          },
+          onCancel: () => this.openLoadouts(picks),
+          cancelLabel: 'Back',
+        });
+      },
+      onCancel: () => {},
+      cancelLabel: 'Close',
+    });
+  }
 
   /** One move line: element dot, name, kind, what it does, uses. */
   private moveRow(list: Phaser.GameObjects.Container, y: number, id: string, tag: string) {

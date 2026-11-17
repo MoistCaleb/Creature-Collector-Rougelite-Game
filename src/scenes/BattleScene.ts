@@ -65,6 +65,7 @@ import {
   trackStat,
   isUnlockedStarter,
   catchBonus,
+  catchStars,
   rosterFull,
   type EncounterKind,
   catchLevel,
@@ -1071,7 +1072,9 @@ export class BattleScene extends Phaser.Scene {
       this.enemySprite.setAlpha(0.85);
     }
     const full = rosterFull(run);
-    const bonusTag = wild ? { species: ' · ★ first catch!', type: ' · ★ new type bonus!', none: '' }[catchBonus(run, wild.speciesId) ?? 'none'] : '';
+    const bonusTag = wild ? { species: ' · +★ first catch!', type: ' · +★ type bonus!', none: '' }[catchBonus(run, wild.speciesId) ?? 'none'] : '';
+    // Catches keep their prestige stars (plus the bonus).
+    const starTag = wild && catchStars(run, wild) > 0 ? ` · ${'★'.repeat(catchStars(run, wild))}` : '';
     const level = wild ? catchLevel(run, wild) : 1;
     let chosen = false;
     if (wild) {
@@ -1086,7 +1089,7 @@ export class BattleScene extends Phaser.Scene {
           color: 0x3a4f7a,
           fontSize: 20,
           glyph: 'crystal',
-          sub: full ? `Party full: release one to make room · Lv ${level}${bonusTag}` : `Forfeit the rewards · joins at Lv ${level}${bonusTag}`,
+          sub: full ? `Party full: release one to make room · Lv ${level}${starTag}${bonusTag}` : `Forfeit the rewards · joins at Lv ${level}${starTag}${bonusTag}`,
         }),
       );
     }
@@ -1124,9 +1127,9 @@ export class BattleScene extends Phaser.Scene {
     const releasedNote = release ? `${releasedName} was released.\n\n` : '';
     const bonus =
       kind === 'species'
-        ? `\n\n★ First of its kind! New Dex entry, so it arrives prestiged.`
+        ? `\n\n★ First of its kind! New Dex entry: +1 prestige star.`
         : kind === 'type'
-          ? `\n\n★ Type bonus! It arrives prestiged. ${newlyClaimed.join(' and ')} is now used up for this run.`
+          ? `\n\n★ Type bonus: +1 prestige star. ${newlyClaimed.join(' and ')} is now used up for this run.`
           : '';
     const starterNote = wasStarter ? '' : `\n\nNew starter unlocked: ${species(c).names[0]}!`;
     run.activeBattle = null;

@@ -152,3 +152,52 @@ export function nextTeamName(meta: Meta): string {
   const names = new Set(savedTeams(meta).map((t) => t.name));
   for (let i = 1; ; i++) if (!names.has(`Team ${i}`)) return `Team ${i}`;
 }
+
+// ---------------------------------------------------------------- saved loadouts
+
+export const MAX_LOADOUTS = 40;
+
+/** A creature saved at the end of a run: its form and moves, reusable in the team builder. */
+export interface SavedLoadout {
+  id: string;
+  speciesId: string;
+  stage: number;
+  moves: string[];
+  /** Where it came from, e.g. "Win · Wildlands". */
+  label: string;
+}
+
+/** Save a run creature's loadout (newest first; the oldest drop off past the limit). */
+export function saveLoadout(meta: Meta, c: Creature, label: string): SavedLoadout {
+  const l: SavedLoadout = {
+    id: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`,
+    speciesId: c.speciesId,
+    stage: c.stage,
+    moves: c.moves.map((m) => m.id),
+    label,
+  };
+  meta.loadouts = [l, ...(meta.loadouts ?? [])].slice(0, MAX_LOADOUTS);
+  return l;
+}
+
+/** Is this exact loadout (species, form, moves) already saved? */
+export function hasLoadout(meta: Meta, c: Creature): boolean {
+  const key = c.moves.map((m) => m.id).join(',');
+  return (meta.loadouts ?? []).some((l) => l.speciesId === c.speciesId && l.stage === c.stage && l.moves.join(',') === key);
+}
+
+export function loadoutsFor(meta: Meta, speciesId: string): SavedLoadout[] {
+  return (meta.loadouts ?? []).filter((l) => l.speciesId === speciesId);
+}
+
+/**
+ * A loadout as an Arena pick: its form (or the closest one you've seen), and its moves that are
+ * legal there (topped up with defaults if none are).
+ */
+export function applyLoadout(meta: Meta, l: SavedLoadout): ArenaPick {
+  const forms = arenaForms(meta, l.speciesId);
+  const stage = forms.includes(l.stage) ? l.stage : Math.max(...forms.filter((f) => f <= l.stage), 0);
+  const pool = arenaMovePool(l.speciesId, stage);
+  const moves = l.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
+  return { speciesId: l.speciesId, stage, moves: moves.length ? moves : defaultArenaMoves(l.speciesId, stage) };
+}
