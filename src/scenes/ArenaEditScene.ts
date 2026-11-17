@@ -12,8 +12,7 @@ import {
   validArenaTeam,
   applyLoadout,
   loadoutsFor,
-  type ArenaPick,
-} from '../logic/arena';
+  type ArenaPick, ownsShiny } from '../logic/arena';
 import { createCreature, creatureTypes, getFloorCeiling, MAX_MOVES, setFloorCeiling, stats } from '../logic/creature';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
@@ -101,7 +100,14 @@ export class ArenaEditScene extends Phaser.Scene {
     this.lw = W - this.lx;
     if (wide) this.add.rectangle(12, 56, 288, 386, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     else this.add.rectangle(12, 66, W - 24, 176, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    this.add.image(wide ? 66 : 76, wide ? 116 : 132, ensureCreatureTexture(this, p.speciesId, p.stage)).setScale((wide ? 3 : 3.4) * SPRITE_FIT);
+    this.add.image(wide ? 66 : 76, wide ? 116 : 132, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale((wide ? 3 : 3.4) * SPRITE_FIT);
+    // Caught it shiny? Bring it shiny (or not).
+    if (ownsShiny(state.meta, p.speciesId)) {
+      button(this, wide ? 156 : W - 74, wide ? 255 : 168, wide ? 264 : 104, 30, p.shiny ? '✦ Shiny: on' : '✦ Shiny: off', () => {
+        picks[this.slot] = { ...p, shiny: !p.shiny || undefined };
+        this.save(picks);
+      }, { fontSize: 12, color: p.shiny ? 0x7a5a1c : 0x2a2440 });
+    }
     const ix = wide ? 128 : 150;
     text(this, ix, wide ? 68 : 78, `${sp.names[p.stage]}  Lv ${ARENA_LEVEL}`, wide ? 15 : 18, COLORS.text, { fontStyle: 'bold', wordWrap: { width: wide ? 166 : W } });
     typeChips(this, ix, wide ? 110 : 112, creatureTypes(c), true);
@@ -122,7 +128,7 @@ export class ArenaEditScene extends Phaser.Scene {
       button(
         this,
         wide ? 156 : 24 + tw / 2 + st * (tw + 6),
-        wide ? 282 + st * 50 : 214,
+        wide ? 296 + st * 48 : 214,
         tw,
         wide ? 44 : 38,
         seen ? sp.names[st] : '???',

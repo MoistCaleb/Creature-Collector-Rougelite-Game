@@ -264,6 +264,8 @@ export class DexScene extends Phaser.Scene {
       if ((state.meta.shinySeen ?? []).includes(sp.id)) row.add(icon(this, W - 120, y + 13, 'sparkle', 14));
       row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
       if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
+      // Caught shiny: it can be brought shiny to the Arena and online duels.
+      if ((state.meta.shinyOwned ?? []).includes(sp.id)) row.add(text(this, W - 24, y + 22, '✦ Shiny caught', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
       if (anySeen) {
         const t = sp.types;
         (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 54, y + 14, el, true)));

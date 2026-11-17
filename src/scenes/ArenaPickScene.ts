@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, ELEMENTS, elementTextColor, type Element } from '../data/types';
-import { activeTeamIndex, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, loadoutsFor, savedTeams, validArenaTeam } from '../logic/arena';
+import { activeTeamIndex, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, loadoutsFor, savedTeams, validArenaTeam, ownsShiny } from '../logic/arena';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic } from '../ui/sound';
@@ -202,8 +202,10 @@ export class ArenaPickScene extends Phaser.Scene {
       const inTeam = taken.includes(id);
       const bg = this.add.rectangle(x + 3, y, CELL_W - 6, CELL_H - 8, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
       this.grid.add(bg);
-      const img = this.add.image(x + CELL_W / 2, y + 40, ensureCreatureTexture(this, id, stage)).setScale(1.9 * SPRITE_FIT);
+      const shiny = ownsShiny(meta, id);
+      const img = this.add.image(x + CELL_W / 2, y + 40, ensureCreatureTexture(this, id, stage, shiny)).setScale(1.9 * SPRITE_FIT);
       this.grid.add(img);
+      if (shiny) this.grid.add(text(this, x + CELL_W - 10, y + 22, '✦ SHINY', 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
       this.grid.add(text(this, x + CELL_W / 2, y + 68, sp.names[stage], 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
       const chips = this.add.container(0, 0);
       typeChipsInto(this, chips, x + CELL_W / 2, y + 96, sp.types);
@@ -227,7 +229,8 @@ export class ArenaPickScene extends Phaser.Scene {
     const t = savedTeams(meta)[activeTeamIndex(meta)];
     const picks = validArenaTeam(meta, t.picks);
     const slot = Math.min(this.slot, picks.length, ARENA_TEAM - 1);
-    picks[slot] = { speciesId, stage, moves: defaultArenaMoves(speciesId, stage) };
+    // A species you've caught shiny comes in shiny (switch it off in the editor).
+    picks[slot] = { speciesId, stage, moves: defaultArenaMoves(speciesId, stage), ...(ownsShiny(state.meta, speciesId) ? { shiny: true } : {}) };
     t.picks = picks;
     saveMeta(meta);
     this.scene.start('ArenaEdit', { slot });
