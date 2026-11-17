@@ -394,7 +394,7 @@ export class MapScene extends Phaser.Scene {
   private makeToken() {
     const run = state.run!;
     const at = this.posOf(run.currentId);
-    // Your lead Hexling follows a step behind (drawn first so your trainer stays in front).
+    // Your lead Hexling follows a step behind (drawn over your trainer, see below).
     const lead = run.team[0];
     if (lead) {
       const f = this.add.container(at.x + FOLLOW.x, at.y + FOLLOW.y);
@@ -420,6 +420,8 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
     this.token = c;
+    // The Hexling is always drawn in front of your trainer.
+    if (this.follower) this.layer.bringToTop(this.follower);
     this.tokenBody = body;
   }
 
