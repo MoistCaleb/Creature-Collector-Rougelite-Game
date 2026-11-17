@@ -436,6 +436,23 @@ export const sfx = {
     tone(2637, 0.22, { type: 'sine', vol: 0.08 });
     tone(3136, 0.2, { type: 'sine', vol: 0.05, delay: 0.04 });
   },
+  /** A manga strip slashes across the screen. */
+  slash(i = 0) {
+    noise(0.16, { freq: 1500 + (i % 4) * 400, to: 7000, vol: 0.22, type: 'bandpass', q: 1.5 });
+  },
+  /** A trainer's name slams onto the cut-in page. */
+  cutInHit() {
+    tone(110, 0.25, { type: 'sine', vol: 0.5, slide: 45 });
+    noise(0.12, { freq: 2200, vol: 0.25 });
+    [0, 7, 12].forEach((s, i) => tone(note(s, 392), 0.12, { type: 'square', vol: 0.1, delay: 0.05 + i * 0.07 }));
+  },
+  /** A guardian's name slams in: heavier, darker. */
+  cutInBoss() {
+    tone(70, 0.6, { type: 'sawtooth', vol: 0.3, slide: 35 });
+    tone(55, 0.6, { type: 'sine', vol: 0.5, slide: 30 });
+    noise(0.5, { freq: 600, to: 120, vol: 0.4 });
+    [0, 1, 0, -1].forEach((s, i) => tone(note(s, 147), 0.2, { type: 'square', vol: 0.08, delay: 0.1 + i * 0.12 }));
+  },
   evolveDone() {
     [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(note(s, 523), 0.18, { type: 'square', vol: 0.14, delay: i * 0.06 }));
     noise(0.6, { freq: 6000, to: 800, vol: 0.2, type: 'highpass' });
