@@ -33,10 +33,10 @@ import { announceGilded } from '../ui/gildedUi';
 import { TWISTS } from '../logic/run';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
-import { ensureTrainerTexture } from '../ui/trainerSprite';
-import { myLook } from '../data/trainerLook';
+import { ensureGrayTrainerTexture, ensureTrainerTexture } from '../ui/trainerSprite';
+import { lookForName, myLook, type TrainerLook } from '../data/trainerLook';
 import { calm } from '../ui/motion';
 import { Scroller } from '../ui/scroll';
 import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
@@ -58,6 +58,31 @@ function hexPoints(w: number, h: number, pointy: boolean): number[] {
   return [w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2];
 }
 
+/** A Hexling shown following a trainer on the map. */
+interface Lead {
+  speciesId: string;
+  stage: number;
+  shiny?: boolean;
+}
+
+/** A trainer token on the map and the Hexling following it. */
+interface Walker {
+  c: Phaser.GameObjects.Container;
+  body: Phaser.GameObjects.Image;
+  f: Phaser.GameObjects.Container | null;
+  fBody: Phaser.GameObjects.Image | null;
+  lead?: Lead;
+  /** Which side of the trainer the Hexling stands on (-1 left, 1 right). */
+  side: number;
+  /** Node it's on. */
+  at: string;
+  /** The other player in a stage race (grayed out). */
+  ghost: boolean;
+}
+
+/** Stage race: the side the rival's Hexling last stood on (kept between map visits). */
+let rivalSide = -1;
+
 /** Where your lead Hexling stands relative to your trainer (behind and to the side). */
 const FOLLOW = { x: 22, y: 9 };
 
@@ -73,6 +98,11 @@ export class MapScene extends Phaser.Scene {
 
   create(data: { banner?: string } = {}) {
     const run = state.run!;
+    // The scene object is reused between visits: start with no tokens from last time.
+    this.me = null;
+    this.rival = null;
+    this.hopping = false;
+    this.underToken = [];
     if (run.activeBattle) {
       // A battle was in progress when the game was closed.
       this.scene.start('Battle', { kind: run.activeBattle.kind });
@@ -320,10 +350,25 @@ export class MapScene extends Phaser.Scene {
     button(this, SIDE_L / 2, 342, bw, 44, 'Menu', () => openGameMenu(this), { fontSize: 16, glyph: 'menu' });
   }
 
+  /** Stage race: tell the other player where we are (for their map) and who leads our team. */
+  private shareProgress() {
+    const run = state.run!;
+    if (!run.race) return;
+    const lead = run.team[0];
+    sendProgress({
+      floor: run.floor,
+      finished: false,
+      won: false,
+      steps: run.map.layout === 'rows' ? stepsToBoss(run.map, run.currentId) : undefined,
+      at: run.currentId,
+      lead: lead ? { speciesId: lead.speciesId, stage: lead.stage, ...(lead.shiny ? { shiny: true } : {}) } : undefined,
+    });
+  }
+
   /** Stage race: share where we are, and show where the other racer is. */
   private drawRaceStatus() {
     const run = state.run!;
-    sendProgress({ floor: run.floor, finished: false, won: false, steps: run.map.layout === 'rows' ? stepsToBoss(run.map, run.currentId) : undefined });
+    this.shareProgress();
     const t = (LANDSCAPE ? text(this, 14, 400, '', 12, '#8fd0ff', { fontStyle: 'bold', wordWrap: { width: SIDE_L - 24 } }) : text(this, W - 8, 66, '', 12, '#8fd0ff', { fontStyle: 'bold' }).setOrigin(1, 0)).setDepth(5);
     const draw = () => {
       if (!t.active) return;
@@ -341,10 +386,14 @@ export class MapScene extends Phaser.Scene {
               : 'on the way';
       t.setText(`vs ${run.race!.opponent}: ${where}`);
     };
-    draw();
-    duel.onRaceChange = draw;
+    const update = () => {
+      draw();
+      this.updateRival();
+    };
+    update();
+    duel.onRaceChange = update;
     this.events.once('shutdown', () => {
-      if (duel.onRaceChange === draw) duel.onRaceChange = null;
+      if (duel.onRaceChange === update) duel.onRaceChange = null;
     });
   }
 
@@ -382,69 +431,106 @@ export class MapScene extends Phaser.Scene {
 
   /** Where the token stands on a node (layer coordinates). */
   private posOf: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
-  private token: Phaser.GameObjects.Container | null = null;
-  private tokenBody: Phaser.GameObjects.Image | null = null;
+  /** You: your trainer and lead Hexling. */
+  private me: Walker | null = null;
+  /** Stage race: the other player, grayed out, moving as they move. */
+  private rival: Walker | null = null;
   private hopping = false;
-  /** Your lead Hexling, trailing just behind your trainer. */
-  private follower: Phaser.GameObjects.Container | null = null;
-  private followerBody: Phaser.GameObjects.Image | null = null;
   private underToken: Phaser.GameObjects.GameObject[] = [];
 
-  /** Your trainer on the current hex, bobbing gently, with a gold ring underfoot. */
+  /** Your trainer on the current hex (gold ring), with your lead Hexling a step behind. */
   private makeToken() {
     const run = state.run!;
-    const at = this.posOf(run.currentId);
-    // Your lead Hexling follows a step behind (drawn over your trainer, see below).
     const lead = run.team[0];
-    if (lead) {
-      // The side it last stood on (saved with the run): -1 left of your trainer, 1 right.
-      const side = run.followSide ?? -1;
-      const f = this.add.container(at.x + FOLLOW.x * side, at.y + FOLLOW.y);
-      const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, 0.4);
-      const fBody = this.add
-        .image(0, 0, ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny))
-        .setOrigin(0.5, 0.92)
-        .setScale(1.4 * SPRITE_FIT)
-        .setFlipX(side < 0); // facing your trainer
-      f.add([fShadow, fBody]);
-      this.layer.add(f);
-      // A little out of step with your trainer's bob, like it's walking along.
-      this.tweens.add({ targets: fBody, y: -2, yoyo: true, repeat: -1, duration: 430, delay: 200, ease: 'Sine.easeInOut' });
-      this.follower = f;
-      this.followerBody = fBody;
-    }
-    const c = this.add.container(at.x, at.y);
-    const ring = this.add.ellipse(0, 0, 40, 14, 0xffc94d, 0.35).setStrokeStyle(2, 0xffc94d, 0.9);
-    const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, 0.45);
-    const body = this.add.image(0, 0, ensureTrainerTexture(this, myLook(run.meta), 'stand')).setOrigin(0.5, 0.94).setScale(1.5);
-    c.add([ring, shadow, body]);
-    this.layer.add(c);
-    this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
-    this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
-    this.token = c;
-    // The Hexling is always drawn in front of your trainer.
-    if (this.follower) this.layer.bringToTop(this.follower);
-    this.tokenBody = body;
+    this.me = this.makeWalker(run.currentId, myLook(run.meta), lead ? { speciesId: lead.speciesId, stage: lead.stage, shiny: lead.shiny } : null, run.followSide ?? -1, null);
   }
 
-  /** Hop the token to a node: a jump in an arc, a squash on landing, then `done`. */
+  /**
+   * A trainer token with their lead Hexling following (drawn in front of the trainer). A rival
+   * (`ghostName` set) is grayed out, stands a little up and to the side, and has a name tag.
+   */
+  private makeWalker(nodeId: string, look: TrainerLook, lead: Lead | null, side: number, ghostName: string | null): Walker {
+    const ghost = ghostName !== null;
+    const at = this.offsetPos(nodeId, ghost);
+    const c = this.add.container(at.x, at.y);
+    const ringColor = ghost ? 0x8fd0ff : 0xffc94d;
+    const ring = this.add.ellipse(0, 0, 40, 14, ringColor, ghost ? 0.18 : 0.35).setStrokeStyle(2, ringColor, ghost ? 0.6 : 0.9);
+    const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, ghost ? 0.25 : 0.45);
+    const body = this.add.image(0, 0, ghost ? ensureGrayTrainerTexture(this, look) : ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.5);
+    c.add([ring, shadow, body]);
+    if (ghost) {
+      body.setAlpha(0.7);
+      c.add(text(this, 0, -58, ghostName, 10, '#8fd0ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5).setAlpha(0.9));
+    }
+    this.layer.add(c);
+    this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: ghost ? 0.1 : 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
+    const w: Walker = { c, body, f: null, fBody: null, side, at: nodeId, ghost };
+    if (lead) this.setLead(w, lead);
+    return w;
+  }
+
+  /** (Re)place a walker's following Hexling. */
+  private setLead(w: Walker, lead: Lead) {
+    w.f?.destroy();
+    const f = this.add.container(w.c.x + FOLLOW.x * w.side, w.c.y + FOLLOW.y);
+    const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, w.ghost ? 0.25 : 0.4);
+    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage) : ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny);
+    const fBody = this.add
+      .image(0, 0, key)
+      .setOrigin(0.5, 0.92)
+      .setScale(1.4 * SPRITE_FIT)
+      .setFlipX(w.side < 0) // facing its trainer
+      .setAlpha(w.ghost ? 0.7 : 1);
+    f.add([fShadow, fBody]);
+    // Drawn in front of its trainer.
+    this.layer.addAt(f, this.layer.getIndex(w.c) + 1);
+    // A little out of step with the trainer's bob, like it's walking along.
+    this.tweens.add({ targets: fBody, y: -2, yoyo: true, repeat: -1, duration: 430, delay: 200, ease: 'Sine.easeInOut' });
+    w.f = f;
+    w.fBody = fBody;
+    w.lead = lead;
+  }
+
+  /** Where a walker stands on a node: a rival stands a little up and to the side. */
+  private offsetPos(id: string, ghost: boolean) {
+    const p = this.posOf(id);
+    return ghost ? { x: p.x + 16, y: p.y - 12 } : p;
+  }
+
+  /** Hop your token to a node, then `done`. */
   private hopTo(id: string, done: () => void) {
-    const c = this.token;
-    const body = this.tokenBody;
-    if (!c || !body) return done();
+    const w = this.me;
+    if (!w) return done();
     const to = this.posOf(id);
-    const from = { x: c.x, y: c.y };
     this.hopping = true;
-    this.tweens.killTweensOf(body);
-    body.setY(0).setFlipX(to.x < from.x);
     // Keep the landing spot in view.
     const area = mapArea();
     const want = Phaser.Math.Clamp(area.top + (area.bottom - area.top) * 0.65 - to.y, this.minScroll, this.maxScroll);
     if (Math.abs(want - this.layer.y) > 4) this.tweens.add({ targets: this.layer, y: want, duration: 420, ease: 'Sine.easeInOut' });
-    const lift = calm() ? 10 : 34;
     sfx.hop();
     this.tweens.add({ targets: this.underToken, alpha: 0.5, duration: 300 });
-    // Crouch, then jump.
+    this.hopWalker(w, id, () => {
+      state.run!.followSide = w.side as -1 | 1;
+      this.time.delayedCall(90, () => {
+        this.hopping = false;
+        done();
+      });
+    });
+  }
+
+  /**
+   * A walker's hop: crouch, jump in an arc, squash on landing; its Hexling hops after it a beat
+   * later and a little lower, landing on the trailing side.
+   */
+  private hopWalker(w: Walker, id: string, done: () => void = () => {}) {
+    const { c, body } = w;
+    const to = this.offsetPos(id, w.ghost);
+    const from = { x: c.x, y: c.y };
+    w.at = id;
+    this.tweens.killTweensOf(body);
+    body.setY(0).setFlipX(to.x < from.x);
+    const lift = calm() ? 10 : 34;
     this.tweens.add({
       targets: body,
       scaleX: 1.7,
@@ -452,7 +538,7 @@ export class MapScene extends Phaser.Scene {
       duration: 70,
       yoyo: true,
       onComplete: () => {
-        this.followHop(to, from, lift);
+        this.followHop(w, to, from, lift);
         const arc = { t: 0 };
         this.tweens.add({
           targets: arc,
@@ -464,7 +550,7 @@ export class MapScene extends Phaser.Scene {
             body.setY(-Math.sin(arc.t * Math.PI) * lift);
           },
           onComplete: () => {
-            sfx.land();
+            if (!w.ghost) sfx.land();
             body.setY(0);
             this.tweens.add({
               targets: body,
@@ -474,10 +560,8 @@ export class MapScene extends Phaser.Scene {
               yoyo: true,
               onComplete: () => {
                 body.setScale(1.5);
-                this.time.delayedCall(90, () => {
-                  this.hopping = false;
-                  done();
-                });
+                this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
+                done();
               },
             });
           },
@@ -486,20 +570,17 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
-  /** The lead Hexling hops after your trainer, a beat later and a little lower. */
-  private followHop(to: { x: number; y: number }, from: { x: number; y: number }, lift: number) {
-    const f = this.follower;
-    const body = this.followerBody;
+  /** The following Hexling's hop: it trails behind (the right side when heading left, and so on). */
+  private followHop(w: Walker, to: { x: number; y: number }, from: { x: number; y: number }, lift: number) {
+    const { f, fBody: body } = w;
     if (!f || !body) return;
     const start = { x: f.x, y: f.y };
-    // It trails behind: the right side when heading left, the left side when heading right
-    // (straight up keeps its side). Remembered so it stands there again next time.
-    const run = state.run!;
-    const side = to.x < from.x - 1 ? 1 : to.x > from.x + 1 ? -1 : (run.followSide ?? -1);
-    run.followSide = side;
-    const end = { x: to.x + FOLLOW.x * side, y: to.y + FOLLOW.y };
+    // Straight up keeps its side.
+    w.side = to.x < from.x - 1 ? 1 : to.x > from.x + 1 ? -1 : w.side;
+    const end = { x: to.x + FOLLOW.x * w.side, y: to.y + FOLLOW.y };
     this.tweens.killTweensOf(body);
     body.setY(0).setFlipX(end.x > start.x);
+    const scale = 1.4 * SPRITE_FIT;
     const arc = { t: 0 };
     this.tweens.add({
       targets: arc,
@@ -512,10 +593,43 @@ export class MapScene extends Phaser.Scene {
         body.setY(-Math.sin(arc.t * Math.PI) * lift * 0.7);
       },
       onComplete: () => {
-        body.setY(0);
-        this.tweens.add({ targets: body, scaleX: 1.55 * SPRITE_FIT, scaleY: 1.25 * SPRITE_FIT, duration: 70, yoyo: true });
+        body.setY(0).setFlipX(w.side < 0);
+        this.tweens.add({
+          targets: body,
+          scaleX: scale * 1.1,
+          scaleY: scale * 0.9,
+          duration: 70,
+          yoyo: true,
+          onComplete: () => {
+            body.setScale(scale);
+            this.tweens.add({ targets: body, y: -2, yoyo: true, repeat: -1, duration: 430, ease: 'Sine.easeInOut' });
+          },
+        });
       },
     });
+  }
+
+  /** Stage race: show (or move) the other player's grayed-out token where they are. */
+  private updateRival() {
+    const run = state.run!;
+    const them = duel.race?.theirs;
+    if (!run.race || !them?.at || !run.map.nodes[them.at] || !this.layer?.active) return;
+    const lead = them.lead ?? null;
+    if (!this.rival) {
+      this.rival = this.makeWalker(them.at, duel.opponent?.look ?? lookForName(run.race.opponent), lead, rivalSide, run.race.opponent);
+      // Behind your own token (their Hexling still in front of them).
+      const r = this.rival;
+      if (this.me) {
+        this.layer.moveBelow(r.c, this.me.c);
+        if (r.f) this.layer.moveAbove(r.f, r.c);
+      }
+    } else {
+      const r = this.rival;
+      if (lead && (!r.lead || r.lead.speciesId !== lead.speciesId || r.lead.stage !== lead.stage)) this.setLead(r, lead);
+      if (r.at !== them.at) this.hopWalker(r, them.at, () => (rivalSide = r.side));
+    }
+    // A wiped-out rival fades further.
+    if (them.finished && !them.won) this.rival.c.setAlpha(0.4);
   }
 
   private enterNode(n: MapNode) {
@@ -533,6 +647,8 @@ export class MapScene extends Phaser.Scene {
   private arrive(n: MapNode) {
     const run = state.run!;
     moveTo(run, n.id);
+    // The other player sees you hop there.
+    this.shareProgress();
     if (['levelup', 'skill', 'prestige', 'treasure', 'event'].includes(n.kind)) {
       // Remember the unresolved choice so a reload offers it again.
       run.pendingNode = n.kind;
