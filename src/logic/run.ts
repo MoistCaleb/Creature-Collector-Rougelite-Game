@@ -366,6 +366,8 @@ export interface Run {
   /** Set on a weekly challenge: the week (its Monday, UTC) and its twist rule. */
   weekly?: string;
   twist?: TwistId;
+  /** Map: which side of your trainer your lead Hexling stands on (-1 left, 1 right). */
+  followSide?: -1 | 1;
   /** Ascendant: the floor its free (no-sacrifice) prestige was used on. */
   ascendFloor?: number;
   /** Stage race against a friend: same map and seed, double battle rewards, a live duel at the end. */
