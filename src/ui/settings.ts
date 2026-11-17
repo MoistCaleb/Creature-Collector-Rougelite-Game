@@ -1,6 +1,5 @@
 import type Phaser from 'phaser';
 import { resetProgress } from '../logic/run';
-import { buzz, canVibrate } from './haptics';
 import { openElementChart } from './elementChart';
 import { openHowToPlay } from './howto';
 import { openPanel } from './panel';
@@ -12,11 +11,11 @@ import { button, COLORS, LANDSCAPE, text } from './widgets';
 const ROW = 52;
 
 /**
- * Settings, as a panel over any screen (title, map, battle): volumes, sound on/off, vibration,
+ * Settings, as a panel over any screen (title, map, battle): volumes, sound on/off,
  * battle speed, first-time tips, How to play, the element chart, and erasing all progress.
  */
 export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}) {
-  const rows = 5 + (canVibrate ? 1 : 0);
+  const rows = 5;
   const p = openPanel(scene, 'Settings', {
     w: LANDSCAPE ? 760 : 430,
     h: LANDSCAPE ? 430 : 50 + rows * ROW + 4 + 3 * 54 + 66,
@@ -80,11 +79,6 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
     volume('Music', () => prefs.musicVol, (v) => (prefs.musicVol = v));
     volume('Sound effects', () => prefs.sfxVol, (v) => (prefs.sfxVol = v));
     toggle('All sound', 'Music, effects and cries', !isMuted(), () => setMuted(!isMuted()));
-    if (canVibrate)
-      toggle('Vibration', 'Feel hits, catches and wins', prefs.haptics, () => {
-        prefs.haptics = !prefs.haptics;
-        buzz(30);
-      });
     toggle('First-time tips', prefs.tips ? 'Short tips the first time you see something' : 'Turn on to see every tip again', prefs.tips, () => {
       prefs.tips = !prefs.tips;
       if (prefs.tips) prefs.tipsSeen = [];

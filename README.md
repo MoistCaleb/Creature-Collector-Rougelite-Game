@@ -55,7 +55,7 @@ Saves on the installed app live on that device. The claude.ai preview keeps its 
 - **Bag** — the map's Bag button shows potions, Evolution Stones and held items; give or take off items right there.
 - **Heat** — beat a run to unlock Heat 1–8: each level stacks a harder rule. Pick it after choosing a map; each Heat won on a map lights one of its 8 flame tokens.
 - **Daily run** — the same seed, starters and map for everyone each day; your best result is kept.
-- **Battle controls** — 1×/2×/3× speed and auto-battle; vibration on Android.
+- **Battle controls** — 1×/2×/3× speed and auto-battle.
 - **Run summary** — what beat you, your MVP, stats, survivors and the fallen.
 
 ## Layout

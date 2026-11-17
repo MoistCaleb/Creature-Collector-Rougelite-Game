@@ -566,7 +566,7 @@ export class BattleScene extends Phaser.Scene {
       title: 'Menu',
       options: [
         { label: 'Resume', color: 0x3b6d4a, glyph: 'play' },
-        { label: 'Settings', sub: 'Sound, vibration, speed', glyph: 'gear' },
+        { label: 'Settings', sub: 'Sound, speed', glyph: 'gear' },
         { label: 'Element chart', sub: 'Your foe’s elements are highlighted', glyph: 'sparkle' },
         { label: giveUp, sub, color: 0x5a2a2a, glyph: 'skull' },
       ],
