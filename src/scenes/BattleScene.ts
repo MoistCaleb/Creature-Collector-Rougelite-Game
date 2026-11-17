@@ -77,7 +77,7 @@ import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, HpBar, stars, text, typeChip, W } from '../ui/widgets';
+import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE } from '../ui/widgets';
 
 interface SidePanel {
   root: Phaser.GameObjects.Container;
@@ -116,8 +116,66 @@ export interface BattleMatch {
   opponentLook?: TrainerLook;
 }
 
-const ENEMY_POS = { x: 320, y: 200 };
-const PLAYER_POS = { x: 120, y: 370 };
+/** Where everything goes on the battle screen: upright (450x800) or wide (800x450). */
+const TALL = {
+  enemy: { x: 320, y: 200 },
+  player: { x: 120, y: 370 },
+  enemyPanel: { x: 16, y: 16 },
+  playerPanel: { x: 450 - 16 - 270, y: 446 },
+  /** Right edge for the pips and the battle title. */
+  titleRight: 434,
+  pipsY: 24,
+  titleY: 48,
+  menu: { x: 414, y: 116 },
+  msg: { x: 12, y: 530, w: 426, h: 62 },
+  moves: { x0: 12, y0: 640, bw: 207, gap: 12, rowH: 74, h: 64 },
+  fallback: { x: 225, y: 640, w: 426, noteY: 690 },
+  switchBtn: { x: 169, y: 768, w: 106 },
+  potionBtn: { x: 281, y: 768, w: 106 },
+  autoBtn: { x: 62, y: 768, w: 100 },
+  speedBtn: { x: 388, y: 768, w: 100 },
+  enemyFx: { x: 16, y: 118 },
+  playerFx: { x: 434, y: 424 },
+  playerTrainer: { x: 38, y: 440 },
+  enemyTrainer: { x: 404, y: 212 },
+  waiting: { x: 225, y: 700 },
+  catchBtn: { x: 225, y: 652, w: 426, h: 72 },
+  finishY: { wild: 738, other: 690 },
+};
+/** Sideways: the field on the left, the message, moves and controls in a column on the right. */
+const WIDE: typeof TALL = {
+  enemy: { x: 390, y: 150 },
+  player: { x: 165, y: 300 },
+  enemyPanel: { x: 16, y: 12 },
+  playerPanel: { x: 250, y: 362 },
+  titleRight: 518,
+  pipsY: 12,
+  titleY: 34,
+  menu: { x: 764, y: 28 },
+  msg: { x: 532, y: 54, w: 256, h: 88 },
+  moves: { x0: 532, y0: 188, bw: 124, gap: 8, rowH: 80, h: 72 },
+  fallback: { x: 660, y: 188, w: 256, noteY: 230 },
+  switchBtn: { x: 594, y: 345, w: 124 },
+  potionBtn: { x: 726, y: 345, w: 124 },
+  autoBtn: { x: 594, y: 403, w: 124 },
+  speedBtn: { x: 726, y: 403, w: 124 },
+  enemyFx: { x: 16, y: 190 },
+  playerFx: { x: 518, y: 340 },
+  playerTrainer: { x: 50, y: 352 },
+  enemyTrainer: { x: 488, y: 160 },
+  waiting: { x: 660, y: 270 },
+  catchBtn: { x: 660, y: 210, w: 256, h: 70 },
+  finishY: { wild: 290, other: 210 },
+};
+let L = TALL;
+let ENEMY_POS = L.enemy;
+let PLAYER_POS = L.player;
+/** Pick the layout for the board in use (call right after `background`). */
+function useLayout() {
+  L = LANDSCAPE ? WIDE : TALL;
+  ENEMY_POS = L.enemy;
+  PLAYER_POS = L.player;
+}
 
 export class BattleScene extends Phaser.Scene {
   private battle!: Battle;
@@ -186,6 +244,7 @@ export class BattleScene extends Phaser.Scene {
     });
 
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[run.map.biome]).darken(78).color);
+    useLayout();
     this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
@@ -193,11 +252,11 @@ export class BattleScene extends Phaser.Scene {
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
 
-    this.enemyPanel = this.makePanel(16, 16);
-    this.playerPanel = this.makePanel(W - 16 - 270, 446);
-    this.pips = text(this, W - 16, 24, '', 16, '#ffc94d').setOrigin(1, 0);
+    this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
+    this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
+    this.pips = text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0);
     const title = boss ? boss.name.toUpperCase() : this.kind === 'elite' ? 'TRAINER' : 'WILD';
-    text(this, W - 16, 48, title, 14, this.kind === 'battle' ? COLORS.textDim : '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
+    text(this, L.titleRight, L.titleY, title, 14, this.kind === 'battle' ? COLORS.textDim : '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
     if (boss) {
       // The boss's rule stays on screen for the whole fight.
       this.add.rectangle(16, 96, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
@@ -213,13 +272,13 @@ export class BattleScene extends Phaser.Scene {
       text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' });
     }
 
-    this.add.rectangle(12, 530, W - 24, 62, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    this.msg = text(this, 24, 540, '', 16, COLORS.text, { wordWrap: { width: W - 48 } });
+    this.add.rectangle(L.msg.x, L.msg.y, L.msg.w, L.msg.h, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    this.msg = text(this, L.msg.x + 12, L.msg.y + 10, '', 16, COLORS.text, { wordWrap: { width: L.msg.w - 24 } });
     this.actions = this.add.container(0, 0);
     this.controls = this.add.container(0, 0);
     this.drawControls();
     // Menu: exit to the title mid-battle (the battle resumes from "Continue run").
-    button(this, W - 36, 116, 48, 36, '', () => {
+    button(this, L.menu.x, L.menu.y, 48, 36, '', () => {
       if (this.busy) return;
       this.cancelAuto();
       openGameMenu(this, () => this.maybeAuto());
@@ -300,10 +359,10 @@ export class BattleScene extends Phaser.Scene {
     this.trainers = {};
     const mine = myLook(state.meta);
     const rest = ensureTrainerTexture(this, mine, 'back');
-    this.trainers.player = { img: place(38, 440, rest, 3.1, 0), rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
+    this.trainers.player = { img: place(L.playerTrainer.x, L.playerTrainer.y, rest, 3.1, 0), rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
     if (enemy) {
       const eRest = ensureTrainerTexture(this, enemy, 'stand');
-      const them = place(404, 212, eRest, 2.8, 450).setFlipX(true);
+      const them = place(L.enemyTrainer.x, L.enemyTrainer.y, eRest, 2.8, 450).setFlipX(true);
       this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command') };
     }
   }
@@ -416,22 +475,23 @@ export class BattleScene extends Phaser.Scene {
       if (this.busy) this.fast = true;
     });
     background(this, m.background);
+    useLayout();
     this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
-    this.enemyPanel = this.makePanel(16, 16);
-    this.playerPanel = this.makePanel(W - 16 - 270, 446);
-    this.pips = text(this, W - 16, 24, '', 16, '#ffc94d').setOrigin(1, 0);
-    text(this, W - 16, 48, m.title, 14, '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
+    this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
+    this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
+    this.pips = text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0);
+    text(this, L.titleRight, L.titleY, m.title, 14, '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
     text(this, 16, 96, m.opponent, 13, '#ffc94d', { fontStyle: 'bold' });
-    this.add.rectangle(12, 530, W - 24, 62, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    this.msg = text(this, 24, 540, '', 16, COLORS.text, { wordWrap: { width: W - 48 } });
+    this.add.rectangle(L.msg.x, L.msg.y, L.msg.w, L.msg.h, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    this.msg = text(this, L.msg.x + 12, L.msg.y + 10, '', 16, COLORS.text, { wordWrap: { width: L.msg.w - 24 } });
     this.actions = this.add.container(0, 0);
     this.controls = this.add.container(0, 0);
     this.drawControls();
-    button(this, W - 36, 116, 48, 36, '', () => this.openMatchMenu(), { glyph: 'menu' }).setDepth(5);
+    button(this, L.menu.x, L.menu.y, 48, 36, '', () => this.openMatchMenu(), { glyph: 'menu' }).setDepth(5);
     this.refreshEnemy();
     this.refreshPlayer();
     this.drawTeamFx();
@@ -508,7 +568,7 @@ export class BattleScene extends Phaser.Scene {
   private showWaiting(what: string) {
     this.hideWaiting();
     this.msg.setText(what);
-    this.waiting = text(this, W / 2, 700, 'Waiting…', 18, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    this.waiting = text(this, L.waiting.x, L.waiting.y, 'Waiting…', 18, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     this.tweens.add({ targets: this.waiting, alpha: 0.35, yoyo: true, repeat: -1, duration: 600 });
   }
 
@@ -671,30 +731,30 @@ export class BattleScene extends Phaser.Scene {
     this.actions.removeAll(true);
     const p = this.battle.p.c;
     const e = this.battle.e.c;
-    const bw = (W - 36) / 2;
+    const { x0, y0, bw, gap, rowH, h: bh } = L.moves;
     if (outOfMoves(p)) {
       // Every move is spent: only the basic attack is left until uses are restored.
       const fb = moveDef(fallbackMove(p));
       const color = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[fb.element]).darken(45).color;
       this.actions.add(
-        button(this, W / 2, 640, W - 24, 64, `${fb.name} (basic attack)`, () => this.act({ kind: 'move', index: -1 }), {
+        button(this, L.fallback.x, L.fallback.y, L.fallback.w, 64, `${fb.name} (basic attack)`, () => this.act({ kind: 'move', index: -1 }), {
           color,
           sub: `${moveSummary(fb, 1)} · ${accText(fb)}`,
           fontSize: 17,
         }),
       );
-      this.actions.add(text(this, W / 2, 690, 'Out of move uses! Rest, bench it, or use a Full Restore.', 13, '#ffc94d').setOrigin(0.5, 0));
+      this.actions.add(text(this, L.fallback.x, L.fallback.noteY, 'Out of move uses! Rest, bench it, or use a Full Restore.', 13, '#ffc94d', { align: 'center', wordWrap: { width: L.fallback.w } }).setOrigin(0.5, 0));
     }
     p.moves.forEach((m, i) => {
       if (outOfMoves(p)) return;
       const d = moveDef(m);
       const mult = typeMultiplier(d.element, creatureTypes(e));
       const hint = d.kind !== 'attack' ? '' : mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
-      const x = 12 + bw / 2 + (i % 2) * (bw + 12);
-      const y = 640 + Math.floor(i / 2) * 74;
+      const x = x0 + bw / 2 + (i % 2) * (bw + gap);
+      const y = y0 + Math.floor(i / 2) * rowH;
       const color = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(45).color;
       this.actions.add(
-        button(this, x, y, bw, 64, d.name + hint, () => this.act({ kind: 'move', index: i }), {
+        button(this, x, y, bw, bh, d.name + hint, () => this.act({ kind: 'move', index: i }), {
           color,
           sub: `${moveSummary(d, m.tier)}  ·  ${'✦'.repeat(m.tier)}`,
           fontSize: 17,
@@ -702,23 +762,23 @@ export class BattleScene extends Phaser.Scene {
         }),
       );
       // Hit chance in the top-left corner; limited moves show their uses left in the top-right.
-      this.actions.add(text(this, x - bw / 2 + 6, y - 30, accText(d), 11, d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(hasUses(m) ? 1 : 0.5));
+      this.actions.add(text(this, x - bw / 2 + 6, y - bh / 2 + 2, accText(d), 11, d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(hasUses(m) ? 1 : 0.5));
       const left = usesLeft(m);
       if (Number.isFinite(left)) {
         const max = maxUses(d)!;
         this.actions.add(
-          text(this, x + bw / 2 - 6, y - 30, `${left}/${max}`, 11, left === 0 ? '#e0524a' : left <= 2 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setOrigin(1, 0),
+          text(this, x + bw / 2 - 6, y - bh / 2 + 2, `${left}/${max}`, 11, left === 0 ? '#e0524a' : left <= 2 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setOrigin(1, 0),
         );
       }
     });
     const canSwap = this.battle.player.some((x, i) => i !== this.battle.pActive && isAlive(x.c));
-    this.actions.add(button(this, W / 2 - 56, 768, 106, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));
+    this.actions.add(button(this, L.switchBtn.x, L.switchBtn.y, L.switchBtn.w, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));
     // No potions outside a run.
     if (this.match) return;
     const potions = state.run!.potions ?? 0;
     const hurt = this.battle.player.some((x) => needsPotion(x.c));
     this.actions.add(
-      button(this, W / 2 + 56, 768, 106, 44, `Potion ${potions}`, () => this.openPotion(), {
+      button(this, L.potionBtn.x, L.potionBtn.y, L.potionBtn.w, 44, `Potion ${potions}`, () => this.openPotion(), {
         enabled: potions > 0 && hurt,
         glyph: 'potion',
         fontSize: 15,
@@ -732,7 +792,7 @@ export class BattleScene extends Phaser.Scene {
     this.controls.removeAll(true);
     const auto = prefs.autoBattle;
     this.controls.add(
-      button(this, 62, 768, 100, 44, auto ? 'Auto ON' : 'Auto', () => {
+      button(this, L.autoBtn.x, L.autoBtn.y, L.autoBtn.w, 44, auto ? 'Auto ON' : 'Auto', () => {
         prefs.autoBattle = !prefs.autoBattle;
         this.drawControls();
         if (prefs.autoBattle) this.maybeAuto();
@@ -741,7 +801,7 @@ export class BattleScene extends Phaser.Scene {
     );
     const speed = prefs.battleSpeed;
     this.controls.add(
-      button(this, W - 62, 768, 100, 44, `${speed}×`, () => {
+      button(this, L.speedBtn.x, L.speedBtn.y, L.speedBtn.w, 44, `${speed}×`, () => {
         const i = BATTLE_SPEEDS.indexOf(speed as (typeof BATTLE_SPEEDS)[number]);
         prefs.battleSpeed = BATTLE_SPEEDS[(i + 1) % BATTLE_SPEEDS.length];
         this.drawControls();
@@ -987,8 +1047,8 @@ export class BattleScene extends Phaser.Scene {
     // Enemy chips go left to right under its panel (clear of the HP numbers and the menu button);
     // the player's go right to left above its panel.
     for (const side of ['enemy', 'player'] as const) {
-      let x = side === 'enemy' ? 16 : W - 16;
-      const y = side === 'enemy' ? 118 : 424;
+      let x = side === 'enemy' ? L.enemyFx.x : L.playerFx.x;
+      const y = side === 'enemy' ? L.enemyFx.y : L.playerFx.y;
       for (const [fx, left] of Object.entries(this.battle.teamFx[side]) as [TeamFxId, number][]) {
         if (!left) continue;
         const def = TEAM_FX[fx];
@@ -1185,7 +1245,7 @@ export class BattleScene extends Phaser.Scene {
     let chosen = false;
     if (wild) {
       this.actions.add(
-        button(this, W / 2, 652, W - 24, 72, `Catch ${creatureName(wild)}`, () => {
+        button(this, L.catchBtn.x, L.catchBtn.y, L.catchBtn.w, L.catchBtn.h, `Catch ${creatureName(wild)}`, () => {
           if (chosen) return;
           chosen = true;
           if (!full) return this.doCatch(wild, fallen);
@@ -1200,7 +1260,7 @@ export class BattleScene extends Phaser.Scene {
       );
     }
     this.actions.add(
-      button(this, W / 2, wild ? 738 : 690, W - 24, 72, wild ? 'Continue' : 'Take rewards', () => {
+      button(this, L.catchBtn.x, wild ? L.finishY.wild : L.finishY.other, L.catchBtn.w, L.catchBtn.h, wild ? 'Continue' : 'Take rewards', () => {
         if (chosen) return;
         chosen = true;
         this.finishWild(wild, xp, coins, fallen);

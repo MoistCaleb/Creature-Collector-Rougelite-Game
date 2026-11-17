@@ -39,17 +39,19 @@ export interface PickConfig {
 
 /** Full-screen modal list of choices, drawn on top of the current scene. */
 export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObjects.Container {
-  const root = scene.add.container(0, 0).setDepth(1000);
-  const dim = scene.add.rectangle(0, 0, W, H, 0x000000, 0.78).setOrigin(0).setInteractive();
+  // On the wide board the panel keeps an upright width, centered.
+  const PW = Math.min(W, 480);
+  const root = scene.add.container((W - PW) / 2, 0).setDepth(1000);
+  const dim = scene.add.rectangle(-(W - PW) / 2, 0, W, H, 0x000000, 0.78).setOrigin(0).setInteractive();
   root.add(dim);
 
   const close = () => root.destroy();
 
   const rowHeight = (r: PickRow) => (r.big ? 84 : 48);
   const infoH = (cfg.rows ?? []).reduce((h, r) => h + rowHeight(r), 0) + (cfg.rows?.length ? 10 : 0);
-  const title = text(scene, W / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
+  const title = text(scene, PW / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: PW - 60 } }).setOrigin(0.5, 0);
   const sub = cfg.subtitle
-    ? text(scene, W / 2, 0, cfg.subtitle, 15, COLORS.text, { align: 'center', wordWrap: { width: W - 70 }, lineSpacing: 4 }).setOrigin(0.5, 0)
+    ? text(scene, PW / 2, 0, cfg.subtitle, 15, COLORS.text, { align: 'center', wordWrap: { width: PW - 70 }, lineSpacing: 4 }).setOrigin(0.5, 0)
     : null;
   const headerH = 18 + title.height + 12 + (sub ? sub.height + 18 : 0);
 
@@ -67,7 +69,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   const panelH = Math.min(H - 40, headerH + listH + footerH + 10);
   const top = Math.max(20, (H - panelH) / 2);
 
-  root.add(scene.add.rectangle(W / 2, top, W - 24, panelH, COLORS.panel).setOrigin(0.5, 0).setStrokeStyle(2, COLORS.stroke));
+  root.add(scene.add.rectangle(PW / 2, top, PW - 24, panelH, COLORS.panel).setOrigin(0.5, 0).setStrokeStyle(2, COLORS.stroke));
   title.setY(top + 18);
   root.add(title);
   if (sub) {
@@ -78,10 +80,10 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   let y = top + headerH;
   for (const r of cfg.rows ?? []) {
     const h = rowHeight(r) - 6;
-    root.add(scene.add.rectangle(30, y, W - 60, h, COLORS.panelLight).setOrigin(0));
+    root.add(scene.add.rectangle(30, y, PW - 60, h, COLORS.panelLight).setOrigin(0));
     root.add(creatureSprite(scene, r.big ? 76 : 58, y + h / 2 - (r.big ? 12 : 7), r.creature, r.big ? 2.6 : 1.3));
     root.add(
-      text(scene, r.big ? 124 : 88, y + h / 2, r.text, r.big ? 18 : 15, COLORS.text, { wordWrap: { width: W - (r.big ? 170 : 130) } }).setOrigin(0, 0.5),
+      text(scene, r.big ? 124 : 88, y + h / 2, r.text, r.big ? 18 : 15, COLORS.text, { wordWrap: { width: PW - (r.big ? 170 : 130) } }).setOrigin(0, 0.5),
     );
     y += rowHeight(r);
   }
@@ -91,7 +93,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   root.add(list);
 
   let page = 0;
-  const pageLabel = paged ? text(scene, W / 2, top + panelH - 76, '', 12, COLORS.textDim).setOrigin(0.5) : null;
+  const pageLabel = paged ? text(scene, PW / 2, top + panelH - 76, '', 12, COLORS.textDim).setOrigin(0.5) : null;
   if (pageLabel) root.add(pageLabel);
   const drawPage = () => {
     list.removeAll(true);
@@ -103,10 +105,10 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
         cfg.onPick(i);
       };
       if (o.creature) {
-        list.add(creatureRow(scene, 30, yy, W - 60, o.creature, { onClick: o.disabled ? undefined : pick, dim: o.disabled, note: o.note }));
+        list.add(creatureRow(scene, 30, yy, PW - 60, o.creature, { onClick: o.disabled ? undefined : pick, dim: o.disabled, note: o.note }));
       } else {
         list.add(
-          button(scene, W / 2, yy + (rowH - 8) / 2, W - 60, rowH - 10, o.label ?? '', pick, {
+          button(scene, PW / 2, yy + (rowH - 8) / 2, PW - 60, rowH - 10, o.label ?? '', pick, {
             sub: o.sub,
             enabled: !o.disabled,
             color: o.color,
@@ -130,11 +132,11 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
       drawPage();
     };
     root.add(button(scene, 66, fy, 76, 46, '', () => turn(-1), { glyph: 'back', fontSize: 16 }));
-    root.add(button(scene, W - 66, fy, 76, 46, '', () => turn(1), { glyph: 'play', fontSize: 16 }));
+    root.add(button(scene, PW - 66, fy, 76, 46, '', () => turn(1), { glyph: 'play', fontSize: 16 }));
   }
   if (cfg.onCancel) {
     root.add(
-      button(scene, W / 2, fy, paged ? 180 : 200, 46, cfg.cancelLabel ?? 'Cancel', () => {
+      button(scene, PW / 2, fy, paged ? 180 : 200, 46, cfg.cancelLabel ?? 'Cancel', () => {
         close();
         cfg.onCancel!();
       }),
