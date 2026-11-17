@@ -345,6 +345,13 @@ export const sfx = {
   levelUp() {
     [0, 4, 7, 12, 16].forEach((s, i) => tone(note(s, 523), 0.12, { type: 'square', vol: 0.14, delay: i * 0.07 }));
   },
+  /** The map token's hop: a springy boing up, then a soft landing tap. */
+  hop() {
+    tone(260, 0.16, { type: 'triangle', vol: 0.2, slide: 620 });
+  },
+  land() {
+    tone(180, 0.06, { type: 'triangle', vol: 0.18, slide: 120 });
+  },
   coin() {
     tone(988, 0.07, { type: 'square', vol: 0.14 });
     tone(1319, 0.2, { type: 'square', vol: 0.14, delay: 0.07 });
