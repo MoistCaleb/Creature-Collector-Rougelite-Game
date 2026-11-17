@@ -287,8 +287,15 @@ Proposed math:
 
 - About 1 wild Hexling in 200 is **shiny**: the same Hexling in rare colors (its palette turned around the color
   wheel, by a fixed amount per family). Only wild battles; trainers and guardians never are.
-- It glitters as it appears ("A shiny X appeared!"), shows ✦ by its name, and keeps its colors when caught
-  and when it evolves. Purely cosmetic.
+- **The reveal** (the first time a shiny foe appears): the field dims, gold light rays spin up behind it,
+  rainbow rings and a fountain of stars burst out, it shimmers through the rainbow, a "✦ SHINY! ✦" banner
+  slams in under it, and a chime cascade plays (with a vibration). The message reads "Whoa! It's a SHINY X!".
+  Your own shinies get a shorter reveal when sent out.
+- **While it's out**: a pulsing gold glow and halo, rising rainbow glitter, a gold panel and name, and a
+  pulsing "✦ SHINY ✦" tab on its panel.
+- **Its attacks**: it flashes through the rainbow and sprays stars at its target, and its hits land with a
+  gold ring, rainbow sparks and a bright ping on top of the move's usual effect.
+- Keeps its colors when caught and when it evolves. Purely cosmetic.
 - The Hexlidex marks families you've seen shiny and shows their shiny forms; Records counts shinies caught.
 - Rolled from a hash of the run seed (not the run's random rolls), so daily runs stay identical for everyone.
 
