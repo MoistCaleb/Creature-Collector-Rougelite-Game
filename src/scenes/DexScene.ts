@@ -14,6 +14,7 @@ import { toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
 import { openElementChart } from '../ui/elementChart';
 import { shinySparkle } from '../ui/shiny';
+import { searchBox } from '../ui/searchBox';
 
 type Tab = 'creatures' | 'moves' | 'elements';
 /** Content starts below the header, tabs and the jump-to-element bar. */
@@ -23,6 +24,18 @@ let TOP = 196;
 const ROW_H = 124;
 const CARD_H = 478;
 const STAGE_LABEL = ['Base form', 'First evolution', 'Final form'];
+
+/** Hexlings tab: search text and which lines to show (kept while you browse). */
+let dexQuery = '';
+type DexFilter = 'all' | 'caught' | 'gilded';
+let dexFilter: DexFilter = 'all';
+
+/** Header layout: where the jump bar starts, and where the list starts under it. */
+function layout(tab: Tab) {
+  if (LANDSCAPE) return { stats: 50, tabsY: 84, tabsH: 30, search: tab === 'creatures' ? { y: 69, h: 30 } : null, jumpY: 117, top: 134 };
+  const creatures = tab === 'creatures';
+  return { stats: 58, tabsY: 98, tabsH: 36, search: creatures ? { y: 122, h: 34 } : null, jumpY: creatures ? 172 : 136, top: creatures ? 220 : 184 };
+}
 
 export class DexScene extends Phaser.Scene {
   private from = 'Title';
@@ -37,6 +50,20 @@ export class DexScene extends Phaser.Scene {
   private live = new Map<number, Phaser.GameObjects.Container>();
   /** The creature row shown as a big card, if any. */
   private expanded: number | null = null;
+  /** Hexlings tab: species index -> its row (rows skip lines the search or filter hides). */
+  private rowOf = new Map<number, number>();
+  private jumpBar: Phaser.GameObjects.Container | null = null;
+  /** The search field (a page element over the canvas): hidden while a panel is open on top. */
+  private search$: HTMLInputElement | null = null;
+
+  /** Open a panel over the Hexlidex, hiding the search field until it closes. */
+  private overlay(open: (done: () => void) => void) {
+    const el = this.search$;
+    if (el) el.style.display = 'none';
+    open(() => {
+      if (el) el.style.display = '';
+    });
+  }
 
   constructor() {
     super('Dex');
@@ -50,7 +77,9 @@ export class DexScene extends Phaser.Scene {
 
   create() {
     background(this);
-    TOP = LANDSCAPE ? 124 : 196;
+    this.search$ = null;
+    const L = layout(this.tab);
+    TOP = L.top;
     const dex = state.meta.dex;
 
     this.content = this.add.container(0, TOP);
@@ -76,14 +105,14 @@ export class DexScene extends Phaser.Scene {
       .setPadding(6, 8, 6, 8)
       .setPosition(hx.x + hx.width + 22, 12)
       .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => openGildedMilestones(this, state.meta));
+      .on('pointerup', () => this.overlay((done) => openGildedMilestones(this, state.meta, done)));
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
-    button(this, W - 156, 30, 96, 40, 'Chart', () => openElementChart(this), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
+    button(this, W - 156, 30, 96, 40, 'Chart', () => this.overlay((done) => openElementChart(this, [], done)), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
     const totalForms = SPECIES.length * 3;
     text(
       this,
       16,
-      48,
+      L.stats,
       `Forms ${dex.forms.length}/${totalForms}  Caught ${dex.caught.length}/${SPECIES.length}  Moves ${dex.moves.length}/${allMoveIds().length}  Elements ${dex.elements.length}/${ELEMENTS.length}`,
       13,
       COLORS.textDim,
@@ -93,13 +122,16 @@ export class DexScene extends Phaser.Scene {
       ['moves', 'Moves'],
       ['elements', 'Elements'],
     ];
+    // Sideways on the Hexlings tab, the tabs take the left half and the search the right half.
+    const tabsW = LANDSCAPE && L.search ? W / 2 - 24 : W - 32;
     tabs.forEach(([t, label], i) => {
-      const bw = (W - 40) / 3;
-      button(this, 16 + bw / 2 + i * (bw + 4), LANDSCAPE ? 80 : 98, bw, LANDSCAPE ? 30 : 40, label, () => this.scene.restart({ from: this.from, tab: t }), {
+      const bw = (tabsW - 8) / 3;
+      button(this, 16 + bw / 2 + i * (bw + 4), L.tabsY, bw, L.tabsH, label, () => this.scene.restart({ from: this.from, tab: t }), {
         color: this.tab === t ? 0x5b4a8a : COLORS.panelLight,
         fontSize: 16,
       });
     });
+    if (L.search) this.drawSearch(L.search.y, L.search.h);
 
     this.drawJumpBar();
 
@@ -118,19 +150,58 @@ export class DexScene extends Phaser.Scene {
   /** Two rows of element buttons: tap to glide to that element; tap again for the next one. */
   private drawJumpBar() {
     const dex = state.meta.dex;
+    this.jumpBar?.destroy();
+    const bar = (this.jumpBar = this.add.container(0, 0));
+    const y0 = layout(this.tab).jumpY;
     const cols = LANDSCAPE ? 12 : 6;
     const bw = (W - 32 - (cols - 1) * 4) / cols;
     ELEMENTS.forEach((el, i) => {
       const seen = dex.elements.includes(el);
       const x = 16 + bw / 2 + (i % cols) * (bw + 4);
-      const y = (LANDSCAPE ? 108 : 136) + Math.floor(i / cols) * 30;
-      button(this, x, y, bw, LANDSCAPE ? 24 : 26, seen ? el : '???', () => this.jumpTo(el), {
+      const y = y0 + Math.floor(i / cols) * 30;
+      bar.add(button(this, x, y, bw, LANDSCAPE ? 24 : 26, seen ? el : '???', () => this.jumpTo(el), {
         color: seen ? ELEMENT_COLORS[el] : COLORS.panelLight,
         textColor: seen ? elementTextColor(el) : '#6d6588',
         fontSize: 11,
         enabled: (this.anchors[el]?.length ?? 0) > 0,
-      });
+      }));
     });
+  }
+
+  /** Hexlings tab: a search box (any form name you've seen, or a number) and Caught / Gilded filters. */
+  private drawSearch(y: number, h: number) {
+    const x0 = LANDSCAPE ? W / 2 + 4 : 16;
+    const fw = LANDSCAPE ? 80 : 78;
+    const boxW = W - 16 - x0 - 2 * (fw + 6);
+    this.add.rectangle(x0, y, boxW, h, 0x0f0c18).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    this.search$ = searchBox(this, x0 + 2, y + 2, boxW - 4, h - 4, {
+      value: dexQuery,
+      placeholder: 'Search Hexlings…',
+      onInput: (v) => {
+        dexQuery = v;
+        this.relist();
+      },
+    });
+    const chip = (i: number, f: DexFilter, label: string, color: number) => {
+      const on = dexFilter === f;
+      button(this, x0 + boxW + 6 + fw / 2 + i * (fw + 6), y + h / 2, fw, h, label, () => {
+        dexFilter = on ? 'all' : f;
+        this.scene.restart({ from: this.from, tab: this.tab });
+      }, { fontSize: 13, color: on ? color : COLORS.panelLight });
+    };
+    chip(0, 'caught', 'Caught', 0x3b6d4a);
+    chip(1, 'gilded', '✦ Gilded', 0x7a5a1c);
+  }
+
+  /** Search changed: rebuild the list in place (the search box keeps the keyboard). */
+  private relist() {
+    this.expanded = null;
+    for (const c of this.live.values()) c.destroy();
+    this.live.clear();
+    this.drawCreatures();
+    this.content.y = TOP;
+    this.refreshRows();
+    this.drawJumpBar();
   }
 
   /** Glide to the next row for this element below the current view (wrapping to the first). */
@@ -172,30 +243,47 @@ export class DexScene extends Phaser.Scene {
   private drawCreatures() {
     this.rows = [];
     this.anchors = {};
+    this.rowOf = new Map();
+    const dex = state.meta.dex;
+    const owned = state.meta.shinyOwned ?? [];
+    const q = dexQuery.trim().toLowerCase().replace(/^#/, '');
     let y = 8;
     SPECIES.forEach((sp, i) => {
+      if (dexFilter === 'caught' && !dex.caught.includes(sp.id)) return;
+      if (dexFilter === 'gilded' && !owned.includes(sp.id)) return;
+      // Search: names of forms you've seen (unseen names stay secret), or the number.
+      if (q && !(/^\d+$/.test(q) ? Number(q) === i + 1 : sp.names.some((n, st) => hasSeenForm(dex, sp.id, st) && n.toLowerCase().includes(q)))) return;
+      this.rowOf.set(i, this.rows.length);
       const h = this.expanded === i ? CARD_H : ROW_H;
       const yy = y;
       this.addRow(yy, h, (row) => (this.expanded === i ? this.drawCreatureCard(row, sp, i, yy, h) : this.drawCreatureRow(row, sp, i, yy, h)));
       for (const el of new Set(sp.types)) this.anchor(el, yy);
       y += h;
     });
+    if (!this.rows.length) {
+      const msg = dexFilter === 'gilded' && !owned.length ? 'No Gilded Hexlings yet. Catch one to unlock its whole line!' : 'Nothing matches. Try another name or filter.';
+      this.addRow(8, 80, (row) => row.add(text(this, W / 2, 40, msg, 14, COLORS.textDim, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5)));
+      y = 88;
+    }
     this.contentH = y + 8;
   }
 
   /** Tap a creature to open it as a big card (tap again to close). Keeps the row where it was on screen. */
   private toggle(i: number) {
     if (this.scroller.moved) return;
-    const screenY = this.content.y + this.rows[i].y;
+    const r0 = this.rowOf.get(i);
+    if (r0 === undefined) return;
+    const screenY = this.content.y + this.rows[r0].y;
     this.expanded = this.expanded === i ? null : i;
     for (const c of this.live.values()) c.destroy();
     this.live.clear();
     this.drawCreatures();
+    const r = this.rowOf.get(i)!;
     const min = Math.min(TOP, H - this.contentH - 20);
-    this.content.y = Phaser.Math.Clamp(screenY - this.rows[i].y, min, TOP);
+    this.content.y = Phaser.Math.Clamp(screenY - this.rows[r].y, min, TOP);
     // An opened card should be fully visible if it fits.
     if (this.expanded === i) {
-      const bottom = this.content.y + this.rows[i].y + CARD_H;
+      const bottom = this.content.y + this.rows[r].y + CARD_H;
       if (bottom > H - 10) this.content.y = Phaser.Math.Clamp(this.content.y - (bottom - (H - 10)), min, TOP);
     }
     this.refreshRows();
