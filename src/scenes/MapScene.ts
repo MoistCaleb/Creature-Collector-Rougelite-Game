@@ -459,8 +459,7 @@ export class MapScene extends Phaser.Scene {
     const body = this.add.image(0, 0, ghost ? ensureGrayTrainerTexture(this, look) : ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.5);
     c.add([ring, shadow, body]);
     if (ghost) {
-      body.setAlpha(0.7);
-      c.add(text(this, 0, -58, ghostName, 10, '#8fd0ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5).setAlpha(0.9));
+      c.add(text(this, 0, -58, ghostName, 10, '#8fd0ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5));
     }
     this.layer.add(c);
     this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: ghost ? 0.1 : 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
@@ -475,13 +474,12 @@ export class MapScene extends Phaser.Scene {
     w.f?.destroy();
     const f = this.add.container(w.c.x + FOLLOW.x * w.side, w.c.y + FOLLOW.y);
     const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, w.ghost ? 0.25 : 0.4);
-    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage) : ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny);
+    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage, true) : ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny);
     const fBody = this.add
       .image(0, 0, key)
       .setOrigin(0.5, 0.92)
       .setScale(1.4 * SPRITE_FIT)
-      .setFlipX(w.side < 0) // facing its trainer
-      .setAlpha(w.ghost ? 0.7 : 1);
+      .setFlipX(w.side < 0); // facing its trainer
     f.add([fShadow, fBody]);
     // Drawn in front of its trainer.
     this.layer.addAt(f, this.layer.getIndex(w.c) + 1);
@@ -628,8 +626,6 @@ export class MapScene extends Phaser.Scene {
       if (lead && (!r.lead || r.lead.speciesId !== lead.speciesId || r.lead.stage !== lead.stage)) this.setLead(r, lead);
       if (r.at !== them.at) this.hopWalker(r, them.at, () => (rivalSide = r.side));
     }
-    // A wiped-out rival fades further.
-    if (them.finished && !them.won) this.rival.c.setAlpha(0.4);
   }
 
   private enterNode(n: MapNode) {

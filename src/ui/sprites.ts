@@ -904,8 +904,9 @@ export function creatureTextureKey(speciesId: string, stage: number, shiny = fal
  * A grayed-out copy of a creature sprite (Hexlidex: seen but never caught): its colours turned to a
  * dim, cool gray, keeping the outline and shading readable.
  */
-export function ensureGrayTexture(scene: Phaser.Scene, speciesId: string, stage: number): string {
-  const key = `${creatureTextureKey(speciesId, stage)}-gray`;
+/** `solid`: fully opaque (the rival's Hexling on a stage-race map); otherwise slightly see-through (Hexlidex). */
+export function ensureGrayTexture(scene: Phaser.Scene, speciesId: string, stage: number, solid = false): string {
+  const key = `${creatureTextureKey(speciesId, stage)}-gray${solid ? '-solid' : ''}`;
   if (scene.textures.exists(key)) return key;
   const canvas = document.createElement('canvas');
   canvas.width = SPRITE_SIZE;
@@ -917,11 +918,11 @@ export function ensureGrayTexture(scene: Phaser.Scene, speciesId: string, stage:
   for (let i = 0; i < d.length; i += 4) {
     if (!d[i + 3]) continue;
     const lum = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
-    const v = 70 + lum * 0.5;
+    const v = solid ? 30 + lum * 0.8 : 70 + lum * 0.5;
     d[i] = v;
     d[i + 1] = v;
-    d[i + 2] = v + 14;
-    d[i + 3] = 230;
+    d[i + 2] = v + (solid ? 6 : 14);
+    d[i + 3] = solid ? 255 : 230;
   }
   ctx.putImageData(img, 0, 0);
   scene.textures.addCanvas(key, canvas);
