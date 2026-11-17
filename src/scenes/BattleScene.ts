@@ -11,7 +11,7 @@ import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
 import { moveImpact, playMove, type Style } from '../ui/movefx';
-import { playMusic, sfx } from '../ui/sound';
+import { isMuted, playMusic, setMuted, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { Rng } from '../logic/rng';
@@ -299,9 +299,15 @@ export class BattleScene extends Phaser.Scene {
       this.enemies = this.battle.enemy.map((x) => x.c);
       m.duel.attach({
         step: (events, next) => {
-          this.duelNext = next;
-          this.hideWaiting();
-          void this.play(events);
+          // Wait for any turn still animating (e.g. a forfeit arriving mid-turn).
+          const go = () => {
+            if (!this.scene.isActive()) return;
+            if (this.busy) return void this.time.delayedCall(150, go);
+            this.duelNext = next;
+            this.hideWaiting();
+            void this.play(events);
+          };
+          go();
         },
       });
       this.watchConnection();
@@ -324,6 +330,7 @@ export class BattleScene extends Phaser.Scene {
     this.actions = this.add.container(0, 0);
     this.controls = this.add.container(0, 0);
     this.drawControls();
+    button(this, W - 36, 116, 48, 36, '', () => this.openMatchMenu(), { glyph: 'menu' }).setDepth(5);
     this.refreshEnemy();
     this.refreshPlayer();
     this.drawTeamFx();
@@ -355,6 +362,43 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------ duels
+
+  /** Arena and duel battles: resume, sound, or give up this battle. */
+  private openMatchMenu() {
+    const m = this.match!;
+    if (!m.duel && this.busy) return;
+    this.cancelAuto();
+    const giveUp = m.duel ? 'Forfeit this battle' : 'Leave the ladder';
+    const sub = m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
+    openPicker(this, {
+      title: 'Menu',
+      options: [
+        { label: 'Resume', color: 0x3b6d4a, glyph: 'play' },
+        { label: `Sound: ${isMuted() ? 'off' : 'on'}`, sub: 'Tap to switch', glyph: isMuted() ? 'mute' : 'sound' },
+        { label: giveUp, sub, color: 0x5a2a2a, glyph: 'skull' },
+      ],
+      onPick: (i) => {
+        if (i === 0) return this.maybeAuto();
+        if (i === 1) {
+          setMuted(!isMuted());
+          return this.openMatchMenu();
+        }
+        openPicker(this, {
+          title: `${giveUp}?`,
+          subtitle: sub + '.',
+          options: [{ label: giveUp, color: 0x8a2c2c }],
+          onPick: () => {
+            if (m.duel) m.duel.forfeit();
+            else this.endMatch(false);
+          },
+          onCancel: () => this.maybeAuto(),
+          cancelLabel: 'Back',
+        });
+      },
+      onCancel: () => this.maybeAuto(),
+      cancelLabel: 'Close',
+    });
+  }
 
   /** What the duel wants next, applied once the current turn has played out. */
   private duelNext: Next | null = null;

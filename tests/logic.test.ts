@@ -1456,3 +1456,26 @@ describe('trainer tactics', () => {
     expect(b.eActive).toBe(2);
   });
 });
+
+describe('duel forfeits', () => {
+  it('a forfeit ends the battle for both: the forfeiter loses, the other wins', async () => {
+    const { DuelController } = await import('../src/net/duel');
+    const { defaultArenaMoves } = await import('../src/logic/arena');
+    const pick = (id: string) => ({ speciesId: id, stage: 1, moves: defaultArenaMoves(id, 1) });
+    const info = { seed: 1, hostName: 'Ann', guestName: 'Bo', hostTeam: [pick('emberkit')], guestTeam: [pick('mossling')] };
+    const queue: { to: 'host' | 'guest'; msg: any }[] = [];
+    const host = new DuelController('host', info, { send: (m) => queue.push({ to: 'guest', msg: m }) });
+    const guest = new DuelController('guest', info, { send: (m) => queue.push({ to: 'host', msg: m }) });
+    let hostEnd: any = null;
+    let guestEnd: any = null;
+    host.attach({ step: (_e, n) => (hostEnd = n) });
+    guest.attach({ step: (_e, n) => (guestEnd = n) });
+    guest.forfeit();
+    while (queue.length) {
+      const { to, msg } = queue.shift()!;
+      (to === 'host' ? host : guest).receive(msg);
+    }
+    expect(guestEnd).toEqual({ phase: 'end', won: false });
+    expect(hostEnd).toEqual({ phase: 'end', won: true });
+  });
+});
