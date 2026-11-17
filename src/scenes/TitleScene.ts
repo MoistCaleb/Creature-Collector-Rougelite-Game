@@ -55,8 +55,8 @@ export class TitleScene extends Phaser.Scene {
       this.tweens.add({ targets: img, y: ly(180), yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
     });
 
-    text(this, lx, ly(70), 'CREATURE', 44, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
-    text(this, lx, ly(115), 'ROGUELITE', 30, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
+    text(this, lx, LANDSCAPE ? 104 : 86, 'HEXBOUND', 52, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    text(this, lx, LANDSCAPE ? 146 : 126, 'A HEXLING ROGUELITE', 18, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
     text(this, lx, ly(270), `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
     text(this, lx, ly(294), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
@@ -83,7 +83,7 @@ export class TitleScene extends Phaser.Scene {
       { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Passives & achievements', fontSize: 16 },
     );
 
-    button(this, cx - 82, ry(550), 156, 54, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
+    button(this, cx - 82, ry(550), 156, 54, 'Hexling Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
     // Daily run: the same seed for everyone today.
     const today = todayUtc();
     const best = dailyPlayed(meta, today)?.best ?? null;
@@ -141,7 +141,7 @@ export class TitleScene extends Phaser.Scene {
       this,
       lx,
       LANDSCAPE ? 398 : H - 62,
-      'Climb 3 floors. Pick your path.\nCatch creatures, evolve, prestige.\nDeath is permanent.',
+      'Climb 3 floors. Pick your path.\nCatch Hexlings, evolve, prestige.\nDeath is permanent.',
       16,
       COLORS.textDim,
       { align: 'center', lineSpacing: 6 },

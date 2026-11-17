@@ -63,7 +63,7 @@ export class ArenaScene extends Phaser.Scene {
       color: 0x3b6d4a,
       fontSize: 20,
       enabled: this.team.length > 0,
-      sub: this.team.length ? 'Full heal before every round' : 'Add at least one creature',
+      sub: this.team.length ? 'Full heal before every round' : 'Add at least one Hexling',
       glyph: 'swords',
     });
 
@@ -92,7 +92,7 @@ export class ArenaScene extends Phaser.Scene {
     const bg = this.add.rectangle(x, y, sw, SLOT_H - 8, p ? COLORS.panel : 0x18141f).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     bg.setInteractive({ useHandCursor: true }).on('pointerup', () => (p ? this.scene.start('ArenaEdit', { slot: i }) : this.scene.start('ArenaPick', { slot: this.team.length })));
     if (!p) {
-      text(this, x + sw / 2, y + (SLOT_H - 8) / 2, '+ Add a creature', 16, COLORS.textDim).setOrigin(0.5);
+      text(this, x + sw / 2, y + (SLOT_H - 8) / 2, '+ Add a Hexling', 16, COLORS.textDim).setOrigin(0.5);
       return;
     }
     const key = ensureCreatureTexture(this, p.speciesId, p.stage);
@@ -126,7 +126,7 @@ export class ArenaScene extends Phaser.Scene {
     const opp = arenaOpponent(l.round, l.seed);
     openPicker(this, {
       title: `Round ${l.round + 1} of ${ARENA_ROUNDS}`,
-      subtitle: `${opp.name} sends out ${opp.team.length} creatures. Your team is fully healed.`,
+      subtitle: `${opp.name} sends out ${opp.team.length} Hexlings. Your team is fully healed.`,
       rows: opp.team.map((c) => ({ creature: c, text: `${creatureName(c)} · Lv ${c.level}` })),
       options: [{ label: 'Fight!', color: 0x8a2c2c }],
       onPick: () => {

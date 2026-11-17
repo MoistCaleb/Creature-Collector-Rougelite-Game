@@ -32,57 +32,57 @@ export const BOSSES: Record<Element, BossDef> = {
   Fire: {
     element: 'Fire', name: 'Ignis', title: 'the Kiln Warden', partner: 'Earth',
     quote: 'Everything here burns. Even you.',
-    rule: 'scorch', ruleName: 'Scorched Ground', ruleDesc: 'Your active creature takes damage every turn unless it is Fire type.',
+    rule: 'scorch', ruleName: 'Scorched Ground', ruleDesc: 'Your active Hexling takes damage every turn unless it is Fire type.',
   },
   Frost: {
     element: 'Frost', name: 'Hela', title: 'Queen of the Whiteout', partner: 'Water',
     quote: 'Slow down. Stay a while. Forever.',
-    rule: 'whiteout', ruleName: 'Whiteout', ruleDesc: 'Your creatures lose 1 Speed whenever they enter battle.',
+    rule: 'whiteout', ruleName: 'Whiteout', ruleDesc: 'Your Hexlings lose 1 Speed whenever they enter battle.',
   },
   Nature: {
     element: 'Nature', name: 'Bramble', title: 'the Thornmother', partner: 'Toxic',
     quote: 'Touch my children and you will bleed.',
-    rule: 'thorns', ruleName: 'Thornwall', ruleDesc: 'Your attacks on her creatures hurt you for 15% of the damage dealt.',
+    rule: 'thorns', ruleName: 'Thornwall', ruleDesc: 'Your attacks on her Hexlings hurt you for 15% of the damage dealt.',
   },
   Earth: {
     element: 'Earth', name: 'Gorran', title: 'the Unmoved', partner: 'Metal',
     quote: 'Mountains do not fall. Neither do I.',
-    rule: 'bulwark', ruleName: 'Bulwark', ruleDesc: 'His creatures enter battle with +1 Defense.',
+    rule: 'bulwark', ruleName: 'Bulwark', ruleDesc: 'His Hexlings enter battle with +1 Defense.',
   },
   Storm: {
     element: 'Storm', name: 'Volta', title: 'the Living Gale', partner: 'Light',
     quote: 'You will never see me coming.',
-    rule: 'tailwind', ruleName: 'Tailwind', ruleDesc: 'Her creatures always strike first, unless you use a priority move.',
+    rule: 'tailwind', ruleName: 'Tailwind', ruleDesc: 'Her Hexlings always strike first, unless you use a priority move.',
   },
   Water: {
     element: 'Water', name: 'Maren', title: 'Keeper of the Undertow', partner: 'Frost',
     quote: 'Every retreat costs something down here.',
-    rule: 'riptide', ruleName: 'Riptide', ruleDesc: 'Each creature you send in takes 1/8 of its HP as damage.',
+    rule: 'riptide', ruleName: 'Riptide', ruleDesc: 'Each Hexling you send in takes 1/8 of its HP as damage.',
   },
   Metal: {
     element: 'Metal', name: 'Forge', title: 'the Iron Engine', partner: 'Storm',
     quote: 'Every turn I grow stronger. Can you keep up?',
-    rule: 'overclock', ruleName: 'Overclock', ruleDesc: 'His active creature gains +1 Attack at the end of every turn.',
+    rule: 'overclock', ruleName: 'Overclock', ruleDesc: 'His active Hexling gains +1 Attack at the end of every turn.',
   },
   Toxic: {
     element: 'Toxic', name: 'Morva', title: 'the Plague Bloom', partner: 'Shadow',
     quote: 'Breathe deep, little ones.',
-    rule: 'miasma', ruleName: 'Miasma', ruleDesc: 'Your creatures are poisoned whenever they enter battle.',
+    rule: 'miasma', ruleName: 'Miasma', ruleDesc: 'Your Hexlings are poisoned whenever they enter battle.',
   },
   Shadow: {
     element: 'Shadow', name: 'Nyx', title: 'the Eclipse', partner: 'Spirit',
     quote: 'In the dark, your courage fails.',
-    rule: 'dread', ruleName: 'Dread', ruleDesc: 'Your creatures lose 1 Attack whenever they enter battle.',
+    rule: 'dread', ruleName: 'Dread', ruleDesc: 'Your Hexlings lose 1 Attack whenever they enter battle.',
   },
   Light: {
     element: 'Light', name: 'Solenne', title: 'the Radiant', partner: 'Spirit',
     quote: 'The light mends all who serve it.',
-    rule: 'sanctuary', ruleName: 'Sanctuary', ruleDesc: 'Her active creature heals at the end of every turn.',
+    rule: 'sanctuary', ruleName: 'Sanctuary', ruleDesc: 'Her active Hexling heals at the end of every turn.',
   },
   Spirit: {
     element: 'Spirit', name: 'Wraithe', title: 'the Hollow King', partner: 'Shadow',
     quote: 'Strike me down. I will take you with me.',
-    rule: 'curse', ruleName: 'Death Curse', ruleDesc: 'When one of his creatures faints, your active creature takes heavy damage.',
+    rule: 'curse', ruleName: 'Death Curse', ruleDesc: 'When one of his Hexlings faints, your active Hexling takes heavy damage.',
   },
   Dragon: {
     element: 'Dragon', name: 'Vharos', title: 'the Last Wyrm', partner: 'Fire',

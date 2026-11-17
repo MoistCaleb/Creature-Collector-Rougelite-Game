@@ -445,7 +445,7 @@ export class MapScene extends Phaser.Scene {
       subtitle: ev.text,
       options: [
         ...opts.map((o) => {
-          const blocked = o.blocked?.(run) ?? (o.target && !allCreatures(run).some((c) => o.eligible?.(run, c) ?? true) ? 'No creature can do this' : null);
+          const blocked = o.blocked?.(run) ?? (o.target && !allCreatures(run).some((c) => o.eligible?.(run, c) ?? true) ? 'No Hexling can do this' : null);
           return { label: o.label, sub: blocked ?? o.sub(run), disabled: !!blocked, color: 0x2f4a6b };
         }),
         { label: ev.leave ?? 'Walk away', color: 0x3a3450 },
@@ -505,7 +505,7 @@ export class MapScene extends Phaser.Scene {
       restoreUses(c);
     }
     sfx.heal();
-    showMessage(this, 'Rest', `Your creatures recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`, this.done);
+    showMessage(this, 'Rest', `Your Hexlings recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`, this.done);
   }
 
   private doLevelUp() {
@@ -527,8 +527,8 @@ export class MapScene extends Phaser.Scene {
       title: 'Training Grounds',
       subtitle: 'How do you want to train?',
       options: [
-        { label: 'Focus training', sub: `One creature gains ${focus} levels` },
-        { label: 'Team drills', sub: `Every creature, bench included, gains ${drill} levels` },
+        { label: 'Focus training', sub: `One Hexling gains ${focus} levels` },
+        { label: 'Team drills', sub: `Every Hexling, bench included, gains ${drill} levels` },
       ],
       onPick: (i) => {
         trackStat(run, 'levelups');
@@ -538,7 +538,7 @@ export class MapScene extends Phaser.Scene {
           for (const { c } of rows) addLevels(c, drill);
           return report('Team drills', rows);
         }
-        this.pickCreature('Focus training', `Choose a creature (+${focus} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
+        this.pickCreature('Focus training', `Choose a Hexling (+${focus} levels)`, allCreatures(run), (c) => c.level >= levelCap(c), (c) => {
           const before = c.level;
           addLevels(c, focus);
           sfx.levelUp();
@@ -610,21 +610,21 @@ export class MapScene extends Phaser.Scene {
       showMessage(
         this,
         'Prestige Altar',
-        'Prestige requires sacrificing a bench creature that shares a type with the one you empower.\n\nYou have no valid pair. The altar stays silent.',
+        'Prestige requires sacrificing a bench Hexling that shares a type with the one you empower.\n\nYou have no valid pair. The altar stays silent.',
         this.done,
       );
       return;
     }
     this.pickCreature(
       'Prestige Altar',
-      'Choose a creature to empower (+15% stats, +5 level cap)',
+      'Choose a Hexling to empower (+15% stats, +5 level cap)',
       allCreatures(run),
       (c) => !targets.includes(c),
       (target) => {
         const fodder = run.bench.filter((b) => b !== target && sharesType(b, target));
         this.pickCreature(
           'Choose a sacrifice',
-          `This bench creature will be gone forever to empower ${creatureName(target)}.`,
+          `This bench Hexling will be gone forever to empower ${creatureName(target)}.`,
           fodder,
           () => false,
           (sac) => {
@@ -648,7 +648,7 @@ export class MapScene extends Phaser.Scene {
     const label = (sl: ShopSlot) => {
       if (sl.item !== 'recruit') return slotName(sl);
       const c = sl.recruit!;
-      const name = hasSeenForm(state.meta.dex, c.speciesId, c.stage) ? creatureName(c) : 'Mystery creature';
+      const name = hasSeenForm(state.meta.dex, c.speciesId, c.stage) ? creatureName(c) : 'Mystery Hexling';
       return `Recruit: ${name} Lv ${c.level}`;
     };
     const reroll = rerollPrice(run, shop);
@@ -704,7 +704,7 @@ export class MapScene extends Phaser.Scene {
     const eligible = eligibleTargets(run, slot.item);
     openPicker(this, {
       title: def.name,
-      subtitle: `${def.desc}. Choose a creature.`,
+      subtitle: `${def.desc}. Choose a Hexling.`,
       options: allCreatures(run).map((c) => ({ creature: c, disabled: !eligible.includes(c) })),
       onPick: (k) => {
         const c = allCreatures(run)[k];

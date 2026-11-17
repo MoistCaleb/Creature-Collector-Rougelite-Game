@@ -53,10 +53,10 @@ export interface Achievement {
 /** Each achievement unlocks one trainer passive. Progress counts across every run, won or lost. */
 export const ACHIEVEMENTS: Achievement[] = [
   { id: 'first-aid', name: 'First Aid', desc: 'Rest at 10 Rest nodes', stat: 'rests', goal: 10, passive: 'medic' },
-  { id: 'collector', name: 'Collector', desc: 'Catch 10 creatures', stat: 'caught', goal: 10, passive: 'scout' },
+  { id: 'collector', name: 'Collector', desc: 'Catch 10 Hexlings', stat: 'caught', goal: 10, passive: 'scout' },
   { id: 'veteran', name: 'Veteran', desc: 'Win 50 battles', stat: 'battlesWon', goal: 50, passive: 'drill' },
   { id: 'big-spender', name: 'Big Spender', desc: 'Spend 500 coins', stat: 'coinsSpent', goal: 500, passive: 'haggler' },
-  { id: 'metamorphosis', name: 'Metamorphosis', desc: 'Evolve 5 creatures', stat: 'evolutions', goal: 5, passive: 'evolutionist' },
+  { id: 'metamorphosis', name: 'Metamorphosis', desc: 'Evolve 5 Hexlings', stat: 'evolutions', goal: 5, passive: 'evolutionist' },
   { id: 'wanderer', name: 'Wanderer', desc: 'Resolve 20 events', stat: 'events', goal: 20, passive: 'explorer' },
   { id: 'champion', name: 'Champion', desc: 'Win a run', stat: 'wins', goal: 1, passive: 'champion' },
   { id: 'prospector', name: 'Prospector', desc: 'Earn 2,000 coins', stat: 'coinsEarned', goal: 2000, passive: 'coinpurse' },
@@ -69,7 +69,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'guardian-slayer', name: 'Guardian Slayer', desc: 'Defeat 15 floor bosses', stat: 'bossesDefeated', goal: 15, passive: 'ironwill' },
   { id: 'treasure-hunter', name: 'Treasure Hunter', desc: 'Open 15 treasure chests', stat: 'treasures', goal: 15, passive: 'lucky' },
   { id: 'chemist', name: 'Chemist', desc: 'Use 15 potions', stat: 'potionsUsed', goal: 15, passive: 'apothecary' },
-  { id: 'outfitter', name: 'Outfitter', desc: 'Give your creatures 10 held items', stat: 'heldEquipped', goal: 10, passive: 'quartermaster' },
+  { id: 'outfitter', name: 'Outfitter', desc: 'Give your Hexlings 10 held items', stat: 'heldEquipped', goal: 10, passive: 'quartermaster' },
   { id: 'hexer', name: 'Hexer', desc: 'Inflict 30 status conditions', stat: 'statusInflicted', goal: 30, passive: 'afflicter' },
   { id: 'trial-by-fire', name: 'Trial by Fire', desc: 'Win a run at Heat 2', stat: 'heatUnlocked', goal: 2, passive: 'tempered' },
   { id: 'in-tune', name: 'In Tune', desc: 'Win 25 battles with a team synergy active', stat: 'synergyWins', goal: 25, passive: 'harmonist' },

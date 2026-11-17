@@ -165,7 +165,7 @@ export class EndScene extends Phaser.Scene {
     const meta = state.meta;
     openPicker(this, {
       title: 'Save a loadout',
-      subtitle: 'Its form and moves are saved. In the team builder, open this creature and tap Loadouts to use them.',
+      subtitle: 'Its form and moves are saved. In the team builder, open this Hexling and tap Loadouts to use them.',
       options: survivors.map((c) => ({
         creature: c,
         disabled: hasLoadout(meta, c),

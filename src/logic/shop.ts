@@ -31,13 +31,13 @@ export interface ItemDef {
 
 export const ITEMS: Record<ItemId, ItemDef> = {
   potion: { name: 'Potion', desc: 'Carry it · heals 50% and cures status, even mid-battle', basePrice: 15, weight: 10, target: 'none' },
-  restore: { name: 'Full Restore', desc: 'Heal every creature to full, cure statuses and restore move uses', basePrice: 70, weight: 6, target: 'none' },
-  manual: { name: 'Training Manual', desc: 'One creature gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
+  restore: { name: 'Full Restore', desc: 'Heal every Hexling to full, cure statuses and restore move uses', basePrice: 70, weight: 6, target: 'none' },
+  manual: { name: 'Training Manual', desc: 'One Hexling gains 2 levels', basePrice: 45, weight: 9, target: 'creature' },
   scroll: { name: 'Skill Scroll', desc: 'Upgrade one move a tier', basePrice: 55, weight: 8, target: 'move' },
-  stone: { name: 'Evolution Stone', desc: 'Evolve a creature that has reached Lv 30 (or 65 for its final form)', basePrice: 120, weight: 5, target: 'none' },
-  sigil: { name: 'Prestige Sigil', desc: 'Prestige a creature, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
-  recruit: { name: 'Recruit', desc: 'A creature joins your party', basePrice: 80, weight: 6, target: 'none' },
-  held: { name: 'Held item', desc: 'Give it to a creature from the Team screen', basePrice: 60, weight: 7, target: 'none' },
+  stone: { name: 'Evolution Stone', desc: 'Evolve a Hexling that has reached Lv 30 (or 65 for its final form)', basePrice: 120, weight: 5, target: 'none' },
+  sigil: { name: 'Prestige Sigil', desc: 'Prestige a Hexling, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
+  recruit: { name: 'Recruit', desc: 'A Hexling joins your party', basePrice: 80, weight: 6, target: 'none' },
+  held: { name: 'Held item', desc: 'Give it to a Hexling from the Team screen', basePrice: 60, weight: 7, target: 'none' },
 };
 
 /** Display name of a slot (held items show which item). */
@@ -127,7 +127,7 @@ export function eligibleTargets(run: Run, item: ItemId): Creature[] {
 /** Whether buying this would do anything right now. Returns a reason if not. */
 export function unusableReason(run: Run, slot: ShopSlot): string | null {
   const def = ITEMS[slot.item];
-  if (def.target !== 'none' && eligibleTargets(run, slot.item).length === 0) return 'No creature can use this';
+  if (def.target !== 'none' && eligibleTargets(run, slot.item).length === 0) return 'No Hexling can use this';
   if (slot.item === 'restore' && allCreatures(run).every((c) => c.hp >= stats(c).hp && !c.status)) return 'Everyone is healthy';
   if (slot.item === 'recruit' && rosterFull(run)) return 'Your party is full';
   if (slot.item === 'potion' && (run.potions ?? 0) >= maxPotions(run)) return `Your pouch is full (${maxPotions(run)} potions)`;
@@ -164,14 +164,14 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       return `Move upgraded to tier ${target!.moves[moveIndex!].tier}.`;
     case 'stone':
       run.evoStones += 1;
-      return 'Evolution Stone added. Use it from the Team screen on a creature at Lv 30 (or 65 for its final form).';
+      return 'Evolution Stone added. Use it from the Team screen on a Hexling at Lv 30 (or 65 for its final form).';
     case 'sigil':
       const lv = target!.level;
       prestigeTracked(run, target!);
       return `Prestiged to ${'★'.repeat(target!.stars)}.${releaseNote(target!, lv)}`;
     case 'held':
       stash(run, slot.held ?? rollHeld(run.rng));
-      return 'Added to your bag. Give it to a creature from the Team screen.';
+      return 'Added to your bag. Give it to a Hexling from the Team screen.';
     case 'recruit': {
       const c = slot.recruit!;
       if (run.team.length < TEAM_MAX) run.team.push(c);

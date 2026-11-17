@@ -43,7 +43,7 @@ export class TeamsScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.edit(i));
       text(this, cx + 12, y + 8, t.name, 17, COLORS.text, { fontStyle: 'bold' });
       if (i === active) text(this, cx + 12, y + 30, LANDSCAPE ? 'ACTIVE · Arena ladder' : 'ACTIVE · used by the Arena ladder', 11, '#ffc94d', { fontStyle: 'bold' });
-      else text(this, cx + 12, y + 30, `${picks.length}/${ARENA_TEAM} creatures`, 11, COLORS.textDim);
+      else text(this, cx + 12, y + 30, `${picks.length}/${ARENA_TEAM} Hexlings`, 11, COLORS.textDim);
       picks.forEach((p, k) => {
         const x = cx + 34 + k * 56;
         this.add.image(x, y + 64, ensureCreatureTexture(this, p.speciesId, p.stage)).setScale(1.1 * SPRITE_FIT);
