@@ -18,19 +18,36 @@ export const RULE_TAGS: Record<BossRule, { tag: string; against: 'you' | 'foe' }
   sanctuary: { tag: 'THEY HEAL EVERY TURN', against: 'foe' },
   curse: { tag: 'EACH FAINT OF THEIRS HITS YOU HARD', against: 'you' },
   pride: { tag: 'THEIR ACE +1 ATTACK, +1 SPEED', against: 'foe' },
+  brittle: { tag: '−1 DEFENSE WHEN YOU SEND ONE IN', against: 'you' },
+  fog: { tag: 'YOUR MOVES −15% ACCURACY', against: 'you' },
+  keeneye: { tag: 'THEIR MOVES NEVER MISS', against: 'foe' },
+  leech: { tag: 'THEY DRAIN YOU EVERY TURN', against: 'you' },
+  vengeance: { tag: '+1 ATTACK AFTER EACH FAINT', against: 'foe' },
+  static: { tag: 'MAY BE PARALYSED WHEN YOU SEND ONE IN', against: 'you' },
+  ironhide: { tag: 'SUPER-EFFECTIVE HITS WEAKER', against: 'foe' },
+  secondwind: { tag: 'THEY HEAL ONCE WHEN LOW', against: 'foe' },
 };
+
+export interface RuleInfo {
+  rule: BossRule;
+  name: string;
+  desc: string;
+}
 
 /**
  * The guardian's rule, before the fight: a warning card that makes the rule impossible to miss.
  * A hazard-striped header, the rule's name in big red, a short summary of what it does, whether it
  * hurts your Hexlings or powers up theirs, and the full description. "Fight!" closes it.
  */
-export function bossRuleCard(scene: Phaser.Scene, boss: BossDef, onFight: () => void) {
-  const info = RULE_TAGS[boss.rule];
+export function bossRuleCard(scene: Phaser.Scene, boss: BossDef, rules: RuleInfo[], onFight: () => void) {
+  const n = rules.length;
   const root = scene.add.container(0, 0).setDepth(1000);
   root.add(fullRect(scene, 0x000000, 0.8).setInteractive());
-  const pw = LANDSCAPE ? 640 : W - 24;
-  const ph = LANDSCAPE ? 420 : 470;
+  // One rule: a big box. Two or three (higher Heat): stacked upright, side by side sideways.
+  const pw = LANDSCAPE ? (n > 1 ? 780 : 640) : W - 24;
+  const boxH = n === 1 ? (LANDSCAPE ? 200 : 250) : LANDSCAPE ? 206 : n === 2 ? 168 : 158;
+  const headH = 34 + 14 + 30 + 40;
+  const ph = LANDSCAPE ? 430 : n === 1 ? 470 : headH + n * (boxH + 8) + 80;
   const panel = scene.add.container(W / 2, H / 2);
   root.add(panel);
   // Panel-local coordinates: the panel's top-left corner is (left, top).
@@ -60,7 +77,7 @@ export function bossRuleCard(scene: Phaser.Scene, boss: BossDef, onFight: () => 
   panel.add(scene.add.rectangle(0, top + hh / 2, LANDSCAPE ? 250 : 236, 26, 0x1a0a0e).setStrokeStyle(2, 0xe0524a));
   panel.add(icon(scene, -(LANDSCAPE ? 104 : 98), top + hh / 2, 'skull', 16));
   panel.add(icon(scene, LANDSCAPE ? 104 : 98, top + hh / 2, 'skull', 16));
-  panel.add(text(scene, 0, top + hh / 2, 'GUARDIAN RULE', 16, '#ff6a5a', { fontStyle: 'bold' }).setOrigin(0.5));
+  panel.add(text(scene, 0, top + hh / 2, n > 1 ? `${n} GUARDIAN RULES` : 'GUARDIAN RULE', 16, '#ff6a5a', { fontStyle: 'bold' }).setOrigin(0.5));
 
   // Who and their quote.
   let y = top + hh + 14;
@@ -70,31 +87,13 @@ export function bossRuleCard(scene: Phaser.Scene, boss: BossDef, onFight: () => 
   panel.add(quote);
   y += quote.height + 14;
 
-  // The rule itself.
-  const boxH = LANDSCAPE ? 200 : 250;
-  const box = scene.add.rectangle(0, y, pw - 28, boxH, 0x3a0d14).setOrigin(0.5, 0).setStrokeStyle(3, 0xff4d4d);
-  panel.add(box);
-  scene.tweens.add({ targets: box, strokeAlpha: 0.35, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
-  let by = y + 14;
-  panel.add(text(scene, 0, by, boss.ruleName.toUpperCase(), LANDSCAPE ? 30 : 32, '#ffffff', { fontStyle: 'bold', stroke: '#8a1c1c', strokeThickness: 6 }).setOrigin(0.5, 0));
-  by += LANDSCAPE ? 50 : 58;
-  // Against you (red) or powering them up (orange).
-  const against = info.against === 'you';
-  const who = against ? 'HURTS YOUR HEXLINGS' : 'POWERS UP THEIR HEXLINGS';
-  const whoChip = scene.add.container(0, by);
-  const whoT = text(scene, 0, 0, who, 12, '#1a0a0e', { fontStyle: 'bold' }).setOrigin(0.5);
-  whoChip.add([scene.add.rectangle(0, 0, whoT.width + 20, 22, against ? 0xff6a5a : 0xffa04d), whoT]);
-  panel.add(whoChip);
-  by += 24;
-  // The summary, big.
-  const tag = text(scene, 0, by, info.tag, LANDSCAPE ? 20 : 21, against ? '#ff8a7a' : '#ffc06a', { fontStyle: 'bold', align: 'center', wordWrap: { width: pw - 70 } }).setOrigin(0.5, 0);
-  panel.add(tag);
-  scene.tweens.add({ targets: tag, scale: 1.05, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
-  by += tag.height + 14;
-  panel.add(scene.add.rectangle(0, by, pw - 80, 1, 0xff6a5a, 0.5));
-  by += 10;
-  panel.add(text(scene, 0, by, boss.ruleDesc, 15, COLORS.text, { align: 'center', wordWrap: { width: pw - 70 }, lineSpacing: 3 }).setOrigin(0.5, 0));
-  panel.add(text(scene, 0, y + boxH - 22, 'Shown on screen for the whole fight', 11, COLORS.textDim).setOrigin(0.5, 0));
+  // The rules.
+  const boxW = LANDSCAPE && n > 1 ? (pw - 28 - (n - 1) * 8) / n : pw - 28;
+  rules.forEach((r, i) => {
+    const bx = LANDSCAPE && n > 1 ? -pw / 2 + 14 + boxW / 2 + i * (boxW + 8) : 0;
+    const byTop = LANDSCAPE && n > 1 ? y : y + i * (boxH + 8);
+    ruleBox(scene, panel, bx, byTop, boxW, boxH, r, n === 1, i > 0);
+  });
 
   const close = () => {
     root.destroy();
@@ -113,8 +112,50 @@ export function bossRuleCard(scene: Phaser.Scene, boss: BossDef, onFight: () => 
     onComplete: () => {
       sfx.statDown();
       scene.cameras.main.shake(180, 0.006);
-      scene.tweens.add({ targets: box, x: { from: -6, to: 6 }, yoyo: true, repeat: 2, duration: 40, onComplete: () => box.setX(0) });
+      scene.tweens.add({ targets: panel, x: { from: W / 2 - 6, to: W / 2 + 6 }, yoyo: true, repeat: 2, duration: 40, onComplete: () => panel.setX(W / 2) });
     },
   });
   return root;
+}
+
+/** One rule in its pulsing red box: name, who it hits, a short summary and the full description. */
+function ruleBox(scene: Phaser.Scene, panel: Phaser.GameObjects.Container, x: number, y: number, w: number, h: number, r: RuleInfo, big: boolean, extra: boolean) {
+  const info = RULE_TAGS[r.rule];
+  const box = scene.add.rectangle(x, y, w, h, 0x3a0d14).setOrigin(0.5, 0).setStrokeStyle(3, 0xff4d4d);
+  panel.add(box);
+  scene.tweens.add({ targets: box, strokeAlpha: 0.35, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
+  if (extra) {
+    const t = text(scene, x - w / 2 + 8, y + 6, 'HEAT', 10, '#1a0a0e', { fontStyle: 'bold', backgroundColor: '#ffa04d', padding: { x: 4, y: 1 } });
+    panel.add(t);
+  }
+  const ww = w - 24;
+  let by = y + (big ? 14 : 10);
+  const name = text(scene, x, by, r.name.toUpperCase(), big ? (LANDSCAPE ? 30 : 32) : 22, '#ffffff', {
+    fontStyle: 'bold',
+    stroke: '#8a1c1c',
+    strokeThickness: big ? 6 : 5,
+    align: 'center',
+    wordWrap: { width: ww },
+  }).setOrigin(0.5, 0);
+  panel.add(name);
+  by += name.height + (big ? 8 : 4);
+  // Against you (red) or powering them up (orange).
+  const against = info.against === 'you';
+  const who = against ? 'HURTS YOUR HEXLINGS' : 'POWERS UP THEIR HEXLINGS';
+  const chipT = text(scene, x, by + 11, who, big ? 12 : 10, '#1a0a0e', { fontStyle: 'bold' }).setOrigin(0.5);
+  panel.add([scene.add.rectangle(x, by + 11, chipT.width + 16, big ? 22 : 18, against ? 0xff6a5a : 0xffa04d), chipT]);
+  by += big ? 30 : 26;
+  // The summary, big.
+  const tag = text(scene, x, by, info.tag, big ? (LANDSCAPE ? 20 : 21) : 15, against ? '#ff8a7a' : '#ffc06a', {
+    fontStyle: 'bold',
+    align: 'center',
+    wordWrap: { width: ww },
+  }).setOrigin(0.5, 0);
+  panel.add(tag);
+  scene.tweens.add({ targets: tag, scale: 1.05, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+  by += tag.height + (big ? 14 : 8);
+  panel.add(scene.add.rectangle(x, by, w - 50, 1, 0xff6a5a, 0.5));
+  by += big ? 10 : 6;
+  panel.add(text(scene, x, by, r.desc, big ? 15 : 12, COLORS.text, { align: 'center', wordWrap: { width: ww }, lineSpacing: 2 }).setOrigin(0.5, 0));
+  if (big) panel.add(text(scene, x, y + h - 22, 'Shown on screen for the whole fight', 11, COLORS.textDim).setOrigin(0.5, 0));
 }

@@ -1,4 +1,4 @@
-import { BOSSES } from '../data/trainers';
+import { BOSSES, EXTRA_RULE_LEVELS, extraRuleCount } from '../data/trainers';
 import * as storage from '../storage';
 import { BALANCE } from '../data/balance';
 import { HELD, HELD_IDS, type HeldId } from '../data/held';
@@ -704,7 +704,8 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     level += heat.enemyLevels;
     if (kind === 'elite') level += BALANCE.eliteLevelBonus + heat.eliteLevels;
     if (kind === 'boss') {
-      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0) + heat.enemyLevels + heat.bossLevels;
+      // Extra rules at Heat 4+ come with a few levels off, to keep the fight fair.
+      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0) + heat.enemyLevels + heat.bossLevels - extraRuleCount(run.heat ?? 0) * EXTRA_RULE_LEVELS;
       stage = Math.min(2, f + (i === count - 1 && BALANCE.bossLeadEvolves[f] ? 1 : 0));
     }
     const c = createCreature(sp.id, Math.max(1, level), stage);

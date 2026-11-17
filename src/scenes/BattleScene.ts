@@ -1,6 +1,6 @@
 import { tip, tipDone } from '../ui/tips';
 import { trainerCutIn } from '../ui/cutin';
-import { bossRuleCard } from '../ui/bossCard';
+import { bossRuleCard, RULE_TAGS } from '../ui/bossCard';
 import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura } from '../ui/shiny';
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
@@ -9,7 +9,7 @@ import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data
 import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
-import { BOSSES, trainerName } from '../data/trainers';
+import { BOSSES, guardianRules, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
 import { emergeFrom, recallToHex, releaseFromHex } from '../ui/entrance';
@@ -234,12 +234,13 @@ export class BattleScene extends Phaser.Scene {
       persist();
     }
     const boss = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
+    // Its own rule, plus extra ones at Heat 4+ (the same ones every time this floor is loaded).
+    const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: run.passive === 'drill' ? 1.1 : 1,
       enemyRandomness: BALANCE.enemyRandomness[this.kind],
-      rule: boss?.rule,
-      ruleName: boss?.ruleName,
+      rules: rules.map((r) => ({ rule: r.rule, name: r.name })),
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
       spareLast: this.kind === 'battle',
       spared: run.activeBattle.spared,
@@ -276,14 +277,29 @@ export class BattleScene extends Phaser.Scene {
     onField(text(this, L.titleRight, L.titleY, title, 14, this.kind === 'battle' ? COLORS.text : '#ff6a5a', { fontStyle: 'bold' }).setOrigin(1, 0));
     if (boss) {
       // The boss's rule stays on screen for the whole fight.
-      this.add.rectangle(16, 96, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
-      icon(this, 32, 109, 'skull', 15);
-      text(this, 44, 101, boss.ruleName, 13, '#ff8a7a', { fontStyle: 'bold' });
-      text(this, 24, 119, boss.ruleDesc, 10, COLORS.text, { wordWrap: { width: 200 } });
+      // The boss's rules stay on screen for the whole fight (several at higher Heat: name and summary).
+      let ry = 96;
+      if (rules.length === 1) {
+        this.add.rectangle(16, ry, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
+        icon(this, 32, 109, 'skull', 15);
+        text(this, 44, 101, boss.ruleName, 13, '#ff8a7a', { fontStyle: 'bold' });
+        text(this, 24, 119, boss.ruleDesc, 10, COLORS.text, { wordWrap: { width: 200 } });
+        ry += 64;
+      } else {
+        const h = 8 + rules.length * 30;
+        this.add.rectangle(16, ry, 214, h, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
+        rules.forEach((r, i) => {
+          const y = ry + 6 + i * 30;
+          icon(this, 30, y + 7, 'skull', 12);
+          text(this, 40, y, r.name, 12, '#ff8a7a', { fontStyle: 'bold' });
+          text(this, 24, y + 15, RULE_TAGS[r.rule].tag.toLowerCase().replace(/^./, (c) => c.toUpperCase()), 9, COLORS.text);
+        });
+        ry += h + 6;
+      }
       const syn = teamSynergy(this.enemies);
       if (syn.length) {
         const line = syn.map((s) => `${s.element} ×${s.count} ${SYNERGY_LABEL[s.stat]} +${Math.round(s.bonus * 100)}%`).join(' · ');
-        text(this, 16, 160, `Synergy: ${line}`, 10, '#ff8a7a', { wordWrap: { width: 214 } });
+        text(this, 16, ry, `Synergy: ${line}`, 10, '#ff8a7a', { wordWrap: { width: 214 } });
       }
     } else if (this.kind === 'elite') {
       onField(text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' }));
@@ -366,7 +382,7 @@ export class BattleScene extends Phaser.Scene {
         this.actions.setVisible(true);
         if (boss) {
           // The guardian's rule, impossible to miss.
-          bossRuleCard(this, boss, begin);
+          bossRuleCard(this, boss, rules, begin);
         } else begin();
       })();
     }

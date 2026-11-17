@@ -5,7 +5,7 @@ import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
 import { fallbackMove, hasUses, outOfMoves, restoreUses, usesLeft, readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
-import { BOSSES } from '../src/data/trainers';
+import { BOSSES, RULES, extraRuleCount, guardianRules } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
@@ -669,6 +669,43 @@ describe('bosses and trainers', () => {
     return c;
   };
   const anyOf = (el: Element) => SPECIES.find((s) => s.types[0] === el && s.types[1] === el)!.id;
+
+  it('guardians bring 1 rule, 2 from Heat 4 and 3 at Heat 8, distinct and the same on reload, a little lower level', () => {
+    for (const el of ELEMENTS) {
+      const boss = BOSSES[el];
+      expect(guardianRules(boss, 0, 7, 0).map((r) => r.rule)).toEqual([boss.rule]);
+      for (const heat of [4, 5, 6, 7, 8]) {
+        const rs = guardianRules(boss, heat, 99, 1);
+        expect(rs).toHaveLength(heat >= 8 ? 3 : 2);
+        expect(rs[0].rule).toBe(boss.rule);
+        expect(new Set(rs.map((r) => r.rule)).size).toBe(rs.length);
+        expect(guardianRules(boss, heat, 99, 1)).toEqual(rs);
+        for (const r of rs) expect(RULES[r.rule]).toBeTruthy();
+      }
+    }
+    expect(extraRuleCount(3)).toBe(0);
+    expect(extraRuleCount(4)).toBe(1);
+    expect(extraRuleCount(8)).toBe(2);
+  });
+
+  it('extra rules: several at once, brittle and dread on entry, keen eye never misses, leech drains', () => {
+    const b = new Battle([mk(anyOf('Water'))], [mk(anyOf('Toxic'))], new Rng(1), {
+      rules: [
+        { rule: 'brittle', name: 'Brittle Air' },
+        { rule: 'dread', name: 'Dread' },
+      ],
+    });
+    b.start();
+    expect(b.p.defStage).toBe(-1);
+    expect(b.p.atkStage).toBe(-1);
+    // Leech: at the end of a turn your Hexling loses HP (both sides just use a status move).
+    const me = mk(anyOf('Water'), 40);
+    const foe = mk(anyOf('Toxic'), 40);
+    const l = new Battle([me], [foe], new Rng(2), { rules: [{ rule: 'leech', name: 'Leech Field' }], enemyRandomness: 0 });
+    l.start();
+    const ev = l.takeTurn({ kind: 'move', index: me.moves.findIndex((m) => moveDef(m).kind !== 'attack') });
+    expect(ev.some((e) => e.kind === 'text' && e.text.startsWith('Leech Field'))).toBe(true);
+  });
 
   it('has a boss for every element', () => {
     for (const el of ELEMENTS) expect(BOSSES[el].element).toBe(el);

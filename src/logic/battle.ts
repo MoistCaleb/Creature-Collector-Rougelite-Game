@@ -129,9 +129,11 @@ export class Battle {
       }
     }
   }
-  /** A floor boss's special rule, if any. */
-  readonly rule: BossRule | null;
-  private ruleName: string;
+  /** A floor boss's special rules (its own, plus extra ones at higher Heat). */
+  readonly rules: BossRule[];
+  private ruleNames: Partial<Record<BossRule, string>> = {};
+  /** Second Wind: enemy creatures that have already used it. */
+  private winded = new Set<number>();
   /** Wild battles: the last enemy is left at 1 HP instead of fainting, so it can be caught. */
   private spareLast: boolean;
   /** The last enemy has been worn down to 1 HP: the battle is won and it awaits catch or finish. */
@@ -158,6 +160,8 @@ export class Battle {
       duel?: { player: string; enemy: string };
       rule?: BossRule;
       ruleName?: string;
+      /** Several rules at once (a guardian at Heat 4+); takes the place of rule/ruleName. */
+      rules?: { rule: BossRule; name: string }[];
       spareLast?: boolean;
       spared?: boolean;
       /** Team synergy multipliers for the player's creatures. */
@@ -177,8 +181,9 @@ export class Battle {
     this.permadeath = opts.permadeath ?? true;
     this.tactics = opts.enemyTactics ? { ...opts.enemyTactics } : null;
     this.duel = opts.duel ?? null;
-    this.rule = opts.rule ?? null;
-    this.ruleName = opts.ruleName ?? 'The field';
+    const list = opts.rules ?? (opts.rule ? [{ rule: opts.rule, name: opts.ruleName ?? 'The field' }] : []);
+    this.rules = list.map((x) => x.rule);
+    for (const x of list) this.ruleNames[x.rule] = x.name;
     this.spareLast = opts.spareLast ?? false;
     this.spared = opts.spared ?? false;
     this.player = playerTeam.map(fresh);
@@ -207,39 +212,50 @@ export class Battle {
 
   /** Boss rules that trigger when a creature enters battle. */
   private onEnter(side: Side, ev: BattleEvent[], skipHpCost = false) {
-    const r = this.rule;
-    if (!r) return;
+    if (!this.rules.length) return;
     const x = side === 'player' ? this.p : this.e;
     if (!isAlive(x.c)) return;
     if (side === 'enemy') {
-      if (r === 'bulwark') this.ruleBump(x, side, 'def', 1, ev);
-      if (r === 'pride' && this.eActive === this.enemy.length - 1) {
-        this.ruleBump(x, side, 'atk', 1, ev);
-        this.ruleBump(x, side, 'spd', 1, ev);
+      if (this.has('bulwark')) this.ruleBump(x, side, 'def', 1, ev, 'bulwark');
+      if (this.has('pride') && this.eActive === this.enemy.length - 1) {
+        this.ruleBump(x, side, 'atk', 1, ev, 'pride');
+        this.ruleBump(x, side, 'spd', 1, ev, 'pride');
       }
       return;
     }
-    if (r === 'whiteout') this.ruleBump(x, side, 'spd', -1, ev);
-    if (r === 'dread') this.ruleBump(x, side, 'atk', -1, ev);
-    if (r === 'miasma' && !x.status) this.inflict(x, side, 'poison', ev, `${this.ruleName}: `);
-    if (r === 'riptide' && !skipHpCost) {
+    if (this.has('whiteout')) this.ruleBump(x, side, 'spd', -1, ev, 'whiteout');
+    if (this.has('dread')) this.ruleBump(x, side, 'atk', -1, ev, 'dread');
+    if (this.has('brittle')) this.ruleBump(x, side, 'def', -1, ev, 'brittle');
+    if (this.has('miasma') && !x.status) this.inflict(x, side, 'poison', ev, `${this.rn('miasma')}: `);
+    if (this.has('static') && !x.status && !skipHpCost && this.rng.chance(0.35)) this.inflict(x, side, 'para', ev, `${this.rn('static')}: `);
+    if (this.has('riptide') && !skipHpCost) {
       const max = stats(x.c).hp;
       const dmg = Math.min(x.c.hp - 1, Math.max(1, Math.floor(max / 8)));
       if (dmg > 0) {
         x.c.hp -= dmg;
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
-        ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(x.c)} is battered by the current!` });
+        ev.push({ kind: 'text', text: `${this.rn('riptide')}: ${creatureName(x.c)} is battered by the current!` });
       }
     }
   }
 
-  private ruleBump(x: Combatant, side: Side, stat: StatKey, by: number, ev: BattleEvent[]) {
+  /** Is this rule in play? */
+  has(r: BossRule): boolean {
+    return this.rules.includes(r);
+  }
+
+  /** A rule's name, for messages. */
+  private rn(r: BossRule): string {
+    return this.ruleNames[r] ?? 'The field';
+  }
+
+  private ruleBump(x: Combatant, side: Side, stat: StatKey, by: number, ev: BattleEvent[], rule: BossRule) {
     const key = stageKey(stat);
     const before = x[key];
     x[key] = Math.max(-MAX_STAGE, Math.min(MAX_STAGE, before + by));
     if (x[key] === before) return;
     ev.push({ kind: 'stat', side, up: by > 0 });
-    ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(x.c)}'s ${STAT_LABEL[stat]} ${by > 0 ? 'rose' : 'fell'}!` });
+    ev.push({ kind: 'text', text: `${this.rn(rule)}: ${creatureName(x.c)}'s ${STAT_LABEL[stat]} ${by > 0 ? 'rose' : 'fell'}!` });
   }
 
   get p(): Combatant {
@@ -319,7 +335,7 @@ export class Battle {
       const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
       const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p);
       const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e));
-      const playerFirst = pPri !== ePri ? pPri : this.rule === 'tailwind' ? false : this.playerGoesFirst();
+      const playerFirst = pPri !== ePri ? pPri : this.has('tailwind') ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       for (const side of order) {
         // A spared creature is too weak to act; the battle is over.
@@ -700,7 +716,10 @@ export class Battle {
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
 
     const targetSideOf: Side = side === 'player' ? 'enemy' : 'player';
-    const acc = user.c.held === 'lens' ? 100 : def.accuracy * (def.kind === 'attack' && this.hasFx(targetSideOf, 'shroud') ? 0.8 : 1);
+    const acc =
+      user.c.held === 'lens' || (side === 'enemy' && this.has('keeneye'))
+        ? 100
+        : def.accuracy * (def.kind === 'attack' && this.hasFx(targetSideOf, 'shroud') ? 0.8 : 1) * (side === 'player' && this.has('fog') ? 0.85 : 1);
     if (this.rng.next() * 100 >= acc) {
       ev.push({ kind: 'text', text: 'It missed!' });
       return;
@@ -730,7 +749,11 @@ export class Battle {
     let landed = 0;
     for (let h = 0; h < hits && isAlive(target.c) && !this.spared; h++) {
       const r = computeDamage(user, target, def, slot.tier, this.rng, el, powerMult);
-      const fxMult = (this.hasFx(side, 'rally') ? 1.25 : 1) * (this.hasFx(targetSide, 'guard') ? 0.75 : 1);
+      const fxMult =
+        (this.hasFx(side, 'rally') ? 1.25 : 1) *
+        (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
+        // Ironhide: each super-effective element only counts x1.25 against their Hexlings.
+        (side === 'player' && this.has('ironhide') ? Math.pow(1.25 / 1.5, r.mult >= 2 ? 2 : r.mult > 1.01 ? 1 : 0) : 1);
       const raw = Math.max(1, Math.round(r.dmg * (side === 'player' ? this.playerDamageMult : 1) * fxMult));
       const dmg = this.hurt(target, raw);
       total += dmg;
@@ -750,11 +773,21 @@ export class Battle {
     if (landed > 1) ev.push({ kind: 'text', text: `Hit ${landed} times!` });
 
     const userMax = stats(user.c).hp;
-    if (this.rule === 'thorns' && side === 'player' && total > 0 && isAlive(user.c)) {
+    // Second Wind: a guardian's Hexling dropping below a third heals once.
+    if (side === 'player' && this.has('secondwind') && isAlive(target.c) && !this.winded.has(target.c.uid)) {
+      const tmax = stats(target.c).hp;
+      if (target.c.hp < tmax / 3) {
+        this.winded.add(target.c.uid);
+        target.c.hp = Math.min(tmax, target.c.hp + Math.ceil(tmax * 0.35));
+        ev.push({ kind: 'heal', side: targetSide, hp: target.c.hp, maxHp: tmax });
+        ev.push({ kind: 'text', text: `${this.rn('secondwind')}: Enemy ${creatureName(target.c)} catches a second wind!` });
+      }
+    }
+    if (this.has('thorns') && side === 'player' && total > 0 && isAlive(user.c)) {
       const th = Math.max(1, Math.round(total * 0.15));
       user.c.hp = Math.max(0, user.c.hp - th);
       ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: th });
-      ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(user.c)} is cut by thorns!` });
+      ev.push({ kind: 'text', text: `${this.rn('thorns')}: ${creatureName(user.c)} is cut by thorns!` });
     }
     if (target.c.held === 'barb' && total > 0 && isAlive(user.c) && !(this.spared && side === 'enemy')) {
       const bb = this.hurt(user, Math.max(1, Math.round(total * 0.15)));
@@ -884,13 +917,14 @@ export class Battle {
         ev.push({ kind: 'enemySend', index: next, hp: this.e.c.hp });
         ev.push({ kind: 'text', text: `${this.tactics?.name ?? 'The enemy'} sends out ${creatureName(this.e.c)}!` });
         this.onEnter('enemy', ev);
+        if (this.has('vengeance')) this.ruleBump(this.e, 'enemy', 'atk', 1, ev, 'vengeance');
       }
-      if (this.rule === 'curse' && isAlive(this.p.c)) {
+      if (this.has('curse') && isAlive(this.p.c)) {
         const max = stats(this.p.c).hp;
         const dmg = Math.max(1, Math.floor(max / 5));
         this.p.c.hp = Math.max(0, this.p.c.hp - dmg);
         ev.push({ kind: 'damage', side: 'player', hp: this.p.c.hp, maxHp: max, amount: dmg });
-        ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(this.p.c)} is struck by the curse!` });
+        ev.push({ kind: 'text', text: `${this.rn('curse')}: ${creatureName(this.p.c)} is struck by the curse!` });
         if (!isAlive(this.p.c)) this.handleFaint('player', ev);
       }
     }
@@ -984,26 +1018,39 @@ export class Battle {
 
   /** Boss rules that trigger at the end of each turn. */
   private ruleEndOfTurn(ev: BattleEvent[]) {
-    const r = this.rule;
-    if (!r || this.outcome() === 'win' || this.outcome() === 'lose') return;
+    if (!this.rules.length || this.outcome() === 'win' || this.outcome() === 'lose') return;
     const p = this.p;
     const e = this.e;
-    if (r === 'scorch' && isAlive(p.c) && !creatureTypes(p.c).includes('Fire')) {
+    if (this.has('scorch') && isAlive(p.c) && !creatureTypes(p.c).includes('Fire')) {
       const max = stats(p.c).hp;
       const dmg = Math.max(1, Math.floor(max / 16));
       p.c.hp = Math.max(0, p.c.hp - dmg);
       ev.push({ kind: 'damage', side: 'player', hp: p.c.hp, maxHp: max, amount: dmg });
-      ev.push({ kind: 'text', text: `${this.ruleName}: ${creatureName(p.c)} is scorched!` });
+      ev.push({ kind: 'text', text: `${this.rn('scorch')}: ${creatureName(p.c)} is scorched!` });
       if (!isAlive(p.c)) this.handleFaint('player', ev);
     }
-    if (r === 'overclock' && isAlive(e.c)) this.ruleBump(e, 'enemy', 'atk', 1, ev);
-    if (r === 'sanctuary' && isAlive(e.c)) {
+    if (this.has('overclock') && isAlive(e.c)) this.ruleBump(e, 'enemy', 'atk', 1, ev, 'overclock');
+    if (this.has('sanctuary') && isAlive(e.c)) {
       const max = stats(e.c).hp;
       if (e.c.hp < max) {
         e.c.hp = Math.min(max, e.c.hp + Math.ceil(max / 12));
         ev.push({ kind: 'heal', side: 'enemy', hp: e.c.hp, maxHp: max });
-        ev.push({ kind: 'text', text: `${this.ruleName}: Enemy ${creatureName(e.c)} is restored by the light!` });
+        ev.push({ kind: 'text', text: `${this.rn('sanctuary')}: Enemy ${creatureName(e.c)} is restored by the light!` });
       }
+    }
+    // Leech Field: your active Hexling feeds theirs.
+    if (this.has('leech') && isAlive(p.c) && isAlive(e.c) && this.outcome() !== 'win') {
+      const pmax = stats(p.c).hp;
+      const dmg = Math.min(p.c.hp, Math.max(1, Math.floor(pmax / 16)));
+      p.c.hp -= dmg;
+      ev.push({ kind: 'damage', side: 'player', hp: p.c.hp, maxHp: pmax, amount: dmg });
+      const emax = stats(e.c).hp;
+      if (e.c.hp < emax) {
+        e.c.hp = Math.min(emax, e.c.hp + dmg);
+        ev.push({ kind: 'heal', side: 'enemy', hp: e.c.hp, maxHp: emax });
+      }
+      ev.push({ kind: 'text', text: `${this.rn('leech')}: Enemy ${creatureName(e.c)} drains ${creatureName(p.c)}!` });
+      if (!isAlive(p.c)) this.handleFaint('player', ev);
     }
   }
 }

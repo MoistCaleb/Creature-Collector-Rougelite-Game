@@ -13,11 +13,11 @@ export const HEAT_LEVELS: HeatLevel[] = [
   { name: 'Heat 1', desc: 'Enemies are 1/2/3 levels higher on floors 1/2/3.' },
   { name: 'Heat 2', desc: 'Survivors only recover 25% HP after a win (Iron Will: 43%).' },
   { name: 'Heat 3', desc: 'Shop prices are 25% higher.' },
-  { name: 'Heat 4', desc: 'Trainers are 1/2/3 more levels higher and always carry held items.' },
+  { name: 'Heat 4', desc: 'Trainers are 1/2/3 more levels higher and always carry held items. Guardians bring a second rule (and are 2 levels lower for it).' },
   { name: 'Heat 5', desc: 'Guardians are 3 levels higher.' },
   { name: 'Heat 6', desc: 'Battles pay 25% fewer coins.' },
   { name: 'Heat 7', desc: 'Enemies are another 1/2/3 levels higher.' },
-  { name: 'Heat 8', desc: 'Guardians are 3 more levels higher and their whole team holds items.' },
+  { name: 'Heat 8', desc: 'Guardians bring a third rule, are 3 more levels higher (2 lower for the rule) and their whole team holds items.' },
 ];
 
 export const MAX_HEAT = HEAT_LEVELS.length - 1;
