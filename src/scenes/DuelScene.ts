@@ -146,7 +146,7 @@ export class DuelScene extends Phaser.Scene {
     const labels: [keyof DuelSettings, string][] = [
       ['bestOf', s.bestOf === 1 ? 'Single battle' : `Best of ${s.bestOf}`],
       ['teamsPerPlayer', `${s.teamsPerPlayer} team${s.teamsPerPlayer > 1 ? 's' : ''} each`],
-      ['teamSize', `${s.teamSize} creature${s.teamSize > 1 ? 's' : ''} per battle`],
+      ['teamSize', `${s.teamSize} Hexling${s.teamSize > 1 ? 's' : ''} per battle`],
       ['level', `Everyone Lv ${s.level}`],
     ];
     const bw = (lw - 8) / 2;
@@ -206,7 +206,7 @@ export class DuelScene extends Phaser.Scene {
         fontSize: 20,
         glyph: 'swords',
         enabled: ready,
-        sub: ready ? `Lv ${s.level} · ${s.teamSize} per side` : `Waiting for both players to bring ${s.teamsPerPlayer} team${s.teamsPerPlayer > 1 ? 's' : ''} with creatures`,
+        sub: ready ? `Lv ${s.level} · ${s.teamSize} per side` : `Waiting for both players to bring ${s.teamsPerPlayer} team${s.teamsPerPlayer > 1 ? 's' : ''} with Hexlings`,
       });
       button(this, rx, by + 66, rw, 58, 'Stage battle', () => this.pickRaceMap(), {
         color: 0x2f4a6b,
@@ -235,7 +235,7 @@ export class DuelScene extends Phaser.Scene {
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
       return;
     }
-    text(this, W / 2, 170, `Which team fights? (${s.teamSize} creature${s.teamSize > 1 ? 's' : ''}, Lv ${s.level})`, 15, COLORS.textDim).setOrigin(0.5, 0);
+    text(this, W / 2, 170, `Which team fights? (${s.teamSize} Hexling${s.teamSize > 1 ? 's' : ''}, Lv ${s.level})`, 15, COLORS.textDim).setOrigin(0.5, 0);
     const n = duel.me!.teams.length;
     duel.me!.teams.forEach((t, i) => {
       // Upright: stacked. Sideways: side by side.

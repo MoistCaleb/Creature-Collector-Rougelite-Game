@@ -608,7 +608,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       case 'waitSwitch':
         this.actions.setVisible(false);
-        this.showWaiting(`${opp} is choosing their next creature.`);
+        this.showWaiting(`${opp} is choosing their next Hexling.`);
         return;
       case 'end':
         this.endMatch(next.won);
@@ -868,7 +868,7 @@ export class BattleScene extends Phaser.Scene {
     this.cancelAuto();
     const list = this.battle.player;
     openPicker(this, {
-      title: forced ? 'Choose your next creature' : 'Switch creature',
+      title: forced ? 'Choose your next Hexling' : 'Switch Hexling',
       subtitle: forced ? undefined : 'Switching uses your turn.',
       options: list.map((x, i) => ({
         creature: x.c,
@@ -1373,20 +1373,20 @@ export class BattleScene extends Phaser.Scene {
       subtitle: 'The guardian\u2019s power is yours to claim.',
       options: [
         { label: 'Full heal', sub: 'Heal your team and bench to full', color: 0x16614f },
-        { label: 'Team prestige', sub: 'Every creature on your main team gains ★', color: 0x7a2a5a },
-        { label: 'Evolve one', sub: evolvable.length ? 'Evolve a creature that has reached its evolution level' : 'No creature has reached its evolution level (Lv 30 / 65)', color: 0x4a2f7a, disabled: evolvable.length === 0 },
+        { label: 'Team prestige', sub: 'Every Hexling on your main team gains ★', color: 0x7a2a5a },
+        { label: 'Evolve one', sub: evolvable.length ? 'Evolve a Hexling that has reached its evolution level' : 'No Hexling has reached its evolution level (Lv 30 / 65)', color: 0x4a2f7a, disabled: evolvable.length === 0 },
         {
           label: 'Claim a guardian',
           sub: full
             ? `Joins at its level +${GUARDIAN_BONUS_LEVELS}, already evolved (release one to make room)`
-            : `One of its creatures joins you at its level +${GUARDIAN_BONUS_LEVELS}, already evolved`,
+            : `One of its Hexlings joins you at its level +${GUARDIAN_BONUS_LEVELS}, already evolved`,
           color: 0x2f4a7a,
         },
       ],
       onPick: (i) => {
         if (i === 0) {
           for (const c of allCreatures(run)) healFraction(c, 1);
-          this.finishFloor('Your creatures are fully healed.');
+          this.finishFloor('Your Hexlings are fully healed.');
         } else if (i === 1) {
           let notes = '';
           run.team.forEach((c) => {
@@ -1396,7 +1396,7 @@ export class BattleScene extends Phaser.Scene {
           this.finishFloor(`Your team glows with prestige!${notes}`);
         } else if (i === 2) {
           openPicker(this, {
-            title: 'Evolve which creature?',
+            title: 'Evolve which Hexling?',
             options: allCreatures(run).map((c) => ({ creature: c, disabled: !readyToEvolve(c), note: canEvolve(c) && !readyToEvolve(c) ? `Evolves at Lv ${evolveLevel(c)}` : undefined })),
             onPick: (k) => {
               const c = allCreatures(run)[k];

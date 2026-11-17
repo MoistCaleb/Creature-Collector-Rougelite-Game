@@ -31,7 +31,7 @@ export class TeamScene extends Phaser.Scene {
   create() {
     const run = state.run!;
     background(this);
-    text(this, 16, 14, 'Your Creatures', 24, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 16, 14, 'Your Hexlings', 24, '#ffc94d', { fontStyle: 'bold' });
     button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
     const bagBtn = button(this, W - 150, 30, 68, 42, 'Bag', () => this.scene.start('Bag', { from: 'Team' }), { fontSize: 16, glyph: 'bag' });
     if ((run.bag ?? []).length) bagBtn.add(this.add.circle(28, -15, 5, 0xffc94d));
@@ -49,7 +49,7 @@ export class TeamScene extends Phaser.Scene {
     } else {
       const hint = dexComplete(run)
         ? `★ Type bonus left: ${unclaimedTypes(run).join(', ') || 'none'}`
-        : 'Tap two creatures to swap. 2+ of an element on the team = synergy.';
+        : 'Tap two Hexlings to swap. 2+ of an element on the team = synergy.';
       text(this, 16, 50, hint, 12, dexComplete(run) ? '#ffc94d' : COLORS.textDim);
     }
 
@@ -63,7 +63,7 @@ export class TeamScene extends Phaser.Scene {
     text(this, benchX, benchY, LANDSCAPE ? `Bench  ${run.bench.length}/${BENCH_MAX}` : `Bench  ${run.bench.length}/${BENCH_MAX}  (second life + prestige fuel)`, 15, COLORS.text);
     run.bench.forEach((c, i) => this.row(benchX, benchY + 20 + i * 68, rowW, c, { list: 'bench', i }));
     if (LANDSCAPE && !this.selectedCreature()) {
-      text(this, 552, 90, 'Tap a creature to see its moves, items and options.\n\nTap two creatures to swap them (team ↔ bench too).\n\nThe bench is a second life and prestige fuel.', 13, COLORS.textDim, { wordWrap: { width: 232 }, lineSpacing: 3 });
+      text(this, 552, 90, 'Tap a Hexling to see its moves, items and options.\n\nTap two Hexlings to swap them (team ↔ bench too).\n\nThe bench is a second life and prestige fuel.', 13, COLORS.textDim, { wordWrap: { width: 232 }, lineSpacing: 3 });
     }
 
     const sel = this.selectedCreature();
@@ -265,7 +265,7 @@ export class TeamScene extends Phaser.Scene {
     const restart = () => this.scene.restart({ selected: this.selected });
     openPicker(this, {
       title: c.held ? `${creatureName(c)} holds ${HELD[c.held].name}` : `Give ${creatureName(c)} an item`,
-      subtitle: c.held ? HELD[c.held].desc : 'Each creature can hold one item. Items come back to your bag if it falls.',
+      subtitle: c.held ? HELD[c.held].desc : 'Each Hexling can hold one item. Items come back to your bag if it falls.',
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...bag.map((id) => ({

@@ -1,6 +1,6 @@
-# Creature Collector Roguelite
+# Hexbound
 
-A mobile-first (portrait, one-thumb) creature-collector roguelite built with TypeScript + Phaser 3.
+A mobile-first creature-collector roguelite built with TypeScript + Phaser 3. The creatures are called **Hexlings**.
 Runs in any phone browser.
 
 See [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the design.
@@ -37,7 +37,7 @@ Saves on the installed app live on that device. The claude.ai preview keeps its 
 - **Hex map** — 3 floors, climb bottom → top, move to any connected hex above you. Floors widen as you go.
 - **Nodes** — Battle, Elite (drops Evolution Stone), Level Up, Skill, Prestige, Rest, Shop, Boss.
 - **Coins & shops** — earn coins from fights, spend them on heals, training, scrolls, stones, sigils and recruits.
-- **Creature Dex** — forms, moves and elements you've seen; evolutions stay hidden until encountered.
+- **Hexling Dex** — forms, moves and elements you've seen; evolutions stay hidden until encountered.
 - **Battles** — 1v1 with switching (costs your turn), 6 elements, dual types, pure-type STAB bonus.
 - **Catching** — the last wild creature is left at 1 HP: finish it for XP and coins, *or* catch it (it joins at its own level and evolution).
 - **Team 4 + bench 3** — bench gets 50% XP, is your second life if the team wipes, and is prestige fuel.

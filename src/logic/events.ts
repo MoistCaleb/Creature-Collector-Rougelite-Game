@@ -60,11 +60,11 @@ export const EVENTS: GameEvent[] = [
   {
     id: 'bargain',
     title: 'Blood Bargain',
-    text: 'A hooded merchant offers coins for a taste of your creatures’ vitality.',
+    text: 'A hooded merchant offers coins for a taste of your Hexlings’ vitality.',
     options: [
       {
         label: 'Offer vitality',
-        sub: (run) => `One creature loses 30% max HP · gain ◉ ${scale(run, 40)}`,
+        sub: (run) => `One Hexling loses 30% max HP · gain ◉ ${scale(run, 40)}`,
         target: true,
         eligible: (_r, c) => c.hp > stats(c).hp * 0.35,
         run: (run, c) => {
@@ -82,7 +82,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Buy the egg',
-        sub: (run) => `◉ ${scale(run, 45)} · a random creature hatches at half your top level`,
+        sub: (run) => `◉ ${scale(run, 45)} · a random Hexling hatches at half your top level`,
         blocked: (run) => (run.coins < scale(run, 45) ? 'Not enough coins' : rosterFull(run) ? 'Your party is full' : null),
         run: (run) => {
           run.coins -= scale(run, 45);
@@ -96,7 +96,7 @@ export const EVENTS: GameEvent[] = [
   {
     id: 'gambler',
     title: 'The Gambler',
-    text: '"Double or nothing, friend?" A grinning creature flips a coin.',
+    text: '"Double or nothing, friend?" A grinning Hexling flips a coin.',
     options: [
       {
         label: 'Bet',
@@ -121,7 +121,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Train hard',
-        sub: () => 'One creature gains 2 levels but takes 20% damage',
+        sub: () => 'One Hexling gains 2 levels but takes 20% damage',
         target: true,
         eligible: (_r, c) => c.level < levelCap(c),
         run: (_run, c) => {
@@ -139,7 +139,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Study it',
-        sub: () => 'One creature learns a new move from its elements',
+        sub: () => 'One Hexling learns a new move from its elements',
         target: true,
         eligible: (_r, c) => tomeMoves(c).length > 0,
         run: (run, c) => {
@@ -158,15 +158,15 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Everyone drinks',
-        sub: () => 'All creatures heal 40%',
+        sub: () => 'All Hexlings heal 40%',
         run: (run) => {
           for (const c of allCreatures(run)) healFraction(c, 0.4);
-          return { text: 'Your creatures feel refreshed.' };
+          return { text: 'Your Hexlings feel refreshed.' };
         },
       },
       {
         label: 'Bathe one',
-        sub: () => 'One creature heals fully',
+        sub: () => 'One Hexling heals fully',
         target: true,
         eligible: (_r, c) => c.hp < stats(c).hp,
         run: (_run, c) => {
@@ -196,7 +196,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Pray',
-        sub: (run) => `One creature: ${luckyOdds(run) * 100}% gain ★, otherwise lose 40% HP`,
+        sub: (run) => `One Hexling: ${luckyOdds(run) * 100}% gain ★, otherwise lose 40% HP`,
         target: true,
         eligible: (_r, c) => canPrestige(c),
         run: (run, c) => {
@@ -214,7 +214,7 @@ export const EVENTS: GameEvent[] = [
   {
     id: 'hatchling',
     title: 'Lost Hatchling',
-    text: 'A wounded young creature from these lands huddles alone.',
+    text: 'A wounded young Hexling from these lands huddles alone.',
     options: [
       {
         label: 'Nurse it back',
@@ -236,7 +236,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Take it',
-        sub: () => 'Gain an Evolution Stone · every creature loses 20% HP',
+        sub: () => 'Gain an Evolution Stone · every Hexling loses 20% HP',
         run: (run) => {
           run.evoStones += 1;
           for (const c of allCreatures(run)) c.hp = Math.max(1, c.hp - Math.ceil(stats(c).hp * 0.2));
@@ -252,7 +252,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Temper a move',
-        sub: () => 'One creature: a random move gains a tier · it loses 25% HP',
+        sub: () => 'One Hexling: a random move gains a tier · it loses 25% HP',
         target: true,
         eligible: (_r, c) => c.moves.some((m) => m.tier < MAX_TIER) && c.hp > stats(c).hp * 0.3,
         run: (run, c) => {
@@ -271,7 +271,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Take a lesson',
-        sub: (run) => `◉ ${scale(run, 25)} · one creature closes half the gap to your strongest (+2 at least)`,
+        sub: (run) => `◉ ${scale(run, 25)} · one Hexling closes half the gap to your strongest (+2 at least)`,
         target: true,
         eligible: (_r, c) => c.level < levelCap(c),
         blocked: (run) => (run.coins < scale(run, 25) ? 'Not enough coins' : null),
@@ -289,7 +289,7 @@ export const EVENTS: GameEvent[] = [
     text: 'Standing stones that answer sacrifice with power. Your bench watches, uneasy.',
     options: [
       {
-        label: 'Offer a bench creature',
+        label: 'Offer a bench Hexling',
         sub: (run) => {
           const t = circleTarget(run);
           return t ? `It leaves for good · ${creatureName(t)} gains ★` : 'Nobody on your team can gain ★';
@@ -324,12 +324,12 @@ export const EVENTS: GameEvent[] = [
   },
   {
     id: 'trader',
-    title: 'Creature Trader',
-    text: 'A trader swaps creatures sight unseen. Yours for one of theirs, a little stronger.',
+    title: 'Hexling Trader',
+    text: 'A trader swaps Hexlings sight unseen. Yours for one of theirs, a little stronger.',
     options: [
       {
         label: 'Trade',
-        sub: () => 'Swap one creature for a random one: same form, +2 levels, full HP',
+        sub: () => 'Swap one Hexling for a random one: same form, +2 levels, full HP',
         target: true,
         run: (run, c) => {
           const pick = run.rng.pick(SPECIES.filter((sp) => sp.id !== c!.speciesId));
@@ -353,7 +353,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Touch it',
-        sub: () => 'One creature gains ★ and heals fully · it loses 3 levels',
+        sub: () => 'One Hexling gains ★ and heals fully · it loses 3 levels',
         target: true,
         eligible: (_r, c) => canPrestige(c) && c.level > 3,
         run: (run, c) => {
@@ -425,7 +425,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Spar',
-        sub: () => 'Every team creature gains 1 level · each loses 25% HP',
+        sub: () => 'Every team Hexling gains 1 level · each loses 25% HP',
         run: (run) => {
           for (const c of run.team) {
             addLevels(c, 1);
@@ -439,7 +439,7 @@ export const EVENTS: GameEvent[] = [
   {
     id: 'thief',
     title: 'Pickpocket!',
-    text: 'A sly creature snatches your coin pouch and bolts into the brush.',
+    text: 'A sly Hexling snatches your coin pouch and bolts into the brush.',
     leave: 'Let it go',
     onLeave: (run) => {
       const lost = Math.min(run.coins, scale(run, 15));
@@ -449,7 +449,7 @@ export const EVENTS: GameEvent[] = [
     options: [
       {
         label: 'Give chase',
-        sub: (run) => `${luckyOdds(run) * 100}%: catch it and keep ◉ ${scale(run, 25)} it stole from others · else your lead creature is hurt 30%`,
+        sub: (run) => `${luckyOdds(run) * 100}%: catch it and keep ◉ ${scale(run, 25)} it stole from others · else your lead Hexling is hurt 30%`,
         run: (run) => {
           if (run.rng.chance(luckyOdds(run))) {
             earnCoins(run, scale(run, 25));
@@ -484,12 +484,12 @@ export const EVENTS: GameEvent[] = [
   },
   {
     id: 'daycare',
-    title: 'Creature Daycare',
-    text: 'A kindly keeper trains creatures left in their care, for a price.',
+    title: 'Hexling Daycare',
+    text: 'A kindly keeper trains Hexlings left in their care, for a price.',
     options: [
       {
-        label: 'Leave a bench creature',
-        sub: (run) => `◉ ${scale(run, 30)} · one bench creature catches up to your strongest (Lv ${highestLevel(run)})`,
+        label: 'Leave a bench Hexling',
+        sub: (run) => `◉ ${scale(run, 30)} · one bench Hexling catches up to your strongest (Lv ${highestLevel(run)})`,
         target: true,
         eligible: (run, c) => run.bench.includes(c) && c.level < Math.min(highestLevel(run), levelCap(c)),
         blocked: (run) => (run.coins < scale(run, 30) ? 'Not enough coins' : null),

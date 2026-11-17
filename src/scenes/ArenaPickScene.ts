@@ -54,9 +54,9 @@ export class ArenaPickScene extends Phaser.Scene {
     button(this, 40, 28, 64, 36, '', () => this.back(), { fontSize: 15, glyph: 'back' });
     const g = G();
     const hx = LANDSCAPE ? g.side / 2 + 20 : W / 2 + 20;
-    if (LANDSCAPE) text(this, 80, 14, 'Choose a creature', 20, '#ffc94d', { fontStyle: 'bold' });
-    else text(this, hx, 16, 'Choose a creature', 24, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
-    text(this, LANDSCAPE ? 16 : hx, 46, 'Creatures you have caught · most evolved form you have seen', 11, COLORS.textDim, { wordWrap: { width: g.side - 32 } }).setOrigin(LANDSCAPE ? 0 : 0.5, 0);
+    if (LANDSCAPE) text(this, 80, 14, 'Choose a Hexling', 20, '#ffc94d', { fontStyle: 'bold' });
+    else text(this, hx, 16, 'Choose a Hexling', 24, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, LANDSCAPE ? 16 : hx, 46, 'Hexlings you have caught · most evolved form you have seen', 11, COLORS.textDim, { wordWrap: { width: g.side - 32 } }).setOrigin(LANDSCAPE ? 0 : 0.5, 0);
     // The search box is a real text field laid over the canvas (so the phone keyboard works).
     this.add.rectangle(16, 66 + this.dy(), g.side - 32, 38, 0x0f0c18).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.makeSearchBox();
@@ -187,7 +187,7 @@ export class ArenaPickScene extends Phaser.Scene {
       return true;
     });
     const filters = [q ? `"${this.query.trim()}"` : '', this.elements.length ? this.elements.join(' / ') : ''].filter(Boolean).join(' · ');
-    this.countText.setText(`${list.length} creature${list.length === 1 ? '' : 's'}${filters ? ` matching ${filters}` : ''}`);
+    this.countText.setText(`${list.length} Hexling${list.length === 1 ? '' : 's'}${filters ? ` matching ${filters}` : ''}`);
     if (!list.length) {
       this.grid.add(text(this, G().x + (W - G().x) / 2, G().top + 40, 'Nothing matches. Try another name or element.', 14, COLORS.textDim).setOrigin(0.5, 0));
     }

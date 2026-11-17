@@ -1,4 +1,7 @@
-# Game Design — Creature Collector Roguelite
+# Game Design — Hexbound
+
+The game is **Hexbound**; its creatures are **Hexlings** (player-facing text always says Hexling; code
+still says `creature`).
 
 Working doc. Items marked **[OPEN]** still need a decision.
 

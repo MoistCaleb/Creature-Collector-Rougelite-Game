@@ -68,10 +68,10 @@ export type PassiveId =
 
 /** Trainer passives. All but Mentor unlock through achievements (see achievements.ts). */
 export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
-  mentor: { name: 'Mentor', desc: 'Bench creatures earn full XP instead of half.' },
+  mentor: { name: 'Mentor', desc: 'Bench Hexlings earn full XP instead of half.' },
   medic: { name: 'Field Medic', desc: 'Rest nodes heal your team to full.' },
-  scout: { name: 'Scout', desc: 'Caught creatures arrive 3 levels higher.' },
-  drill: { name: 'Drill Sergeant', desc: 'Your creatures deal 10% more damage.' },
+  scout: { name: 'Scout', desc: 'Caught Hexlings arrive 3 levels higher.' },
+  drill: { name: 'Drill Sergeant', desc: 'Your Hexlings deal 10% more damage.' },
   haggler: { name: 'Haggler', desc: 'Shop prices are 25% lower.' },
   evolutionist: { name: 'Evolutionist', desc: 'Start each run with an Evolution Stone.' },
   explorer: { name: 'Explorer', desc: 'Treasure chests hold 50% more coins.' },
@@ -88,7 +88,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   apothecary: { name: 'Apothecary', desc: '2 starting potions, carry 8, they heal 75%.' },
   quartermaster: { name: 'Quartermaster', desc: 'Start each run with two random held items.' },
   afflicter: { name: 'Afflicter', desc: 'Your moves inflict statuses twice as often.' },
-  tempered: { name: 'Tempered', desc: 'Your creatures can\u2019t be burned or poisoned.' },
+  tempered: { name: 'Tempered', desc: 'Your Hexlings can\u2019t be burned or poisoned.' },
   harmonist: { name: 'Harmonist', desc: 'Team synergy bonuses are doubled.' },
 };
 

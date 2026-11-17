@@ -71,7 +71,7 @@ export class BagScene extends Phaser.Scene {
     list.add(text(this, 16, y, `Equipped  (${holders.length})`, 16, COLORS.text, { fontStyle: 'bold' }));
     y += 28;
     if (!holders.length) {
-      list.add(text(this, 16, y, 'No creature is holding an item.', 13, COLORS.textDim));
+      list.add(text(this, 16, y, 'No Hexling is holding an item.', 13, COLORS.textDim));
       y += 30;
     }
     for (const c of holders) {
@@ -132,7 +132,7 @@ export class BagScene extends Phaser.Scene {
         enabled: (run.potions ?? 0) > 0 && hurt,
       }),
     );
-    card(1, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a creature that has reached Lv 30 (or 65).', '#e0a8ff');
+    card(1, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a Hexling that has reached Lv 30 (or 65).', '#e0a8ff');
     const ready = allCreatures(run).some(readyToEvolve);
     head(
       button(this, cardAt(1).x + cw - 40, cardAt(1).y + 30, 64, 32, 'Use', () => this.useStone(), {
@@ -149,7 +149,7 @@ export class BagScene extends Phaser.Scene {
     const all = allCreatures(run);
     openPicker(this, {
       title: 'Use an Evolution Stone',
-      subtitle: `${run.evoStones} left. A creature can evolve once it reaches Lv 30 (first evolution) or Lv 65 (final form).`,
+      subtitle: `${run.evoStones} left. A Hexling can evolve once it reaches Lv 30 (first evolution) or Lv 65 (final form).`,
       options: all.map((c) => ({
         creature: c,
         disabled: !readyToEvolve(c),
@@ -199,7 +199,7 @@ export class BagScene extends Phaser.Scene {
     const all = allCreatures(run);
     openPicker(this, {
       title: `Give ${heldName(id)}`,
-      subtitle: `${HELD[id].desc}\nEach creature holds one item; its old one comes back to the bag.`,
+      subtitle: `${HELD[id].desc}\nEach Hexling holds one item; its old one comes back to the bag.`,
       options: all.map((c) => ({ creature: c, note: c.held ? `Holds ${heldName(c.held)}` : undefined })),
       onPick: (k) => {
         equipHeld(run, all[k], id);
