@@ -267,6 +267,41 @@ Proposed math:
 - **Menus:** a soft glow and honeycomb with big element-colored hexagons drifting up and rising sparks; the
   title screen adds a glowing arcade floor.
 
+## Help, settings and records
+
+- **Settings** (gear on the title screen, or Menu in a run or battle): music and sound-effect volume (0-10),
+  all sound on/off, vibration (devices that can vibrate), first-time tips, battle speed, How to play, the
+  element chart, and Erase all progress (asks twice).
+- **First-time tips**: a short card the first time you reach the map, the bench, a battle, a guardian, a
+  catch, a shop, an event and a Prestige Altar. "No more tips" turns them off; Settings turns them back on
+  (and shows them all again).
+- **How to play**: six short pages (goal, map, battles, catching, growing stronger, elements), from the title
+  screen, Settings or the in-run menu.
+- **Element chart**: every element's strong-vs and weak-to elements and its synergy stat. Opened from a battle,
+  the foe's elements are highlighted. Also in the Hexlidex (Chart) and Settings.
+- **Records** (title screen): runs, wins, win rate, current and best win streak, top Heat won, most-used
+  Hexling, lifetime counts, and the last 20 finished runs (result, map, Heat, date, the team that finished).
+  Stage battles don't count.
+
+## Shiny Hexlings
+
+- About 1 wild Hexling in 200 is **shiny**: the same Hexling in rare colors (its palette turned around the color
+  wheel, by a fixed amount per family). Only wild battles; trainers and guardians never are.
+- It glitters as it appears ("A shiny X appeared!"), shows ✦ by its name, and keeps its colors when caught
+  and when it evolves. Purely cosmetic.
+- The Hexlidex marks families you've seen shiny and shows their shiny forms; Records counts shinies caught.
+- Rolled from a hash of the run seed (not the run's random rolls), so daily runs stay identical for everyone.
+
+## Music
+
+- All music is synthesized: each song is 16 bars (A A' B A) composed from a mode, two chord progressions and a
+  seed, with bass, drums, pads, arpeggios and bells.
+- Songs: title, map, wild battle, trainer battle, guardian, final guardian (floor 3), shop, event, arena
+  (arena and online screens), victory and defeat.
+- Map, battle, trainer and guardian songs take the floor's element: its mode (e.g. Fire harmonic minor,
+  Light lydian, Nature dorian), tempo and instruments (echoing leads for Water and Spirit, bells for Frost
+  and Light, arpeggios for Storm and Dragon), so all 12 elements sound different.
+
 ## Meta progression (between runs)
 Runs unlock:
 - New starters: any species that joins your party (caught, claimed, recruited, hatched) unlocks as a

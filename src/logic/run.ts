@@ -133,6 +133,83 @@ export interface Meta {
   dailies?: Record<string, DailyRecord>;
   /** Favorite evolution line (species id): always one of the starter choices. */
   favorite?: string;
+  /** Finished runs, newest first (see recordRun). */
+  history?: RunRecord[];
+  /** Runs won in a row right now, and the best streak ever. */
+  streak?: number;
+  bestStreak?: number;
+  /** How many runs each species (by base id) finished on your team, alive or fallen. */
+  usage?: Record<string, number>;
+  /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
+  shinySeen?: string[];
+  shinyCaught?: number;
+}
+
+/** One finished run, for the Records screen. */
+export interface RunRecord {
+  /** When it ended (ms since 1970). */
+  at: number;
+  won: boolean;
+  /** Floor reached (1-3). */
+  floor: number;
+  mapId: string;
+  heat: number;
+  daily?: string;
+  battlesWon: number;
+  caught: number;
+  /** Who finished the run (survivors), up to 7. */
+  team: { speciesId: string; stage: number; level: number; shiny?: boolean }[];
+  mvp?: { speciesId: string; stage: number; name: string; dealt: number };
+  endedBy?: string;
+}
+
+/** How many finished runs the Records screen keeps. */
+export const HISTORY_MAX = 20;
+
+/**
+ * Note a finished run (called once, from the end screen): history, win streaks and which
+ * Hexlings you use most. Stage battles (online) aren't counted.
+ */
+export function recordRun(run: Run, won: boolean) {
+  const meta = run.meta;
+  if (run.race) return;
+  const mvp = runMvp(run);
+  const rec: RunRecord = {
+    at: Date.now(),
+    won,
+    floor: won ? 3 : run.floor + 1,
+    mapId: run.mapId,
+    heat: run.heat ?? 0,
+    daily: run.daily,
+    battlesWon: run.log.battlesWon,
+    caught: run.log.caught,
+    team: allCreatures(run)
+      .slice(0, 7)
+      .map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, ...(c.shiny ? { shiny: true } : {}) })),
+    mvp: mvp && mvp.dealt > 0 ? { speciesId: mvp.speciesId, stage: mvp.stage, name: mvp.name, dealt: mvp.dealt } : undefined,
+    endedBy: won ? undefined : run.log.endedBy?.label,
+  };
+  meta.history = [rec, ...(meta.history ?? [])].slice(0, HISTORY_MAX);
+  meta.streak = won ? (meta.streak ?? 0) + 1 : 0;
+  meta.bestStreak = Math.max(meta.bestStreak ?? 0, meta.streak);
+  const usage = (meta.usage = meta.usage ?? {});
+  const ids = new Set([...allCreatures(run).map((c) => c.speciesId), ...(run.log.fallen ?? []).map((f) => f.speciesId)]);
+  for (const id of ids) usage[id] = (usage[id] ?? 0) + 1;
+  saveMeta(meta);
+}
+
+/** A shiny was seen: remember its species for the Hexlidex. */
+export function noteShiny(meta: Meta, speciesId: string) {
+  const seen = (meta.shinySeen = meta.shinySeen ?? []);
+  if (seen.includes(speciesId)) return;
+  seen.push(speciesId);
+  saveMeta(meta);
+}
+
+/** The species you've finished the most runs with. */
+export function mostUsed(meta: Meta): { speciesId: string; runs: number } | null {
+  const e = Object.entries(meta.usage ?? {}).sort((a, b) => b[1] - a[1])[0];
+  return e ? { speciesId: e[0], runs: e[1] } : null;
 }
 
 export interface DailyResult {
@@ -446,6 +523,16 @@ export function clearSavedRun() {
   }
 }
 
+/** Erase everything: the run in progress and all progress between runs. */
+export function resetProgress() {
+  try {
+    storage.removeItem(RUN_KEY);
+    storage.removeItem(META_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function unlockedMaps(meta: Meta) {
   return MAPS.filter((m) => mapUnlocked(m, meta.wins));
 }
@@ -593,12 +680,17 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     // Trainers and guardians carry held items (the guardian's ace always, trainers sometimes from floor 2).
     const holds = boss ? i === count - 1 || heat.bossTeamItems : kind === 'elite' && (heat.eliteItems || (f > 0 && rng.chance(0.4)));
     if (holds) c.held = rollHeld(rng);
+    // About 1 wild Hexling in 200 is shiny (a hash, so the run's random rolls are untouched).
+    if (kind === 'battle' && hashString(`${run.seed}:shiny:${run.log.fights}:${i}`) % SHINY_IN === 0) c.shiny = true;
     c.hp = stats(c).hp;
     enemies.push(c);
   }
   run.log.fights += 1;
   return enemies;
 }
+
+/** One wild Hexling in this many is shiny. */
+export const SHINY_IN = 200;
 
 /** Swap a creature's first stat move (or its last move) for its line's team move. */
 function giveTeamMove(c: Creature) {
@@ -815,6 +907,10 @@ export function catchCreature(
   c.pendingMoves = [];
   c.stars = catchStars(run, enemy);
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
+  if (enemy.shiny) {
+    c.shiny = true;
+    run.meta.shinyCaught = (run.meta.shinyCaught ?? 0) + 1;
+  }
   const newlyClaimed: Element[] = [];
   if (bonus === 'type')
     for (const t of creatureTypes(c))

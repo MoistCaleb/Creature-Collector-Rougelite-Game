@@ -46,7 +46,7 @@ export class ArenaScene extends Phaser.Scene {
     this.events.once('shutdown', () => setFloorCeiling(ceiling));
     this.team = activeTeam(meta);
     background(this);
-    playMusic('title');
+    playMusic('arena');
     button(this, 40, 28, 64, 36, '', () => this.scene.start('Title', {}), { fontSize: 15, glyph: 'back' });
     text(this, W / 2 + 20, 18, 'Battle Arena', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     text(this, W / 2 + 20, 54, `Everyone Lv ${ARENA_LEVEL} · no stars or items · best ${meta.arenaBest ?? 0}/${ARENA_ROUNDS}`, 13, COLORS.textDim).setOrigin(0.5, 0);

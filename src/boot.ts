@@ -16,6 +16,11 @@ import { PassivesScene } from './scenes/PassivesScene';
 import { StarterScene } from './scenes/StarterScene';
 import { TeamScene } from './scenes/TeamScene';
 import { TitleScene } from './scenes/TitleScene';
+import { RecordsScene } from './scenes/RecordsScene';
+import { openSettings } from './ui/settings';
+import { openElementChart } from './ui/elementChart';
+import { openHowToPlay } from './ui/howto';
+import { tip } from './ui/tips';
 import { loadMeta } from './logic/run';
 import { state } from './state';
 import { boardChanged, COLORS, FH, FW, landscapeReady, ZOOM } from './ui/widgets';
@@ -24,7 +29,7 @@ import { boardChanged, COLORS, FH, FW, landscapeReady, ZOOM } from './ui/widgets
 export function startGame() {
   state.meta = loadMeta();
   // Screens with a landscape layout (the rest stay upright, centered, when the phone is sideways).
-  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel');
+  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel', 'Records');
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
@@ -51,6 +56,7 @@ export function startGame() {
       EndScene,
       DexScene,
       PassivesScene,
+      RecordsScene,
     ],
   });
 
@@ -78,5 +84,6 @@ export function startGame() {
   window.visualViewport?.addEventListener('resize', later);
 
   // Handy for debugging in the browser console.
-  Object.assign(window, { game, state });
+  // Handles for testing in the browser console (and screenshot scripts).
+  Object.assign(window, { game, state, ui: { openSettings, openElementChart, openHowToPlay, tip } });
 }

@@ -24,7 +24,7 @@ export class TeamsScene extends Phaser.Scene {
     const teams = savedTeams(meta);
     const active = activeTeamIndex(meta);
     background(this);
-    playMusic('title');
+    playMusic('arena');
     button(this, 40, 28, 64, 36, '', () => this.scene.start('Arena', {}), { fontSize: 15, glyph: 'back' });
     text(this, W / 2 + 20, 18, 'Your teams', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     text(this, W / 2 + 20, 54, `Up to ${MAX_SAVED_TEAMS} teams · tap one to edit it`, 13, COLORS.textDim).setOrigin(0.5, 0);

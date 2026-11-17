@@ -48,7 +48,7 @@ export class ArenaPickScene extends Phaser.Scene {
 
   create() {
     background(this);
-    playMusic('title');
+    playMusic('arena');
     const fixedFrom = this.children.list.length;
 
     button(this, 40, 28, 64, 36, '', () => this.back(), { fontSize: 15, glyph: 'back' });

@@ -1,3 +1,7 @@
+import { tip, tipDone } from '../ui/tips';
+import { shinyBurst } from '../ui/shiny';
+import { openSettings } from '../ui/settings';
+import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
@@ -14,7 +18,7 @@ import { HELD, heldName } from '../data/held';
 import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
 import { moveImpact, playMove, type Style } from '../ui/movefx';
-import { isMuted, playMusic, setMuted, sfx } from '../ui/sound';
+import { playMusic, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { Rng } from '../logic/rng';
@@ -73,6 +77,7 @@ import {
   type EncounterKind,
   catchLevel,
   type XpResult,
+  noteShiny,
 } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -288,7 +293,8 @@ export class BattleScene extends Phaser.Scene {
     button(this, L.menu.x, L.menu.y, 48, 36, '', () => {
       if (this.busy) return;
       this.cancelAuto();
-      openGameMenu(this, () => this.maybeAuto());
+      // Settings may change the battle speed: redraw the controls on the way back.
+      openGameMenu(this, () => this.afterMenu(), this.shownEnemy ? creatureTypes(this.shownEnemy) : []);
     }, { glyph: 'menu' }).setDepth(5);
 
     this.refreshEnemy();
@@ -297,20 +303,23 @@ export class BattleScene extends Phaser.Scene {
     const intro = resuming
       ? 'The battle resumes!'
       : this.kind === 'battle'
-        ? `A wild ${this.enemies.map(creatureName).join(' and a wild ')} appeared!`
+        ? `A ${this.enemies.map((e) => `${e.shiny ? 'shiny' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
         : this.kind === 'elite'
           ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
     this.msg.setText(intro);
     this.showActions();
     ensureFxTextures(this);
-    playMusic(boss ? 'boss' : 'battle');
+    // The floor's element colours the music; floor 3's guardian has its own song.
+    playMusic(boss ? (run.floor === 2 ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', run.map.biome);
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     const begin = () => {
       if (boss && !resuming) this.bossEntrance();
-      if (entry.length) this.play(entry);
-      else this.maybeAuto();
+      const go = () => (entry.length ? this.play(entry) : this.maybeAuto());
+      if (resuming || tipDone(boss ? 'boss' : 'battle')) return go();
+      // First battle / first guardian: a short tip first (after the guardian's entrance).
+      this.time.delayedCall(boss ? 2200 : 300, () => tip(this, boss ? 'boss' : 'battle', go));
     };
     // Resuming after a reload: pick up wherever the battle was left.
     if (resuming) {
@@ -516,7 +525,7 @@ export class BattleScene extends Phaser.Scene {
     this.msg.setText(intro);
     this.showActions();
     ensureFxTextures(this);
-    playMusic('battle');
+    playMusic('trainer', creatureTypes(this.enemies[0])[0]);
     const entry = m.duel ? [] : this.battle.start();
     this.enemySprite.setVisible(false);
     this.playerSprite.setVisible(false);
@@ -552,15 +561,14 @@ export class BattleScene extends Phaser.Scene {
       title: 'Menu',
       options: [
         { label: 'Resume', color: 0x3b6d4a, glyph: 'play' },
-        { label: `Sound: ${isMuted() ? 'off' : 'on'}`, sub: 'Tap to switch', glyph: isMuted() ? 'mute' : 'sound' },
+        { label: 'Settings', sub: 'Sound, vibration, speed', glyph: 'gear' },
+        { label: 'Element chart', sub: 'Your foe’s elements are highlighted', glyph: 'sparkle' },
         { label: giveUp, sub, color: 0x5a2a2a, glyph: 'skull' },
       ],
       onPick: (i) => {
         if (i === 0) return this.maybeAuto();
-        if (i === 1) {
-          setMuted(!isMuted());
-          return this.openMatchMenu();
-        }
+        if (i === 1) return void openSettings(this, () => this.afterMenu());
+        if (i === 2) return void openElementChart(this, this.shownEnemy ? creatureTypes(this.shownEnemy) : [], () => this.maybeAuto());
         openPicker(this, {
           title: `${giveUp}?`,
           subtitle: sub + '.',
@@ -576,6 +584,13 @@ export class BattleScene extends Phaser.Scene {
       onCancel: () => this.maybeAuto(),
       cancelLabel: 'Close',
     });
+  }
+
+  /** Back from a menu: settings may have changed the speed. */
+  private afterMenu() {
+    this.drawControls();
+    this.setSpeed();
+    this.maybeAuto();
   }
 
   /** What the duel wants next, applied once the current turn has played out. */
@@ -656,9 +671,18 @@ export class BattleScene extends Phaser.Scene {
     const c = this.battle.e.c;
     const el = creatureTypes(c)[0];
     const voice = () => cry(c.speciesId, c.stage);
-    if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, el, voice);
+    const shine = <T,>(p: Promise<T>) => (c.shiny ? p.then((v) => (this.shinyFlash(c), v)) : p);
+    if (this.kind === 'battle') return shine(emergeFrom(this, this.enemySprite, el, voice));
     this.order('enemy');
-    return releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el], voice);
+    return shine(releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el], voice));
+  }
+
+  /** A shiny Hexling glitters as it appears (and goes into the Hexlidex as seen shiny). */
+  private shinyFlash(c: Creature) {
+    sfx.shiny();
+    shinyBurst(this, this.enemySprite.x, this.enemySprite.y, 80, (this.enemySprite.depth ?? 0) + 1);
+    this.tweens.add({ targets: this.enemySprite, alpha: 0.4, yoyo: true, repeat: 2, duration: 90 });
+    noteShiny(state.meta, c.speciesId);
   }
 
   private enterPlayer() {
@@ -691,7 +715,7 @@ export class BattleScene extends Phaser.Scene {
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
     this.setStatus(p, c.status?.id ?? null);
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.name.setText(`${creatureName(c)}${c.shiny ? ' ✦' : ''} Lv${c.level} ${stars(c.stars)}`);
     p.held.setVisible(!!c.held);
     if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.width + 12);
     p.chips.removeAll(true);
@@ -708,7 +732,7 @@ export class BattleScene extends Phaser.Scene {
     const e = this.battle.e.c;
     this.shownEnemy = e;
     dex.creature(e);
-    this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
+    this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage, e.shiny)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
     this.fillPanel(this.enemyPanel, e, hp);
     const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
@@ -722,7 +746,7 @@ export class BattleScene extends Phaser.Scene {
     const p = this.battle.p.c;
     this.shownPlayer = p;
     dex.creature(p, true);
-    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
+    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
     this.fillPanel(this.playerPanel, p, hp);
   }
@@ -1250,6 +1274,7 @@ export class BattleScene extends Phaser.Scene {
       wild ? `The wild ${creatureName(wild)} is barely standing! Catch it, or finish it for the rewards.` : 'Victory!',
     );
     if (wild) {
+      tip(this, 'catch');
       // It sways, weakened.
       this.tweens.add({ targets: this.enemySprite, angle: 6, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
       this.enemySprite.setAlpha(0.85);
@@ -1320,7 +1345,7 @@ export class BattleScene extends Phaser.Scene {
     this.msg.setText(`You throw a bond crystal at ${creatureName(wild)}!`);
     playCatch(
       this,
-      ensureCreatureTexture(this, wild.speciesId, wild.stage),
+      ensureCreatureTexture(this, wild.speciesId, wild.stage, wild.shiny),
       5 * SPRITE_FIT,
       { x: PLAYER_POS.x + 30, y: PLAYER_POS.y - 30 },
       ENEMY_POS,
@@ -1401,12 +1426,12 @@ export class BattleScene extends Phaser.Scene {
             onPick: (k) => {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
-              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
               const lv = c.level;
               evolveTracked(run, c);
               const note = releaseNote(c, lv);
               dex.creature(c, true);
-              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
               playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
                 cry(c.speciesId, c.stage);
                 this.finishFloor(`${from} evolved into ${creatureName(c)}!${note}`);

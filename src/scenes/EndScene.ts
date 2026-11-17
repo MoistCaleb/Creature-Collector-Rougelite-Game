@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, dailyRecord, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
+import { allCreatures, clearSavedRun, dailyRecord, describeDaily, recordDaily, recordRun, runMvp, saveMeta } from '../logic/run';
 import { state } from '../state';
 import { isAlive, type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
@@ -15,6 +15,7 @@ import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
 
 /** Runs whose daily result is already recorded (so re-laying out the screen doesn't count it twice). */
 const recordedRuns = new WeakSet<object>();
+const historyRuns = new WeakSet<object>();
 
 /** End of a run: what happened, who carried the team, who made it and who didn't. */
 export class EndScene extends Phaser.Scene {
@@ -24,11 +25,16 @@ export class EndScene extends Phaser.Scene {
 
   create(data: { won: boolean }) {
     background(this);
-    playMusic(data.won ? 'title' : null);
+    playMusic(data.won ? 'win' : 'lose');
     if (data.won) sfx.victory();
     else sfx.defeat();
     const run = state.run!;
     clearSavedRun();
+    // History, streaks and most-used Hexlings: once per run (the screen re-lays out when the phone turns).
+    if (!historyRuns.has(run)) {
+      historyRuns.add(run);
+      recordRun(run, data.won);
+    }
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>
       this.add.image(x, y, ensureCreatureTexture(this, speciesId, stage)).setScale(scale * SPRITE_FIT);
 

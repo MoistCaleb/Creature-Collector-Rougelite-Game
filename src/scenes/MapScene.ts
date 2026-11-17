@@ -36,6 +36,7 @@ import { playMusic, sfx } from '../ui/sound';
 import { Scroller } from '../ui/scroll';
 import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
 import { mapBackdrop } from '../ui/backdrops';
+import { tip, tipDone } from '../ui/tips';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
@@ -73,7 +74,7 @@ export class MapScene extends Phaser.Scene {
     const base = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color;
     background(this, base);
     mapBackdrop(this, map.biome, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, base);
-    playMusic('map');
+    playMusic('map', map.biome);
 
     // ---- map layer
     this.layer = this.add.container(0, 0);
@@ -166,8 +167,10 @@ export class MapScene extends Phaser.Scene {
 
     for (const c of allCreatures(run)) dex.creature(c, true);
     persist();
-    const after = () =>
+    const resume = () =>
       run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
+    // First-time tips come before anything that's waiting.
+    const after = () => tip(this, 'map', () => (run.bench.length ? tip(this, 'bench', resume) : resume()));
     // Announce any achievements earned since the last time the map was shown.
     const next = () => {
       const meta = state.meta;
@@ -319,7 +322,7 @@ export class MapScene extends Phaser.Scene {
       const slotH = (H - 20) / 4;
       run.team.forEach((c, i) => {
         const y = 10 + slotH * i;
-        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6 * SPRITE_FIT);
+        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.6 * SPRITE_FIT);
         img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
         text(this, x0 + 76, y + slotH / 2 - 18, `Lv ${c.level}`, 13, COLORS.text, { fontStyle: 'bold' });
         new HpBar(this, x0 + 76, y + slotH / 2 + 4, SIDE_R - 88, 7, false).set(c.hp, stats(c).hp);
@@ -332,7 +335,7 @@ export class MapScene extends Phaser.Scene {
     const slotW = W / 4;
     run.team.forEach((c, i) => {
       const x = slotW * i + slotW / 2;
-      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6 * SPRITE_FIT);
+      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.6 * SPRITE_FIT);
       img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
       text(this, x, y0 + 64, `Lv ${c.level}`, 12, COLORS.textDim).setOrigin(0.5);
       new HpBar(this, x - 36, y0 + 84, 72, 7, false).set(c.hp, stats(c).hp);
@@ -434,6 +437,8 @@ export class MapScene extends Phaser.Scene {
 
   private doEvent() {
     const run = state.run!;
+    playMusic('event');
+    if (!tipDone('event')) return void tip(this, 'event', () => this.doEvent());
     if (!run.eventId) {
       run.eventId = rollEvent(run).id;
       persist();
@@ -587,6 +592,7 @@ export class MapScene extends Phaser.Scene {
 
   private doPrestige() {
     const run = state.run!;
+    if (!tipDone('prestige')) return void tip(this, 'prestige', () => this.doPrestige());
     // Ascendant: one sacrifice-free prestige per floor.
     if (run.passive === 'ascendant' && run.ascendFloor !== run.floor) {
       return this.pickCreature(
@@ -644,6 +650,8 @@ export class MapScene extends Phaser.Scene {
 
   private openShop() {
     const run = state.run!;
+    playMusic('shop');
+    if (!tipDone('shop')) return void tip(this, 'shop', () => this.openShop());
     const shop = run.shop!;
     const label = (sl: ShopSlot) => {
       if (sl.item !== 'recruit') return slotName(sl);
