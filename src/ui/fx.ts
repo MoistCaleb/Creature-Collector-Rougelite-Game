@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { sfx } from './sound';
-import { H, W, ZOOM } from './widgets';
+import { fullRect, H, W, ZOOM } from './widgets';
 
 /**
  * Battle visual effects, all drawn in code: per-element projectiles and impacts, status
@@ -338,7 +338,7 @@ export function playCatch(
   onDone: () => void,
 ) {
   ensureFxTextures(scene);
-  const dim = scene.add.rectangle(0, 0, W, H, 0x000000, 0.35).setOrigin(0).setDepth(1500).setInteractive();
+  const dim = fullRect(scene, 0x000000, 0.35).setDepth(1500).setInteractive();
   const mon = scene.add.image(at.x, at.y, creatureKey).setScale(scale).setDepth(1501).setAlpha(0);
   const gem = crystal(scene, color).setDepth(1503).setPosition(from.x, from.y).setScale(0.8);
   const groundY = at.y + 60;
@@ -439,7 +439,7 @@ export function playEvolution(
 ) {
   ensureFxTextures(scene);
   const root = scene.add.container(0, 0).setDepth(2000);
-  const dim = scene.add.rectangle(0, 0, W, H, 0x05040a, 0.92).setOrigin(0).setInteractive();
+  const dim = fullRect(scene, 0x05040a, 0.92).setInteractive();
   root.add(dim);
   const glow = scene.add.circle(W / 2, H / 2 - 40, 90, color, 0.25);
   root.add(glow);

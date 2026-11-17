@@ -16,7 +16,7 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureTrainerTexture, type TrainerPose } from '../ui/trainerSprite';
-import { background, button, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
+import { background, button, COLORS, fullRect, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 type Part = (typeof LOOK_PARTS)[number];
 
@@ -122,7 +122,7 @@ export class TrainerScene extends Phaser.Scene {
   /** A grid of every option for one part, each shown on your trainer; tap one to wear it. */
   private openPart(part: Part, look: TrainerLook) {
     const layer = this.add.container(0, 0).setDepth(50);
-    layer.add(this.add.rectangle(0, 0, W, H, 0x000000, 0.65).setOrigin(0).setInteractive());
+    layer.add(fullRect(this, 0x000000, 0.65).setInteractive());
     const pm = LANDSCAPE ? 10 : 30;
     layer.add(this.add.rectangle(10, pm, W - 20, H - 2 * pm, COLORS.bg).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
     layer.add(text(this, W / 2, pm + 10, part.label, 22, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0));

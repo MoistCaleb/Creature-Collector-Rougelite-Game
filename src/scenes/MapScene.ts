@@ -34,7 +34,8 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
 import { Scroller } from '../ui/scroll';
-import { background, button, COLORS, H, HpBar, LANDSCAPE, text, W } from '../ui/widgets';
+import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
+import { mapBackdrop } from '../ui/backdrops';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
@@ -69,11 +70,15 @@ export class MapScene extends Phaser.Scene {
       return;
     }
     const map = run.map;
-    background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color);
+    const base = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color;
+    background(this, base);
+    mapBackdrop(this, map.biome, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, base);
     playMusic('map');
 
     // ---- map layer
     this.layer = this.add.container(0, 0);
+    // The map scrolls within the layout; it never slides into the screen's margins.
+    clipList(this, this.layer, 0, H);
     const cols = map.cols;
     const pointy = map.layout === 'rows';
     // Pointy-top: half-hex columns, one row per step. Flat-top: the older half-row lattice.
@@ -219,7 +224,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     if (run.race) this.drawRaceStatus();
     if (LANDSCAPE) return this.drawSideInfo();
-    this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
+    this.add.rectangle(-OX, -OY, FW, TOP_BAR + OY, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     // Heat and daily markers after the land name.
@@ -250,7 +255,7 @@ export class MapScene extends Phaser.Scene {
   /** Sideways: floor, land, coins, stones, steps to the boss and the buttons, in a left column. */
   private drawSideInfo() {
     const run = state.run!;
-    this.add.rectangle(0, 0, SIDE_L, H, 0x0b0912, 0.92).setOrigin(0);
+    this.add.rectangle(-OX, -OY, SIDE_L + OX, FH, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 12, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 40, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     let mx = 14 + biome.width + 12;
@@ -310,7 +315,7 @@ export class MapScene extends Phaser.Scene {
     if (LANDSCAPE) {
       // Sideways: the team down a right column.
       const x0 = W - SIDE_R;
-      this.add.rectangle(x0, 0, SIDE_R, H, 0x0b0912, 0.92).setOrigin(0);
+      this.add.rectangle(x0, -OY, FW - OX - x0, FH, 0x0b0912, 0.92).setOrigin(0);
       const slotH = (H - 20) / 4;
       run.team.forEach((c, i) => {
         const y = 10 + slotH * i;
@@ -323,7 +328,7 @@ export class MapScene extends Phaser.Scene {
       return;
     }
     const y0 = H - BOTTOM_BAR;
-    this.add.rectangle(0, y0, W, BOTTOM_BAR, 0x0b0912, 0.92).setOrigin(0);
+    this.add.rectangle(-OX, y0, FW, FH - OY - y0, 0x0b0912, 0.92).setOrigin(0);
     const slotW = W / 4;
     run.team.forEach((c, i) => {
       const x = slotW * i + slotW / 2;

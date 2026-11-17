@@ -6,7 +6,7 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, FONT, H, LANDSCAPE, text, W } from '../ui/widgets';
+import { background, button, clipList, COLORS, FONT, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 const CELL_H = 118;
 /**
@@ -77,6 +77,7 @@ export class ArenaPickScene extends Phaser.Scene {
     if (LANDSCAPE) this.add.rectangle(0, 0, g.x - 6, H, COLORS.bg).setOrigin(0).setDepth(2);
     else this.add.rectangle(0, 0, W, g.top - 6, COLORS.bg).setOrigin(0).setDepth(2);
     this.grid = this.add.container(0, 0).setDepth(1);
+    clipList(this, this.grid, LANDSCAPE ? 0 : g.top - 6);
     this.drawGrid();
 
     // Drag to scroll; a drag isn't a tap.

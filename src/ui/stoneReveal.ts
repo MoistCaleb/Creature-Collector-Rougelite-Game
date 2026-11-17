@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { HELD, type HeldId } from '../data/held';
 import { ensureIcon, type IconId } from './icons';
 import { sfx } from './sound';
-import { button, COLORS, H, text, W } from './widgets';
+import { button, COLORS, fullRect, text, W } from './widgets';
 
 interface RevealOpts {
   /** One icon per thing gained (up to 3 are shown). */
@@ -22,7 +22,7 @@ interface RevealOpts {
  */
 function rewardReveal(scene: Phaser.Scene, o: RevealOpts, onDone: () => void) {
   const root = scene.add.container(0, 0).setDepth(1100);
-  const dim = scene.add.rectangle(0, 0, W, H, 0x0a0614, 0.86).setOrigin(0).setInteractive();
+  const dim = fullRect(scene, 0x0a0614, 0.86).setInteractive();
   root.add(dim);
   const cx = W / 2;
   const cy = 300;

@@ -18,7 +18,7 @@ import { TeamScene } from './scenes/TeamScene';
 import { TitleScene } from './scenes/TitleScene';
 import { loadMeta } from './logic/run';
 import { state } from './state';
-import { COLORS, H, LANDSCAPE, landscapeReady, W, wantsWide, ZOOM } from './ui/widgets';
+import { boardChanged, COLORS, FH, FW, landscapeReady, ZOOM } from './ui/widgets';
 
 /** Start the game. Call once the save storage is ready. */
 export function startGame() {
@@ -28,8 +28,8 @@ export function startGame() {
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
-    width: Math.round(W * ZOOM),
-    height: Math.round(H * ZOOM),
+    width: Math.round(FW * ZOOM),
+    height: Math.round(FH * ZOOM),
     backgroundColor: COLORS.bg,
     pixelArt: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -58,13 +58,13 @@ export function startGame() {
   // the notch moving sides. Window resize events alone fire before a rotation settles (leaving the
   // canvas sized for the old orientation, i.e. "zoomed in"), so watch the box itself, and check
   // again once the rotation animation is over.
-  // Turning the phone also swaps the board for screens with a landscape layout: those screens
-  // restart (with the same data) and lay themselves out again; battles pick up where they were.
+  // Turning the phone (or the screen changing shape) also swaps the board: screens restart (with
+  // the same data) and lay themselves out again; battles pick up where they were.
   let relayout = false;
   const refit = () => {
     game.scale.refresh();
     const active = game.scene.getScenes(true);
-    if (!relayout && active.some((s) => wantsWide(s.scene.key) !== LANDSCAPE)) {
+    if (!relayout && active.some((s) => boardChanged(s.scene.key))) {
       relayout = true;
       active.forEach((s) => s.scene.restart());
       setTimeout(() => (relayout = false), 200);

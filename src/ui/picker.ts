@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Creature } from '../logic/creature';
-import { button, COLORS, creatureRow, creatureSprite, H, text, W } from './widgets';
+import { button, COLORS, creatureRow, creatureSprite, fullRect, H, OX, OY, text, W } from './widgets';
 
 export interface PickOption {
   label?: string;
@@ -42,7 +42,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   // On the wide board the panel keeps an upright width, centered.
   const PW = Math.min(W, 480);
   const root = scene.add.container((W - PW) / 2, 0).setDepth(1000);
-  const dim = scene.add.rectangle(-(W - PW) / 2, 0, W, H, 0x000000, 0.78).setOrigin(0).setInteractive();
+  const dim = fullRect(scene, 0x000000, 0.78).setPosition(-(W - PW) / 2 - OX, -OY).setInteractive();
   root.add(dim);
 
   const close = () => root.destroy();

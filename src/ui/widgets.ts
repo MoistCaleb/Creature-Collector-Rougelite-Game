@@ -28,14 +28,83 @@ export const deviceWide = () => typeof window !== 'undefined' && window.innerWid
 /** The board this scene should use right now. */
 export const wantsWide = (key: string) => deviceWide() && WIDE_READY.has(key);
 
-/** Switch the board (and resize the canvas) if this scene needs the other orientation. */
+/**
+ * The board fills the whole screen. The layout (W x H) sits inside the phone's safe area (clear of
+ * the notch / Dynamic Island and rounded corners), as large as it fits, and the rest of the screen
+ * is margin: OX to the left of the layout and OY above it, FW x FH in all. Backgrounds, dimmers
+ * and the battle scenery cover the margins too, so there are no empty bars on any phone shape.
+ */
+export let OX = 0;
+export let OY = 0;
+export let FW = 450;
+export let FH = 800;
+
+/** The phone's safe-area insets in CSS pixels (0 where there are none). */
+function safeInsets() {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const out = { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+  probe.remove();
+  return out;
+}
+
+/** The board a scene should use on this screen right now. */
+export function boardFor(key: string) {
+  const wide = wantsWide(key);
+  const bw = wide ? 800 : 450;
+  const bh = wide ? 450 : 800;
+  if (typeof window === 'undefined') return { wide, bw, bh, ox: 0, oy: 0, fw: bw, fh: bh };
+  const box = document.getElementById('game');
+  const sw = box?.clientWidth || window.innerWidth;
+  const sh = box?.clientHeight || window.innerHeight;
+  const ins = safeInsets();
+  // Sideways, the home bar only needs a thin strip: let the layout reach the bottom edge.
+  if (wide) ins.b = Math.min(ins.b, 6);
+  const safeW = Math.max(1, sw - ins.l - ins.r);
+  const safeH = Math.max(1, sh - ins.t - ins.b);
+  const s = Math.min(safeW / bw, safeH / bh);
+  // Very unusual shapes (e.g. a nearly square unfolded screen) get at most this much margin.
+  const fw = Math.round(Math.min(sw / s, bw * 1.6));
+  const fh = Math.round(Math.min(sh / s, bh * 1.6));
+  let ox = (ins.l + (safeW - bw * s) / 2) / s;
+  let oy = (ins.t + (safeH - bh * s) / 2) / s;
+  ox = Math.round(Math.max(0, Math.min(ox, fw - bw)));
+  oy = Math.round(Math.max(0, Math.min(oy, fh - bh)));
+  return { wide, bw, bh, ox, oy, fw, fh };
+}
+
+/** Does this scene need a different board than the one in use (turned phone, new screen size)? */
+export function boardChanged(key: string) {
+  const b = boardFor(key);
+  return b.wide !== LANDSCAPE || Math.abs(b.fw - FW) > 2 || Math.abs(b.fh - FH) > 2 || Math.abs(b.ox - OX) > 2 || Math.abs(b.oy - OY) > 2;
+}
+
+/** Switch the board (and resize the canvas) for this scene and this screen. */
 function useBoard(scene: Phaser.Scene) {
-  const wide = wantsWide(scene.scene.key);
-  if (wide === LANDSCAPE) return;
-  LANDSCAPE = wide;
-  W = wide ? 800 : 450;
-  H = wide ? 450 : 800;
-  scene.scale.setGameSize(Math.round(W * ZOOM), Math.round(H * ZOOM));
+  const b = boardFor(scene.scene.key);
+  LANDSCAPE = b.wide;
+  W = b.bw;
+  H = b.bh;
+  OX = b.ox;
+  OY = b.oy;
+  if (b.fw !== FW || b.fh !== FH || Math.round(FW * ZOOM) !== scene.scale.width) {
+    FW = b.fw;
+    FH = b.fh;
+    scene.scale.setGameSize(Math.round(FW * ZOOM), Math.round(FH * ZOOM));
+  }
+}
+
+/** A rectangle over the whole screen, margins included (for dimmers and full-screen fills). */
+export const fullRect = (scene: Phaser.Scene, color: number, alpha = 1) => scene.add.rectangle(-OX, -OY, FW, FH, color, alpha).setOrigin(0);
+
+/** Clip a scrolling list to the rows between `top` and `bottom` (it must not slide into the margins). */
+export function clipList(scene: Phaser.Scene, list: Phaser.GameObjects.Container, top: number, bottom = H) {
+  const shape = scene.make.graphics({}, false).fillRect(-OX, top, FW, bottom - top);
+  list.setMask(shape.createGeometryMask());
+  scene.events.once('shutdown', () => shape.destroy());
 }
 
 /**
@@ -281,7 +350,7 @@ export function background(scene: Phaser.Scene, color = COLORS.bg, decor: 'menu'
   // Every scene draws its background first, so this is where the board is chosen (upright or
   // wide) and the camera gets its zoom.
   useBoard(scene);
-  scene.cameras.main.setOrigin(0, 0).setZoom(ZOOM);
-  scene.add.rectangle(0, 0, W, H, color).setOrigin(0);
-  if (decor !== 'none') menuBackdrop(scene, W, H, color, decor === 'title');
+  scene.cameras.main.setOrigin(0, 0).setZoom(ZOOM).setScroll(-OX, -OY);
+  fullRect(scene, color);
+  if (decor !== 'none') menuBackdrop(scene, OX, OY, FW, FH, color, decor === 'title');
 }
