@@ -20,6 +20,7 @@ export const HOW_TO_PLAY: Page[] = [
       'Each floor ends with a guardian. Beat the floor 3 guardian to win the run and unlock a new map.',
       'A Hexling that faints is gone for the rest of the run. If your whole team falls, the run is over.',
       'Between runs you keep what you unlocked: starters, Hexlidex entries, maps and trainer passives.',
+      'Win a run and you can go Shiny Hunting: endless floors where shinies are everywhere and enemies keep getting stronger.',
     ],
   },
   {

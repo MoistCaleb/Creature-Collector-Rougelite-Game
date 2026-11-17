@@ -11,7 +11,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
+import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1653,5 +1653,45 @@ describe('daily passives', () => {
       const m = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: 'drill', runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] } as Meta;
       expect(startRun(m, ids[0], dailySeed(date), 'wildlands', date).passive).toBe(pv[ids[0]]);
     }
+  });
+});
+
+describe('shiny hunting', () => {
+  const meta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(),
+    coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+
+  it('goes on forever: clearing a hunt floor never wins, final forms out-level and out-star you, shinies are common', () => {
+    const run = startRun(meta(), DEFAULT_STARTERS[0], 11);
+    run.floor = 2;
+    startHunt(run);
+    expect(run.hunt).toEqual({ depth: 1, shinies: 0 });
+    const node = (kind: string) => ({ ...run.map.nodes[run.map.nodes[run.currentId].next[0]], kind, progress: 0.5 }) as never;
+    const first = makeEncounter(run, node('battle'));
+    expect(first.every((e) => e.stage === 2)).toBe(true);
+    expect(first[0].level).toBeGreaterThan(90);
+    const wins = run.meta.wins;
+    for (let d = 0; d < 8; d++) expect(clearFloor(run)).toBe(false);
+    expect(run.meta.wins).toBe(wins);
+    expect(run.hunt!.depth).toBe(9);
+    let shiny = 0;
+    let total = 0;
+    let trainerShiny = 0;
+    let maxLevel = 0;
+    let maxStars = 0;
+    for (let k = 0; k < 300; k++) {
+      for (const e of makeEncounter(run, node('battle'))) {
+        total++;
+        if (e.shiny) shiny++;
+        maxLevel = Math.max(maxLevel, e.level);
+        maxStars = Math.max(maxStars, e.stars);
+      }
+      for (const e of makeEncounter(run, node('elite'))) if (e.shiny) trainerShiny++;
+    }
+    expect(maxLevel).toBeGreaterThan(125);
+    expect(maxStars).toBe(HUNT_MAX_STARS);
+    expect(shiny / total).toBeGreaterThan(1 / 25);
+    expect(trainerShiny).toBeGreaterThan(0);
   });
 });

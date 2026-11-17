@@ -332,7 +332,7 @@ export class BattleScene extends Phaser.Scene {
     this.showActions();
     ensureFxTextures(this);
     // The floor's element colours the music; floor 3's guardian has its own song.
-    playMusic(boss ? (run.floor === 2 ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', run.map.biome);
+    playMusic(boss ? (run.floor === 2 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', run.map.biome);
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     const begin = () => {
@@ -1373,9 +1373,33 @@ export class BattleScene extends Phaser.Scene {
     const starTag = wild && catchStars(run, wild) > 0 ? ` · ${'★'.repeat(catchStars(run, wild))}` : '';
     const level = wild ? catchLevel(run, wild) : 1;
     let chosen = false;
+    // The one exception: in a two-Hexling wild battle, a shiny that fainted first can still be caught.
+    const shinyFirst =
+      this.kind === 'battle' && this.enemies.length === 2 && this.enemies[0].shiny && !isAlive(this.enemies[0]) ? this.enemies[0] : null;
+    if (shinyFirst) {
+      const sLevel = catchLevel(run, shinyFirst);
+      const sStars = catchStars(run, shinyFirst);
+      this.msg.setText(
+        wild
+          ? `The shiny ${creatureName(shinyFirst)} can still be caught! Catch it, catch the ${creatureName(wild)}, or finish for the rewards.`
+          : `The shiny ${creatureName(shinyFirst)} can still be caught!`,
+      );
+      const half = wild ? (L.catchBtn.w - 8) / 2 : L.catchBtn.w;
+      const sx = wild ? L.catchBtn.x - L.catchBtn.w / 2 + half / 2 : L.catchBtn.x;
+      const btn = button(this, sx, L.catchBtn.y, half, L.catchBtn.h, `Catch ✦ ${creatureName(shinyFirst)}`, () => {
+        if (chosen) return;
+        chosen = true;
+        if (!full) return this.doCatch(shinyFirst, fallen);
+        this.pickRelease(`Catch ${creatureName(shinyFirst)}`, (out) => this.doCatch(shinyFirst, fallen, out), () => (chosen = false));
+      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'SHINY', sub: `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}` });
+      this.actions.add(btn);
+    }
     if (wild) {
+      // Beside the shiny's button when there is one.
+      const half = shinyFirst ? (L.catchBtn.w - 8) / 2 : L.catchBtn.w;
+      const cx = shinyFirst ? L.catchBtn.x + L.catchBtn.w / 2 - half / 2 : L.catchBtn.x;
       this.actions.add(
-        button(this, L.catchBtn.x, L.catchBtn.y, L.catchBtn.w, L.catchBtn.h, `Catch ${creatureName(wild)}`, () => {
+        button(this, cx, L.catchBtn.y, half, L.catchBtn.h, `Catch ${creatureName(wild)}`, () => {
           if (chosen) return;
           chosen = true;
           if (!full) return this.doCatch(wild, fallen);
@@ -1383,9 +1407,13 @@ export class BattleScene extends Phaser.Scene {
           this.pickRelease(`Catch ${creatureName(wild)}`, (out) => this.doCatch(wild, fallen, out), () => (chosen = false));
         }, {
           color: 0x3a4f7a,
-          fontSize: 20,
+          fontSize: shinyFirst ? 15 : 20,
           glyph: 'crystal',
-          sub: full ? `Party full: release one to make room · Lv ${level}${starTag}${bonusTag}` : `Forfeit the rewards · joins at Lv ${level}${starTag}${bonusTag}`,
+          sub: shinyFirst
+            ? `Lv ${level}${starTag}`
+            : full
+              ? `Party full: release one to make room · Lv ${level}${starTag}${bonusTag}`
+              : `Forfeit the rewards · joins at Lv ${level}${starTag}${bonusTag}`,
         }),
       );
     }
@@ -1565,7 +1593,11 @@ export class BattleScene extends Phaser.Scene {
       this.scene.start('End', { won: true });
       return;
     }
-    this.toMap(`${note}\n\nYou climb to the ${run.map.biome} lands.`);
+    this.toMap(
+      run.hunt
+        ? `${note}\n\nThe hunt goes deeper: floor ${run.hunt.depth}, the ${run.map.biome} lands. Enemies grow stronger.`
+        : `${note}\n\nYou climb to the ${run.map.biome} lands.`,
+    );
   }
 
   private onLose() {

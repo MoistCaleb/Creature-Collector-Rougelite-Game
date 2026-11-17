@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, dailyRecord, describeDaily, recordDaily, recordRun, runMvp, saveMeta } from '../logic/run';
-import { state } from '../state';
+import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
+import { persist, state } from '../state';
 import { isAlive, type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
 import { MOVES } from '../data/moves';
@@ -31,16 +31,24 @@ export class EndScene extends Phaser.Scene {
     const run = state.run!;
     clearSavedRun();
     // History, streaks and most-used Hexlings: once per run (the screen re-lays out when the phone turns).
+    // A Shiny Hunt was already recorded as a won run when it began; just keep the hunt's bests.
+    const hunt = run.hunt;
     if (!historyRuns.has(run)) {
       historyRuns.add(run);
-      recordRun(run, data.won);
+      if (hunt) {
+        state.meta.bestHunt = Math.max(state.meta.bestHunt ?? 0, hunt.depth);
+        state.meta.bestHuntShinies = Math.max(state.meta.bestHuntShinies ?? 0, hunt.shinies);
+        saveMeta(state.meta);
+      } else recordRun(run, data.won);
     }
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>
       this.add.image(x, y, ensureCreatureTexture(this, speciesId, stage)).setScale(scale * SPRITE_FIT);
 
     const race = run.race;
-    const title = race ? (data.won ? 'STAGE CLEARED' : 'STAGE LOST') : data.won ? 'VICTORY!' : 'RUN OVER';
-    const sub = race
+    const title = hunt ? 'HUNT OVER' : race ? (data.won ? 'STAGE CLEARED' : 'STAGE LOST') : data.won ? 'VICTORY!' : 'RUN OVER';
+    const sub = hunt
+      ? `Your team fell on Shiny Hunt floor ${hunt.depth}. ${hunt.shinies} shin${hunt.shinies === 1 ? 'y' : 'ies'} caught on the hunt.`
+      : race
       ? data.won
         ? `You reached the boss. Your team now faces ${race.opponent}!`
         : `Your team fell in the ${run.map.biome} lands before reaching the boss.`
@@ -89,7 +97,7 @@ export class EndScene extends Phaser.Scene {
     const totalDamage = [...allCreatures(run), ...(run.log.fallen ?? [])].reduce((n, c) => n + (c.dealt ?? 0), 0);
     const stats: [string, string][] = [
       ['Battles won', String(run.log.battlesWon)],
-      race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? 3 : run.floor)],
+      hunt ? ['Hunt floor', String(hunt.depth)] : race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? 3 : run.floor)],
       ['Caught', String(run.log.caught)],
       ['Lost', String(run.log.lost)],
       ['Coins earned', String(run.log.coins ?? 0)],
@@ -144,15 +152,28 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Achievements: ${earned.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name).join(', ')}`);
     }
-    if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : 310) : run.race ? 610 : 640)) {
+    const huntRoom = data.won && !run.daily && !hunt && !run.race;
+    if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
       text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
     }
 
     if (run.race) return this.raceFinish(run, data.won);
     // Keep a good creature: save its form and moves for the team builder.
     const alive = allCreatures(run).filter((c) => c.hp > 0);
+    // Won a normal run: keep climbing as a Shiny Hunt.
+    const canHunt = data.won && !run.daily && !hunt;
+    if (canHunt) {
+      const hb = button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 296 : 630, 320, 52, 'Shiny Hunting', () => this.confirmHunt(run), {
+        fontSize: 20,
+        color: 0x7a5a1c,
+        glyph: 'sparkle',
+        badge: 'ENDLESS',
+        sub: 'Keep climbing · shinies everywhere',
+      });
+      this.tweens.add({ targets: hb, scale: 1.04, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    }
     if (alive.length) {
-      const label = `${data.won ? 'Win' : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
+      const label = `${hunt ? `Hunt ${hunt.depth}` : data.won ? 'Win' : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
       button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 352 : 692, 320, 44, 'Save a loadout', () => this.saveLoadouts(alive, label), {
         fontSize: 16,
         color: 0x2f4a6b,
@@ -164,6 +185,26 @@ export class EndScene extends Phaser.Scene {
       state.run = null;
       this.scene.start('Title', {});
     }, { color: 0x3b6d4a, fontSize: 20 });
+  }
+
+  /** Explain Shiny Hunting, then start it: the run continues on endless floors. */
+  private confirmHunt(run: NonNullable<typeof state.run>) {
+    openPicker(this, {
+      title: 'Shiny Hunting',
+      subtitle:
+        'Your win is already counted. Keep climbing with this team through endless floors of random elements.\n\n' +
+        `• Shinies are everywhere: about 1 wild Hexling in ${HUNT_SHINY_IN.wild}, and trainers' and guardians' Hexlings can be shiny too.\n` +
+        '• Your team is fully healed to start, and your Hexlings can reach their full level cap.\n' +
+        `• Enemies are final forms that grow every floor, with higher levels than yours and up to ${HUNT_MAX_STARS}★.\n` +
+        '• It ends when your team falls. How deep can you go?',
+      options: [{ label: 'Start the hunt', color: 0x7a5a1c, glyph: 'sparkle' }],
+      onPick: () => {
+        const el = startHunt(run);
+        persist();
+        this.scene.start('Map', { banner: `The Shiny Hunt begins in the ${el} lands. Your team is fully healed.` });
+      },
+      onCancel: () => {},
+    });
   }
 
   /** Pick survivors to save as loadouts (several can be saved; saved ones are marked). */

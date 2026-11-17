@@ -183,7 +183,7 @@ export class MapScene extends Phaser.Scene {
       });
       showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', after);
     };
-    const afterBanner = () => (data.banner ? showMessage(this, `Floor ${run.floor + 1}`, data.banner, next) : next());
+    const afterBanner = () => (data.banner ? showMessage(this, run.hunt ? `Shiny Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
     // New held items and Evolution Stones since the map was last shown get their own moments.
     const items = run.newItems ?? [];
     run.newItems = [];
@@ -228,7 +228,7 @@ export class MapScene extends Phaser.Scene {
     if (run.race) this.drawRaceStatus();
     if (LANDSCAPE) return this.drawSideInfo();
     this.add.rectangle(-OX, -OY, FW, TOP_BAR + OY, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 10, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 10, run.race ? 'Stage battle' : run.hunt ? `Shiny Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     // Heat and daily markers after the land name.
     let mx = 14 + biome.width + 12;
@@ -259,7 +259,7 @@ export class MapScene extends Phaser.Scene {
   private drawSideInfo() {
     const run = state.run!;
     this.add.rectangle(-OX, -OY, SIDE_L + OX, FH, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 12, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 12, run.race ? 'Stage battle' : run.hunt ? `Shiny Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 40, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     let mx = 14 + biome.width + 12;
     if (run.heat) {
