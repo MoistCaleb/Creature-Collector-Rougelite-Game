@@ -188,6 +188,10 @@ Proposed math:
 ## Level curve (target)
 - Level caps: 30 / 65 / 100 by evolution stage, +5 per ★. Evolving needs Lv 30 (first) / Lv 65 (second),
   whatever the cap (a floor ceiling or stars don't change it), including the boss's "Evolve one" boon.
+- **Trainer tactics:** trainers (1 potion) and guardians (2 potions) drink a potion (heal 50%, cure status)
+  when a creature is low or badly afflicted, switch out of super-effective matchups to a teammate that resists
+  (not two switches close together), and after a faint send in the creature with the best matchup. Arena
+  ladder trainers do the same from round 3.
 - **Team moves:** every line learns its element's team move at Lv 26. Effects sit on your side for 5 turns
   (+1 per skill tier), whoever is out, so switching keeps them: Rally (Fire/Dragon, +25% damage), Guard
   (Earth/Metal, -25% damage taken), Tailwind (Storm/Spirit, +50% speed), Ward (Light/Frost, no status),

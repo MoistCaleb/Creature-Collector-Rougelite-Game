@@ -1413,3 +1413,46 @@ describe('team moves', () => {
     expect(c.moves[0].id).not.toBe(id);
   });
 });
+
+describe('trainer tactics', () => {
+  const mk = (id: string, lv: number, moves: string[]) => {
+    const c = createCreature(id, lv);
+    c.moves = moves.map((m) => ({ id: m, tier: 1 }));
+    return c;
+  };
+  it('trainers drink a potion when their creature is in trouble', () => {
+    let used = 0;
+    for (let s = 0; s < 20; s++) {
+      const p = mk('emberkit', 40, ['Fire:buff']);
+      const e = mk('golemite', 40, [attackId('Earth', 0)]);
+      e.hp = Math.ceil(stats(e).hp * 0.2);
+      const b = new Battle([p], [e], new Rng(s), { enemyTactics: { potions: 1, name: 'Ace Kim' } });
+      const ev = b.takeTurn({ kind: 'move', index: 0 });
+      if (ev.some((x) => x.kind === 'text' && x.text.includes('uses a Potion'))) used++;
+      expect(b.tactics!.potions).toBeGreaterThanOrEqual(0);
+    }
+    expect(used).toBeGreaterThan(8);
+  });
+  it('trainers switch out of a bad matchup and send in the best answer after a faint', () => {
+    // Player: Water attacker. Enemy lead: Fire (weak to Water); bench: Nature (resists Water).
+    let switched = 0;
+    for (let s = 0; s < 20; s++) {
+      const p = mk('puddlet', 40, [attackId('Water', 1)]);
+      const fire = mk('emberkit', 40, [attackId('Fire', 0)]);
+      const grass = mk('mossling', 40, [attackId('Nature', 0)]);
+      const b = new Battle([p], [fire, grass], new Rng(s), { enemyTactics: { potions: 0 } });
+      b.takeTurn({ kind: 'move', index: 0 });
+      if (b.eActive === 1) switched++;
+    }
+    expect(switched).toBeGreaterThan(8);
+    // After a faint the best matchup comes in, not just the next in line.
+    const p = mk('puddlet', 60, [attackId('Water', 1)]);
+    const lead = mk('golemite', 5, [attackId('Earth', 0)]);
+    const fire = mk('emberkit', 40, [attackId('Fire', 0)]);
+    const grass = mk('mossling', 40, [attackId('Nature', 0)]);
+    const b = new Battle([p], [lead, fire, grass], new Rng(1), { enemyTactics: { potions: 0 } });
+    lead.hp = 1;
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.eActive).toBe(2);
+  });
+});

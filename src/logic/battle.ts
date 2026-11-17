@@ -64,6 +64,11 @@ export class Battle {
   /** Chance the enemy picks a random move instead of its best one. */
   private enemyRandomness: number;
   private permadeath: boolean;
+  /** Smarter trainer/guardian play (see enemyTactics); potions left. */
+  tactics: { potions: number; name?: string } | null;
+  /** Turn the enemy last switched voluntarily (no two switches in a row). */
+  private lastEnemySwitch = -10;
+  private turnNo = 0;
   /** Set for duels between two people (see the constructor option). */
   readonly duel: { player: string; enemy: string } | null;
   /** Team effects up on each side, with turns left (see TEAM_FX). */
@@ -142,6 +147,11 @@ export class Battle {
       /** Your fainted creatures are gone for good (runs); off for Arena and duels. */
       permadeath?: boolean;
       /**
+       * Trainers and guardians: switch out of bad matchups, send in the best answer after a faint,
+       * and use this many potions (heal 50%, cure status) when a creature is in trouble.
+       */
+      enemyTactics?: { potions: number; name?: string };
+      /**
        * Duels between two people: names shown for each side ("Sam's Monolith"), and the enemy side
        * chooses its own next creature after a faint (see forcedEnemySwitch).
        */
@@ -165,6 +175,7 @@ export class Battle {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
     this.permadeath = opts.permadeath ?? true;
+    this.tactics = opts.enemyTactics ? { ...opts.enemyTactics } : null;
     this.duel = opts.duel ?? null;
     this.rule = opts.rule ?? null;
     this.ruleName = opts.ruleName ?? 'The field';
@@ -267,7 +278,11 @@ export class Battle {
 
   takeTurn(action: PlayerAction): BattleEvent[] {
     const ev: BattleEvent[] = [];
-    const enemyMove = this.chooseEnemyMove();
+    this.turnNo++;
+    // Trainers may switch or drink a potion instead of attacking; that happens first.
+    const plan = this.enemyPlan();
+    if (plan) this.doEnemyPlan(plan, ev);
+    const enemyMove = plan ? null : this.chooseEnemyMove();
 
     if (action.kind === 'potion') {
       const x = this.player[action.index];
@@ -286,7 +301,7 @@ export class Battle {
           ev.push({ kind: 'text', text: `${creatureName(x.c)} is cured!` });
         }
       }
-      if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
+      if (isAlive(this.p.c) && enemyMove) this.useMove('enemy', enemyMove, ev);
     } else if (action.kind === 'swap') {
       if (!this.canSwapTo(action.index)) return ev;
       ev.push({ kind: 'text', text: `${creatureName(this.p.c)}, come back!` });
@@ -296,14 +311,14 @@ export class Battle {
       ev.push({ kind: 'swap', side: 'player', index: action.index, hp: this.p.c.hp });
       ev.push({ kind: 'text', text: `Go, ${creatureName(this.p.c)}!` });
       this.onEnter('player', ev);
-      if (isAlive(this.p.c)) this.useMove('enemy', enemyMove, ev);
+      if (isAlive(this.p.c) && enemyMove) this.useMove('enemy', enemyMove, ev);
     } else {
       const enemyAtStart = this.e;
       // A move with no uses left (or index -1) falls back to the creature's basic attack.
       const chosen = this.p.c.moves[action.index];
       const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
       const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p);
-      const ePri = !!moveDef(enemyMove).priority || this.clawProc(this.e);
+      const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e));
       const playerFirst = pPri !== ePri ? pPri : this.rule === 'tailwind' ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       for (const side of order) {
@@ -316,6 +331,7 @@ export class Battle {
         const target = side === 'player' ? this.e : this.p;
         if (!isAlive(target.c)) continue;
         const slot = side === 'player' ? pSlot : enemyMove;
+        if (!slot) continue;
         this.useMove(side, slot, ev);
       }
     }
@@ -352,7 +368,7 @@ export class Battle {
     this.eActive = index;
     resetStages(this.e);
     ev.push({ kind: 'enemySend', index, hp: this.e.c.hp });
-    ev.push({ kind: 'text', text: `${this.duel ? this.duel.enemy : 'The enemy'} sends out ${creatureName(this.e.c)}!` });
+    ev.push({ kind: 'text', text: `${this.duel?.enemy ?? this.tactics?.name ?? 'The enemy'} sends out ${creatureName(this.e.c)}!` });
     this.onEnter('enemy', ev);
   }
 
@@ -402,6 +418,87 @@ export class Battle {
     }
     this.endOfTurn(ev);
     return ev;
+  }
+
+  // ------------------------------------------------------------ trainer tactics
+
+  /** How hard the player's active creature can hit this enemy creature (best type multiplier of its attacks). */
+  private threatTo(x: Combatant): number {
+    const types = creatureTypes(x.c);
+    let best = 0;
+    for (const m of this.p.c.moves) {
+      const d = moveDef(m);
+      if (d.kind !== 'attack' || !hasUses(m)) continue;
+      best = Math.max(best, typeMultiplier(attackElement(d, this.p, x), types));
+    }
+    return best || 1;
+  }
+
+  /** How well this enemy creature hits the player's active one (its best type multiplier). */
+  private punchOf(x: Combatant): number {
+    const types = creatureTypes(this.p.c);
+    let best = 0;
+    for (const m of x.c.moves) {
+      const d = moveDef(m);
+      if (d.kind !== 'attack' || !hasUses(m)) continue;
+      best = Math.max(best, typeMultiplier(attackElement(d, x, this.p), types));
+    }
+    return best || 1;
+  }
+
+  /** The living enemy creature with the best matchup against the player's active one. */
+  private bestEnemyAnswer(exclude = -1): number {
+    let best = -1;
+    let score = -Infinity;
+    this.enemy.forEach((x, i) => {
+      if (i === exclude || !isAlive(x.c)) return;
+      const s = this.punchOf(x) / this.threatTo(x) + 0.3 * (x.c.hp / stats(x.c).hp);
+      if (s > score) {
+        score = s;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  /** Trainers: drink a potion when in trouble, or switch out of a bad matchup. Null = just attack. */
+  private enemyPlan(): { kind: 'potion' } | { kind: 'swap'; index: number } | null {
+    const t = this.tactics;
+    if (!t || this.spared || !isAlive(this.e.c) || !isAlive(this.p.c)) return null;
+    const e = this.e;
+    const frac = e.c.hp / stats(e.c).hp;
+    const badStatus = e.status === 'sleep' || e.status === 'freeze' || ((e.status === 'burn' || e.status === 'poison') && frac < 0.6);
+    if (t.potions > 0 && (frac < 0.3 || (badStatus && frac < 0.8)) && this.rng.chance(0.7)) return { kind: 'potion' };
+    // Switch when the player's creature hits this one super-effectively and a teammate takes it far better.
+    if (this.turnNo - this.lastEnemySwitch > 2 && this.threatTo(e) > 1.2 && frac > 0.2) {
+      const i = this.bestEnemyAnswer(this.eActive);
+      if (i >= 0 && this.threatTo(this.enemy[i]) <= 1 && this.enemy[i].c.hp / stats(this.enemy[i].c).hp > 0.4 && this.rng.chance(0.6)) {
+        return { kind: 'swap', index: i };
+      }
+    }
+    return null;
+  }
+
+  private doEnemyPlan(plan: { kind: 'potion' } | { kind: 'swap'; index: number }, ev: BattleEvent[]) {
+    const who = this.tactics?.name ?? 'The enemy';
+    if (plan.kind === 'potion') {
+      const x = this.e;
+      this.tactics!.potions--;
+      const max = stats(x.c).hp;
+      const hurt = x.c.hp < max;
+      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * 0.5));
+      ev.push({ kind: 'text', text: `${who} uses a Potion on ${creatureName(x.c)}!` });
+      if (hurt) ev.push({ kind: 'heal', side: 'enemy', hp: x.c.hp, maxHp: max });
+      if (x.status) this.cure(x, 'enemy', ev);
+      return;
+    }
+    this.lastEnemySwitch = this.turnNo;
+    ev.push({ kind: 'text', text: `${who} calls back ${creatureName(this.e.c)}!` });
+    this.eActive = plan.index;
+    resetStages(this.e);
+    ev.push({ kind: 'enemySend', index: plan.index, hp: this.e.c.hp });
+    ev.push({ kind: 'text', text: `${who} sends out ${creatureName(this.e.c)}!` });
+    this.onEnter('enemy', ev);
   }
 
   /** Quick Claw: a 25% chance to jump the queue this turn. */
@@ -780,12 +877,12 @@ export class Battle {
     });
     if (side === 'enemy') {
       // In duels the other person picks their next creature themselves.
-      const next = this.duel ? -1 : this.enemy.findIndex((x) => isAlive(x.c));
+      const next = this.duel ? -1 : this.tactics ? this.bestEnemyAnswer() : this.enemy.findIndex((x) => isAlive(x.c));
       if (next >= 0) {
         this.eActive = next;
         resetStages(this.e);
         ev.push({ kind: 'enemySend', index: next, hp: this.e.c.hp });
-        ev.push({ kind: 'text', text: `The enemy sends out ${creatureName(this.e.c)}!` });
+        ev.push({ kind: 'text', text: `${this.tactics?.name ?? 'The enemy'} sends out ${creatureName(this.e.c)}!` });
         this.onEnter('enemy', ev);
       }
       if (this.rule === 'curse' && isAlive(this.p.c)) {

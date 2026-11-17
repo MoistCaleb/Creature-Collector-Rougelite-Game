@@ -34,6 +34,9 @@ export const BALANCE = {
   /** Whether each floor boss's lead creature is one evolution ahead. */
   bossLeadEvolves: [false, true, true],
   eliteLevelBonus: 1,
+  /** Potions trainers and guardians carry into battle (heal 50%, cure status). */
+  trainerPotions: 1,
+  bossPotions: 2,
   /** Chance an enemy picks a random move instead of its best one (lower = smarter). */
   enemyRandomness: { battle: 0.5, elite: 0.1, boss: 0 } as Record<'battle' | 'elite' | 'boss', number>,
   /** Per floor: each defeated enemy is worth this many of ITS OWN level-ups in XP (steady pacing at any level). */

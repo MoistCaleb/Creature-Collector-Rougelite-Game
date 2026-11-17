@@ -219,6 +219,8 @@ export class ArenaScene extends Phaser.Scene {
           title: `ARENA ${l.round + 1}/${ARENA_ROUNDS}`,
           opponent: opp.name,
           randomness: opp.randomness,
+          // From round 3, ladder trainers switch out of bad matchups and carry potions.
+          tactics: l.round >= 2 ? { potions: l.round >= 4 ? 2 : 1 } : undefined,
           background: 0x1a1430,
           onEnd: (won) => this.roundOver(l, won),
         };
