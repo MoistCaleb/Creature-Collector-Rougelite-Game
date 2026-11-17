@@ -5,10 +5,7 @@ import {
   ARENA_LEVEL,
   ARENA_ROUNDS,
   ARENA_TEAM,
-  arenaForms,
   arenaOpponent,
-  arenaRoster,
-  defaultArenaMoves,
   makeArenaCreature,
   activeTeam,
   activeTeamIndex,
@@ -89,7 +86,7 @@ export class ArenaScene extends Phaser.Scene {
     const y = SLOT_Y + i * SLOT_H;
     const p = this.team[i];
     const bg = this.add.rectangle(12, y, W - 24, SLOT_H - 8, p ? COLORS.panel : 0x18141f).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    bg.setInteractive({ useHandCursor: true }).on('pointerup', () => (p ? this.scene.start('ArenaEdit', { slot: i }) : this.chooseSpecies(this.team.length)));
+    bg.setInteractive({ useHandCursor: true }).on('pointerup', () => (p ? this.scene.start('ArenaEdit', { slot: i }) : this.scene.start('ArenaPick', { slot: this.team.length })));
     if (!p) {
       text(this, W / 2, y + (SLOT_H - 8) / 2, '+ Add a creature', 16, COLORS.textDim).setOrigin(0.5);
       return;
@@ -117,46 +114,6 @@ export class ArenaScene extends Phaser.Scene {
     };
     if (i > 0) button(this, W - 40, y + 46, 40, 28, '▲', () => move(i - 1), { fontSize: 14 });
     if (i < this.team.length - 1) button(this, W - 40, y + 80, 40, 28, '▼', () => move(i + 1), { fontSize: 14 });
-  }
-
-  private chooseSpecies(i: number) {
-    const taken = this.team.filter((_, k) => k !== i).map((p) => p.speciesId);
-    const roster = arenaRoster(state.meta).filter((id) => !taken.includes(id));
-    const previews = roster.map((id) => {
-      const forms = arenaForms(state.meta, id);
-      return createCreature(id, ARENA_LEVEL, forms[forms.length - 1]);
-    });
-    openPicker(this, {
-      title: 'Choose a creature',
-      subtitle: 'Any species you have caught, in its most evolved form you have seen.',
-      options: previews.map((c) => ({ creature: c })),
-      onPick: (k) => {
-        const id = roster[k];
-        const forms = arenaForms(state.meta, id);
-        if (forms.length > 1) return this.chooseForm(i, id);
-        this.setPick(i, id, forms[0]);
-      },
-      onCancel: () => {},
-    });
-  }
-
-  private chooseForm(i: number, speciesId: string) {
-    const forms = arenaForms(state.meta, speciesId);
-    openPicker(this, {
-      title: 'Which form?',
-      subtitle: 'Later forms have higher stats.',
-      options: forms.map((st) => ({ creature: createCreature(speciesId, ARENA_LEVEL, st), note: `Stage ${st + 1}` })),
-      onPick: (k) => this.setPick(i, speciesId, forms[k]),
-      onCancel: () => {},
-    });
-  }
-
-  private setPick(i: number, speciesId: string, stage: number) {
-    const slot = Math.min(i, this.team.length);
-    this.team[slot] = { speciesId, stage, moves: defaultArenaMoves(speciesId, stage) };
-    this.save();
-    // Straight into the editor to pick its moves.
-    this.scene.start('ArenaEdit', { slot });
   }
 
   // ------------------------------------------------------------ ladder
