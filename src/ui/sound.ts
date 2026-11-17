@@ -440,6 +440,12 @@ export const sfx = {
   slash(i = 0) {
     noise(0.16, { freq: 1500 + (i % 4) * 400, to: 7000, vol: 0.22, type: 'bandpass', q: 1.5 });
   },
+  /** A cut-in strip slams home: a punchy thud and a paper snap. */
+  stripHit(i = 0) {
+    tone(150 - i * 15, 0.16, { type: 'sine', vol: 0.55, slide: 50 });
+    noise(0.07, { freq: 3200, vol: 0.35, type: 'bandpass', q: 1.2 });
+    noise(0.18, { freq: 900, to: 200, vol: 0.25 });
+  },
   /** A trainer's name slams onto the cut-in page. */
   cutInHit() {
     tone(110, 0.25, { type: 'sine', vol: 0.5, slide: 45 });
