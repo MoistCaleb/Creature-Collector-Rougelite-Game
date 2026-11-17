@@ -1,12 +1,11 @@
 import Phaser from 'phaser';
-import { maxUsesText, MOVES, moveSummary } from '../data/moves';
+import { MOVES } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
   ARENA_LEVEL,
   ARENA_ROUNDS,
   ARENA_TEAM,
   arenaForms,
-  arenaMovePool,
   arenaOpponent,
   arenaRoster,
   defaultArenaMoves,
@@ -16,10 +15,7 @@ import {
   savedTeams,
   type ArenaPick,
 } from '../logic/arena';
-import { createCreature, creatureName, creatureTypes, getFloorCeiling, MAX_MOVES, setFloorCeiling } from '../logic/creature';
-import { SPECIES_BY_ID } from '../data/species';
-
-const arenaName = (speciesId: string, stage: number) => SPECIES_BY_ID[speciesId].names[stage];
+import { createCreature, creatureName, creatureTypes, getFloorCeiling, setFloorCeiling } from '../logic/creature';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -93,7 +89,7 @@ export class ArenaScene extends Phaser.Scene {
     const y = SLOT_Y + i * SLOT_H;
     const p = this.team[i];
     const bg = this.add.rectangle(12, y, W - 24, SLOT_H - 8, p ? COLORS.panel : 0x18141f).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    bg.setInteractive({ useHandCursor: true }).on('pointerup', () => (p ? this.editSlot(i) : this.chooseSpecies(i)));
+    bg.setInteractive({ useHandCursor: true }).on('pointerup', () => (p ? this.scene.start('ArenaEdit', { slot: i }) : this.chooseSpecies(this.team.length)));
     if (!p) {
       text(this, W / 2, y + (SLOT_H - 8) / 2, '+ Add a creature', 16, COLORS.textDim).setOrigin(0.5);
       return;
@@ -110,31 +106,17 @@ export class ArenaScene extends Phaser.Scene {
       this.add.rectangle(mx, my + 7, 7, 7, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
       text(this, mx + 11, my, d.name, 12, COLORS.text);
     });
-  }
-
-  private editSlot(i: number) {
-    const p = this.team[i];
-    const forms = arenaForms(state.meta, p.speciesId);
-    openPicker(this, {
-      title: arenaName(p.speciesId, p.stage),
-      options: [
-        { label: 'Choose moves', sub: `${p.moves.length}/${MAX_MOVES} chosen`, color: 0x2f4a6b },
-        { label: 'Change form', sub: forms.length > 1 ? 'Pick another stage of this line' : 'Only one form seen so far', disabled: forms.length < 2 },
-        { label: 'Swap creature', sub: 'Pick a different species for this slot' },
-        { label: 'Remove', color: 0x5a2a2a },
-      ],
-      onPick: (k) => {
-        if (k === 0) this.chooseMoves(i, []);
-        else if (k === 1) this.chooseForm(i, p.speciesId);
-        else if (k === 2) this.chooseSpecies(i);
-        else {
-          this.team.splice(i, 1);
-          this.save();
-          this.scene.restart({});
-        }
-      },
-      onCancel: () => {},
-    });
+    text(this, W - 26, y + 8, 'Edit ›', 13, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);
+    // Reorder: in duels the first creatures in the team are the ones that fight.
+    const move = (to: number) => {
+      const t = [...this.team];
+      [t[i], t[to]] = [t[to], t[i]];
+      this.team = t;
+      this.save();
+      this.scene.restart({});
+    };
+    if (i > 0) button(this, W - 40, y + 46, 40, 28, '▲', () => move(i - 1), { fontSize: 14 });
+    if (i < this.team.length - 1) button(this, W - 40, y + 80, 40, 28, '▼', () => move(i + 1), { fontSize: 14 });
   }
 
   private chooseSpecies(i: number) {
@@ -170,36 +152,11 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private setPick(i: number, speciesId: string, stage: number) {
-    this.team[i] = { speciesId, stage, moves: defaultArenaMoves(speciesId, stage) };
+    const slot = Math.min(i, this.team.length);
+    this.team[slot] = { speciesId, stage, moves: defaultArenaMoves(speciesId, stage) };
     this.save();
-    this.scene.restart({});
-  }
-
-  /** Pick moves one at a time (up to 4); "Done" keeps what's chosen so far. */
-  private chooseMoves(i: number, chosen: string[]) {
-    const p = this.team[i];
-    const pool = arenaMovePool(p.speciesId, p.stage).filter((id) => !chosen.includes(id));
-    const finish = (moves: string[]) => {
-      this.team[i] = { ...p, moves };
-      this.save();
-      this.scene.restart({});
-    };
-    if (chosen.length >= MAX_MOVES || !pool.length) return finish(chosen);
-    openPicker(this, {
-      title: `Move ${chosen.length + 1} of ${MAX_MOVES}`,
-      subtitle: chosen.length ? `Chosen: ${chosen.map((id) => MOVES[id].name).join(', ')}` : `${arenaName(p.speciesId, p.stage)} can learn these by Lv ${ARENA_LEVEL}.`,
-      options: [
-        ...pool.map((id) => {
-          const d = MOVES[id];
-          return { label: d.name, sub: `${d.element} · ${moveSummary(d, 1)} · ${maxUsesText(d)}`, color: Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(45).color };
-        }),
-        ...(chosen.length ? [{ label: `Done (keep ${chosen.length})`, color: 0x3b6d4a }] : []),
-      ],
-      onPick: (k) => (k < pool.length ? this.chooseMoves(i, [...chosen, pool[k]]) : finish(chosen)),
-      onCancel: () => (chosen.length ? finish(chosen) : undefined),
-      cancelLabel: chosen.length ? 'Done' : 'Cancel',
-      rowHeight: 62,
-    });
+    // Straight into the editor to pick its moves.
+    this.scene.start('ArenaEdit', { slot });
   }
 
   // ------------------------------------------------------------ ladder
