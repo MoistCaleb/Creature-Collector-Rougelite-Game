@@ -12,7 +12,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
+import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, starterShiny, toggleStarterShiny, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1715,5 +1715,25 @@ describe('shinies in the Arena and online duels', () => {
     const team = validTeam(meta, [{ speciesId: e.speciesId, stage: 0, moves: [], shiny: true }]);
     expect(team[0].shiny).toBe(true);
     expect(mkArena(team[0]).shiny).toBe(true);
+  });
+
+  it('a shiny caught in any form unlocks the whole line: it starts runs shiny (unless switched off)', () => {
+    const meta = {
+      unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(),
+      coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+    } as Meta;
+    const id = DEFAULT_STARTERS[1];
+    expect(startRun(meta, id, 1).team[0].shiny).toBeFalsy();
+    // Caught as a final form: the base form (the starter) is shiny too.
+    const run = startRun(meta, DEFAULT_STARTERS[0], 2);
+    const e = createCreature(id, 70, 2);
+    e.shiny = true;
+    catchCreature(run, e);
+    expect(starterShiny(meta, id)).toBe(true);
+    expect(startRun(meta, id, 3).team[0].shiny).toBe(true);
+    toggleStarterShiny(meta, id);
+    expect(startRun(meta, id, 4).team[0].shiny).toBeFalsy();
+    toggleStarterShiny(meta, id);
+    expect(startRun(meta, id, 5).team[0].shiny).toBe(true);
   });
 });

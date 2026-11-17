@@ -12,6 +12,7 @@ import { cry } from '../ui/cries';
 import { toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
 import { openElementChart } from '../ui/elementChart';
+import { shinySparkle } from '../ui/shiny';
 
 type Tab = 'creatures' | 'moves' | 'elements';
 /** Content starts below the header, tabs and the jump-to-element bar. */
@@ -65,7 +66,11 @@ export class DexScene extends Phaser.Scene {
 
     // Header drawn last so it sits on top (and catches taps meant for it, not rows scrolled under it).
     this.add.rectangle(0, 0, W, TOP, COLORS.bg).setOrigin(0).setInteractive();
-    text(this, 16, 14, 'Hexlidex', 24, '#ffc94d', { fontStyle: 'bold' });
+    const hx = text(this, 16, 14, 'Hexlidex', 24, '#ffc94d', { fontStyle: 'bold' });
+    // Shinies unlocked (any form of a line unlocks the whole line).
+    const nShiny = (state.meta.shinyOwned ?? []).length;
+    icon(this, hx.x + hx.width + 16, 28, 'sparkle', 16);
+    text(this, hx.x + hx.width + 28, 20, `${nShiny}/${SPECIES.length} shiny`, 14, nShiny ? '#ffd86b' : COLORS.textDim, { fontStyle: 'bold' });
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
     button(this, W - 156, 30, 96, 40, 'Chart', () => openElementChart(this), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
     const totalForms = SPECIES.length * 3;
@@ -191,8 +196,12 @@ export class DexScene extends Phaser.Scene {
   }
 
   /** Row background that opens/closes the card when tapped (but not when dragged). */
-  private tapArea(row: Phaser.GameObjects.Container, y: number, h: number, i: number, enabled: boolean) {
-    const bg = this.add.rectangle(12, y, W - 24, h - 8, COLORS.panel).setOrigin(0).setStrokeStyle(1, this.expanded === i ? COLORS.accent : COLORS.stroke);
+  private tapArea(row: Phaser.GameObjects.Container, y: number, h: number, i: number, enabled: boolean, shiny = false) {
+    // Shiny-unlocked lines get a gold frame.
+    const bg = this.add
+      .rectangle(12, y, W - 24, h - 8, shiny ? 0x2c2236 : COLORS.panel)
+      .setOrigin(0)
+      .setStrokeStyle(shiny ? 2 : 1, shiny ? 0xffd86b : this.expanded === i ? COLORS.accent : COLORS.stroke, shiny ? 0.9 : 1);
     if (enabled) bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.toggle(i));
     row.add(bg);
   }
@@ -200,8 +209,10 @@ export class DexScene extends Phaser.Scene {
   /** An opened creature: every form large, with its stats at Lv 50 and its cry. */
   private drawCreatureCard(row: Phaser.GameObjects.Container, sp: (typeof SPECIES)[number], i: number, y: number, h: number) {
     const dex = state.meta.dex;
-    this.tapArea(row, y, h, i, true);
+    const owned = (state.meta.shinyOwned ?? []).includes(sp.id);
+    this.tapArea(row, y, h, i, true, owned);
     row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
+    if (owned) row.add(text(this, W - 138, y + 26, '✦ Shiny unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
     if (dex.caught.includes(sp.id)) row.add(text(this, W - 138, y + 10, '● Caught', 12, '#8fe08a').setOrigin(1, 0));
@@ -223,12 +234,14 @@ export class DexScene extends Phaser.Scene {
       const seen = hasSeenForm(dex, sp.id, s);
       row.add(this.add.rectangle(24, sy, 112, 124, 0x15111f).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       if (seen) {
-        row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s)).setScale(3.4 * SPRITE_FIT));
-        // Seen this family shiny: its rare colors in the corner.
-        if (shinySeen) {
-          row.add(this.add.rectangle(112, sy + 100, 44, 44, 0x2a2244).setStrokeStyle(1, 0xffc94d, 0.7));
-          row.add(this.add.image(112, sy + 100, ensureCreatureTexture(this, sp.id, s, true)).setScale(1 * SPRITE_FIT));
-          row.add(icon(this, 128, sy + 84, 'sparkle', 10));
+        // Shiny unlocked: the big picture is the shiny, its normal colours in the corner.
+        // Only seen shiny: normal big, the shiny in the corner.
+        row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s, owned)).setScale(3.4 * SPRITE_FIT));
+        if (owned) row.add(shinySparkle(this, 36, sy + 14, 14));
+        if (shinySeen || owned) {
+          row.add(this.add.rectangle(112, sy + 100, 44, 44, 0x2a2244).setStrokeStyle(1, owned ? COLORS.stroke : 0xffc94d, 0.7));
+          row.add(this.add.image(112, sy + 100, ensureCreatureTexture(this, sp.id, s, !owned)).setScale(1 * SPRITE_FIT));
+          if (!owned) row.add(icon(this, 128, sy + 84, 'sparkle', 10));
         }
         // Stats at this form's level cap (no prestige stars).
         const c = createCreature(sp.id, 1, s);
@@ -258,14 +271,21 @@ export class DexScene extends Phaser.Scene {
     const dex = state.meta.dex;
     {
       const anySeen = [0, 1, 2].some((s) => hasSeenForm(dex, sp.id, s));
-      this.tapArea(row, y, rowH, i, anySeen);
+      const owned = (state.meta.shinyOwned ?? []).includes(sp.id);
+      this.tapArea(row, y, rowH, i, anySeen, owned);
       if (anySeen) row.add(icon(this, W - 30, y + rowH - 22, 'arrowUp', 12).setAngle(180).setAlpha(0.45));
       if (state.meta.favorite === sp.id) row.add(icon(this, W - 100, y + 13, 'star', 14));
-      if ((state.meta.shinySeen ?? []).includes(sp.id)) row.add(icon(this, W - 120, y + 13, 'sparkle', 14));
+      if (!owned && (state.meta.shinySeen ?? []).includes(sp.id)) row.add(icon(this, W - 120, y + 13, 'sparkle', 14));
       row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
       if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
       // Caught shiny: it can be brought shiny to the Arena and online duels.
-      if ((state.meta.shinyOwned ?? []).includes(sp.id)) row.add(text(this, W - 24, y + 22, '✦ Shiny caught', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
+      if (owned) {
+        // Beside the element chips.
+        const tx = 70 + (sp.types[0] === sp.types[1] ? 1 : 2) * 54 + 6;
+        const tag = text(this, tx + 6, y + 14, '✦ SHINY UNLOCKED', 10, '#2a1a00', { fontStyle: 'bold' }).setOrigin(0, 0.5);
+        row.add(this.add.rectangle(tx, y + 14, tag.width + 12, 16, 0xffd86b).setOrigin(0, 0.5));
+        row.add(tag);
+      }
       if (anySeen) {
         const t = sp.types;
         (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 54, y + 14, el, true)));
@@ -274,7 +294,8 @@ export class DexScene extends Phaser.Scene {
         const cx = 70 + s * 130;
         const cy = y + 54;
         if (hasSeenForm(dex, sp.id, s)) {
-          row.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s)).setScale(1.7 * SPRITE_FIT));
+          row.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s, owned)).setScale(1.7 * SPRITE_FIT));
+          if (owned) row.add(shinySparkle(this, cx + 26, cy - 24, 11));
         } else {
           row.add(this.add.rectangle(cx, cy, 52, 52, 0x15111f).setStrokeStyle(1, COLORS.stroke));
           row.add(text(this, cx, cy, '?', 24, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));

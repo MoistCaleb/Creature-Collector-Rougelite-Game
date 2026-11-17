@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, todayUtc, dailyPlayed } from '../logic/run';
+import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed } from '../logic/run';
 import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
@@ -41,7 +41,7 @@ export class TitleScene extends Phaser.Scene {
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);
     ids.forEach((id, i) => {
-      const key = ensureCreatureTexture(this, id, 0);
+      const key = ensureCreatureTexture(this, id, 0, starterShiny(meta, id));
       const x = lx - 170 + i * 68;
       const img = this.add.image(x, ly(190), key).setScale(2.2 * SPRITE_FIT);
       this.tweens.add({ targets: img, y: ly(180), yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });

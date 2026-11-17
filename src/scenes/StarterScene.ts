@@ -3,7 +3,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { dailyPassives, dailySeed, dailyStarters, PASSIVES, rollStarterChoices, startRun } from '../logic/run';
+import { dailyPassives, dailySeed, dailyStarters, PASSIVES, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -70,7 +70,8 @@ export class StarterScene extends Phaser.Scene {
         const mid = x + cw / 2;
         const card = this.add.rectangle(x, y, cw, 350, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
         card.setInteractive({ useHandCursor: true }).on('pointerup', () => this.pick(id));
-        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0)).setScale(3.4 * SPRITE_FIT);
+        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id))).setScale(3.4 * SPRITE_FIT);
+        this.shinyToggle(id, x + cw - 50, y + 18, 84);
         this.tweens.add({ targets: img, y: y + 60, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
         if (!this.daily && state.meta.favorite === id) {
           pixelIcon(this, x + 18, y + 16, 'star', 16);
@@ -94,7 +95,8 @@ export class StarterScene extends Phaser.Scene {
       card.setInteractive({ useHandCursor: true });
       card.on('pointerup', () => this.pick(id));
 
-      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0)).setScale(4 * SPRITE_FIT);
+      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id))).setScale(4 * SPRITE_FIT);
+      this.shinyToggle(id, 82, y + 20, 100);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
       text(this, 175, y + 16, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
       if (!this.daily && state.meta.favorite === id) {
@@ -122,6 +124,17 @@ export class StarterScene extends Phaser.Scene {
         this.scene.start(this.daily ? 'Daily' : 'MapSelect', {});
       }, { fontSize: 15, glyph: 'back' });
     }
+  }
+
+  /** Shiny unlocked for this line: start it shiny (tap to switch to its normal colours and back). */
+  private shinyToggle(id: string, x: number, y: number, w: number) {
+    const meta = state.meta;
+    if (!(meta.shinyOwned ?? []).includes(id)) return;
+    const on = starterShiny(meta, id);
+    button(this, x, y, w, 24, on ? '✦ Shiny' : '✦ Normal', () => {
+      toggleStarterShiny(meta, id);
+      this.scene.restart({ mapId: this.mapId, daily: this.daily ?? undefined, race: this.race ?? undefined });
+    }, { fontSize: 11, color: on ? 0x7a5a1c : 0x2a2440 });
   }
 
   private pick(id: string) {

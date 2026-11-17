@@ -382,6 +382,13 @@ Proposed math:
 - Keeps its colors when caught and when it evolves. Purely cosmetic.
 - The Hexlidex marks families you've seen shiny and shows their shiny forms; Records counts shinies caught.
 - Rolled from a hash of the run seed (not the run's random rolls), so daily runs stay identical for everyone.
+- **One shiny unlocks the whole line:** catching (or claiming) a shiny in any of its three forms unlocks every
+  form of that species shiny. A shiny-unlocked species **starts runs shiny** (the starter card has a "✦ Shiny /
+  ✦ Normal" switch, remembered per species) and parades shiny on the title screen.
+- **In the Hexlidex:** a shiny count in the header ("✦ N/120 shiny"); unlocked lines have a gold frame, a
+  "✦ SHINY UNLOCKED" tag and every seen form drawn shiny with twinkling sparkles. The opened card shows each form
+  shiny and large (normal colours in the corner) with "✦ Shiny unlocked: every form". Lines only seen shiny keep a
+  small sparkle and the shiny in the corner.
 - **Shinies online:** every species you've caught (or claimed) shiny is recorded ("✦ Shiny caught" in the
   Hexlidex). In the team builder it shows ✦ SHINY in the picker, joins teams shiny, and has a "✦ Shiny: on/off"
   toggle. Shiny picks fight shiny in the Battle Arena and online duels (the other player sees it shiny too, with

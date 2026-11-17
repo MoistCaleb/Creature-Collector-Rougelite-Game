@@ -144,8 +144,13 @@ export interface Meta {
   /** Deepest Shiny Hunting floor reached, and the most shinies caught in one hunt. */
   bestHunt?: number;
   bestHuntShinies?: number;
-  /** Species you've caught (or claimed) shiny: they can be brought shiny to the Arena and duels. */
+  /**
+   * Species you've caught (or claimed) shiny, in any form: every form of the line is unlocked shiny
+   * (as a starter, in the Arena and in online duels).
+   */
   shinyOwned?: string[];
+  /** Shiny-unlocked species you've chosen to start runs with in their normal colours. */
+  shinyOff?: string[];
   /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
   shinySeen?: string[];
   shinyCaught?: number;
@@ -202,6 +207,25 @@ export function recordRun(run: Run, won: boolean) {
   const ids = new Set([...allCreatures(run).map((c) => c.speciesId), ...(run.log.fallen ?? []).map((f) => f.speciesId)]);
   for (const id of ids) usage[id] = (usage[id] ?? 0) + 1;
   saveMeta(meta);
+}
+
+/** Does this species start runs shiny? (Caught shiny in any form, unless you've switched it off.) */
+export function starterShiny(meta: Meta, speciesId: string): boolean {
+  return (meta.shinyOwned ?? []).includes(speciesId) && !(meta.shinyOff ?? []).includes(speciesId);
+}
+
+/** Switch a shiny-unlocked starter between its shiny and normal colours. */
+export function toggleStarterShiny(meta: Meta, speciesId: string) {
+  const off = new Set(meta.shinyOff ?? []);
+  if (off.has(speciesId)) off.delete(speciesId);
+  else off.add(speciesId);
+  meta.shinyOff = [...off];
+  saveMeta(meta);
+}
+
+function withShiny(c: Creature, shiny: boolean): Creature {
+  if (shiny) c.shiny = true;
+  return c;
 }
 
 /** A shiny joined you: its species can now be brought shiny to the Arena and online duels. */
@@ -501,7 +525,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     map,
     currentId: map.startId,
     visited: [map.startId],
-    team: [createCreature(starterId, passive === 'champion' ? 10 : BALANCE.starterLevel)],
+    team: [withShiny(createCreature(starterId, passive === 'champion' ? 10 : BALANCE.starterLevel), starterShiny(meta, starterId))],
     bench: [],
     evoStones: passive === 'evolutionist' ? 1 : 0,
     stonesSeen: passive === 'evolutionist' ? 1 : 0,
