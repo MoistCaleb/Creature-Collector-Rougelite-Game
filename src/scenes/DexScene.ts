@@ -29,11 +29,16 @@ const STAGE_LABEL = ['Base form', 'First evolution', 'Final form'];
 let dexQuery = '';
 type DexFilter = 'all' | 'caught' | 'gilded';
 let dexFilter: DexFilter = 'all';
+/** Moves tab: search text and which kind of move to show. */
+let moveQuery = '';
+type MoveFilter = 'all' | 'attack' | 'status';
+let moveFilter: MoveFilter = 'all';
 
 /** Header layout: where the jump bar starts, and where the list starts under it. */
 function layout(tab: Tab) {
-  if (LANDSCAPE) return { stats: 50, tabsY: 84, tabsH: 30, search: tab === 'creatures' ? { y: 69, h: 30 } : null, jumpY: 117, top: 134 };
-  const creatures = tab === 'creatures';
+  const searchable = tab === 'creatures' || tab === 'moves';
+  if (LANDSCAPE) return { stats: 50, tabsY: 84, tabsH: 30, search: searchable ? { y: 69, h: 30 } : null, jumpY: 117, top: 134 };
+  const creatures = searchable;
   return { stats: 58, tabsY: 98, tabsH: 36, search: creatures ? { y: 122, h: 34 } : null, jumpY: creatures ? 172 : 136, top: creatures ? 220 : 184 };
 }
 
@@ -168,29 +173,38 @@ export class DexScene extends Phaser.Scene {
     });
   }
 
-  /** Hexlings tab: a search box (any form name you've seen, or a number) and Caught / Gilded filters. */
+  /**
+   * Hexlings and Moves tabs: a search box and two filters. Hexlings: names of forms you've seen
+   * (or a number), Caught / Gilded. Moves: names, elements and kinds of moves you've seen,
+   * Attacks / Status.
+   */
   private drawSearch(y: number, h: number) {
+    const moves = this.tab === 'moves';
     const x0 = LANDSCAPE ? W / 2 + 4 : 16;
     const fw = LANDSCAPE ? 80 : 78;
     const boxW = W - 16 - x0 - 2 * (fw + 6);
     this.add.rectangle(x0, y, boxW, h, 0x0f0c18).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.search$ = searchBox(this, x0 + 2, y + 2, boxW - 4, h - 4, {
-      value: dexQuery,
-      placeholder: 'Search Hexlings…',
+      value: moves ? moveQuery : dexQuery,
+      placeholder: moves ? 'Search moves…' : 'Search Hexlings…',
       onInput: (v) => {
-        dexQuery = v;
+        if (moves) moveQuery = v;
+        else dexQuery = v;
         this.relist();
       },
     });
-    const chip = (i: number, f: DexFilter, label: string, color: number) => {
-      const on = dexFilter === f;
+    const chip = (i: number, on: boolean, label: string, color: number, flip: () => void) =>
       button(this, x0 + boxW + 6 + fw / 2 + i * (fw + 6), y + h / 2, fw, h, label, () => {
-        dexFilter = on ? 'all' : f;
+        flip();
         this.scene.restart({ from: this.from, tab: this.tab });
       }, { fontSize: 13, color: on ? color : COLORS.panelLight });
-    };
-    chip(0, 'caught', 'Caught', 0x3b6d4a);
-    chip(1, 'gilded', '✦ Gilded', 0x7a5a1c);
+    if (moves) {
+      chip(0, moveFilter === 'attack', 'Attacks', 0x8a3a2a, () => (moveFilter = moveFilter === 'attack' ? 'all' : 'attack'));
+      chip(1, moveFilter === 'status', 'Status', 0x2f4a6b, () => (moveFilter = moveFilter === 'status' ? 'all' : 'status'));
+    } else {
+      chip(0, dexFilter === 'caught', 'Caught', 0x3b6d4a, () => (dexFilter = dexFilter === 'caught' ? 'all' : 'caught'));
+      chip(1, dexFilter === 'gilded', '✦ Gilded', 0x7a5a1c, () => (dexFilter = dexFilter === 'gilded' ? 'all' : 'gilded'));
+    }
   }
 
   /** Search changed: rebuild the list in place (the search box keeps the keyboard). */
@@ -198,7 +212,8 @@ export class DexScene extends Phaser.Scene {
     this.expanded = null;
     for (const c of this.live.values()) c.destroy();
     this.live.clear();
-    this.drawCreatures();
+    if (this.tab === 'moves') this.drawMoves();
+    else this.drawCreatures();
     this.content.y = TOP;
     this.refreshRows();
     this.drawJumpBar();
@@ -417,9 +432,26 @@ export class DexScene extends Phaser.Scene {
 
   private drawMoves() {
     const dex = state.meta.dex;
+    this.rows = [];
+    this.anchors = {};
+    const q = moveQuery.trim().toLowerCase();
+    const KIND: Record<string, string> = { attack: 'Attack', buff: 'Boost', debuff: 'Hinder', heal: 'Heal' };
+    const kindOf = (id: string) => KIND[MOVES[id].kind] ?? 'Move';
+    // A filter or a search only shows moves you've seen (unseen ones have nothing to match).
+    const shows = (id: string, el: Element) => {
+      const seen = dex.moves.includes(id);
+      if (!q && moveFilter === 'all') return true;
+      if (!seen) return false;
+      if (moveFilter === 'attack' && MOVES[id].kind !== 'attack') return false;
+      if (moveFilter === 'status' && MOVES[id].kind === 'attack') return false;
+      if (!q) return true;
+      return MOVES[id].name.toLowerCase().includes(q) || kindOf(id).toLowerCase().includes(q) || (dex.elements.includes(el) && el.toLowerCase().includes(q));
+    };
     let y = 8;
     for (const el of ELEMENTS) {
       const elSeen = dex.elements.includes(el);
+      const ids = elementPool(el).filter((id) => shows(id, el));
+      if (!ids.length) continue;
       const hy = y;
       this.anchor(el, hy);
       this.addRow(hy, 30, (row) => {
@@ -427,7 +459,6 @@ export class DexScene extends Phaser.Scene {
         else row.add(text(this, 16, hy + 2, '??? element', 14, '#4a4068'));
       });
       y += 30;
-      const ids = elementPool(el);
       for (const id of ids) {
         const m = MOVES[id];
         const seen = dex.moves.includes(id);
@@ -435,7 +466,7 @@ export class DexScene extends Phaser.Scene {
         this.addRow(my, 38, (row) => {
           row.add(this.add.rectangle(12, my, W - 24, 34, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
           if (seen) {
-            const kind = m.kind === 'attack' ? 'Attack' : m.kind === 'buff' ? 'Boost' : 'Hinder';
+            const kind = kindOf(id);
             row.add(this.add.rectangle(22, my + 17, 8, 8, ELEMENT_COLORS[el]));
             row.add(text(this, 34, my + 9, m.name, 14, COLORS.text));
             row.add(text(this, 170, my + 10, kind, 12, COLORS.textDim));
@@ -447,6 +478,10 @@ export class DexScene extends Phaser.Scene {
         y += 38;
       }
       y += 12;
+    }
+    if (!this.rows.length) {
+      this.addRow(8, 80, (row) => row.add(text(this, W / 2, 40, 'Nothing matches. Try another name, element or filter.', 14, COLORS.textDim, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5)));
+      y = 96;
     }
     this.contentH = y;
   }
