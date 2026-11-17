@@ -201,6 +201,8 @@ Proposed math:
 
 ## Hexlidex
 - Persistent across runs: forms seen (per evolution stage), moves seen, elements seen.
+- Seen but never caught: the line's forms are drawn grayed out with "○ Seen" (the card says "Seen · not caught
+  yet"); once caught they show in full colour with "● Caught".
 - Evolutions show as ??? until you've seen that form (starter cards, team screen, dex).
 - Elements tab reveals matchups once encountered.
 
