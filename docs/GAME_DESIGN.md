@@ -312,6 +312,27 @@ Proposed math:
 - Removed. iPhone Safari has no vibration API, and the iOS 18 haptic-switch workaround didn't produce any
   vibration on a real iPhone, so the feature (Android vibration included) was dropped.
 
+## Shiny Hunting (endless)
+
+- After winning a normal run (not a daily or a stage battle), the end screen offers **Shiny Hunting**: keep
+  climbing with the same team through endless floors. The win is already counted (history, streaks, unlocks).
+- The team is fully healed and restored to start. Each hunt floor has a random element and the last floor's
+  map shape, shops and XP tables. The floor level ceiling is lifted, so your Hexlings can reach their own cap
+  (up to Lv 125 with 5★).
+- **Enemies out-scale you:** always final forms, starting around Lv 94 and climbing 8 levels a floor (trainers +3,
+  guardians +8), past your cap from about the 4th hunt floor. They carry 2★ to start, one more every two
+  floors, up to **6★** (one past yours).
+- **Shinies everywhere:** about 1 wild Hexling in 12, and 1 in 20 of trainers' and guardians' Hexlings (a
+  claimed guardian keeps its colours).
+- Guardians keep their rules (and Heat extras). Beating one takes you a floor deeper; the hunt ends when your
+  team falls ("HUNT OVER"). Records keep the deepest hunt floor and the most shinies caught in one hunt.
+
+## Catching a shiny that fainted first
+
+- The one exception to "only the last wild Hexling can be caught": in a two-Hexling wild battle, if the first
+  one was shiny and fainted, the catch screen also offers **Catch ✦ [shiny]** (beside catching the second one).
+  You catch one or the other, or finish for the rewards. This applies in every run, not only Shiny Hunting.
+
 ## Trainer and guardian intros
 
 - Before a trainer or guardian battle, a manga-style cut-in plays: a paper page where slanted strips slash in

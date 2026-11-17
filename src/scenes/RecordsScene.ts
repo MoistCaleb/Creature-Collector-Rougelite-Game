@@ -86,6 +86,8 @@ export class RecordsScene extends Phaser.Scene {
       ['Shiny Hexlings', `${meta.shinyCaught ?? 0} caught`],
       ['Arena best', `${meta.arenaBest ?? 0}/5`],
       ['Maps won', `${meta.clearedMaps.length}/${Object.keys(MAP_BY_ID).length}`],
+      ['Deepest shiny hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
+      ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} shin${meta.bestHuntShinies === 1 ? 'y' : 'ies'}` : '—'],
     ];
     const hw = (colW - 4) / 2;
     counts.forEach(([label, value], i) => {

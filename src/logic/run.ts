@@ -29,6 +29,7 @@ import {
   MAX_STARS,
   teamElement,
   type Creature,
+  cureStatus,
 } from './creature';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { emptyDex, type Dex } from './dex';
@@ -140,6 +141,9 @@ export interface Meta {
   bestStreak?: number;
   /** How many runs each species (by base id) finished on your team, alive or fallen. */
   usage?: Record<string, number>;
+  /** Deepest Shiny Hunting floor reached, and the most shinies caught in one hunt. */
+  bestHunt?: number;
+  bestHuntShinies?: number;
   /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
   shinySeen?: string[];
   shinyCaught?: number;
@@ -288,6 +292,11 @@ export interface Run {
   claimedTypes: Element[];
   /** Lost to a boss but survived via the bench: must re-fight it. */
   bossPending: boolean;
+  /**
+   * Shiny Hunting: the endless climb after a won run. `depth` is the hunt floor (1, 2, ...); the run
+   * stays on its last floor's tables (shops, XP, map shape) while enemies keep scaling with depth.
+   */
+  hunt?: { depth: number; shinies: number };
   log: {
     battlesWon: number;
     caught: number;
@@ -508,7 +517,8 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
  * stored while held back pours in. Creatures already above it (older saves) keep their levels.
  */
 export function applyFloorCap(run: Run) {
-  setFloorCeiling(BALANCE.floorLevelCap[run.floor] ?? Infinity);
+  // Shiny Hunting lifts the floor ceiling: your Hexlings can reach their own caps (up to 125).
+  setFloorCeiling(run.hunt ? Infinity : (BALANCE.floorLevelCap[run.floor] ?? Infinity));
   for (const c of allCreatures(run)) releaseBanked(c);
 }
 
@@ -670,6 +680,12 @@ export type EncounterKind = 'battle' | 'elite' | 'boss';
  * BALANCE.bossStarBonus), capped per floor by BALANCE.enemyStarMax.
  */
 export function enemyStars(run: Run, kind: EncounterKind, rng: Rng): number {
+  if (run.hunt) {
+    // Shiny Hunting: enemies out-prestige you as you go deeper, up to 6 stars (one past yours).
+    const d = run.hunt.depth;
+    const n = 2 + Math.floor((d - 1) / 2) + (kind === 'boss' ? 1 : kind === 'battle' ? rng.int(-1, 0) : 0);
+    return Math.max(0, Math.min(HUNT_MAX_STARS, n));
+  }
   const max = BALANCE.enemyStarMax[run.floor] ?? 0;
   if (!max || !run.team.length) return 0;
   const avg = Math.round(run.team.reduce((t, c) => t + c.stars, 0) / run.team.length);
@@ -708,6 +724,11 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
       level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0) + heat.enemyLevels + heat.bossLevels - extraRuleCount(run.heat ?? 0) * EXTRA_RULE_LEVELS;
       stage = Math.min(2, f + (i === count - 1 && BALANCE.bossLeadEvolves[f] ? 1 : 0));
     }
+    if (run.hunt) {
+      // Shiny Hunting: final forms from the start, and levels that climb past yours.
+      level = huntLevel(run.hunt.depth, node.progress, kind) + (kind === 'boss' && i === count - 1 ? 2 : 0) + rng.int(-1, 1);
+      stage = 2;
+    }
     const c = createCreature(sp.id, Math.max(1, level), stage);
     c.stars = enemyStars(run, kind, rng);
     if (kind !== 'battle' && f > 0) {
@@ -720,7 +741,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     const holds = boss ? i === count - 1 || heat.bossTeamItems : kind === 'elite' && (heat.eliteItems || (f > 0 && rng.chance(0.4)));
     if (holds) c.held = rollHeld(rng);
     // About 1 wild Hexling in 200 is shiny (a hash, so the run's random rolls are untouched).
-    if (kind === 'battle' && hashString(`${run.seed}:shiny:${run.log.fights}:${i}`) % SHINY_IN === 0) c.shiny = true;
+    // Shiny Hunting: far more often, and trainers' and guardians' Hexlings can be shiny too.
+    const odds = run.hunt ? (kind === 'battle' ? HUNT_SHINY_IN.wild : HUNT_SHINY_IN.trainer) : kind === 'battle' ? SHINY_IN : 0;
+    if (odds && hashString(`${run.seed}:shiny:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`) % odds === 0) c.shiny = true;
     c.hp = stats(c).hp;
     enemies.push(c);
   }
@@ -730,6 +753,47 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
 
 /** One wild Hexling in this many is shiny. */
 export const SHINY_IN = 200;
+/** Shiny Hunting: one in this many wild Hexlings, and trainers' / guardians' Hexlings, is shiny. */
+export const HUNT_SHINY_IN = { wild: 12, trainer: 20 };
+/** Shiny Hunting enemies can carry one more star than yours can. */
+export const HUNT_MAX_STARS = 6;
+
+/**
+ * Enemy level on a Shiny Hunting floor: final-form levels from the start (around the floor 3
+ * guardian), climbing 8 a floor, past your 125 cap from around the 4th hunt floor.
+ */
+export function huntLevel(depth: number, progress: number, kind: EncounterKind): number {
+  const base = 94 + (depth - 1) * 8 + Math.round(progress * 10);
+  return base + (kind === 'elite' ? 3 : kind === 'boss' ? 8 : 0);
+}
+
+/**
+ * Start Shiny Hunting after a won run: the team is fully healed and restored, and the climb goes on
+ * through endless floors of random elements. Returns the new floor's element.
+ */
+export function startHunt(run: Run): Element {
+  run.hunt = { depth: 1, shinies: 0 };
+  for (const c of allCreatures(run)) {
+    c.hp = stats(c).hp;
+    cureStatus(c);
+    restoreUses(c);
+  }
+  return nextHuntFloor(run);
+}
+
+/** A new Shiny Hunting floor: a random element and a fresh map (on the last floor's shape). */
+function nextHuntFloor(run: Run): Element {
+  const el = run.rng.pick([...ELEMENTS]);
+  run.biomes[run.floor] = el;
+  applyFloorCap(run);
+  run.map = generateFloor(run.floor, el, run.rng.int(0, 2 ** 31));
+  run.currentId = run.map.startId;
+  run.visited = [run.map.startId];
+  run.bossPending = false;
+  run.shop = null;
+  run.pendingNode = null;
+  return el;
+}
 
 /** Swap a creature's first stat move (or its last move) for its line's team move. */
 function giveTeamMove(c: Creature) {
@@ -949,6 +1013,7 @@ export function catchCreature(
   if (enemy.shiny) {
     c.shiny = true;
     run.meta.shinyCaught = (run.meta.shinyCaught ?? 0) + 1;
+    if (run.hunt) run.hunt.shinies += 1;
   }
   const newlyClaimed: Element[] = [];
   if (bonus === 'type')
@@ -1049,6 +1114,15 @@ export function trackStat(run: Run, stat: keyof MetaStats, by = 1) {
 export function clearFloor(run: Run): boolean {
   const meta = run.meta;
   meta.bossesDefeated += 1;
+  if (run.hunt) {
+    // Shiny Hunting never ends in a win: deeper you go.
+    run.hunt.depth += 1;
+    meta.bestHunt = Math.max(meta.bestHunt ?? 0, run.hunt.depth);
+    saveMeta(meta);
+    for (const c of allCreatures(run)) restoreUses(c);
+    nextHuntFloor(run);
+    return false;
+  }
   if (run.floor === FLOORS - 1) {
     // Winning a run unlocks the next map and the next passive.
     const before = unlockedMaps(meta).length;
