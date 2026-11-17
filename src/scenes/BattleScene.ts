@@ -324,7 +324,7 @@ export class BattleScene extends Phaser.Scene {
     const intro = resuming
       ? 'The battle resumes!'
       : this.kind === 'battle'
-        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦SHINY✦' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
+        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦GILDED✦' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
         : this.kind === 'elite'
           ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
@@ -739,7 +739,7 @@ export class BattleScene extends Phaser.Scene {
       const first = !this.revealed.has(c.uid);
       this.revealed.add(c.uid);
       noteShiny(state.meta, c.speciesId);
-      if (first) this.msg.setText(`Whoa! It's a SHINY ${creatureName(c)}!`);
+      if (first) this.msg.setText(`Whoa! It's a GILDED ${creatureName(c)}!`);
       await shinyReveal(this, sprite, first);
     } else await shinyReveal(this, sprite, false);
     this.startAura(side);
@@ -773,7 +773,7 @@ export class BattleScene extends Phaser.Scene {
     // SHINY tab on the bottom edge.
     const shiny = this.add.container(135, 74).setVisible(false);
     shiny.add(this.add.rectangle(0, 0, 104, 22, 0xffd86b).setStrokeStyle(2, 0x7a4a00));
-    shiny.add(text(this, 0, 0, '✦ SHINY ✦', 13, '#4a2a00', { fontStyle: 'bold' }).setOrigin(0.5));
+    shiny.add(text(this, 0, 0, '✦ GILDED ✦', 13, '#4a2a00', { fontStyle: 'bold' }).setOrigin(0.5));
     root.add(shiny);
     this.tweens.add({ targets: shiny, scale: 1.08, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
     return { root, name, chips, bar, status, held, frame, shiny };
@@ -1381,8 +1381,8 @@ export class BattleScene extends Phaser.Scene {
       const sStars = catchStars(run, shinyFirst);
       this.msg.setText(
         wild
-          ? `The shiny ${creatureName(shinyFirst)} can still be caught! Catch it, catch the ${creatureName(wild)}, or finish for the rewards.`
-          : `The shiny ${creatureName(shinyFirst)} can still be caught!`,
+          ? `The gilded ${creatureName(shinyFirst)} can still be caught! Catch it, catch the ${creatureName(wild)}, or finish for the rewards.`
+          : `The gilded ${creatureName(shinyFirst)} can still be caught!`,
       );
       const half = wild ? (L.catchBtn.w - 8) / 2 : L.catchBtn.w;
       const sx = wild ? L.catchBtn.x - L.catchBtn.w / 2 + half / 2 : L.catchBtn.x;
@@ -1391,7 +1391,7 @@ export class BattleScene extends Phaser.Scene {
         chosen = true;
         if (!full) return this.doCatch(shinyFirst, fallen);
         this.pickRelease(`Catch ${creatureName(shinyFirst)}`, (out) => this.doCatch(shinyFirst, fallen, out), () => (chosen = false));
-      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'SHINY', sub: `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}` });
+      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'GILDED', sub: `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}` });
       this.actions.add(btn);
     }
     if (wild) {

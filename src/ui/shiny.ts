@@ -132,7 +132,7 @@ export async function shinyReveal(scene: Phaser.Scene, sprite: Phaser.GameObject
     // Under the Hexling, in the open field (never over the panels).
     const by = y + sprite.displayHeight * 0.5 + 56;
     const banner = scene.add
-      .text(x, by, '✦ SHINY! ✦', {
+      .text(x, by, '✦ GILDED! ✦', {
         fontFamily: FONT,
         fontSize: '44px',
         fontStyle: 'bold',

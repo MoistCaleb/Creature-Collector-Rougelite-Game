@@ -47,7 +47,7 @@ export class EndScene extends Phaser.Scene {
     const race = run.race;
     const title = hunt ? 'HUNT OVER' : race ? (data.won ? 'STAGE CLEARED' : 'STAGE LOST') : data.won ? 'VICTORY!' : 'RUN OVER';
     const sub = hunt
-      ? `Your team fell on Shiny Hunt floor ${hunt.depth}. ${hunt.shinies} shin${hunt.shinies === 1 ? 'y' : 'ies'} caught on the hunt.`
+      ? `Your team fell on Gilded Hunt floor ${hunt.depth}. ${hunt.shinies} gilded Hexling${hunt.shinies === 1 ? '' : 's'} caught on the hunt.`
       : race
       ? data.won
         ? `You reached the boss. Your team now faces ${race.opponent}!`
@@ -163,12 +163,12 @@ export class EndScene extends Phaser.Scene {
     // Won a normal run: keep climbing as a Shiny Hunt.
     const canHunt = data.won && !run.daily && !hunt;
     if (canHunt) {
-      const hb = button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 296 : 630, 320, 52, 'Shiny Hunting', () => this.confirmHunt(run), {
+      const hb = button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 296 : 630, 320, 52, 'Gilded Hunt', () => this.confirmHunt(run), {
         fontSize: 20,
         color: 0x7a5a1c,
         glyph: 'sparkle',
         badge: 'ENDLESS',
-        sub: 'Keep climbing · shinies everywhere',
+        sub: 'Keep climbing · gilded Hexlings everywhere',
       });
       this.tweens.add({ targets: hb, scale: 1.04, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     }
@@ -190,10 +190,10 @@ export class EndScene extends Phaser.Scene {
   /** Explain Shiny Hunting, then start it: the run continues on endless floors. */
   private confirmHunt(run: NonNullable<typeof state.run>) {
     openPicker(this, {
-      title: 'Shiny Hunting',
+      title: 'Gilded Hunt',
       subtitle:
         'Your win is already counted. Keep climbing with this team through endless floors of random elements.\n\n' +
-        `• Shinies are everywhere: about 1 wild Hexling in ${HUNT_SHINY_IN.wild}, and trainers' and guardians' Hexlings can be shiny too.\n` +
+        `• Gilded Hexlings are everywhere: about 1 wild Hexling in ${HUNT_SHINY_IN.wild}, and trainers' and guardians' Hexlings can be gilded too.\n` +
         '• Your team is fully healed to start, and your Hexlings can reach their full level cap.\n' +
         `• Enemies are final forms that grow every floor, with higher levels than yours and up to ${HUNT_MAX_STARS}★.\n` +
         '• It ends when your team falls. How deep can you go?',
@@ -201,7 +201,7 @@ export class EndScene extends Phaser.Scene {
       onPick: () => {
         const el = startHunt(run);
         persist();
-        this.scene.start('Map', { banner: `The Shiny Hunt begins in the ${el} lands. Your team is fully healed.` });
+        this.scene.start('Map', { banner: `The Gilded Hunt begins in the ${el} lands. Your team is fully healed.` });
       },
       onCancel: () => {},
     });

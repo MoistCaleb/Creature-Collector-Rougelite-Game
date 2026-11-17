@@ -83,11 +83,11 @@ export class RecordsScene extends Phaser.Scene {
       ['Events', st.events.toLocaleString()],
       ['Treasure opened', st.treasures.toLocaleString()],
       ['Hexlidex forms', `${meta.dex.forms.length}/${forms}`],
-      ['Shiny Hexlings', `${meta.shinyCaught ?? 0} caught`],
+      ['Gilded Hexlings', `${meta.shinyCaught ?? 0} caught`],
       ['Arena best', `${meta.arenaBest ?? 0}/5`],
       ['Maps won', `${meta.clearedMaps.length}/${Object.keys(MAP_BY_ID).length}`],
-      ['Deepest shiny hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
-      ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} shin${meta.bestHuntShinies === 1 ? 'y' : 'ies'}` : '—'],
+      ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
+      ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
     ];
     const hw = (colW - 4) / 2;
     counts.forEach(([label, value], i) => {

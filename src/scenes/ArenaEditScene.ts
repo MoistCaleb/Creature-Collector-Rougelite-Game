@@ -103,7 +103,7 @@ export class ArenaEditScene extends Phaser.Scene {
     this.add.image(wide ? 66 : 76, wide ? 116 : 132, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale((wide ? 3 : 3.4) * SPRITE_FIT);
     // Caught it shiny? Bring it shiny (or not).
     if (ownsShiny(state.meta, p.speciesId)) {
-      button(this, wide ? 156 : W - 74, wide ? 255 : 168, wide ? 264 : 104, 30, p.shiny ? '✦ Shiny: on' : '✦ Shiny: off', () => {
+      button(this, wide ? 156 : W - 74, wide ? 255 : 168, wide ? 264 : 104, 30, p.shiny ? '✦ Gilded: on' : '✦ Gilded: off', () => {
         picks[this.slot] = { ...p, shiny: !p.shiny || undefined };
         this.save(picks);
       }, { fontSize: 12, color: p.shiny ? 0x7a5a1c : 0x2a2440 });

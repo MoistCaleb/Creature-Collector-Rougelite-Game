@@ -205,7 +205,7 @@ export class ArenaPickScene extends Phaser.Scene {
       const shiny = ownsShiny(meta, id);
       const img = this.add.image(x + CELL_W / 2, y + 40, ensureCreatureTexture(this, id, stage, shiny)).setScale(1.9 * SPRITE_FIT);
       this.grid.add(img);
-      if (shiny) this.grid.add(text(this, x + CELL_W - 10, y + 22, '✦ SHINY', 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
+      if (shiny) this.grid.add(text(this, x + CELL_W - 10, y + 22, '✦ GILDED', 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
       this.grid.add(text(this, x + CELL_W / 2, y + 68, sp.names[stage], 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
       const chips = this.add.container(0, 0);
       typeChipsInto(this, chips, x + CELL_W / 2, y + 96, sp.types);
