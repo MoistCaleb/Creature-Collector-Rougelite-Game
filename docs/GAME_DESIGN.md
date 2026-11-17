@@ -243,6 +243,16 @@ Proposed math:
 - **Accuracy** is shown on every move: battle buttons (top-left corner), learn/forget pickers, shrines, the
   Team screen, the Dex and the Arena team builder.
 
+## Backgrounds
+- **Battles** take place in a pixel-art environment for the floor's element (outside a run: the opponent's
+  lead creature's element), each with its own weather and a ground pad under each side:
+  Fire volcano (embers), Frost snowy peaks (snow), Nature meadow (leaves), Earth mesas (dust), Storm crags
+  (rain, lightning), Water beach (bubbles), Metal factory (sparks), Toxic swamp (spores), Shadow ruins at
+  night (motes), Light sunlit temple (glints), Spirit graveyard under the moon (wisps), Dragon crimson peaks
+  (ash). The controls sit on a shaded strip below (upright) or to the right (sideways).
+- **Menus:** a soft glow and honeycomb with big element-colored hexagons drifting up and rising sparks; the
+  title screen adds a glowing arcade floor.
+
 ## Meta progression (between runs)
 Runs unlock:
 - New starters: any species that joins your party (caught, claimed, recruited, hatched) unlocks as a

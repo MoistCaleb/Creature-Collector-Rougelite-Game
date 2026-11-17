@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { menuBackdrop } from './backdrops';
 import { HELD } from '../data/held';
 import { STATUS } from '../data/status';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
@@ -276,10 +277,11 @@ export function creatureRow(
   return cont;
 }
 
-export function background(scene: Phaser.Scene, color = COLORS.bg) {
+export function background(scene: Phaser.Scene, color = COLORS.bg, decor: 'menu' | 'title' | 'none' = color === COLORS.bg ? 'menu' : 'none') {
   // Every scene draws its background first, so this is where the board is chosen (upright or
   // wide) and the camera gets its zoom.
   useBoard(scene);
   scene.cameras.main.setOrigin(0, 0).setZoom(ZOOM);
   scene.add.rectangle(0, 0, W, H, color).setOrigin(0);
+  if (decor !== 'none') menuBackdrop(scene, W, H, color, decor === 'title');
 }
