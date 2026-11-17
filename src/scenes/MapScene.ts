@@ -1,6 +1,7 @@
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
+import { openGameMenu } from '../ui/gameMenu';
 import { duel, sendProgress } from '../net/runtime';
 import { session } from '../net/session';
 import { MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
@@ -33,7 +34,7 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
 import { Scroller } from '../ui/scroll';
-import { background, button, COLORS, H, HpBar, muteButton, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
@@ -229,7 +230,7 @@ export class MapScene extends Phaser.Scene {
       pixelIcon(this, 21, 67, 'skull', 14);
       text(this, 32, 60, steps === 1 ? 'Boss is next' : `Boss in ${steps} steps`, 12, '#c9a3dd');
     }
-    muteButton(this, W - 226, TOP_BAR / 2, 36);
+    button(this, W - 226, TOP_BAR / 2, 40, 44, '', () => openGameMenu(this), { glyph: 'menu' });
     button(this, W - 170, TOP_BAR / 2, 60, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 15 });
     // The Bag shows a dot when it holds items nobody is using yet.
     const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });

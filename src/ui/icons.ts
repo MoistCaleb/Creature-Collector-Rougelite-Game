@@ -44,6 +44,21 @@ const ICONS = {
     '...OYWWYO...',
     '....OOOO....',
   ],
+  // Menu: three bars.
+  menu: [
+    '............',
+    '.WWWWWWWWWW.',
+    '.WWWWWWWWWW.',
+    '............',
+    '............',
+    '.WWWWWWWWWW.',
+    '.WWWWWWWWWW.',
+    '............',
+    '............',
+    '.WWWWWWWWWW.',
+    '.WWWWWWWWWW.',
+    '............',
+  ],
   calendar: [
     '..d.....d...',
     '.RRdRRRRdRR.',
