@@ -121,8 +121,10 @@ export interface Meta {
   arenaBest?: number;
   /** Creatures saved at the end of runs, to reuse in the team builder. */
   loadouts?: import('./arena').SavedLoadout[];
-  /** Name shown to the other player in duels. */
+  /** Your trainer's name: shown in battles and to the other player online. */
   duelName?: string;
+  /** How your trainer looks (see data/trainerLook). */
+  trainerLook?: import('../data/trainerLook').TrainerLook;
   /** Heat levels (1-8) won on each map, for the map's Heat tokens. */
   mapHeats?: Record<string, number[]>;
   /** The most recent daily played (kept for older saves; see dailies). */

@@ -5,6 +5,8 @@ import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { ensureTrainerTexture } from '../ui/trainerSprite';
+import { myLook, myName } from '../data/trainerLook';
 import { playMusic } from '../ui/sound';
 import { buzz, canVibrate } from '../ui/haptics';
 import type { IconId } from '../ui/icons';
@@ -31,6 +33,13 @@ export class TitleScene extends Phaser.Scene {
       }, { fontSize: 20, glyph: glyph() });
     }
     const meta = state.meta;
+
+    // Your trainer (top-left): tap to edit name and look.
+    const tb = button(this, 66, 30, 116, 46, '', () => this.scene.start('Trainer', { from: 'Title' }), { color: 0x2f4a6b });
+    tb.add(this.add.image(-38, 0, ensureTrainerTexture(this, myLook(meta))).setScale(0.95));
+    const nm = text(this, 12, -8, myName(meta), 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
+    if (nm.width > 76) nm.setScale(76 / nm.width);
+    tb.add([nm, text(this, 12, 10, 'Edit trainer', 10, COLORS.textDim).setOrigin(0.5)]);
 
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);
@@ -103,9 +112,9 @@ export class TitleScene extends Phaser.Scene {
       install = button(
         this,
         W / 2,
-        672,
+        666,
         200,
-        40,
+        36,
         'Install app',
         () => {
           if (opt === 'prompt') void promptInstall().then(() => this.scene.restart({}));
@@ -126,7 +135,7 @@ export class TitleScene extends Phaser.Scene {
     text(
       this,
       W / 2,
-      H - 90,
+      H - 62,
       'Climb 3 floors. Pick your path.\nCatch creatures, evolve, prestige.\nDeath is permanent.',
       16,
       COLORS.textDim,

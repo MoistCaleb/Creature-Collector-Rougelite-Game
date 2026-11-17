@@ -1526,3 +1526,21 @@ describe('catch stars and loadouts', () => {
     expect(applyLoadout(m, saveLoadout(m, final, 'x')).stage).toBe(1);
   });
 });
+
+describe('trainer looks', () => {
+  it('cleans looks from peers, and names/elements always give the same look', async () => {
+    const { cleanLook, DEFAULT_LOOK, lookForName, bossLook, LOOK_PARTS } = await import('../src/data/trainerLook');
+    expect(cleanLook(null)).toEqual(DEFAULT_LOOK);
+    const bad = cleanLook({ skin: 99, hair: -1, hat: 2.5, top: '3', accent: 4 });
+    expect(bad.skin).toBe(DEFAULT_LOOK.skin);
+    expect(bad.hair).toBe(DEFAULT_LOOK.hair);
+    expect(bad.hat).toBe(DEFAULT_LOOK.hat);
+    expect(bad.top).toBe(3);
+    expect(bad.accent).toBe(4);
+    expect(lookForName('Ace Trainer Rhea')).toEqual(lookForName('Ace Trainer Rhea'));
+    for (const l of [lookForName('x'), bossLook('Fire'), bossLook('Shadow')]) {
+      for (const p of LOOK_PARTS) expect(l[p.key]).toBeLessThan(p.names.length);
+    }
+    expect(bossLook('Fire')).not.toEqual(bossLook('Water'));
+  });
+});

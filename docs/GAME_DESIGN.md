@@ -220,6 +220,18 @@ Proposed math:
   fought get full XP; teammates who sat out and the bench get 50%. Catch-up bonus: +8% per level
   behind the top creature, capped at x2.
 
+## Trainers
+- **Your trainer:** tap the trainer button on the title screen (or "Your trainer" in Play online) to set your
+  name and look: skin, hair style and color, eyes, hat, top, accent and bottoms (Shuffle picks a random look).
+  The name is used in battles and shown to your opponent online.
+- **In battle:** your trainer stands bottom-left behind your creature, pointing into the fight. Trainers,
+  guardians, Arena ladder opponents and online opponents stand top-right; wild battles have no one there.
+- **Built from the same parts:** NPC trainers get a look from their name (the same trainer always looks the
+  same); each guardian has hand-picked parts in its element's colors. Online, each phone sends its look and
+  shows the other player's.
+- **Accuracy** is shown on every move: battle buttons (top-left corner), learn/forget pickers, shrines, the
+  Team screen, the Dex and the Arena team builder.
+
 ## Meta progression (between runs)
 Runs unlock:
 - New starters: any species that joins your party (caught, claimed, recruited, hatched) unlocks as a

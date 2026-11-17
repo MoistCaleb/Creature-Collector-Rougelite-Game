@@ -378,6 +378,9 @@ export function describeEffects(m: MoveDef, tier: number): string {
   return (m.kind === 'debuff' ? 'Foe ' : 'Self ') + fmtFx(effectsAtTier(m, tier));
 }
 
+/** Hit chance, shown next to every move. */
+export const accText = (m: MoveDef) => `${m.accuracy}% acc`;
+
 /** Short summary for UI. */
 export function moveSummary(m: MoveDef, tier: number): string {
   if (m.team === 'mend') return `Team: heal ${Math.round(mendHeal(tier) * 100)}% + cure`;

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { maxUses, moveSummary } from '../data/moves';
+import { accText, maxUses, moveSummary } from '../data/moves';
 import { ELEMENT_COLORS, elementTextColor } from '../data/types';
 import { SYNERGY_LABEL, teamSynergy } from '../logic/synergy';
 import { usesLeft, evolveLevel, readyToEvolve, BANK_LEVELS, bankedLevels, floorCapped, getFloorCeiling, bankLimit, canEvolve, creatureName, creatureTypes, levelCap, moveDef, species, stats, xpToNext, type Creature } from '../logic/creature';
@@ -127,7 +127,7 @@ export class TeamScene extends Phaser.Scene {
       this.add.rectangle(18, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
       const left = usesLeft(m);
       const uses = Number.isFinite(left) ? ` · ${left}/${maxUses(d)} uses` : '';
-      const line = text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · T${m.tier}${uses}`, 11, left === 0 ? '#e0524a' : COLORS.text);
+      const line = text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · ${accText(d)} · T${m.tier}${uses}`, 11, left === 0 ? '#e0524a' : COLORS.text);
       const room = W - 48;
       if (line.width > room) line.setScale(room / line.width, 1);
     });

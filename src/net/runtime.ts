@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { cleanLook, type TrainerLook } from '../data/trainerLook';
 import type { ArenaPick } from '../logic/arena';
 import { SPECIES_BY_ID } from '../data/species';
 import { MOVES } from '../data/moves';
@@ -23,6 +24,7 @@ export interface BroughtTeam {
 /** A player in the session: name and the teams they're bringing. */
 export interface Opponent {
   name: string;
+  look?: TrainerLook;
   teams: BroughtTeam[];
 }
 
@@ -153,7 +155,7 @@ function cleanTeam(team: unknown): ArenaPick[] {
 
 /** Say hello: our name and the teams we're bringing. */
 export function sendHello() {
-  if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, teams: duel.me.teams });
+  if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, teams: duel.me.teams });
 }
 
 /** Host: change a session setting and tell the guest. */
@@ -244,6 +246,7 @@ function beginDuel(controller: DuelController, initialNext?: Next) {
     seed: controller.info.seed,
     title: 'DUEL',
     opponent: controller.opponentName,
+    opponentLook: duel.opponent?.look,
     randomness: 0,
     background: 0x14223a,
     duel: controller,
@@ -269,11 +272,12 @@ session.onMessage((msg: DuelMsg) => {
     case 'hello':
       duel.opponent = {
         name: String(msg.name || 'Friend').slice(0, 16),
+        look: cleanLook(msg.look),
         teams: (Array.isArray(msg.teams) ? msg.teams : []).slice(0, 3).map((t) => ({ name: String(t?.name ?? 'Team').slice(0, 18), picks: cleanTeam(t?.picks) })),
       };
       // The host answers with its own hello (and the settings) so the guest sees the whole setup.
       if (session.role === 'host' && !msg.reply) {
-        if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, teams: duel.me.teams, reply: true });
+        if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, teams: duel.me.teams, reply: true });
         session.send({ t: 'settings', s: duel.settings });
       }
       duel.onChange?.();

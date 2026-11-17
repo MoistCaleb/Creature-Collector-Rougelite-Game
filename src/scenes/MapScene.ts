@@ -4,7 +4,7 @@ import { itemReveal, stoneReveal } from '../ui/stoneReveal';
 import { openGameMenu } from '../ui/gameMenu';
 import { duel, sendProgress } from '../net/runtime';
 import { session } from '../net/session';
-import { MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
+import { accText, MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
   addLevels,
@@ -191,12 +191,12 @@ export class MapScene extends Phaser.Scene {
     const tag = 'RECOMMENDED';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
-      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${nm.accuracy}% · ${maxUsesText(nm)}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...c.moves.map((m, i) => {
           const d = moveDef(m);
-          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · T${m.tier} · ${usesText(m)}`, badge: rec === i ? tag : undefined };
+          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · ${accText(d)} · T${m.tier} · ${usesText(m)}`, badge: rec === i ? tag : undefined };
         }),
         { label: `Don't learn ${nm.name}`, color: 0x3a3450, badge: rec === null ? tag : undefined },
       ],
@@ -513,7 +513,7 @@ export class MapScene extends Phaser.Scene {
         const d = moveDef(m);
         return {
           label: `${creatureName(c)}: ${d.name}  T${m.tier} → T${m.tier + 1}`,
-          sub: tierUpgradeText(d, m.tier + 1),
+          sub: `${tierUpgradeText(d, m.tier + 1)} · ${accText(d)}`,
           icon: c,
         };
       }),
@@ -657,7 +657,7 @@ export class MapScene extends Phaser.Scene {
           rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
           options: moves.map(({ m }) => {
             const d = moveDef(m);
-            return { label: `${d.name}  T${m.tier} → T${m.tier + 1}`, sub: tierUpgradeText(d, m.tier + 1) };
+            return { label: `${d.name}  T${m.tier} → T${m.tier + 1}`, sub: `${tierUpgradeText(d, m.tier + 1)} · ${accText(d)}` };
           }),
           onPick: (j) => finish(c, moves[j].idx),
           onCancel: back,
