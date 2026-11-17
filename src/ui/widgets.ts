@@ -5,7 +5,6 @@ import { STATUS } from '../data/status';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
 import { isMuted, setMuted, sfx } from './sound';
-import { tapFeel } from './haptics';
 import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
 import { ensureIcon, icon as iconImage, type IconId } from './icons';
 
@@ -219,7 +218,6 @@ export function button(
     bg.on('pointerup', () => {
       bg.setFillStyle(color);
       sfx.click();
-      tapFeel();
       onClick();
     });
   }

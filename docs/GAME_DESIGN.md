@@ -291,17 +291,13 @@ Proposed math:
 
 ## Vibration
 
-- Android: the browser vibration API, with patterns per moment (hits, catches, wins, evolutions...).
-- iPhone (iOS 18+): Safari has no vibration API, so a hidden system switch (kept in the page, off-screen) is
-  flipped to get the system's haptic tick. iOS only allows it while a touch is being handled, so every button
-  press ticks right inside the touch, and other buzzes (hits, catches) are tried too but iOS may skip them.
-  Needs iOS Settings > Sounds & Haptics > System Haptics on. On/off in the game's Settings.
-- Every button press gives a light tap (both platforms).
+- Removed. iPhone Safari has no vibration API, and the iOS 18 haptic-switch workaround didn't produce any
+  vibration on a real iPhone, so the feature (Android vibration included) was dropped.
 
 ## Help, settings and records
 
 - **Settings** (gear on the title screen, or Menu in a run or battle): music and sound-effect volume (0-10),
-  all sound on/off, vibration (devices that can vibrate), first-time tips, battle speed, How to play, the
+  all sound on/off, first-time tips, battle speed, How to play, the
   element chart, and Erase all progress (asks twice).
 - **First-time tips**: a short card the first time you reach the map, the bench, a battle, a guardian, a
   catch, a shop, an event and a Prestige Altar. "No more tips" turns them off; Settings turns them back on
@@ -320,7 +316,7 @@ Proposed math:
   wheel, by a fixed amount per family). Only wild battles; trainers and guardians never are.
 - **The reveal** (the first time a shiny foe appears): the field dims, gold light rays spin up behind it,
   rainbow rings and a fountain of stars burst out, it shimmers through the rainbow, a "✦ SHINY! ✦" banner
-  slams in under it, and a chime cascade plays (with a vibration). The message reads "Whoa! It's a SHINY X!".
+  slams in under it, and a chime cascade plays. The message reads "Whoa! It's a SHINY X!".
   Your own shinies get a shorter reveal when sent out.
 - **While it's out**: a pulsing gold glow and halo, rising rainbow glitter, a gold panel and name, and a
   pulsing "✦ SHINY ✦" tab on its panel.

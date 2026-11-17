@@ -1,4 +1,4 @@
-/** Small per-device preferences (volumes, battle speed, auto-battle, vibration, tips). Never part of a save. */
+/** Small per-device preferences (volumes, battle speed, auto-battle, tips). Never part of a save. */
 
 function read(key: string): string | null {
   try {
@@ -41,12 +41,6 @@ export const prefs = {
   },
   set autoBattle(v: boolean) {
     set('ccr-battle-auto', v ? '1' : '0');
-  },
-  get haptics(): boolean {
-    return get('ccr-haptics', '1') === '1';
-  },
-  set haptics(v: boolean) {
-    set('ccr-haptics', v ? '1' : '0');
   },
   /** Music and sound-effect volume, 0-10. */
   get musicVol(): number {

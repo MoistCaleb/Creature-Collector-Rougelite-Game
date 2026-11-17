@@ -22,7 +22,7 @@ export class TitleScene extends Phaser.Scene {
     playMusic('title');
     text(this, 8, H - 8, `build ${__BUILD__}`, 10, '#4a4068').setOrigin(0, 1);
     muteButton(this, W - 30, 30);
-    // Settings: volumes, vibration, battle speed, tips, erasing progress.
+    // Settings: volumes, battle speed, tips, erasing progress.
     button(this, W - 78, 30, 40, 40, '', () => openSettings(this, () => this.scene.restart({})), { fontSize: 20, glyph: 'gear' });
     const meta = state.meta;
     // Upright: one centered column. Sideways: the title and parade on the left, buttons on the right.

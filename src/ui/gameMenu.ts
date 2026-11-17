@@ -19,7 +19,7 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
     subtitle: 'Your run saves automatically. Exit any time and pick up again with "Continue run".',
     options: [
       { label: 'Resume', color: 0x3b6d4a, glyph: 'play' },
-      { label: 'Settings', sub: 'Sound, vibration, speed, tips', glyph: 'gear' },
+      { label: 'Settings', sub: 'Sound, speed, tips', glyph: 'gear' },
       { label: 'Element chart', sub: focus.length ? 'Your foe’s elements are highlighted' : 'What beats what', glyph: 'sparkle' },
       { label: 'How to play', glyph: 'book' },
       { label: 'Exit to title', sub: 'Your run is saved', color: 0x2f4a6b, glyph: 'back' },
