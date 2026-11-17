@@ -1,4 +1,5 @@
 import { tip, tipDone } from '../ui/tips';
+import { trainerCutIn } from '../ui/cutin';
 import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura } from '../ui/shiny';
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
@@ -340,6 +341,17 @@ export class BattleScene extends Phaser.Scene {
       this.actions.setVisible(false);
       this.busy = true;
       void (async () => {
+        // Trainers and guardians get a manga-style cut-in first.
+        if (boss || this.kind === 'elite') {
+          await trainerCutIn(this, {
+            name: boss ? boss.name : trainer,
+            sub: boss ? `${boss.title} · Guardian of floor ${run.floor + 1}` : 'Trainer',
+            look: boss ? bossLook(boss.element) : lookForName(trainer),
+            team: this.enemies,
+            boss: !!boss,
+            accent: ELEMENT_COLORS[run.map.biome],
+          });
+        }
         await this.wait(250);
         await this.enterEnemy();
         if (this.kind === 'battle') this.msg.setText(intro);

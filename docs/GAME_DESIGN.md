@@ -294,6 +294,17 @@ Proposed math:
 - Removed. iPhone Safari has no vibration API, and the iOS 18 haptic-switch workaround didn't produce any
   vibration on a real iPhone, so the feature (Android vibration included) was dropped.
 
+## Trainer and guardian intros
+
+- Before a trainer or guardian battle, a manga-style cut-in plays: a paper page where slanted strips slash in
+  from alternating sides, each a tight black-and-white close-up — the trainer's (or guardian's) face on top,
+  then up to two of their Hexlings — split by sketchy, overshooting ink lines.
+- Sprites are inked like a manga page: solid blacks, crosshatch and fine-line screen tones, white paper (tone
+  cut-offs come from each sprite's own brightness; trainers are inked by hand: white skin, solid black eyes).
+- "NAME" slams in over a brush slash of the floor's element color, with the trainer's role or the guardian's
+  title and floor, then "Approaching..." (red for guardians) as the dots tick in. Guardians get a heavier hit
+  sound and shake. Tap to skip. Then the strips slash away and the battle begins.
+
 ## Help, settings and records
 
 - **Settings** (gear on the title screen, or Menu in a run or battle): music and sound-effect volume (0-10),
