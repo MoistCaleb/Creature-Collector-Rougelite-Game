@@ -288,11 +288,34 @@ export class BattleScene extends Phaser.Scene {
    * fight), the opponent top-right (wild battles have no one there).
    */
   private drawTrainers(enemy: TrainerLook | null) {
-    const pose = (img: Phaser.GameObjects.Image, delay: number) =>
+    const bob = (img: Phaser.GameObjects.Image, delay: number) =>
       this.tweens.add({ targets: img, y: img.y - 3, yoyo: true, repeat: -1, duration: 900, delay, ease: 'Sine.easeInOut' });
-    const me = this.add.image(38, 440, ensureTrainerTexture(this, myLook(state.meta), 'back')).setScale(3.1);
-    pose(me, 0);
-    if (enemy) pose(this.add.image(404, 212, ensureTrainerTexture(this, enemy, 'command')).setScale(2.8).setFlipX(true), 450);
+    this.trainers = {};
+    const mine = myLook(state.meta);
+    const rest = ensureTrainerTexture(this, mine, 'back');
+    const me = this.add.image(38, 440, rest).setScale(3.1);
+    bob(me, 0);
+    this.trainers.player = { img: me, rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
+    if (enemy) {
+      const eRest = ensureTrainerTexture(this, enemy, 'stand');
+      const them = this.add.image(404, 212, eRest).setScale(2.8).setFlipX(true);
+      bob(them, 450);
+      this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command') };
+    }
+  }
+
+  /** Trainers standing beside the field: arms down, and their textures for giving an order. */
+  private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; timer?: Phaser.Time.TimerEvent }>> = {};
+
+  /** A trainer gives an order (a move or sending a creature out): raise the arm, then lower it. */
+  private order(side: 'player' | 'enemy') {
+    const t = this.trainers[side];
+    if (!t || !t.img.active) return;
+    t.img.setTexture(t.act);
+    t.timer?.remove();
+    t.timer = this.time.delayedCall(700, () => {
+      if (t.img.active) t.img.setTexture(t.rest);
+    });
   }
 
   /** A battle outside a run: same field, panels and animations; no rewards, potions or saving. */
@@ -498,11 +521,13 @@ export class BattleScene extends Phaser.Scene {
     const el = creatureTypes(c)[0];
     const voice = () => cry(c.speciesId, c.stage);
     if (this.kind === 'battle') return emergeFrom(this, this.enemySprite, el, voice);
+    this.order('enemy');
     return releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el], voice);
   }
 
   private enterPlayer() {
     const c = this.battle.p.c;
+    this.order('player');
     return releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(c)[0]], () => cry(c.speciesId, c.stage));
   }
 
@@ -782,6 +807,7 @@ export class BattleScene extends Phaser.Scene {
           break;
         }
         case 'attack': {
+          this.order(ev.side);
           dex.move(ev.moveId);
           const def = MOVES[ev.moveId];
           lastEl = def?.element ?? lastEl;
