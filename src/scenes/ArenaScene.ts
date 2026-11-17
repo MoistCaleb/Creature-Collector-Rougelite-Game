@@ -1,4 +1,5 @@
-import { takeNewTitles, titleNews } from '../logic/titles';
+import { takeNewTitles} from '../logic/titles';
+import { titleNews } from '../logic/cosmetics';
 import Phaser from 'phaser';
 import { MOVES } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';

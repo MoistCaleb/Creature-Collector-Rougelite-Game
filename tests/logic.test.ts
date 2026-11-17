@@ -1902,7 +1902,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -1967,5 +1967,37 @@ describe('trainer titles', () => {
     expect(cleanTitle('Hexbound')).toBe('Hexbound');
     expect(cleanTitle('Supreme Hacker')).toBeUndefined();
     expect(cleanTitle(42)).toBeUndefined();
+  });
+});
+
+import { lockOf, rewardText, TITLE_REWARDS, titleNews } from '../src/logic/cosmetics';
+import { cleanLook } from '../src/data/trainerLook';
+
+describe('title cosmetics', () => {
+  it('every reward belongs to a real title and is a locked option', () => {
+    const meta = blankMeta();
+    for (const [name, items] of Object.entries(TITLE_REWARDS)) {
+      expect(TITLE_BY_NAME[name]).toBeTruthy();
+      for (const c of items) {
+        const part = LOOK_PARTS.find((p) => p.key === c.key)!;
+        expect(c.value).toBeGreaterThanOrEqual(part.free ?? part.names.length);
+        expect(lockOf(meta, c.key, c.value)?.title?.name).toBe(name);
+      }
+    }
+    // Every option past the free ones unlocks somehow.
+    for (const p of LOOK_PARTS) for (let v = p.free ?? p.names.length; v < p.names.length; v++) expect(lockOf(meta, p.key, v)).not.toBeNull();
+  });
+  it('unlocks with its title, and says so', () => {
+    const meta = blankMeta();
+    meta.mapHeats = { wildlands: [4] };
+    const crown = TITLE_REWARDS.Heatseeker[0];
+    expect(lockOf(meta, crown.key, crown.value)).toBeNull();
+    expect(rewardText('Heatseeker')).toBe('Unlocks Flame crown, Inferno aura');
+    expect(titleNews(takeNewTitles(meta))).toContain('Unlocked: Flame crown, Inferno aura');
+  });
+  it('keeps a back item from a peer, and drops bad ones', () => {
+    expect(cleanLook({ back: 3 }).back).toBe(3);
+    expect(cleanLook({ back: 99 }).back).toBe(0);
+    expect(cleanLook({}).back).toBe(0);
   });
 });

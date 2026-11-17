@@ -17,6 +17,14 @@ const LENS = 0x9adcf0;
 const GOLD_LIGHT = 0xfff0a0;
 const BLUSH = 0xf08a9a;
 const INK = 0x2a2230;
+const STEEL = 0x9aa4b8;
+const STEEL_DARK = 0x5a6274;
+const GLOW_CYAN = 0x5af0ff;
+const VOID = 0x1c1030;
+const FLAME = [0xffe060, 0xff9a2a, 0xff5a1a];
+
+/** The outline color for each aura (0: the usual ink). */
+export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8];
 
 const shade = (c: number, k: number) => {
   const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k)));
@@ -86,6 +94,8 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     }
   }
 
+  if (!back) backItem();
+
   // ---- legs and bottoms
   const bottom = look.bottom;
   const pants = bottom === 0 || bottom === 4 || bottom === 5;
@@ -120,6 +130,22 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(15, 32, 18, 32, shoeC);
     put(11, 28, GOLD_LIGHT);
     put(16, 28, GOLD_LIGHT);
+  } else if (look.shoes === 4) {
+    // Rocket boots: chunky steel boots with a stripe and a nozzle under each heel.
+    rect(9, 28, 12, 32, STEEL);
+    rect(15, 28, 18, 32, STEEL);
+    rect(9, 30, 12, 30, shoeC);
+    rect(15, 30, 18, 30, shoeC);
+    rect(10, 33, 11, 33, STEEL_DARK);
+    rect(16, 33, 17, 33, STEEL_DARK);
+  } else if (look.shoes === 5) {
+    // Cloud steps: little clouds under the feet.
+    round(9, 30, 12, 31, shoeC, 1);
+    round(15, 30, 18, 31, shoeC, 1);
+    round(8, 31, 13, 33, 0xf4f8ff, 1);
+    round(14, 31, 19, 33, 0xf4f8ff, 1);
+    rect(9, 33, 12, 33, 0xc8d8ec);
+    rect(15, 33, 18, 33, 0xc8d8ec);
   } else if (look.shoes === 2) {
     rect(9, 31, 12, 32, skin); // sandals: a strap and a sole
     rect(15, 31, 18, 32, skin);
@@ -135,7 +161,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   }
 
   // ---- body
-  round(9, 19, 18, 26, top === 9 ? acc : topC, 1);
+  round(9, 19, 18, 26, top === 9 ? acc : top === 15 ? VOID : top === 16 ? STEEL : topC, 1);
   if (top === 0) rect(9, 22, 18, 22, acc); // tee stripe
   if (top === 1 && !back) rect(13, 19, 14, 26, acc); // open jacket
   if (top === 2 && !back) {
@@ -163,6 +189,27 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     if (!back) rect(13, 19, 14, 26, acc);
   }
   if (top === 8) rect(8, 24, 19, 25, acc); // robe sash
+  if (top === 14) {
+    // Dragon armor: scales, a chest plate and spiked shoulders (below, after the arms).
+    for (let y = 19; y <= 26; y++) for (let x = 9; x <= 18; x++) if ((x + y) % 3 === 0) put(x, y, shade(topC, 0.7));
+    round(11, 20, 16, 24, acc, 1);
+    if (!back) rect(13, 21, 14, 22, GOLD);
+  }
+  if (top === 15) {
+    // Void cloak: a starry robe down to the ankles with a glowing collar.
+    round(8, 19, 19, 31, VOID, 1);
+    rect(11, 19, 16, 19, 0x8a3ad8);
+    for (const [x, y] of [[10, 21], [16, 23], [12, 27], [17, 29], [9, 25], [14, 30], [15, 20]]) put(x, y, (x + y) % 2 ? 0xffffff : 0xc8a8f0);
+  }
+  if (top === 16) {
+    // Mech suit: steel plates, a glowing core and vents.
+    round(8, 19, 19, 27, STEEL, 1);
+    rect(8, 23, 19, 23, STEEL_DARK);
+    if (!back) {
+      round(12, 20, 15, 22, GLOW_CYAN, 1);
+      put(13, 21, 0xffffff);
+    } else for (const y of [20, 22, 25]) rect(11, y, 16, y, STEEL_DARK);
+  }
   if (top === 4) round(11, 20, 16, 24, acc, 1); // chest (back) plate
   if (top === 5) {
     rect(9, 19, 18, 19, skin); // tank top: bare shoulders, two straps
@@ -207,11 +254,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       rect(13, 22, 14, 23, 0xd8443a);
     }
   }
-  if (![3, 7, 8, 11, 13].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
+  if (![3, 7, 8, 11, 13, 15, 16].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
 
   // ---- arms
   const bare = top === 5;
-  const sleeve = top === 9 ? acc : topC;
+  const sleeve = top === 9 ? acc : top === 15 ? VOID : top === 16 ? 0x8a94a8 : topC;
   const sleeveEnd = bare ? 18 : top === 0 || top === 12 ? 20 : 22;
   const armDown = (x: number) => {
     rect(x, 19, x + 1, sleeveEnd, sleeve);
@@ -232,11 +279,25 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     round(6, 18, 9, 19, GOLD, 1); // gold epaulettes
     round(18, 18, 21, 19, GOLD, 1);
   }
+  if (top === 14) {
+    for (const [x, d] of [[7, -1], [20, 1]] as const) {
+      round(Math.min(x, x + 2 * d), 18, Math.max(x, x + 2 * d), 20, acc, 1); // spiked pauldrons
+      put(x + 2 * d, 17, acc);
+      put(x + 3 * d, 16, GOLD_LIGHT);
+    }
+  }
+  if (top === 16) {
+    round(4, 17, 9, 21, STEEL_DARK, 1); // big shoulder plates
+    round(18, 17, 23, 21, STEEL_DARK, 1);
+    put(6, 19, GLOW_CYAN);
+    put(21, 19, GLOW_CYAN);
+  }
   if (top === 4) {
     round(5, 18, 9, 20, acc, 1); // shoulder pads
     round(18, 18, 22, 20, acc, 1);
   }
   if (back && top === 2) round(9, 17, 18, 22, shade(topC, 0.8), 1); // hood on the back
+  if (back) backItem();
 
   // ---- head and face
   round(X0, Y0, X1, Y1, skin, 2);
@@ -391,6 +452,119 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   }
 
   /** Hats (most look the same from behind; a few lose their front details). */
+  /** A line of pixels, `t` thick. */
+  function line(x0: number, y0: number, x1: number, y1: number, c: number, t = 1) {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (let i = 0; i <= n; i++) {
+      const x = Math.round(x0 + ((x1 - x0) * i) / (n || 1));
+      const y = Math.round(y0 + ((y1 - y0) * i) / (n || 1));
+      rect(x, y, x + t - 1, y + t - 1, c);
+    }
+  }
+
+  /**
+   * A pair of wings, colored per pixel: i counts out from the body (0) to the tip (w - 1). The tip
+   * sweeps up and out above the shoulders; below it the wing tapers in feathered steps.
+   */
+  function wings(color: (i: number, w: number, y: number) => number | null, y0 = 6, y1 = 27, max = 8) {
+    const peak = y0 + 4;
+    for (let y = y0; y <= y1; y++) {
+      // Top: only the outer part (the tip leaning out); then full width; then tapering, notched.
+      const from = y < peak ? Math.max(0, max - 2 - (y - y0) * 2) : 0;
+      let w = y < peak ? max : max - Math.floor(((y - peak) * max) / (y1 - peak + 2));
+      if (y > peak && y % 2 === 1) w -= 1;
+      for (let i = from; i < w; i++) {
+        const c = color(i, w, y);
+        if (c === null) continue;
+        put(8 - i, y, c);
+        put(19 + i, y, c);
+      }
+    }
+  }
+
+  /** Wings, a jetpack, a greatsword, a tail or mech arms: behind you from the front, on top from behind. */
+  function backItem() {
+    switch (look.back) {
+      case 1: // angel wings
+        wings((i, w, y) => (i === w - 1 ? 0xdde8f6 : y % 3 === 0 && i > 1 ? 0xc8d8ec : 0xf8fbff));
+        break;
+      case 2: // demon wings: dark ribs, a scalloped edge
+        wings((i, w, y) => (i % 3 === 0 ? 0x2a0a1a : i === w - 1 ? 0x3a0a22 : y % 4 === 0 ? 0x5a1430 : 0x7a1a3a), 5, 27, 9);
+        break;
+      case 3: // jetpack
+        if (back) {
+          round(9, 18, 12, 27, STEEL, 1);
+          round(15, 18, 18, 27, STEEL, 1);
+          rect(13, 20, 14, 26, STEEL_DARK);
+          rect(9, 21, 18, 21, 0xd8443a);
+          rect(10, 28, 11, 28, STEEL_DARK);
+          rect(16, 28, 17, 28, STEEL_DARK);
+        } else {
+          round(3, 18, 6, 27, STEEL, 1);
+          round(21, 18, 24, 27, STEEL, 1);
+          rect(3, 19, 6, 19, 0xd8443a);
+          rect(21, 19, 24, 19, 0xd8443a);
+          rect(4, 28, 5, 28, STEEL_DARK);
+          rect(22, 28, 23, 28, STEEL_DARK);
+        }
+        break;
+      case 4: // greatsword: a huge blade over the shoulder
+        line(27, 0, 7, 20, 0xe8eef6, 2);
+        line(28, 1, 8, 21, 0x9aa4b8);
+        line(4, 18, 10, 24, GOLD, 1); // crossguard
+        line(5, 18, 11, 24, GOLD, 1);
+        line(6, 22, 3, 25, 0x6a4a2a, 2); // grip
+        rect(1, 26, 2, 27, GOLD);
+        break;
+      case 5: { // dragon tail, curling up with a spade tip
+        const path = back
+          ? [[14, 27], [15, 28], [17, 28], [19, 28], [21, 27], [23, 26], [24, 25], [25, 24], [26, 22], [26, 21], [27, 20]]
+          : [[19, 28], [21, 28], [22, 27], [24, 26], [25, 25], [26, 24], [26, 23], [27, 22], [27, 21], [28, 20]];
+        for (const [x, y] of path) rect(x, y, x + 1, y + 1, 0xc0303a);
+        for (const [x, y] of path.filter((_, i) => i % 3 === 1)) put(x, y - 1, GOLD);
+        const [tx, ty] = path[path.length - 1];
+        round(tx - 1, ty - 3, tx + 2, ty - 1, 0xc0303a, 1);
+        put(tx, ty - 4, 0xc0303a);
+        break;
+      }
+      case 6: // fairy wings: two shimmering lobes a side
+        for (let y = 10; y <= 26; y++) {
+          const upper = y <= 19;
+          const w = upper ? 7 - Math.floor(Math.abs(y - 14.5)) : 5 - Math.abs(y - 23);
+          for (let i = 0; i < w; i++) {
+            const c = i === w - 1 ? 0xffffff : upper ? ((i + y) % 4 === 0 ? 0xe8fcff : 0xa8f0ff) : (i + y) % 4 === 0 ? 0xffe0f8 : 0xf8b8e8;
+            put(8 - i, y, c);
+            put(19 + i, y, c);
+          }
+        }
+        break;
+      case 7: // mech arms: two extra robot arms with glowing joints and claws
+        for (const d of [-1, 1] as const) {
+          const sx = d < 0 ? 7 : 20;
+          const ex = sx + 3 * d;
+          const hx = sx + 4 * d;
+          line(sx, 19, ex, 15, 0x8a94a8, 2);
+          line(ex, 15, hx, 9, 0x8a94a8, 2);
+          put(ex, 15, GLOW_CYAN);
+          put(hx, 9, GLOW_CYAN);
+          put(hx - d, 7, STEEL_DARK);
+          put(hx + d, 7, STEEL_DARK);
+          put(hx - d, 8, STEEL_DARK);
+          put(hx + d + d, 8, STEEL_DARK);
+        }
+        break;
+      case 8: // phoenix wings: fire from gold to red, with flaming tips
+        wings((i, w, y) => {
+          if (i === w - 1 && y % 2 === 0) return GOLD_LIGHT;
+          const f = (y - 4) / 22 + (i / w) * 0.3;
+          return f < 0.33 ? FLAME[0] : f < 0.7 ? FLAME[1] : FLAME[2];
+        }, 4, 26, 9);
+        break;
+      default:
+        break;
+    }
+  }
+
   function hat() {
     switch (look.hat) {
       case 1: // cap with a side brim (a strap from behind)
@@ -516,6 +690,76 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           put(X1 - 3, Y0 - 2, acc);
         }
         break;
+      case 20: // flame crown: a gold band crowned with fire
+        rect(X0 + 2, Y0 - 1, X1 - 2, Y0 + 1, GOLD);
+        for (let x = X0 + 2; x <= X1 - 2; x++) {
+          const h = 2 + ((x * 7) % 4);
+          for (let k = 0; k < h; k++) put(x, Y0 - 2 - k, FLAME[Math.min(2, h - 1 - k)]);
+        }
+        if (!back) rect(13, Y0, 14, Y0, hatC);
+        break;
+      case 21: // storm cloud: it follows you around, rumbling
+        round(7, 1, 20, 4, 0xd8dce8, 2);
+        round(10, 0, 16, 2, 0xf4f6fc, 1);
+        rect(8, 4, 19, 4, 0x8a90a4);
+        put(19, 5, 0xfff27a);
+        put(20, 6, 0xfff27a);
+        put(19, 7, 0xfff27a);
+        break;
+      case 22: // dragon helm: horns, fins and a crest
+        round(X0 - 1, Y0 - 3, X1 + 1, Y0 + 3, hatC, 2);
+        rect(X0 - 1, Y0 + 3, X1 + 1, Y0 + 3, shade(hatC, 0.7));
+        for (const [x, d] of [[X0 - 1, -1], [X1 + 1, 1]] as const) {
+          put(x, Y0 - 2, 0xf0e2c0);
+          put(x + d, Y0 - 3, 0xf0e2c0);
+          put(x + d, Y0 - 4, 0xf0e2c0);
+          put(x + 2 * d, Y0 - 5, 0xfff8e0);
+          rect(Math.min(x + d, x + 2 * d), Y0 + 1, Math.max(x + d, x + 2 * d), Y0 + 4, acc);
+        }
+        for (const x of [10, 13, 14, 17]) put(x, Y0 - 4, acc);
+        if (!back) rect(9, Y0 + 2, 18, Y0 + 2, GOLD);
+        break;
+      case 23: // wizard hat: tall, starry, tip bent over
+        rect(X0 - 3, Y0 + 1, X1 + 3, Y0 + 1, shade(hatC, 0.8));
+        rect(9, Y0, 18, Y0, acc);
+        rect(10, Y0 - 1, 17, Y0 - 1, hatC);
+        rect(11, Y0 - 2, 16, Y0 - 2, hatC);
+        rect(12, Y0 - 3, 15, Y0 - 3, hatC);
+        rect(13, Y0 - 4, 16, Y0 - 4, hatC);
+        rect(16, Y0 - 5, 18, Y0 - 5, hatC);
+        put(19, Y0 - 4, GOLD_LIGHT);
+        for (const [x, y] of [[11, Y0 - 1], [15, Y0 - 2], [13, Y0 - 3], [16, Y0 - 1]]) put(x, y, GOLD);
+        break;
+      case 24: // viking helm
+        round(X0, Y0 - 3, X1, Y0 + 2, STEEL, 2);
+        rect(X0, Y0 + 2, X1, Y0 + 2, STEEL_DARK);
+        rect(13, Y0 - 3, 14, Y0 + 1, STEEL_DARK);
+        for (const [x, d] of [[X0 - 1, -1], [X1 + 1, 1]] as const) {
+          put(x, Y0, 0xf0e2c0);
+          put(x, Y0 - 1, 0xf0e2c0);
+          put(x + d, Y0 - 2, 0xf0e2c0);
+          put(x + d, Y0 - 3, 0xf0e2c0);
+          put(x + d, Y0 - 4, 0xfff8e0);
+        }
+        if (!back) rect(13, Y0 + 3, 14, Y0 + 5, STEEL_DARK);
+        break;
+      case 25: // third eye, open on the forehead
+        if (!back) {
+          round(12, 7, 15, 9, 0xffffff, 1);
+          rect(13, 7, 14, 9, 0xd040e0);
+          put(13, 8, 0x3a0a4a);
+          put(13, 6, 0xf080ff);
+          put(14, 6, 0xf080ff);
+        } else rect(12, Y0 + 2, 15, Y0 + 2, 0xd040e0);
+        break;
+      case 26: // astral halo: a big spiked ring of light, floating
+        rect(X0 + 1, 1, X1 - 1, 1, 0x9af0ff);
+        rect(X0 + 1, 3, X1 - 1, 3, 0x9af0ff);
+        put(X0, 2, 0x9af0ff);
+        put(X1, 2, 0x9af0ff);
+        for (const x of [X0 + 2, 11, 16, X1 - 2]) put(x, 0, 0xffffff);
+        rect(13, 0, 14, 0, 0xffffff);
+        break;
       case 17: // propeller cap
         round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);
         rect(X0 + 1, Y0 - 3, 13, Y0 - 1, acc);
@@ -534,7 +778,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     for (let x = 0; x < TRAINER_W; x++) {
       const c = g[y][x];
       if (c === null) {
-        if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) out[y][x] = look.aura ? 0xc08a10 : OUTLINE;
+        if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) out[y][x] = AURA_OUTLINE[look.aura] ?? OUTLINE;
         continue;
       }
       if (c === 0xffffff) continue;
@@ -543,7 +787,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       else if (!filled(x - 1, y) || !filled(x, y - 1)) out[y][x] = shade(c, 1.08);
     }
   }
-  if (look.aura) {
+  if (look.aura === 1) {
     // Golden glow: a gold outline (above) and a few sparkles around the trainer.
     for (const [sx, sy] of [[2, 6], [28, 3], [29, 20], [1, 24]]) {
       for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {

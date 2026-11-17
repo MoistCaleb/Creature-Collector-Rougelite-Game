@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { saveMeta, type Meta } from '../logic/run';
 import { earnedTitles, hasTitle, myTitle, TIER_INFO, TIERS, TITLES, type TitleTier } from '../logic/titles';
 import { openPanel } from './panel';
+import { rewardText } from '../logic/cosmetics';
 import { sfx } from './sound';
 import { titleBadge } from './titleBadge';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
@@ -17,7 +18,7 @@ const hexNum = (c: string) => parseInt(c.slice(1), 16);
  */
 export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void) {
   const pw = LANDSCAPE ? 760 : 436;
-  const ph = LANDSCAPE ? 440 : 640;
+  const ph = LANDSCAPE ? 440 : 760;
   const p = openPanel(scene, 'Trainer titles', { w: pw, h: ph, onClose });
   const x0 = p.x + 14;
   const w = p.w - 28;
@@ -60,11 +61,11 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
       body.add(b);
     });
 
-    // The tier's titles: two columns sideways, one upright.
+    // The tier's titles: three columns sideways, one upright. Each: name, how to earn it, what it unlocks.
     const list = TITLES.filter((t) => t.tier === shownTier);
-    const cols = LANDSCAPE ? 2 : 1;
+    const cols = LANDSCAPE ? 3 : 1;
     const top = tabY + 50;
-    const rowH = LANDSCAPE ? 62 : 64;
+    const rowH = LANDSCAPE ? 76 : 78;
     const cw = (w - (cols - 1) * 10) / cols;
     const cur = myTitle(meta);
     list.forEach((t, i) => {
@@ -78,16 +79,29 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
         .setOrigin(0)
         .setStrokeStyle(2, worn ? hexNum(TIER_INFO[t.tier].color) : COLORS.stroke, worn ? 1 : 0.6);
       body.add(bg);
-      if (got) body.add(titleBadge(scene, cx + 12, cy + 18, t.name, 16, { originX: 0, maxW: cw - 110 }));
-      else body.add(text(scene, cx + 12, cy + 18, t.name, 16, '#6d6888', { fontStyle: 'bold' }).setOrigin(0, 0.5));
-      body.add(text(scene, cx + 12, cy + 34, t.desc, 12, got ? COLORS.text : COLORS.textDim, { wordWrap: { width: cw - 110 } }));
+      const fs = LANDSCAPE ? 14 : 16;
+      if (got) body.add(titleBadge(scene, cx + 10, cy + 15, t.name, fs, { originX: 0, maxW: cw - 96 }));
+      else {
+        const nm = text(scene, cx + 10, cy + 15, t.name, fs, '#6d6888', { fontStyle: 'bold' }).setOrigin(0, 0.5);
+        if (nm.width > cw - 96) nm.setScale((cw - 96) / nm.width);
+        body.add(nm);
+      }
+      const desc = text(scene, cx + 10, cy + 29, t.desc, LANDSCAPE ? 11 : 12, got ? COLORS.text : COLORS.textDim);
+      if (desc.width > cw - 20) desc.setScale((cw - 20) / desc.width);
+      body.add(desc);
+      const reward = rewardText(t.name) || (t.gilded ? 'Unlocks Gilded outfit pieces' : '');
+      if (reward) {
+        const r = text(scene, cx + 10, cy + 47, `✦ ${reward}`, LANDSCAPE ? 10 : 11, got ? TIER_INFO[t.tier].color : '#8a84a8', { fontStyle: 'bold' });
+        if (r.width > cw - 20) r.setScale((cw - 20) / r.width);
+        body.add(r);
+      }
       const right = worn ? 'Wearing' : got ? 'Tap to wear' : `${Math.min(have, need)}/${need}`;
-      body.add(text(scene, cx + cw - 12, cy + (rowH - 6) / 2, right, 12, worn ? '#8fe08a' : got ? '#ffc94d' : COLORS.textDim, { fontStyle: 'bold' }).setOrigin(1, 0.5));
+      body.add(text(scene, cx + cw - 10, cy + 15, right, LANDSCAPE ? 11 : 12, worn ? '#8fe08a' : got ? '#ffc94d' : COLORS.textDim, { fontStyle: 'bold' }).setOrigin(1, 0.5));
       if (!got) {
         // A thin progress bar under the count.
-        const bw = 70;
-        const bx = cx + cw - 12 - bw;
-        const by = cy + (rowH - 6) / 2 + 12;
+        const bw = LANDSCAPE ? 56 : 70;
+        const bx = cx + cw - 10 - bw;
+        const by = cy + 23;
         body.add(scene.add.rectangle(bx, by, bw, 4, 0x15121f).setOrigin(0));
         body.add(scene.add.rectangle(bx, by, Math.max(0, bw * Math.min(1, have / need)), 4, hexNum(TIER_INFO[t.tier].color), 0.7).setOrigin(0));
       }

@@ -1,5 +1,6 @@
 import { titleBadge } from '../ui/titleBadge';
-import { addOnlineWin, titleNews } from '../logic/titles';
+import { addOnlineWin} from '../logic/titles';
+import { titleNews } from '../logic/cosmetics';
 import { tip, tipDone } from '../ui/tips';
 import { trainerCutIn } from '../ui/cutin';
 import { bossRuleCard, RULE_TAGS } from '../ui/bossCard';
@@ -10,6 +11,7 @@ import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
+import { trainerFx } from '../ui/trainerFx';
 import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, guardianRules, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
@@ -420,10 +422,12 @@ export class BattleScene extends Phaser.Scene {
     const mine = myLook(state.meta);
     const rest = ensureTrainerTexture(this, mine, 'back');
     this.trainers.player = { img: place(L.playerTrainer.x, L.playerTrainer.y, rest, 3.1, 0), rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
+    trainerFx(this, this.trainers.player.img, mine, { back: true });
     if (enemy) {
       const eRest = ensureTrainerTexture(this, enemy, 'stand');
       const them = place(L.enemyTrainer.x, L.enemyTrainer.y, eRest, 2.8, 450).setFlipX(true);
       this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command') };
+      trainerFx(this, them, enemy);
     }
   }
 

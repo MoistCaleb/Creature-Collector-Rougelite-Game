@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.1';
+export const APP_VERSION = '1.2';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,18 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2',
+    title: 'Legendary gear',
+    items: [
+      '27 new cosmetics, unlocked by trainer titles, many with live effects.',
+      'New Back slot: Angel, Demon, Fairy and Phoenix wings, a Jetpack, a Greatsword, a Dragon tail and Mech arms.',
+      'Hats: Flame crown, Storm cloud, Dragon helm, Wizard hat, Viking helm, Third eye, Astral halo. Tops: Dragon armor, Void cloak, Mech suit. Shoes: Rocket boots, Cloud steps.',
+      'Animated auras: Inferno, Frost, Storm, Shadow, Toxic, Starfall, Rainbow and Void, shown in battle, on the map and to your opponent online.',
+      'The Titles screen shows what each title unlocks.',
+      'Stage battles: your opponent’s title shows over their token on the map.',
+    ],
+  },
   {
     version: '1.1',
     title: 'Trainer titles',

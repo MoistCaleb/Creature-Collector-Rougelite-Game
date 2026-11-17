@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { takeNewMilestones } from '../logic/gilded';
-import { addOnlineWin, takeNewTitles, titleNews } from '../logic/titles';
+import { addOnlineWin, takeNewTitles} from '../logic/titles';
+import { titleNews, unlocksOf } from '../logic/cosmetics';
 import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
@@ -172,7 +173,10 @@ export class EndScene extends Phaser.Scene {
     }
     const titles = takeNewTitles(state.meta);
     if (titles.length || milestones.length) saveMeta(state.meta);
-    if (titles.length) extra.push(`New title${titles.length > 1 ? 's' : ''}: ${titles.map((t) => t.name).join(', ')} (Edit trainer › Titles)`);
+    if (titles.length) {
+      const u = unlocksOf(titles);
+      extra.push(`New title${titles.length > 1 ? 's' : ''}: ${titles.map((t) => t.name).join(', ')}${u ? ` · unlocks ${u}` : ''} (Edit trainer)`);
+    }
     const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race;
     if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
       text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);

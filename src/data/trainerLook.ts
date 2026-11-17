@@ -21,8 +21,10 @@ export interface TrainerLook {
   face: number;
   shoes: number;
   shoeColor: number;
-  /** 1: the Golden glow (a Gilded milestone). Missing on older looks: none. */
+  /** An animated aura (see ui/trainerFx). 0: none. Missing on older looks: none. */
   aura: number;
+  /** Something on your back: wings, a jetpack, a greatsword… 0: none. Missing on older looks: none. */
+  back: number;
 }
 
 export const SKIN_TONES = [0xffe0c4, 0xf2c39b, 0xd9a273, 0xb57a4e, 0x8a5a36, 0x5e3b22];
@@ -34,12 +36,15 @@ export const HATS = [
   'Bunny ears', 'Flower', 'Bow', 'Bandana', 'Helmet', 'Halo', 'Horns', 'Propeller cap',
   // Gilded milestone rewards (see logic/gilded.ts).
   'Gilded laurel', 'Gilded crown',
+  // Title rewards (see logic/cosmetics.ts).
+  'Flame crown', 'Storm cloud', 'Dragon helm', 'Wizard hat', 'Viking helm', 'Third eye', 'Astral halo',
 ] as const;
-export const TOPS = ['Tee', 'Jacket', 'Hoodie', 'Long coat', 'Armor', 'Tank top', 'Sweater', 'Overalls', 'Robe', 'Vest', 'Scarf', 'Cape', 'Sailor', 'Gilded coat'] as const;
+export const TOPS = ['Tee', 'Jacket', 'Hoodie', 'Long coat', 'Armor', 'Tank top', 'Sweater', 'Overalls', 'Robe', 'Vest', 'Scarf', 'Cape', 'Sailor', 'Gilded coat', 'Dragon armor', 'Void cloak', 'Mech suit'] as const;
 export const BOTTOMS = ['Pants', 'Shorts', 'Skirt', 'Long skirt', 'Cargo pants', 'Puffy pants'] as const;
 export const FACES = ['None', 'Glasses', 'Shades', 'Eyepatch', 'Freckles', 'Bandage'] as const;
-export const SHOES = ['Sneakers', 'Boots', 'Sandals', 'Gilded boots'] as const;
-export const AURAS = ['None', 'Golden glow'] as const;
+export const SHOES = ['Sneakers', 'Boots', 'Sandals', 'Gilded boots', 'Rocket boots', 'Cloud steps'] as const;
+export const AURAS = ['None', 'Golden glow', 'Inferno', 'Frost', 'Storm', 'Shadow', 'Toxic', 'Starfall', 'Rainbow', 'Void'] as const;
+export const BACKS = ['None', 'Angel wings', 'Demon wings', 'Jetpack', 'Greatsword', 'Dragon tail', 'Fairy wings', 'Mech arms', 'Phoenix wings'] as const;
 /** Clothing colors (hat, top, accent, bottoms). */
 export const CLOTH_COLORS = [
   0xd8443a, 0xf08a2a, 0xf0c838, 0x5ab84a, 0x2aa8a0, 0x6ac8f0, 0x3a6ad8, 0x2a3458,
@@ -57,7 +62,7 @@ export const EYE_COLOR_NAMES = ['Dark', 'Blue', 'Green', 'Amber', 'Violet', 'Red
 
 /**
  * Each part: its options (used by the editor and to clean looks from peers). `free` is how many
- * of them everyone has (the rest are Gilded milestone rewards, never given to NPC trainers).
+ * of them everyone has (the rest are Gilded milestone and title rewards, never given to NPC trainers).
  */
 export const LOOK_PARTS: { key: keyof TrainerLook; label: string; names: readonly string[]; free?: number }[] = [
   { key: 'skin', label: 'Skin', names: SKIN_TONES.map((_, i) => `Tone ${i + 1}`) },
@@ -75,11 +80,12 @@ export const LOOK_PARTS: { key: keyof TrainerLook; label: string; names: readonl
   { key: 'shoes', label: 'Shoes', names: SHOES, free: 3 },
   { key: 'shoeColor', label: 'Shoe color', names: COLOR_NAMES, free: 18 },
   { key: 'aura', label: 'Aura', names: AURAS, free: 1 },
+  { key: 'back', label: 'Back', names: BACKS, free: 1 },
 ];
 
 export const DEFAULT_LOOK: TrainerLook = {
   skin: 1, hair: 0, hairColor: 1, eyes: 0, hat: 1, hatColor: 0, top: 1, topColor: 6, accent: 11, bottom: 0, bottomColor: 7,
-  face: 0, shoes: 0, shoeColor: 13, aura: 0,
+  face: 0, shoes: 0, shoeColor: 13, aura: 0, back: 0,
 };
 
 /** Make any value safe to draw: every part a whole number in range (bad or missing parts use the default). */
@@ -101,7 +107,7 @@ export const myName = (meta: { duelName?: string }): string => meta.duelName || 
 export function randomLook(rng: Rng): TrainerLook {
   const look = { ...DEFAULT_LOOK };
   // Only the options everyone has (and the same rolls as before milestone rewards existed).
-  for (const p of LOOK_PARTS) if (p.key !== 'aura') look[p.key] = rng.int(0, (p.free ?? p.names.length) - 1);
+  for (const p of LOOK_PARTS) if (p.key !== 'aura' && p.key !== 'back') look[p.key] = rng.int(0, (p.free ?? p.names.length) - 1);
   // Hats are less common than bare heads, and bald is rare.
   if (rng.next() < 0.35) look.hat = 0;
   if (rng.next() < 0.6) look.face = 0;

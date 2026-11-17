@@ -36,6 +36,8 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureGrayTrainerTexture, ensureTrainerTexture } from '../ui/trainerSprite';
+import { trainerFx } from '../ui/trainerFx';
+import { titleBadge } from '../ui/titleBadge';
 import { lookForName, myLook, type TrainerLook } from '../data/trainerLook';
 import { calm } from '../ui/motion';
 import { Scroller } from '../ui/scroll';
@@ -459,9 +461,13 @@ export class MapScene extends Phaser.Scene {
     const body = this.add.image(0, 0, ghost ? ensureGrayTrainerTexture(this, look) : ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.5);
     c.add([ring, shadow, body]);
     if (ghost) {
-      c.add(text(this, 0, -58, ghostName, 10, '#8fd0ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5));
+      // Their name, and their title (in its tier's color and effect) under it.
+      const title = duel.opponent?.title;
+      c.add(text(this, 0, title ? -70 : -58, ghostName, 10, '#8fd0ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5));
+      if (title) c.add(titleBadge(this, 0, -58, title, 9, { maxW: 110 }));
     }
     this.layer.add(c);
+    trainerFx(this, body, look, { gray: ghost });
     this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: ghost ? 0.1 : 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
     const w: Walker = { c, body, f: null, fBody: null, side, at: nodeId, ghost };

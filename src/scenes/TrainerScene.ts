@@ -4,6 +4,7 @@ import {
   cleanLook,
   EYE_COLORS,
   HAIR_COLORS,
+  DEFAULT_LOOK,
   LOOK_PARTS,
   myLook,
   myName,
@@ -12,8 +13,9 @@ import {
   type TrainerLook,
 } from '../data/trainerLook';
 import { Rng } from '../logic/rng';
-import { gildedCount, lockedBy, nextMilestone } from '../logic/gilded';
-import { earnedTitles, myTitle, TITLES } from '../logic/titles';
+import { gildedCount, nextMilestone } from '../logic/gilded';
+import { lockOf } from '../logic/cosmetics';
+import { earnedTitles, myTitle, TIER_INFO, TITLES } from '../logic/titles';
 import { openTitles } from '../ui/titlesUi';
 import { titleInButton, titleSub } from '../ui/titleBadge';
 import { openGildedMilestones } from '../ui/gildedUi';
@@ -23,6 +25,7 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureTrainerTexture, type TrainerPose } from '../ui/trainerSprite';
+import { trainerFx } from '../ui/trainerFx';
 import { background, button, COLORS, fullRect, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 type Part = (typeof LOOK_PARTS)[number];
@@ -84,6 +87,7 @@ export class TrainerScene extends Phaser.Scene {
     this.add.ellipse(96, 248 + py, 110, 22, 0x000000, 0.35);
     const pose: TrainerPose = previewPose === 'stand' ? 'stand' : 'backCommand';
     const img = this.add.image(pose === 'backCommand' ? 105 : 96, 164 + py, ensureTrainerTexture(this, look, pose)).setScale(5);
+    trainerFx(this, img, look, { back: pose === 'backCommand' });
     this.tweens.add({ targets: img, y: 160 + py, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
     text(this, 96, 266 + py, pose === 'backCommand' ? 'In battle (from behind) · tap' : 'Tap to see it in battle', 10, COLORS.textDim).setOrigin(0.5, 1);
     panel.setInteractive({ useHandCursor: true }).on('pointerup', () => {
@@ -159,12 +163,19 @@ export class TrainerScene extends Phaser.Scene {
       layer.add(cell);
       const preview = { ...base, [part.key]: v } as TrainerLook;
       const scale = Math.min(2.4, (cellH - 30) / 34);
-      // Gilded milestone rewards stay locked (dimmed, with what unlocks them) until you reach them.
-      const lock = lockedBy(state.meta, part.key, v);
-      layer.add(this.add.image(x + cellW / 2, y + (cellH - 22) / 2, ensureTrainerTexture(this, preview, 'stand')).setScale(scale).setAlpha(lock ? 0.3 : 1));
+      // Title and Gilded milestone rewards stay locked (dimmed, with what unlocks them) until you earn them.
+      const lock = lockOf(state.meta, part.key, v);
+      const pimg = this.add.image(x + cellW / 2, y + (cellH - 22) / 2, ensureTrainerTexture(this, preview, 'stand')).setScale(scale).setAlpha(lock ? 0.3 : 1);
+      layer.add(pimg);
+      // Effects on this option's preview (only for the part that has them, so the grid stays calm).
+      if (['aura', 'back', 'hat', 'shoes', 'top'].includes(part.key)) trainerFx(this, pimg, { ...DEFAULT_LOOK, [part.key]: v });
       if (lock) {
         layer.add(pixelIcon(this, x + cellW / 2, y + (cellH - 22) / 2, 'lock', 22));
-        const need = text(this, x + cellW / 2, y + 8, `✦ ${lock.count} Gilded`, 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+        const need = text(this, x + cellW / 2, y + 8, lock.short, 10, lock.title ? TIER_INFO[lock.title.tier].color : '#ffd86b', {
+          fontStyle: 'bold',
+          stroke: '#120e1c',
+          strokeThickness: 3,
+        }).setOrigin(0.5, 0);
         if (need.width > cellW - 8) need.setScale((cellW - 8) / need.width);
         layer.add(need);
       } else if (v >= (part.free ?? part.names.length)) layer.add(text(this, x + cellW - 8, y + 6, '✦', 13, '#ffd86b').setOrigin(1, 0));
@@ -175,12 +186,7 @@ export class TrainerScene extends Phaser.Scene {
       layer.add(label);
       cell.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         if (current) return close();
-        if (lock)
-          return showMessage(
-            this,
-            `✦ ${name}`,
-            `A Gilded milestone reward: own ${lock.count} Gilded species to wear it (you have ${gildedCount(state.meta)}).\n\nCatch a Gilded Hexling in any form to own its whole line.`,
-          );
+        if (lock) return showMessage(this, `✦ ${name}`, lock.long);
         sfx.coin();
         this.set({ ...look, [part.key]: v });
       });
