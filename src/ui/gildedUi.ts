@@ -19,10 +19,10 @@ export function announceGilded(scene: Phaser.Scene, meta: Meta, then: () => void
 }
 
 /** Every milestone, what it gives, and how close you are. */
-export function openGildedMilestones(scene: Phaser.Scene, meta: Meta) {
+export function openGildedMilestones(scene: Phaser.Scene, meta: Meta, onClose: () => void = () => {}) {
   const n = gildedCount(meta);
   const rowH = LANDSCAPE ? 58 : 82;
-  const p = openPanel(scene, 'Gilded milestones', { w: LANDSCAPE ? 700 : 430, h: LANDSCAPE ? 440 : 120 + GILDED_MILESTONES.length * rowH + 70 });
+  const p = openPanel(scene, 'Gilded milestones', { w: LANDSCAPE ? 700 : 430, h: LANDSCAPE ? 440 : 120 + GILDED_MILESTONES.length * rowH + 70, onClose });
   const x0 = p.x + 16;
   const w = p.w - 32;
   let y = p.top;

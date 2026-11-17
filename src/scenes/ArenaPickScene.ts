@@ -6,7 +6,8 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, clipList, COLORS, FONT, H, LANDSCAPE, text, W } from '../ui/widgets';
+import { background, button, clipList, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
+import { searchBox } from '../ui/searchBox';
 
 const CELL_H = 118;
 /**
@@ -110,45 +111,13 @@ export class ArenaPickScene extends Phaser.Scene {
   }
 
   private makeSearchBox() {
-    const el = document.createElement('input');
-    el.type = 'search';
-    el.placeholder = 'Search by name…';
-    el.value = this.query;
-    el.autocomplete = 'off';
-    Object.assign(el.style, {
-      position: 'fixed',
-      border: 'none',
-      outline: 'none',
-      background: 'transparent',
-      color: '#f0eaff',
-      fontFamily: FONT,
-      padding: '0 10px',
-      zIndex: '10',
-    } as CSSStyleDeclaration);
-    const place = () => {
-      const r = this.game.canvas.getBoundingClientRect();
-      const k = r.width / W;
-      Object.assign(el.style, {
-        left: `${r.left + 18 * k}px`,
-        top: `${r.top + (68 + this.dy()) * k}px`,
-        width: `${(G().side - 36) * k}px`,
-        height: `${34 * k}px`,
-        fontSize: `${Math.round(16 * k)}px`,
-      });
-    };
-    place();
-    el.addEventListener('input', () => {
-      this.query = el.value;
-      this.drawGrid();
+    this.input$ = searchBox(this, 18, 68 + this.dy(), G().side - 36, 34, {
+      value: this.query,
+      onInput: (v) => {
+        this.query = v;
+        this.drawGrid();
+      },
     });
-    window.addEventListener('resize', place);
-    window.addEventListener('game-layout', place);
-    this.events.once('shutdown', () => {
-      window.removeEventListener('resize', place);
-      window.removeEventListener('game-layout', place);
-    });
-    document.body.appendChild(el);
-    this.input$ = el;
   }
 
   /** Element filter chips: tap to toggle; several can be on at once. */
