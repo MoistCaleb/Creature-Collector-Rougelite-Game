@@ -83,8 +83,12 @@ export function makeArenaCreature(p: ArenaPick, opts: { level?: number } = {}): 
 export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): ArenaPick[] {
   const roster = arenaRoster(meta);
   return (picks ?? [])
-    .filter((p) => roster.includes(p.speciesId) && arenaForms(meta, p.speciesId).includes(p.stage))
-    .map((p) => ({ ...p, moves: p.moves.filter((id) => arenaMovePool(p.speciesId, p.stage).includes(id)).slice(0, MAX_MOVES) }))
+    .filter((p) => p && roster.includes(p.speciesId) && arenaForms(meta, p.speciesId).includes(p.stage))
+    .map((p) => {
+      const moves = (p.moves ?? []).filter((id) => arenaMovePool(p.speciesId, p.stage).includes(id)).slice(0, MAX_MOVES);
+      // No legal moves left: fall back to the ones it would naturally know.
+      return { ...p, moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage) };
+    })
     .slice(0, ARENA_TEAM);
 }
 
