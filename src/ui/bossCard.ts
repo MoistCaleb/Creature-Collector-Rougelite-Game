@@ -9,11 +9,11 @@ import { button, COLORS, fullRect, H, LANDSCAPE, text, W } from './widgets';
 export const RULE_TAGS: Record<BossRule, { tag: string; against: 'you' | 'foe' }> = {
   scorch: { tag: 'YOUR HEXLING BURNS EVERY TURN', against: 'you' },
   whiteout: { tag: '−1 SPEED WHEN YOU SEND ONE IN', against: 'you' },
-  thorns: { tag: 'YOUR HITS RECOIL 15%', against: 'you' },
+  thorns: { tag: 'YOUR HITS RECOIL 10%', against: 'you' },
   bulwark: { tag: 'THEIR HEXLINGS +1 DEFENSE', against: 'foe' },
   tailwind: { tag: 'THEY ALWAYS MOVE FIRST', against: 'foe' },
   riptide: { tag: '−1/8 HP WHEN YOU SEND ONE IN', against: 'you' },
-  overclock: { tag: 'THEY GAIN +1 ATTACK EVERY TURN', against: 'foe' },
+  overclock: { tag: 'THEY GAIN +1 ATTACK EVERY TURN (MAX +3)', against: 'foe' },
   miasma: { tag: 'POISONED WHEN YOU SEND ONE IN', against: 'you' },
   dread: { tag: '−1 ATTACK WHEN YOU SEND ONE IN', against: 'you' },
   sanctuary: { tag: 'THEY HEAL EVERY TURN', against: 'foe' },

@@ -20,6 +20,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Credits, and this What’s new list.',
       'The installed app now tells you when a new version is ready.',
       'Balance: Heat 1 enemies are 1/1/2 levels higher (was 1/2/3); 12 of the weakest starters got sturdier.',
+      'Fire: sturdier Hexlings, Cauterize (a draining hit) and Heat Haze (+2 Defense) replace Stoking Claw and Fire Dance.',
+      'Guardian rules: Thornwall recoil 15% → 10%; Overclock stops at +3 Attack.',
     ],
   },
   {

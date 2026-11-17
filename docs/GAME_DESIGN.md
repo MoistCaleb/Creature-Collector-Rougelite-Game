@@ -133,7 +133,7 @@ during the fight:
 | Earth | Gorran, the Unmoved | Bulwark: his creatures enter with +1 Defense |
 | Storm | Volta, the Living Gale | Tailwind: she always moves first unless you use a priority move |
 | Water | Maren, Keeper of the Undertow | Riptide: creatures you send in take 1/8 HP (never fatal) |
-| Metal | Forge, the Iron Engine | Overclock: his active creature gains +1 Attack every turn |
+| Metal | Forge, the Iron Engine | Overclock: his active creature gains +1 Attack every turn, up to +3 |
 | Toxic | Morva, the Plague Bloom | Miasma: your creatures are poisoned on entry |
 | Shadow | Nyx, the Eclipse | Dread: your creatures enter with -1 Attack |
 | Light | Solenne, the Radiant | Sanctuary: her active creature heals 1/12 HP every turn |
@@ -507,5 +507,7 @@ Runs unlock:
 `scripts/balance.ts` has a bot play about 10,000 runs and writes `docs/BALANCE_REPORT.md`: win rate by
 Heat, where runs end, every starter at Heat 0 (and by element), guardian and extra-rule loss rates, Gilded
 Hunt depth and the weekly twists. The bot is simple, so its numbers are for comparing, not absolute.
+`RULES_ONLY=1 npx vite-node scripts/balance.ts` runs a bigger Heat 4-8 sample and prints just the guardian
+rule loss rates (the report's rule table is small and noisy).
 
 ## Open questions
