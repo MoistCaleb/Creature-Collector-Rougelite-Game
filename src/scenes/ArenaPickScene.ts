@@ -126,7 +126,11 @@ export class ArenaPickScene extends Phaser.Scene {
       this.drawGrid();
     });
     window.addEventListener('resize', place);
-    this.events.once('shutdown', () => window.removeEventListener('resize', place));
+    window.addEventListener('game-layout', place);
+    this.events.once('shutdown', () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('game-layout', place);
+    });
     document.body.appendChild(el);
     this.input$ = el;
   }

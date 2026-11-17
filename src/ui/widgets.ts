@@ -15,10 +15,14 @@ export const H = 800;
  * ...but rendered at the screen's real pixel density so it stays sharp on phones. The canvas is
  * ZOOM times larger and every scene's camera zooms by ZOOM (see `background`), so layout code
  * keeps using 450x800 coordinates. Capped at 3 to keep the canvas a sensible size.
+ * Sized for the screen held upright, so it stays sharp whichever way the phone is turned (in
+ * landscape the board is shorter on screen, so it only gets sharper).
  */
 export const ZOOM = (() => {
   if (typeof window === 'undefined') return 1;
-  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const short = Math.min(window.innerWidth, window.innerHeight);
+  const long = Math.max(window.innerWidth, window.innerHeight);
+  const fit = Math.min(short / W, long / H);
   return Math.min(3, Math.max(1, (window.devicePixelRatio || 1) * fit));
 })();
 export const FONT = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';

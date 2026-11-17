@@ -52,6 +52,20 @@ export function startGame() {
     ],
   });
 
+  // Re-fit whenever the game's box really changes size: turning the phone, browser bars sliding,
+  // the notch moving sides. Window resize events alone fire before a rotation settles (leaving the
+  // canvas sized for the old orientation, i.e. "zoomed in"), so watch the box itself, and check
+  // again once the rotation animation is over.
+  const refit = () => {
+    game.scale.refresh();
+    requestAnimationFrame(() => window.dispatchEvent(new Event('game-layout')));
+  };
+  const box = document.getElementById('game');
+  if (box && 'ResizeObserver' in window) new ResizeObserver(refit).observe(box);
+  const later = () => [100, 350, 800].forEach((ms) => setTimeout(refit, ms));
+  window.addEventListener('orientationchange', later);
+  window.visualViewport?.addEventListener('resize', later);
+
   // Handy for debugging in the browser console.
   Object.assign(window, { game, state });
 }
