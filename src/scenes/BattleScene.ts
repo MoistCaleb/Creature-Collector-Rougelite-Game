@@ -942,8 +942,8 @@ export class BattleScene extends Phaser.Scene {
     const race = !!this.match!.duel!.info.hostCreatures;
     duel.controller = null;
     if (race) {
-      const title = won ? 'You won the race!' : `${opp} won the race`;
-      const body = won ? `Your run's team beat ${opp}'s in the final duel!` : `${opp}'s team won the final duel.`;
+      const title = won ? 'You won the stage battle!' : `${opp} won the stage battle`;
+      const body = won ? `Your team beat ${opp}'s at the boss!` : `${opp}'s team beat yours at the boss.`;
       return showMessage(this, title, body, () => {
         endRace();
         state.run = null;

@@ -31,7 +31,7 @@ export class StarterScene extends Phaser.Scene {
     background(this);
     playMusic('title');
     const opp = duel.opponent?.name ?? 'your friend';
-    const titleText = this.race ? `Stage race vs ${opp}` : this.daily ? `Daily run · ${this.daily}` : 'Choose your starter';
+    const titleText = this.race ? `Stage battle vs ${opp}` : this.daily ? `Daily run · ${this.daily}` : 'Choose your starter';
     const title = text(this, W / 2 + 20, 34, titleText, this.daily || this.race ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     if (this.daily) pixelIcon(this, title.x - title.width / 2 - 16, 34, 'calendar', 22);
     text(

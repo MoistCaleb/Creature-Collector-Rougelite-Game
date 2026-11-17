@@ -118,7 +118,7 @@ export class MapScene extends Phaser.Scene {
       );
       const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
       const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
-      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? BOSSES[map.biome].name : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
       if (!canGo && !isCurrent) {
         hex.setAlpha(visited ? 0.35 : 0.6);
@@ -212,7 +212,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     if (run.race) this.drawRaceStatus();
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 10, `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 10, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     // Heat and daily markers after the land name.
     let mx = 14 + biome.width + 12;
@@ -228,7 +228,8 @@ export class MapScene extends Phaser.Scene {
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 67, 'skull', 14);
-      text(this, 32, 60, steps === 1 ? 'Boss is next' : `Boss in ${steps} steps`, 12, '#c9a3dd');
+      const foe = run.race ? run.race.opponent : 'Boss';
+      text(this, 32, 60, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd');
     }
     button(this, W - 226, TOP_BAR / 2, 40, 44, '', () => openGameMenu(this), { glyph: 'menu' });
     button(this, W - 170, TOP_BAR / 2, 60, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 15 });
@@ -241,12 +242,22 @@ export class MapScene extends Phaser.Scene {
   /** Stage race: share where we are, and show where the other racer is. */
   private drawRaceStatus() {
     const run = state.run!;
-    sendProgress({ floor: run.floor, finished: false, won: false });
+    sendProgress({ floor: run.floor, finished: false, won: false, steps: run.map.layout === 'rows' ? stepsToBoss(run.map, run.currentId) : undefined });
     const t = text(this, W - 8, 66, '', 12, '#8fd0ff', { fontStyle: 'bold' }).setOrigin(1, 0).setDepth(5);
     const draw = () => {
       if (!t.active) return;
       const them = duel.race?.theirs;
-      const where = !session.connected ? 'reconnecting…' : !them ? 'starting' : them.finished ? (them.won ? 'finished!' : 'run over') : `floor ${them.floor + 1}`;
+      const where = !session.connected
+        ? 'reconnecting…'
+        : !them
+          ? 'starting'
+          : them.finished
+            ? them.won
+              ? 'waiting at the boss!'
+              : 'team wiped out'
+            : them.steps !== undefined
+              ? `${them.steps} steps to go`
+              : 'on the way';
       t.setText(`vs ${run.race!.opponent}: ${where}`);
     };
     draw();
@@ -288,9 +299,16 @@ export class MapScene extends Phaser.Scene {
       return this.resumeNode(n.kind);
     }
     switch (n.kind) {
+      case 'boss':
+        // Stage battle: the boss here is the other player. The stage ends and the duel starts.
+        if (run.race) {
+          persist();
+          return void this.scene.start('End', { won: true });
+        }
+        this.scene.start('Battle', { kind: n.kind });
+        return;
       case 'battle':
       case 'elite':
-      case 'boss':
         this.scene.start('Battle', { kind: n.kind });
         return;
       case 'heal':
