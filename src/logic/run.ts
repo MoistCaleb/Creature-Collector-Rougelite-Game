@@ -396,6 +396,8 @@ export interface ActiveBattle {
   summary: string;
   /** Which variant of the element's battle stage this fight takes place on. */
   stage?: number;
+  /** Stat stages, who's out, the foe's potions left...: so a reload resumes the fight exactly. */
+  state?: import('./battle').BattleState;
 }
 
 /** Three starter choices: the favorite (if unlocked) plus random others from the unlocked pool. */

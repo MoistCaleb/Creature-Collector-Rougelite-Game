@@ -339,6 +339,12 @@ export class BattleScene extends Phaser.Scene {
     playMusic(boss ? (run.floor === 2 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', run.map.biome);
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
+    // Resuming: stat stages, who's out, the foe's potions and used-up rule effects come back too.
+    if (resuming && run.activeBattle.state) {
+      this.battle.restoreState(run.activeBattle.state);
+      this.refreshEnemy();
+      this.refreshPlayer();
+    }
     const begin = () => {
       if (boss && !resuming) this.bossEntrance();
       const go = () => (entry.length ? this.play(entry) : this.maybeAuto());
@@ -1201,6 +1207,7 @@ export class BattleScene extends Phaser.Scene {
     if (ab) {
       ab.fought = [...new Set([...(ab.fought ?? []), ...this.battle.fought])];
       if (this.battle.spared) ab.spared = true;
+      ab.state = this.battle.saveState();
     }
     if (!this.match) persist();
     if (this.match?.duel) {

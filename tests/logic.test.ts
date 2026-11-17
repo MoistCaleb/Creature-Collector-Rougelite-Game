@@ -1904,3 +1904,33 @@ describe('changelog', () => {
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
+
+describe('resuming a battle after a reload', () => {
+  it('keeps stat stages, who is out, the foe’s potions and used-up Second Wind', () => {
+    const mk = () => [createCreature('emberkit', 30), createCreature('pebblin', 30)];
+    const me = mk();
+    const foes = [createCreature('sproutle', 30), createCreature('zapling', 30)];
+    const b = new Battle(me, foes, new Rng(3), { enemyTactics: { potions: 2 }, rules: [{ rule: 'overclock', name: 'Overclock' }] });
+    b.start();
+    b.takeTurn({ kind: 'swap', index: 1 });
+    b.p.atkStage = 2;
+    b.e.defStage = -1;
+    b.tactics!.potions = 1;
+    const saved = JSON.parse(JSON.stringify(b.saveState()));
+    // A reload builds a fresh battle from the same creatures.
+    const b2 = new Battle(me, foes, new Rng(3), { enemyTactics: { potions: 2 }, rules: [{ rule: 'overclock', name: 'Overclock' }] });
+    b2.start(true);
+    b2.restoreState(saved);
+    expect(b2.pActive).toBe(1);
+    expect(b2.p.atkStage).toBe(2);
+    expect(b2.e.defStage).toBe(-1);
+    expect(b2.e.atkStage).toBe(b.e.atkStage);
+    expect(b2.tactics!.potions).toBe(1);
+  });
+  it('Overclock stops at +3 Attack', () => {
+    const b = new Battle([createCreature('golemite', 60)], [createCreature('golemite', 60)], new Rng(1), { enemyRandomness: 0, rules: [{ rule: 'overclock', name: 'Overclock' }] });
+    b.start();
+    for (let i = 0; i < 8 && b.outcome() !== 'win' && b.outcome() !== 'lose'; i++) b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.e.atkStage).toBeLessThanOrEqual(3);
+  });
+});
