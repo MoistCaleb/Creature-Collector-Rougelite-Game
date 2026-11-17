@@ -18,7 +18,7 @@ import { state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, text, typeChips, W } from '../ui/widgets';
+import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
 import type { BattleMatch } from './BattleScene';
 
 /** A ladder in progress: which round is next, and its seed. */
@@ -56,8 +56,10 @@ export class ArenaScene extends Phaser.Scene {
 
     for (let i = 0; i < ARENA_TEAM; i++) this.drawSlot(i);
 
-    const y = SLOT_Y + ARENA_TEAM * SLOT_H + 14;
-    button(this, W / 2, y + 30, W - 40, 60, `Start ladder (${ARENA_ROUNDS} rounds)`, () => this.startLadder({ round: 0, seed: Date.now() % 1e9 }), {
+    // Upright: slots stacked, buttons below. Sideways: a 2x2 grid of slots, the buttons side by side under it.
+    const y = LANDSCAPE ? SLOT_Y + 2 * SLOT_H - 2 : SLOT_Y + ARENA_TEAM * SLOT_H + 14;
+    const bw = LANDSCAPE ? (W - 36) / 2 : W - 40;
+    button(this, LANDSCAPE ? 12 + bw / 2 : W / 2, y + 30, bw, 60, `Start ladder (${ARENA_ROUNDS} rounds)`, () => this.startLadder({ round: 0, seed: Date.now() % 1e9 }), {
       color: 0x3b6d4a,
       fontSize: 20,
       enabled: this.team.length > 0,
@@ -65,7 +67,7 @@ export class ArenaScene extends Phaser.Scene {
       glyph: 'swords',
     });
 
-    button(this, W / 2, y + 106, W - 40, 56, 'Play with a friend', () => this.scene.start('Duel', {}), {
+    button(this, LANDSCAPE ? 24 + bw * 1.5 : W / 2, LANDSCAPE ? y + 30 : y + 106, bw, LANDSCAPE ? 60 : 56, 'Play with a friend', () => this.scene.start('Duel', {}), {
       color: 0x2f4a6b,
       fontSize: 19,
       sub: 'Live, phone to phone, with a 5-digit code',
@@ -83,27 +85,29 @@ export class ArenaScene extends Phaser.Scene {
   // ------------------------------------------------------------ team slots
 
   private drawSlot(i: number) {
-    const y = SLOT_Y + i * SLOT_H;
+    const sw = LANDSCAPE ? (W - 36) / 2 : W - 24;
+    const x = LANDSCAPE ? 12 + (i % 2) * (sw + 12) : 12;
+    const y = LANDSCAPE ? SLOT_Y + Math.floor(i / 2) * SLOT_H : SLOT_Y + i * SLOT_H;
     const p = this.team[i];
-    const bg = this.add.rectangle(12, y, W - 24, SLOT_H - 8, p ? COLORS.panel : 0x18141f).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    const bg = this.add.rectangle(x, y, sw, SLOT_H - 8, p ? COLORS.panel : 0x18141f).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     bg.setInteractive({ useHandCursor: true }).on('pointerup', () => (p ? this.scene.start('ArenaEdit', { slot: i }) : this.scene.start('ArenaPick', { slot: this.team.length })));
     if (!p) {
-      text(this, W / 2, y + (SLOT_H - 8) / 2, '+ Add a creature', 16, COLORS.textDim).setOrigin(0.5);
+      text(this, x + sw / 2, y + (SLOT_H - 8) / 2, '+ Add a creature', 16, COLORS.textDim).setOrigin(0.5);
       return;
     }
     const key = ensureCreatureTexture(this, p.speciesId, p.stage);
-    this.add.image(54, y + 46, key).setScale(2.2 * SPRITE_FIT);
+    this.add.image(x + 42, y + 46, key).setScale(2.2 * SPRITE_FIT);
     const c = createCreature(p.speciesId, ARENA_LEVEL, p.stage);
-    text(this, 100, y + 8, `${creatureName(c)}  Lv ${ARENA_LEVEL}`, 16, COLORS.text, { fontStyle: 'bold' });
-    typeChips(this, 100, y + 38, creatureTypes(c), true);
+    text(this, x + 88, y + 8, `${creatureName(c)}  Lv ${ARENA_LEVEL}`, 16, COLORS.text, { fontStyle: 'bold' });
+    typeChips(this, x + 88, y + 38, creatureTypes(c), true);
     p.moves.forEach((id, k) => {
       const d = MOVES[id];
-      const mx = 100 + (k % 2) * 165;
+      const mx = x + 88 + (k % 2) * 140;
       const my = y + 58 + Math.floor(k / 2) * 18;
       this.add.rectangle(mx, my + 7, 7, 7, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
       text(this, mx + 11, my, d.name, 12, COLORS.text);
     });
-    text(this, W - 26, y + 8, 'Edit ›', 13, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);
+    text(this, x + sw - 14, y + 8, 'Edit ›', 13, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);
     // Reorder: in duels the first creatures in the team are the ones that fight.
     const move = (to: number) => {
       const t = [...this.team];
@@ -112,8 +116,8 @@ export class ArenaScene extends Phaser.Scene {
       this.save();
       this.scene.restart({});
     };
-    if (i > 0) button(this, W - 40, y + 46, 40, 28, '▲', () => move(i - 1), { fontSize: 14 });
-    if (i < this.team.length - 1) button(this, W - 40, y + 80, 40, 28, '▼', () => move(i + 1), { fontSize: 14 });
+    if (i > 0) button(this, x + sw - 28, y + 46, 40, 28, '▲', () => move(i - 1), { fontSize: 14 });
+    if (i < this.team.length - 1) button(this, x + sw - 28, y + 80, 40, 28, '▼', () => move(i + 1), { fontSize: 14 });
   }
 
   // ------------------------------------------------------------ ladder

@@ -6,7 +6,7 @@ import { icon as pixelIcon } from '../ui/icons';
 import { openPicker } from '../ui/picker';
 import { state } from '../state';
 import { playMusic } from '../ui/sound';
-import { background, button, COLORS, text, typeChip, W } from '../ui/widgets';
+import { background, button, COLORS, text, typeChip, LANDSCAPE, W } from '../ui/widgets';
 
 /** Choose which map (set of floor elements) to run before picking a starter. */
 export class MapSelectScene extends Phaser.Scene {
@@ -23,36 +23,40 @@ export class MapSelectScene extends Phaser.Scene {
     button(this, 40, 28, 64, 36, '', () => this.scene.start('Title', {}), { fontSize: 15, glyph: 'back' });
     const unlocked = meta.heatUnlocked ?? 0;
 
-    const cardH = 80;
+    const cardH = LANDSCAPE ? 100 : 80;
+    // Sideways: three columns of map cards.
+    const cols = LANDSCAPE ? 3 : 1;
+    const cardW = (W - 32 - (cols - 1) * 12) / cols;
     MAPS.forEach((m, i) => {
-      const y = 84 + i * (cardH + 5);
+      const y = 84 + Math.floor(i / cols) * (cardH + 5);
+      const x0 = 16 + (i % cols) * (cardW + 12);
       const open = mapUnlocked(m, meta.wins);
       const selected = meta.lastMap === m.id;
       const card = this.add
-        .rectangle(16, y, W - 32, cardH, open ? COLORS.panel : 0x18141f)
+        .rectangle(x0, y, cardW, cardH, open ? COLORS.panel : 0x18141f)
         .setOrigin(0)
         .setStrokeStyle(2, selected && open ? COLORS.accent : COLORS.stroke);
       const cleared = meta.clearedMaps.includes(m.id);
-      text(this, 30, y + 10, m.name + (cleared ? '  ✓' : ''), 18, open ? COLORS.text : '#5d5578', { fontStyle: 'bold' });
-      text(this, 30, y + 36, open ? m.desc : `Locked: win ${m.winsToUnlock} run${m.winsToUnlock === 1 ? '' : 's'} (${meta.wins}/${m.winsToUnlock})`, 12, open ? COLORS.textDim : '#5d5578', {
-        wordWrap: { width: W - 80 },
+      text(this, x0 + 14, y + 10, m.name + (cleared ? '  ✓' : ''), 18, open ? COLORS.text : '#5d5578', { fontStyle: 'bold' });
+      text(this, x0 + 14, y + 36, open ? m.desc : `Locked: win ${m.winsToUnlock} run${m.winsToUnlock === 1 ? '' : 's'} (${meta.wins}/${m.winsToUnlock})`, 12, open ? COLORS.textDim : '#5d5578', {
+        wordWrap: { width: cardW - 48 },
       });
       // Heat tokens: one per Heat level won on this map (8 on a map beaten at every Heat).
       const won = meta.mapHeats?.[m.id] ?? [];
       if (open && (unlocked > 0 || won.length)) {
         for (let h = 1; h <= MAX_HEAT; h++) {
-          const x = W - 30 - (MAX_HEAT - h) * 15;
+          const x = x0 + cardW - 14 - (MAX_HEAT - h) * 15;
           const lit = won.includes(h);
           pixelIcon(this, x, y + 20, 'flame', 14).setAlpha(lit ? 1 : 0.18);
         }
-        if (won.length) text(this, W - 30, y + 30, `${won.length}/${MAX_HEAT}`, 11, '#ff8a3a', { fontStyle: 'bold' }).setOrigin(1, 0);
+        if (won.length) text(this, x0 + cardW - 14, y + 30, `${won.length}/${MAX_HEAT}`, 11, '#ff8a3a', { fontStyle: 'bold' }).setOrigin(1, 0);
       }
       if (m.biomes) {
         m.biomes.forEach((el, k) => {
-          const chip = typeChip(this, 30 + k * 66, y + 63, el, true);
+          const chip = typeChip(this, x0 + 14 + k * 66, y + cardH - 17, el, true);
           if (!open) chip.setAlpha(0.35);
         });
-      } else text(this, 30, y + 60, 'Random elements', 12, open ? '#ffc94d' : '#5d5578');
+      } else text(this, x0 + 14, y + cardH - 20, 'Random elements', 12, open ? '#ffc94d' : '#5d5578');
       if (open) {
         card.setInteractive({ useHandCursor: true });
         card.on('pointerup', () => {

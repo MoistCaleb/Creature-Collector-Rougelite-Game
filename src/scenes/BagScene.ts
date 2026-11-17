@@ -10,7 +10,7 @@ import { sfx } from '../ui/sound';
 import { dex, persist, state } from '../state';
 import { icon as pixelIcon } from '../ui/icons';
 import { openPicker, showMessage } from '../ui/picker';
-import { background, button, COLORS, H, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 const HEADER = 186;
 
@@ -34,8 +34,13 @@ export class BagScene extends Phaser.Scene {
     const run = state.run!;
     background(this);
 
+    // Upright: potions and stones in a header, items listed below. Sideways: potions and stones in
+    // a left column, the item list scrolling on the right.
+    const LX = LANDSCAPE ? 300 : 0;
+    const LW = W - LX;
+    const TOP = LANDSCAPE ? 62 : HEADER;
     // Scrolling list of items (drawn first so the header covers it as it scrolls).
-    const list = this.add.container(0, HEADER);
+    const list = this.add.container(LX, TOP);
     const bag = run.bag ?? [];
     const kinds = [...new Set(bag)] as HeldId[];
     const count = (id: HeldId) => bag.filter((x) => x === id).length;
@@ -44,18 +49,18 @@ export class BagScene extends Phaser.Scene {
     y += 28;
     if (!kinds.length) {
       list.add(
-        text(this, 16, y, 'No held items yet. Trainers, treasure, events and shops give them out.', 13, COLORS.textDim, { wordWrap: { width: W - 32 } }),
+        text(this, 16, y, 'No held items yet. Trainers, treasure, events and shops give them out.', 13, COLORS.textDim, { wordWrap: { width: LW - 32 } }),
       );
       y += 44;
     }
     for (const id of kinds) {
       const def = HELD[id];
-      list.add(this.add.rectangle(10, y, W - 20, 64, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+      list.add(this.add.rectangle(10, y, LW - 20, 64, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       list.add(pixelIcon(this, 34, y + 32, def.icon, 28));
       const n = count(id);
       list.add(text(this, 58, y + 9, `${def.name}${n > 1 ? `  ×${n}` : ''}`, 15, COLORS.text, { fontStyle: 'bold' }));
-      list.add(text(this, 58, y + 31, def.desc, 12, COLORS.textDim, { wordWrap: { width: W - 160 } }));
-      list.add(button(this, W - 52, y + 32, 72, 36, 'Give', () => this.give(id), { fontSize: 15, color: 0x2f4a6b }));
+      list.add(text(this, 58, y + 31, def.desc, 12, COLORS.textDim, { wordWrap: { width: LW - 160 } }));
+      list.add(button(this, LW - 52, y + 32, 72, 36, 'Give', () => this.give(id), { fontSize: 15, color: 0x2f4a6b }));
       y += 70;
     }
 
@@ -70,12 +75,12 @@ export class BagScene extends Phaser.Scene {
     }
     for (const c of holders) {
       const def = HELD[c.held!];
-      list.add(this.add.rectangle(10, y, W - 20, 48, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
+      list.add(this.add.rectangle(10, y, LW - 20, 48, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       list.add(pixelIcon(this, 34, y + 24, def.icon, 24));
       list.add(text(this, 58, y + 6, creatureName(c), 14, COLORS.text, { fontStyle: 'bold' }));
       list.add(text(this, 58, y + 26, def.name, 12, COLORS.textDim));
       list.add(
-        button(this, W - 60, y + 24, 88, 32, 'Take off', () => {
+        button(this, LW - 60, y + 24, 88, 32, 'Take off', () => {
           unequipHeld(run, c);
           persist();
           this.scene.restart({ from: this.from });
@@ -85,18 +90,21 @@ export class BagScene extends Phaser.Scene {
     }
 
     // Drag to scroll when the list is taller than the screen.
-    const room = H - HEADER - 10;
-    const minY = HEADER - Math.max(0, y - room);
-    if (minY < HEADER) {
+    const room = H - TOP - 10;
+    const minY = TOP - Math.max(0, y - room);
+    if (minY < TOP) {
       this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
         if (!p.isDown) return;
-        list.y = Phaser.Math.Clamp(list.y + (p.y - p.prevPosition.y) / this.cameras.main.zoom, minY, HEADER);
+        list.y = Phaser.Math.Clamp(list.y + (p.y - p.prevPosition.y) / this.cameras.main.zoom, minY, TOP);
       });
-      text(this, W / 2, H - 16, 'Drag to scroll', 11, COLORS.textDim).setOrigin(0.5).setDepth(5);
+      text(this, LX + LW / 2, H - 16, 'Drag to scroll', 11, COLORS.textDim).setOrigin(0.5).setDepth(5);
     }
 
     // Header: title, back to the map, potions and stones.
-    this.add.rectangle(0, 0, W, HEADER - 6, COLORS.bg).setOrigin(0).setDepth(4).setInteractive();
+    if (LANDSCAPE) {
+      this.add.rectangle(0, 0, LX - 6, H, COLORS.bg).setOrigin(0).setDepth(4).setInteractive();
+      this.add.rectangle(LX - 6, 0, W - LX + 6, TOP - 6, COLORS.bg).setOrigin(0).setDepth(4).setInteractive();
+    } else this.add.rectangle(0, 0, W, HEADER - 6, COLORS.bg).setOrigin(0).setDepth(4).setInteractive();
     const head = (o: Phaser.GameObjects.GameObject & { setDepth(d: number): unknown }) => o.setDepth(5);
     head(text(this, 16, 14, 'Bag', 26, '#ffc94d', { fontStyle: 'bold' }));
     head(
@@ -104,25 +112,29 @@ export class BagScene extends Phaser.Scene {
         ? button(this, W - 60, 30, 100, 42, 'Team', () => this.scene.start('Team', {}), { fontSize: 17, glyph: 'back' })
         : button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' }),
     );
-    const card = (x: number, iconId: 'potion' | 'stone', title: string, sub: string, color: string) => {
-      head(this.add.rectangle(x, 62, (W - 36) / 2, 110, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
-      head(pixelIcon(this, x + 26, 92, iconId, 32));
-      head(text(this, x + 48, 76, title, 22, color, { fontStyle: 'bold' }));
-      head(text(this, x + 12, 116, sub, 12, COLORS.textDim, { wordWrap: { width: (W - 36) / 2 - 20 } }));
+    // Two cards: side by side (upright) or stacked in the left column (sideways).
+    const cw = LANDSCAPE ? LX - 24 : (W - 36) / 2;
+    const cardAt = (k: number) => (LANDSCAPE ? { x: 12, y: 62 + k * 124 } : { x: 12 + k * (cw + 12), y: 62 });
+    const card = (k: number, iconId: 'potion' | 'stone', title: string, sub: string, color: string) => {
+      const { x, y } = cardAt(k);
+      head(this.add.rectangle(x, y, cw, 110, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
+      head(pixelIcon(this, x + 26, y + 30, iconId, 32));
+      head(text(this, x + 48, y + 14, title, 22, color, { fontStyle: 'bold' }));
+      head(text(this, x + 12, y + 54, sub, 12, COLORS.textDim, { wordWrap: { width: cw - 20 } }));
     };
-    card(12, 'potion', `${run.potions ?? 0}/${maxPotions(run)}`, `Potions · heal ${Math.round(potionHeal(run) * 100)}% and cure status. Also usable in battle.`, '#8fe08a');
+    card(0, 'potion', `${run.potions ?? 0}/${maxPotions(run)}`, `Potions · heal ${Math.round(potionHeal(run) * 100)}% and cure status. Also usable in battle.`, '#8fe08a');
     const hurt = allCreatures(run).some(needsPotion);
     head(
-      button(this, 12 + (W - 36) / 2 - 40, 92, 64, 32, 'Use', () => this.drinkPotion(), {
+      button(this, cardAt(0).x + cw - 40, cardAt(0).y + 30, 64, 32, 'Use', () => this.drinkPotion(), {
         fontSize: 14,
         color: 0x2f5a4a,
         enabled: (run.potions ?? 0) > 0 && hurt,
       }),
     );
-    card(24 + (W - 36) / 2, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a creature that has reached Lv 30 (or 65).', '#e0a8ff');
+    card(1, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a creature that has reached Lv 30 (or 65).', '#e0a8ff');
     const ready = allCreatures(run).some(readyToEvolve);
     head(
-      button(this, W - 52, 92, 64, 32, 'Use', () => this.useStone(), {
+      button(this, cardAt(1).x + cw - 40, cardAt(1).y + 30, 64, 32, 'Use', () => this.useStone(), {
         fontSize: 14,
         color: 0x5b3c8a,
         enabled: run.evoStones > 0 && ready,

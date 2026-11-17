@@ -24,7 +24,7 @@ import { COLORS, H, LANDSCAPE, landscapeReady, W, wantsWide, ZOOM } from './ui/w
 export function startGame() {
   state.meta = loadMeta();
   // Screens with a landscape layout (the rest stay upright, centered, when the phone is sideways).
-  landscapeReady('Battle', 'Map');
+  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel');
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',

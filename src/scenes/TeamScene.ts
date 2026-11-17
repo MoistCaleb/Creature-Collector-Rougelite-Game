@@ -11,7 +11,7 @@ import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
-import { background, button, COLORS, creatureRow, stars, text, W } from '../ui/widgets';
+import { background, button, COLORS, creatureRow, H, LANDSCAPE, stars, text, W } from '../ui/widgets';
 
 type Ref = { list: 'team' | 'bench'; i: number };
 
@@ -53,13 +53,18 @@ export class TeamScene extends Phaser.Scene {
       text(this, 16, 50, hint, 12, dexComplete(run) ? '#ffc94d' : COLORS.textDim);
     }
 
-    const rowW = W - 32;
+    // Upright: team then bench, details at the bottom. Sideways: team, bench and details in three columns.
+    const rowW = LANDSCAPE ? 256 : W - 32;
+    const benchX = LANDSCAPE ? 280 : 16;
     text(this, 16, 70, `Main team  ${run.team.length}/${TEAM_MAX}`, 15, COLORS.text);
-    if (Number.isFinite(getFloorCeiling())) text(this, W - 16, 72, `Floor level cap: ${getFloorCeiling()}`, 12, '#c9a3dd').setOrigin(1, 0);
+    if (Number.isFinite(getFloorCeiling())) text(this, LANDSCAPE ? 530 : W - 16, 72, `Floor level cap: ${getFloorCeiling()}`, 12, '#c9a3dd').setOrigin(1, 0);
     run.team.forEach((c, i) => this.row(16, 90 + i * 68, rowW, c, { list: 'team', i }));
-    const benchY = 90 + TEAM_MAX * 68 + 6;
-    text(this, 16, benchY, `Bench  ${run.bench.length}/${BENCH_MAX}  (second life + prestige fuel)`, 15, COLORS.text);
-    run.bench.forEach((c, i) => this.row(16, benchY + 20 + i * 68, rowW, c, { list: 'bench', i }));
+    const benchY = LANDSCAPE ? 70 : 90 + TEAM_MAX * 68 + 6;
+    text(this, benchX, benchY, LANDSCAPE ? `Bench  ${run.bench.length}/${BENCH_MAX}` : `Bench  ${run.bench.length}/${BENCH_MAX}  (second life + prestige fuel)`, 15, COLORS.text);
+    run.bench.forEach((c, i) => this.row(benchX, benchY + 20 + i * 68, rowW, c, { list: 'bench', i }));
+    if (LANDSCAPE && !this.selectedCreature()) {
+      text(this, 552, 90, 'Tap a creature to see its moves, items and options.\n\nTap two creatures to swap them (team ↔ bench too).\n\nThe bench is a second life and prestige fuel.', 13, COLORS.textDim, { wordWrap: { width: 232 }, lineSpacing: 3 });
+    }
 
     const sel = this.selectedCreature();
     if (sel) this.details(sel);
@@ -100,14 +105,20 @@ export class TeamScene extends Phaser.Scene {
 
   private details(c: Creature) {
     const run = state.run!;
-    const y0 = 600;
-    this.add.rectangle(8, y0, W - 16, 192, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.accent);
+    // Upright: a wide panel at the bottom. Sideways: a tall panel in the right column.
+    const wide = LANDSCAPE;
+    const px = wide ? 544 : 8;
+    const pw = wide ? W - 552 : W - 16;
+    const y0 = wide ? 66 : 600;
+    const lx = px + 10;
+    this.add.rectangle(px, y0, pw, wide ? H - 74 : 192, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.accent);
     const s = stats(c);
     const sp = species(c);
     const cap = levelCap(c);
-    text(this, 18, y0 + 8, `${creatureName(c)} ${stars(c.stars)}`, 18, COLORS.text, { fontStyle: 'bold' });
+    text(this, lx, y0 + 8, `${creatureName(c)} ${stars(c.stars)}`, 18, COLORS.text, { fontStyle: 'bold' });
     const next = c.stage < 2 ? `next: ${formName(state.meta.dex, sp.id, c.stage + 1)}` : 'final form';
-    text(this, W - 18, y0 + 12, `Stage ${c.stage + 1}/3 · ${next}`, 12, COLORS.textDim).setOrigin(1, 0);
+    if (wide) text(this, lx, y0 + 30, `Stage ${c.stage + 1}/3 · ${next}`, 12, COLORS.textDim);
+    else text(this, W - 18, y0 + 12, `Stage ${c.stage + 1}/3 · ${next}`, 12, COLORS.textDim).setOrigin(1, 0);
     const stored = c.banked ?? 0;
     const full = stored >= bankLimit(c);
     const xpLine =
@@ -118,40 +129,53 @@ export class TeamScene extends Phaser.Scene {
           : floorCapped(c)
             ? 'Floor cap · XP is stored for the next floor'
             : 'MAX · XP is stored and pays coins';
-    text(this, 18, y0 + 31, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim);
-    text(this, 18, y0 + 47, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text);
+    const dy = wide ? 18 : 0;
+    const fit = (t: Phaser.GameObjects.Text, room: number) => (t.width > room ? t.setScale(room / t.width, 1) : t);
+    fit(text(this, lx, y0 + 31 + dy, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim), pw - 20);
+    fit(text(this, lx, y0 + 47 + dy, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text), pw - 20);
     c.moves.forEach((m, i) => {
       const d = moveDef(m);
+      const left = usesLeft(m);
+      const uses = Number.isFinite(left) ? ` · ${left}/${maxUses(d)} uses` : '';
+      const color = left === 0 ? '#e0524a' : COLORS.text;
+      if (wide) {
+        // Two lines per move: name, then what it does.
+        const y = y0 + 90 + i * 32;
+        this.add.rectangle(lx, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
+        fit(text(this, lx + 12, y, `${d.name} · T${m.tier}${uses}`, 12, color, { fontStyle: 'bold' }), pw - 32);
+        fit(text(this, lx + 12, y + 15, `${moveSummary(d, m.tier)} · ${accText(d)}`, 11, COLORS.textDim), pw - 32);
+        return;
+      }
       // One move per row, full width; long effect lists shrink to fit rather than overlap.
       const y = y0 + 68 + i * 16;
       this.add.rectangle(18, y + 7, 8, 8, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
-      const left = usesLeft(m);
-      const uses = Number.isFinite(left) ? ` · ${left}/${maxUses(d)} uses` : '';
-      const line = text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · ${accText(d)} · T${m.tier}${uses}`, 11, left === 0 ? '#e0524a' : COLORS.text);
-      const room = W - 48;
-      if (line.width > room) line.setScale(room / line.width, 1);
+      fit(text(this, 30, y, `${d.name} · ${moveSummary(d, m.tier)} · ${accText(d)} · T${m.tier}${uses}`, 11, color), W - 48);
     });
 
     // Held item.
     const bag = run.bag ?? [];
     button(
       this,
-      116,
-      y0 + 145,
-      196,
+      wide ? px + pw / 2 : 116,
+      wide ? y0 + 232 : y0 + 145,
+      wide ? pw - 20 : 196,
       24,
       c.held ? heldName(c.held) : bag.length ? `Give item (${bag.length})` : 'No items',
       () => this.itemPicker(c),
       { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a, glyph: c.held ? HELD[c.held].icon : 'bag' },
     );
 
-    const by = y0 + 176;
+    // Actions: a row of four (upright) or a 2x2 grid (sideways).
+    const bw = wide ? (pw - 26) / 2 : 0;
+    const slot = (k: number, x: number, w: number) =>
+      wide ? { x: px + 10 + bw / 2 + (k % 2) * (bw + 6), y: y0 + 300 + Math.floor(k / 2) * 36, w: bw } : { x, y: y0 + 176, w };
     const stoneOk = run.evoStones > 0 && readyToEvolve(c);
+    const b0 = slot(0, 58, 100);
     button(
       this,
-      58,
-      by,
-      100,
+      b0.x,
+      b0.y,
+      b0.w,
       28,
       'Evolve',
       () => {
@@ -172,11 +196,12 @@ export class TeamScene extends Phaser.Scene {
     );
     const ref = this.selected!;
     const canMove = ref.list === 'team' ? run.bench.length < BENCH_MAX && run.team.length > 1 : run.team.length < TEAM_MAX;
+    const b1 = slot(1, 166, 104);
     button(
       this,
-      166,
-      by,
-      104,
+      b1.x,
+      b1.y,
+      b1.w,
       28,
       ref.list === 'team' ? 'To bench' : 'To team',
       () => {
@@ -187,11 +212,12 @@ export class TeamScene extends Phaser.Scene {
       },
       { enabled: canMove, fontSize: 15 },
     );
+    const b2 = slot(2, 270, 92);
     button(
       this,
-      270,
-      by,
-      92,
+      b2.x,
+      b2.y,
+      b2.w,
       28,
       'Release',
       () =>
@@ -210,11 +236,12 @@ export class TeamScene extends Phaser.Scene {
       { enabled: allCreatures(run).length > 1, fontSize: 15, color: 0x5a2a2a },
     );
     const potions = run.potions ?? 0;
+    const b3 = slot(3, 374, 100);
     button(
       this,
-      374,
-      by,
-      100,
+      b3.x,
+      b3.y,
+      b3.w,
       28,
       `Potion ${potions}`,
       () => {
@@ -224,8 +251,10 @@ export class TeamScene extends Phaser.Scene {
       },
       { enabled: potions > 0 && needsPotion(c), fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
     );
-    if (!stoneOk && run.evoStones > 0 && canEvolve(c))
-      text(this, 226, y0 + 145, `Evolves at Lv ${evolveLevel(c)}.`, 11, '#ffc94d', { wordWrap: { width: W - 244 } }).setOrigin(0, 0.5);
+    if (!stoneOk && run.evoStones > 0 && canEvolve(c)) {
+      if (wide) text(this, px + pw / 2, y0 + 262, `Evolves at Lv ${evolveLevel(c)}.`, 11, '#ffc94d').setOrigin(0.5);
+      else text(this, 226, y0 + 145, `Evolves at Lv ${evolveLevel(c)}.`, 11, '#ffc94d', { wordWrap: { width: W - 244 } }).setOrigin(0, 0.5);
+    }
   }
 
   /** Give, swap or take off a held item. */

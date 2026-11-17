@@ -13,7 +13,10 @@ import { session } from '../net/session';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { icon as pixelIcon } from '../ui/icons';
-import { background, button, COLORS, text, typeChips, W } from '../ui/widgets';
+import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
+
+/** This visit's three random starters. */
+let rolled: string[] | null = null;
 
 export class StarterScene extends Phaser.Scene {
   constructor() {
@@ -49,12 +52,37 @@ export class StarterScene extends Phaser.Scene {
       COLORS.textDim,
     ).setOrigin(0.5);
 
-    const choices = this.race ? this.race.starters : this.daily ? dailyStarters(this.daily) : rollStarterChoices(state.meta, new Rng());
+    // The roll is kept until you pick or leave, so turning the phone doesn't reroll it.
+    rolled ??= rollStarterChoices(state.meta, new Rng());
+    const choices = this.race ? this.race.starters : this.daily ? dailyStarters(this.daily) : rolled;
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       dex.form(id, 0);
       const preview = createCreature(id, BALANCE.starterLevel);
       const s = stats(preview);
+      if (LANDSCAPE) {
+        // Sideways: three tall cards side by side.
+        const cw = (W - 40 - 24) / 3;
+        const x = 20 + i * (cw + 12);
+        const y = 88;
+        const mid = x + cw / 2;
+        const card = this.add.rectangle(x, y, cw, 350, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+        card.setInteractive({ useHandCursor: true }).on('pointerup', () => this.pick(id));
+        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0)).setScale(3.4 * SPRITE_FIT);
+        this.tweens.add({ targets: img, y: y + 60, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
+        if (!this.daily && state.meta.favorite === id) {
+          pixelIcon(this, x + 18, y + 16, 'star', 16);
+          text(this, x + 30, y + 9, 'Favorite', 11, '#ffc94d', { fontStyle: 'bold' });
+        }
+        text(this, mid, y + 122, sp.names[0], 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0);
+        const chipsW = sp.types[0] === sp.types[1] ? 104 : 128;
+        typeChips(this, mid - chipsW / 2, y + 162, sp.types);
+        text(this, mid, y + 180, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
+        text(this, mid, y + 226, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        text(this, mid, y + 262, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        button(this, mid, y + 320, cw - 40, 36, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
+        return;
+      }
       const y = 100 + i * 228;
       const card = this.add.rectangle(20, y, W - 40, 214, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
       card.setInteractive({ useHandCursor: true });
@@ -76,10 +104,16 @@ export class StarterScene extends Phaser.Scene {
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 
-    if (!this.race) button(this, 40, 28, 64, 36, '', () => this.scene.start(this.daily ? 'Daily' : 'MapSelect', {}), { fontSize: 15, glyph: 'back' });
+    if (!this.race) {
+      button(this, 40, 28, 64, 36, '', () => {
+        rolled = null;
+        this.scene.start(this.daily ? 'Daily' : 'MapSelect', {});
+      }, { fontSize: 15, glyph: 'back' });
+    }
   }
 
   private pick(id: string) {
+    rolled = null;
     if (this.race) {
       // Same map and seed as the other racer; Heat 0 and no passive so it's even.
       const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true);
