@@ -111,21 +111,21 @@ function gearFx(look: TrainerLook, back: boolean): [number, Spawn][] {
   const out: [number, Spawn][] = [];
   // Jetpack exhaust.
   if (look.back === 3) {
-    const nozzles = back ? [10.5, 16.5] : [4.5, 22.5];
-    out.push([45, (fx) => drift(fx, fx.px(pick(nozzles) + rand(-0.5, 0.5), 29, pick(FLAME)), rand(-1, 1), rand(4, 7), 260)]);
+    const nozzles = back ? [10.5, 16.5] : [5.5, 21.5];
+    out.push([45, (fx) => drift(fx, fx.px(pick(nozzles) + rand(-0.5, 0.5), back ? 29 : 28, pick(FLAME)), rand(-1, 1), rand(4, 7), 260)]);
   }
   // Phoenix wings shed embers; angel wings, feathers.
   if (look.back === 8) out.push([90, (fx) => drift(fx, fx.px(pick([rand(0, 5), rand(23, 29)]), rand(8, 26), pick(FLAME)), rand(-2, 2), -rand(5, 10), 650)]);
   if (look.back === 1) out.push([700, (fx) => drift(fx, fx.px(pick([rand(0, 5), rand(23, 28)]), rand(14, 26), 0xffffff, 2, 1), rand(-3, 3), rand(6, 10), 1300, { angle: 180 })]);
   if (look.back === 6) out.push([300, (fx) => sparkle(fx, pick([rand(1, 6), rand(22, 27)]), rand(10, 26), pick([0xa8f0ff, 0xf8b8e8]))]);
   // Rocket boots.
-  if (look.shoes === 4) out.push([50, (fx) => drift(fx, fx.px(pick([10.5, 16.5]) + rand(-0.5, 0.5), 33.5, pick(FLAME)), rand(-1, 1), rand(2, 4), 200)]);
+  if (look.shoes === 4) out.push([50, (fx) => drift(fx, fx.px(pick([10, 17]) + rand(-1, 1), 33.5, pick(FLAME)), rand(-1, 1), rand(2, 4), 200)]);
   // Flame crown.
   if (look.hat === 20) out.push([70, (fx) => drift(fx, fx.px(rand(8, 19), rand(-1, 2), pick(FLAME)), rand(-1, 1), -rand(3, 6), 420)]);
   // Storm cloud: rain, and now and then a little bolt.
   if (look.hat === 21) {
-    out.push([110, (fx) => drift(fx, fx.px(rand(8, 19), 5, 0x8ad8ff, 0.6, 1.5), 0, rand(4, 6), 380, { ease: 'Linear' })]);
-    out.push([1400, (fx) => sparkle(fx, rand(9, 18), 6, 0xfff27a)]);
+    out.push([110, (fx) => drift(fx, fx.px(pick([rand(3, 6), rand(21, 24)]), 5, 0x8ad8ff, 0.6, 1.5), 0, rand(6, 10), 420, { ease: 'Linear' })]);
+    out.push([1400, (fx) => sparkle(fx, rand(5, 22), 2, 0xfff27a)]);
   }
   // Astral halo, Third eye, Void cloak, Mech suit core.
   if (look.hat === 26) out.push([260, (fx) => sparkle(fx, rand(7, 20), rand(0, 4), 0x9af0ff)]);
