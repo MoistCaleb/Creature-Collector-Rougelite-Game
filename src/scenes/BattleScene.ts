@@ -188,7 +188,7 @@ export class BattleScene extends Phaser.Scene {
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[run.map.biome]).darken(78).color);
     this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
-    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null);
+    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
@@ -287,25 +287,84 @@ export class BattleScene extends Phaser.Scene {
    * Trainers stand off to the side, behind their creatures: you bottom-left, seen from behind (arm raised toward the
    * fight), the opponent top-right (wild battles have no one there).
    */
-  private drawTrainers(enemy: TrainerLook | null) {
-    const bob = (img: Phaser.GameObjects.Image, delay: number) =>
-      this.tweens.add({ targets: img, y: img.y - 3, yoyo: true, repeat: -1, duration: 900, delay, ease: 'Sine.easeInOut' });
+  private drawTrainers(enemy: TrainerLook | null, foeName: string | null) {
+    this.foeName = foeName;
+    // Each trainer sits in a holder that idles up and down; the image inside it hops on its own.
+    const place = (x: number, y: number, key: string, scale: number, delay: number) => {
+      const holder = this.add.container(x, y);
+      const img = this.add.image(0, 0, key).setScale(scale);
+      holder.add(img);
+      this.tweens.add({ targets: holder, y: y - 3, yoyo: true, repeat: -1, duration: 900, delay, ease: 'Sine.easeInOut' });
+      return img;
+    };
     this.trainers = {};
     const mine = myLook(state.meta);
     const rest = ensureTrainerTexture(this, mine, 'back');
-    const me = this.add.image(38, 440, rest).setScale(3.1);
-    bob(me, 0);
-    this.trainers.player = { img: me, rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
+    this.trainers.player = { img: place(38, 440, rest, 3.1, 0), rest, act: ensureTrainerTexture(this, mine, 'backCommand') };
     if (enemy) {
       const eRest = ensureTrainerTexture(this, enemy, 'stand');
-      const them = this.add.image(404, 212, eRest).setScale(2.8).setFlipX(true);
-      bob(them, 450);
+      const them = place(404, 212, eRest, 2.8, 450).setFlipX(true);
       this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command') };
     }
   }
 
+  /** The opposing trainer's (or guardian's / opponent's) name, to tell which side a message is about. */
+  private foeName: string | null = null;
+
+  /** A little hop: this trainer is the one the message is about. */
+  private hop(side: 'player' | 'enemy') {
+    const t = this.trainers[side];
+    if (!t || !t.img.active || t.hopping) return;
+    t.hopping = true;
+    this.tweens.add({
+      targets: t.img,
+      y: -9,
+      duration: 110,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        t.img.y = 0;
+        t.hopping = false;
+      },
+    });
+  }
+
+  /**
+   * Which side a battle message is about: enemy markers ("Enemy …", "wild …", the foe's name) win,
+   * then your creatures, your name or your team; otherwise the side of the nearest event before it
+   * (e.g. "It's super effective!" after a hit), or after it.
+   */
+  private aboutSide(msg: string, events: BattleEvent[], idx: number): 'player' | 'enemy' | null {
+    const has = (s: string | null | undefined) => !!s && msg.includes(s);
+    const enemyNames = this.battle.enemy.map((x) => creatureName(x.c));
+    if (/\bEnemy\b|\bwild\b|enemy's team/i.test(msg) || has(this.foeName)) return 'enemy';
+    if (this.match?.duel) {
+      if (has(`${this.match.opponent}'s`)) return 'enemy';
+      if (has(`${myName(state.meta)}'s`)) return 'player';
+    }
+    if (/Your team|\byour\b/i.test(msg) || this.battle.player.some((x) => has(creatureName(x.c)))) return 'player';
+    if (!this.match?.duel && enemyNames.some(has)) return 'enemy';
+    const sided = (e: BattleEvent | undefined) => (e && 'side' in e ? e.side : e?.kind === 'enemySend' ? 'enemy' : null);
+    for (let k = idx - 1; k >= 0; k--) {
+      const s = sided(events[k]);
+      if (s) return s;
+    }
+    for (let k = idx + 1; k < events.length; k++) {
+      const s = sided(events[k]);
+      if (s) return s;
+    }
+    return null;
+  }
+
+  /** Show a battle message, and bounce the trainer whose side it's about. */
+  private say(msg: string, events: BattleEvent[], idx: number) {
+    this.msg.setText(msg);
+    const side = this.aboutSide(msg, events, idx);
+    if (side) this.hop(side);
+  }
+
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
-  private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; timer?: Phaser.Time.TimerEvent }>> = {};
+  private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; timer?: Phaser.Time.TimerEvent; hopping?: boolean }>> = {};
 
   /** A trainer gives an order (a move or sending a creature out): raise the arm, then lower it. */
   private order(side: 'player' | 'enemy') {
@@ -359,7 +418,7 @@ export class BattleScene extends Phaser.Scene {
     background(this, m.background);
     this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
-    this.drawTrainers(m.opponentLook ?? lookForName(m.opponent));
+    this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.enemyPanel = this.makePanel(16, 16);
@@ -791,7 +850,7 @@ export class BattleScene extends Phaser.Scene {
       switch (ev.kind) {
         case 'text':
           if (ev === shownEarly) break;
-          this.msg.setText(ev.text);
+          this.say(ev.text, events, idx);
           if (ev.text === 'It missed!') sfx.miss();
           await this.wait(620);
           break;
@@ -815,7 +874,7 @@ export class BattleScene extends Phaser.Scene {
           const target = this.spriteOf(ev.side === 'player' ? 'enemy' : 'player');
           const next = events[idx + 1];
           if (next?.kind === 'text') {
-            this.msg.setText(next.text);
+            this.say(next.text, events, idx + 1);
             shownEarly = next;
           }
           attackerHome = { x: ev.side === 'player' ? PLAYER_POS.x : ENEMY_POS.x, y: ev.side === 'player' ? PLAYER_POS.y : ENEMY_POS.y };

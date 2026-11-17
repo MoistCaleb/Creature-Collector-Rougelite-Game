@@ -230,6 +230,8 @@ Proposed math:
   guardians, Arena ladder and online opponents) stand top-right facing you. Wild battles have no one there.
   Whenever a side uses a move or sends a creature out, its trainer raises an arm to give the order, then
   lowers it.
+  Each battle message bounces the trainer of the side it's about ("Enemy …" or the foe's name: theirs; your
+  creatures or team: yours; otherwise the side of the event it follows, e.g. "It's super effective!").
 - **Built from the same parts:** NPC trainers get a look from their name (the same trainer always looks the
   same); each guardian has hand-picked parts in its element's colors. Online, each phone sends its look and
   shows the other player's.
