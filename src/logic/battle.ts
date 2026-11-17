@@ -28,6 +28,19 @@ export const THORNS_RECOIL = 0.1;
 /** Overclock: their Attack climbs one stage a turn, up to this many. */
 export const OVERCLOCK_MAX = 3;
 
+/** What a battle in progress needs to pick up exactly where it was after a reload. */
+export interface BattleState {
+  pActive: number;
+  eActive: number;
+  stages: { player: [number, number, number][]; enemy: [number, number, number][] };
+  sash: { player: (string | null)[]; enemy: (string | null)[] };
+  teamFx: Battle['teamFx'];
+  potions: number | null;
+  winded: number[];
+  turnNo: number;
+  lastEnemySwitch: number;
+}
+
 export type PlayerAction =
   | { kind: 'move'; index: number }
   | { kind: 'swap'; index: number }
@@ -206,6 +219,44 @@ export class Battle {
     this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
     if (this.player[this.pActive]) this.fought.add(this.player[this.pActive].c.uid);
     this.rng = rng;
+  }
+
+  /** The battle's in-progress state (stat stages, who's out, potions left...), for saving. */
+  saveState(): BattleState {
+    const st = (xs: Combatant[]) => xs.map((x) => [x.atkStage, x.defStage, x.spdStage] as [number, number, number]);
+    const sa = (xs: Combatant[]) => xs.map((x) => x.sash ?? null);
+    return {
+      pActive: this.pActive,
+      eActive: this.eActive,
+      stages: { player: st(this.player), enemy: st(this.enemy) },
+      sash: { player: sa(this.player), enemy: sa(this.enemy) },
+      teamFx: { player: { ...this.teamFx.player }, enemy: { ...this.teamFx.enemy } },
+      potions: this.tactics ? this.tactics.potions : null,
+      winded: [...this.winded],
+      turnNo: this.turnNo,
+      lastEnemySwitch: this.lastEnemySwitch,
+    };
+  }
+
+  /** Put back a saved state (after start(true), so entry effects don't stack on top of it). */
+  restoreState(s: BattleState | undefined) {
+    if (!s) return;
+    const put = (xs: Combatant[], stages: [number, number, number][] = [], sash: (string | null)[] = []) =>
+      xs.forEach((x, i) => {
+        const v = stages[i];
+        if (v) [x.atkStage, x.defStage, x.spdStage] = v.map((n) => Math.max(-MAX_STAGE, Math.min(MAX_STAGE, Number(n) || 0))) as [number, number, number];
+        const sh = sash[i];
+        x.sash = sh === 'fired' || sh === 'spent' ? sh : undefined;
+      });
+    put(this.player, s.stages?.player, s.sash?.player);
+    put(this.enemy, s.stages?.enemy, s.sash?.enemy);
+    if (this.player[s.pActive] && isAlive(this.player[s.pActive].c)) this.pActive = s.pActive;
+    if (this.enemy[s.eActive] && isAlive(this.enemy[s.eActive].c)) this.eActive = s.eActive;
+    if (s.teamFx) this.teamFx = { player: { ...s.teamFx.player }, enemy: { ...s.teamFx.enemy } };
+    if (this.tactics && typeof s.potions === 'number') this.tactics.potions = s.potions;
+    this.winded = new Set(s.winded ?? []);
+    this.turnNo = s.turnNo ?? this.turnNo;
+    this.lastEnemySwitch = s.lastEnemySwitch ?? this.lastEnemySwitch;
   }
 
   /**

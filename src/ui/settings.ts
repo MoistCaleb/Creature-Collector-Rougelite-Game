@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import { resetProgress } from '../logic/run';
+import { flushCloud } from '../storage';
 import { openElementChart } from './elementChart';
 import { openHowToPlay } from './howto';
 import { openPanel } from './panel';
@@ -134,8 +135,10 @@ function confirmErase(scene: Phaser.Scene) {
         title: 'Are you sure?',
         subtitle: 'This can’t be undone.',
         options: [{ label: 'Yes, erase it all', color: 0x8a2c2c }],
-        onPick: () => {
+        onPick: async () => {
           resetProgress();
+          // Wait for the cloud copy to be cleared too, or the old save comes back after the reload.
+          await flushCloud();
           window.location.reload();
         },
         onCancel: () => {},

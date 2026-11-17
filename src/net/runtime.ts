@@ -11,6 +11,7 @@ import type { BattleMatch } from '../scenes/BattleScene';
 import { applySnap, cleanSettings, DEFAULT_SETTINGS, DUEL_VERSION, DuelController, type DuelSettings, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type StartInfo } from './duel';
 import { SPECIES } from '../data/species';
 import { HELD } from '../data/held';
+import { stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import type { Creature } from '../logic/creature';
 import { session } from './session';
@@ -85,7 +86,13 @@ function cleanCreatures(list: unknown): Creature[] {
       pendingMoves: [],
     }))
     .filter((c) => c.moves.length > 0)
-    .slice(0, 4);
+    .slice(0, 4)
+    // HP within the creature's real maximum (a missing or bad value means full health).
+    .map((c) => {
+      const max = stats(c).hp;
+      const hp = Number(c.hp);
+      return { ...c, hp: Number.isFinite(hp) ? Math.max(0, Math.min(max, Math.round(hp))) : max };
+    });
 }
 
 // ---------------------------------------------------------------- stage race
