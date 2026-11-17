@@ -262,6 +262,8 @@ export interface ActiveBattle {
   /** uids of your creatures that took part (full XP). */
   fought?: number[];
   summary: string;
+  /** Which variant of the element's battle stage this fight takes place on. */
+  stage?: number;
 }
 
 /** Three starter choices: the favorite (if unlocked) plus random others from the unlocked pool. */

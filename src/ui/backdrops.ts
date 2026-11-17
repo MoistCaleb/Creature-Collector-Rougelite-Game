@@ -40,6 +40,10 @@ interface Theme {
   pad: [number, number];
   weather: Weather;
   flash?: boolean;
+  /** Fog over the horizon (0-1). */
+  haze?: number;
+  /** Snow-cap color (dimmed at dusk and night). */
+  capColor?: number;
 }
 
 const THEMES: Record<Element, Theme> = {
@@ -344,12 +348,117 @@ function prop(g: Phaser.GameObjects.Graphics, rng: Rng, kind: Prop, x: number, b
   }
 }
 
-/** Paint the still part of an element's scene (sky, range, props, ground) into a texture. */
-function paint(scene: Phaser.Scene, el: Element, bw: number, bh: number, fieldH: number): string {
-  const key = `bd:${el}:${bw}x${bh}:${fieldH}`;
+// ---------------------------------------------------------------- stage variants
+
+type Mood = 'day' | 'dusk' | 'night' | 'fog';
+
+/** Times of day each element can have ('day' is the theme as drawn above). */
+const MOODS: Record<Element, Mood[]> = {
+  Fire: ['day', 'dusk', 'night'],
+  Frost: ['day', 'dusk', 'night', 'fog'],
+  Nature: ['day', 'dusk', 'night', 'fog'],
+  Earth: ['day', 'dusk', 'night'],
+  Storm: ['day', 'fog', 'night'],
+  Water: ['day', 'dusk', 'night', 'fog'],
+  Metal: ['day', 'dusk', 'night', 'fog'],
+  Toxic: ['day', 'fog', 'night'],
+  Shadow: ['day', 'fog', 'dusk'],
+  Light: ['day', 'dusk', 'fog'],
+  Spirit: ['day', 'fog', 'dusk'],
+  Dragon: ['day', 'dusk', 'night'],
+};
+
+/** A second set of props and a second range shape for each element. */
+const ALT: Record<Element, { mid: Theme['mid']; ridge: Ridge }> = {
+  Fire: { mid: { prop: 'rock', color: 0x2a1418, n: 5, size: 10 }, ridge: 'peaks' },
+  Frost: { mid: { prop: 'crystal', color: 0x8ac8f0, n: 6, size: 14 }, ridge: 'hills' },
+  Nature: { mid: { prop: 'pine', color: 0x2a5a34, n: 8, size: 15 }, ridge: 'peaks' },
+  Earth: { mid: { prop: 'arch', color: 0x8a4a2e, n: 3, size: 14 }, ridge: 'dunes' },
+  Storm: { mid: { prop: 'deadTree', color: 0x1a1e28, n: 6, size: 16 }, ridge: 'mesas' },
+  Water: { mid: { prop: 'rock', color: 0x4a5a6a, n: 4, size: 10 }, ridge: 'none' },
+  Metal: { mid: { prop: 'pillar', color: 0x4a4e5a, n: 7, size: 22 }, ridge: 'mesas' },
+  Toxic: { mid: { prop: 'mushroom', color: 0x8a3ac8, n: 7, size: 10 }, ridge: 'peaks' },
+  Shadow: { mid: { prop: 'grave', color: 0x1a1428, n: 8, size: 9 }, ridge: 'peaks' },
+  Light: { mid: { prop: 'arch', color: 0xd8c08a, n: 3, size: 20 }, ridge: 'hills' },
+  Spirit: { mid: { prop: 'arch', color: 0xb83a5a, n: 3, size: 16 }, ridge: 'peaks' },
+  Dragon: { mid: { prop: 'rock', color: 0x3a1018, n: 5, size: 11 }, ridge: 'volcano' },
+};
+
+/** What a stage number means: its time of day, which props and range, and which way it faces. */
+function stageParts(el: Element, stage: number) {
+  const moods = MOODS[el];
+  return { mood: moods[stage % moods.length], alt: ((stage >> 4) & 1) === 1, ridgeAlt: ((stage >> 5) & 1) === 1, flip: ((stage >> 6) & 1) === 1 };
+}
+
+const lastStage: { el?: Element; mood?: Mood } = {};
+
+/**
+ * Pick a stage for a new battle: a random layout, and never the same time of day as the battle
+ * before it in the same element, so back-to-back fights look different.
+ */
+export function pickStage(el: Element): number {
+  let stage = 0;
+  for (let i = 0; i < 20; i++) {
+    stage = (Math.random() * 2 ** 30) | 0;
+    if (lastStage.el !== el || stageParts(el, stage).mood !== lastStage.mood) break;
+  }
+  lastStage.el = el;
+  lastStage.mood = stageParts(el, stage).mood;
+  return stage;
+}
+
+/** An element's theme as it looks on one stage. */
+function themeFor(el: Element, stage: number): Theme {
+  const base = THEMES[el];
+  const { mood, alt, ridgeAlt, flip } = stageParts(el, stage);
+  const t: Theme = { ...base, far: { ...base.far }, mid: alt ? ALT[el].mid : base.mid, orb: base.orb && { ...base.orb } };
+  if (ridgeAlt) {
+    t.far.ridge = ALT[el].ridge;
+    if (t.far.ridge !== 'none' && !t.far.h) t.far.h = 20;
+    if (t.far.ridge === 'none' || t.far.ridge === 'hills' || t.far.ridge === 'dunes') t.far.cap = undefined;
+    if (t.far.ridge === 'none' && el === 'Water') t.far.h = 0;
+  }
+  if (t.orb && flip) t.orb.x = 1 - t.orb.x;
+  const tint = (c: number, to: number, a: number) => mix(c, to, a);
+  if (mood === 'dusk') {
+    t.sky = [tint(base.sky[0], 0x2a1840, 0.55), tint(base.sky[1], 0xff8a4a, 0.55)];
+    t.orb = { kind: 'sun', color: 0xffa060, x: t.orb?.x ?? 0.7, y: 0.88, r: 11 };
+    t.far.color = tint(t.far.color, 0x3a1a2a, 0.4);
+    t.capColor = 0xf8c8b0;
+    t.mid = { ...t.mid, color: tint(t.mid.color, 0x2a1020, 0.35) };
+    t.ground = [tint(base.ground[0], 0x4a2030, 0.3), tint(base.ground[1], 0x2a1020, 0.3)];
+  } else if (mood === 'night') {
+    t.sky = [tint(base.sky[0], 0x04040c, 0.75), tint(base.sky[1], 0x1a1a40, 0.7)];
+    t.stars = true;
+    t.orb = { kind: 'moon', color: 0xe8e8ff, x: t.orb?.x ?? 0.75, y: 0.3, r: 8 };
+    t.far.color = tint(t.far.color, 0x0a0a1a, 0.55);
+    t.capColor = 0x8a94b8;
+    t.mid = { ...t.mid, color: tint(t.mid.color, 0x0a0a1a, 0.45) };
+    t.ground = [tint(base.ground[0], 0x10102a, 0.55), tint(base.ground[1], 0x08081a, 0.5)];
+    t.pad = [tint(base.pad[0], 0x10102a, 0.4), tint(base.pad[1], 0x08081a, 0.4)];
+  } else if (mood === 'fog') {
+    const fogC = 0xc8c8d4;
+    t.sky = [tint(base.sky[0], fogC, 0.45), tint(base.sky[1], fogC, 0.6)];
+    if (t.orb) t.orb = { ...t.orb, color: tint(t.orb.color, fogC, 0.5), r: t.orb.r + 2 };
+    t.far.color = tint(t.far.color, t.sky[1], 0.6);
+    t.mid = { ...t.mid, color: tint(t.mid.color, t.sky[1], 0.35) };
+    t.ground = [tint(base.ground[0], fogC, 0.3), base.ground[1]];
+    t.haze = 0.5;
+  }
+  // A sun or moon on the left would hide behind the enemy's panel: keep it lower there.
+  if (t.orb && t.orb.x < 0.65) t.orb.y = Math.max(t.orb.y, 0.62);
+  return t;
+}
+
+/** Paint the still part of a stage (sky, range, props, ground) into a texture. */
+function paint(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, fieldH: number): string {
+  const key = `bd:${el}:${stage}:${bw}x${bh}:${fieldH}`;
   if (scene.textures.exists(key)) return key;
-  const t = THEMES[el];
-  const rng = new Rng(hashString(`backdrop:${el}`));
+  // Keep only the newest few stage paintings.
+  const old = scene.textures.getTextureKeys().filter((k) => k.startsWith('bd:'));
+  for (const k of old.slice(0, Math.max(0, old.length - 3))) scene.textures.remove(k);
+  const t = themeFor(el, stage);
+  const rng = new Rng(hashString(`backdrop:${el}:${stage}`));
   const w = Math.ceil(bw / PX);
   const h = Math.ceil(bh / PX);
   const hz = Math.round((fieldH * 0.4) / PX);
@@ -381,7 +490,7 @@ function paint(scene: Phaser.Scene, el: Element, bw: number, bh: number, fieldH:
     const top = hz - far[x];
     if (far[x] <= 0) continue;
     g.fillStyle(t.far.color).fillRect(x, top, 1, far[x]);
-    if (t.far.cap && far[x] > t.far.h * 0.55) g.fillStyle(0xf4fbff).fillRect(x, top, 1, Math.min(t.far.cap, far[x] - Math.round(t.far.h * 0.5)));
+    if (t.far.cap && far[x] > t.far.h * 0.55) g.fillStyle(t.capColor ?? 0xf4fbff).fillRect(x, top, 1, Math.min(t.far.cap, far[x] - Math.round(t.far.h * 0.5)));
   }
   if (t.far.ridge === 'volcano') {
     const cx = Math.round(w * 0.38);
@@ -406,6 +515,10 @@ function paint(scene: Phaser.Scene, el: Element, bw: number, bh: number, fieldH:
   // Props along the horizon, back to front.
   const spots = Array.from({ length: t.mid.n }, (_, i) => ((i + 0.3 + rng.next() * 0.4) / t.mid.n) * w);
   for (const x of spots) prop(g, rng, t.mid.prop, x, hz + rng.int(0, 2), t.mid.size * (0.7 + rng.next() * 0.5), t.mid.color);
+  if (t.haze) {
+    // Fog: thickest on the horizon, thinning toward you.
+    for (let i = 0; i < 10; i++) g.fillStyle(0xe8e8f0, t.haze * (1 - i / 10) * 0.45).fillRect(0, hz - 6 + i * 3, w, 3);
+  }
 
   g.generateTexture(key, w, h);
   g.destroy();
@@ -535,11 +648,11 @@ function weather(scene: Phaser.Scene, el: Element, area: Phaser.Geom.Rectangle) 
  * A battle's environment for an element, across the whole board. The field (where the creatures
  * stand) is the top-left `fieldW x fieldH`; the rest (the controls) is dimmed so buttons read well.
  */
-export function battleBackdrop(scene: Phaser.Scene, el: Element, bw: number, bh: number, field: { w: number; h: number }) {
-  const key = paint(scene, el, bw, bh, field.h);
+export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, field: { w: number; h: number }) {
+  const key = paint(scene, el, stage, bw, bh, field.h);
   scene.add.image(0, 0, key).setOrigin(0).setScale(PX);
   weather(scene, el, new Phaser.Geom.Rectangle(0, 0, field.w, field.h));
-  const t = THEMES[el];
+  const t = themeFor(el, stage);
   if (t.flash) {
     // Lightning now and then: a white flash over the field.
     const flash = scene.add.rectangle(0, 0, field.w, field.h, 0xffffff, 0).setOrigin(0);
@@ -562,8 +675,8 @@ export function battleBackdrop(scene: Phaser.Scene, el: Element, bw: number, bh:
 }
 
 /** The ground pad a creature stands on, in the element's colors, with a shadow on it. */
-export function battlePad(scene: Phaser.Scene, el: Element, x: number, y: number, w = 200) {
-  const [top, rim] = THEMES[el].pad;
+export function battlePad(scene: Phaser.Scene, el: Element, stage: number, x: number, y: number, w = 200) {
+  const [top, rim] = themeFor(el, stage).pad;
   scene.add.ellipse(x, y + 6, w + 16, 52, rim);
   scene.add.ellipse(x, y, w + 16, 48, top);
   scene.add.ellipse(x, y + 2, w - 30, 30, mix(top, 0xffffff, 0.12), 0.6);
