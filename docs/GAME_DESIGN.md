@@ -382,6 +382,11 @@ Proposed math:
 - Keeps its colors when caught and when it evolves. Purely cosmetic.
 - The Hexlidex marks families you've seen shiny and shows their shiny forms; Records counts shinies caught.
 - Rolled from a hash of the run seed (not the run's random rolls), so daily runs stay identical for everyone.
+- **Shinies online:** every species you've caught (or claimed) shiny is recorded ("✦ Shiny caught" in the
+  Hexlidex). In the team builder it shows ✦ SHINY in the picker, joins teams shiny, and has a "✦ Shiny: on/off"
+  toggle. Shiny picks fight shiny in the Battle Arena and online duels (the other player sees it shiny too, with
+  the full reveal); saved loadouts remember it. A pick can only be shiny for a species you own shiny.
+  Older saves: if any shinies were caught, the species seen shiny count as owned.
 
 ## Music
 

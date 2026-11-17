@@ -95,7 +95,7 @@ export class ArenaScene extends Phaser.Scene {
       text(this, x + sw / 2, y + (SLOT_H - 8) / 2, '+ Add a Hexling', 16, COLORS.textDim).setOrigin(0.5);
       return;
     }
-    const key = ensureCreatureTexture(this, p.speciesId, p.stage);
+    const key = ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny);
     this.add.image(x + 42, y + 46, key).setScale(2.2 * SPRITE_FIT);
     const c = createCreature(p.speciesId, ARENA_LEVEL, p.stage);
     text(this, x + 88, y + 8, `${creatureName(c)}  Lv ${ARENA_LEVEL}`, 16, COLORS.text, { fontStyle: 'bold' });

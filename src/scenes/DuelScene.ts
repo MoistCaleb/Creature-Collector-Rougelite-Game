@@ -182,7 +182,7 @@ export class DuelScene extends Phaser.Scene {
       // Its creatures, under the button (the ones that will fight are bright).
       const shown = t.picks.slice(0, 4);
       shown.forEach((p, k) => {
-        const img = this.add.image(x + (k - (shown.length - 1) / 2) * Math.min(44, tw / 4), 366, ensureCreatureTexture(this, p.speciesId, p.stage)).setScale(1.1 * SPRITE_FIT);
+        const img = this.add.image(x + (k - (shown.length - 1) / 2) * Math.min(44, tw / 4), 366, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale(1.1 * SPRITE_FIT);
         if (k >= s.teamSize) img.setAlpha(0.3);
       });
     });
@@ -195,7 +195,7 @@ export class DuelScene extends Phaser.Scene {
     theirs.forEach((t, i) => {
       const y = (LANDSCAPE ? 44 : 418) + i * 34;
       text(this, ox, y, t.name, 13, COLORS.text, { fontStyle: 'bold' });
-      t.picks.slice(0, 4).forEach((p, k) => this.add.image(ox + 150 + k * 44, y + 8, ensureCreatureTexture(this, p.speciesId, p.stage)).setScale(1 * SPRITE_FIT));
+      t.picks.slice(0, 4).forEach((p, k) => this.add.image(ox + 150 + k * 44, y + 8, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale(1 * SPRITE_FIT));
     });
 
     const ready = mine.length === s.teamsPerPlayer && mine.every((t) => t.picks.length) && theirs.length === s.teamsPerPlayer && theirs.every((t) => t.picks.length);
@@ -245,7 +245,7 @@ export class DuelScene extends Phaser.Scene {
       c.add(text(this, 0, -30, t.name, 18, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5));
       const fighters = t.picks.slice(0, s.teamSize);
       fighters.forEach((p, k) => {
-        c.add(this.add.image((k - (fighters.length - 1) / 2) * 70, 14, ensureCreatureTexture(this, p.speciesId, p.stage)).setScale(1.5 * SPRITE_FIT));
+        c.add(this.add.image((k - (fighters.length - 1) / 2) * 70, 14, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale(1.5 * SPRITE_FIT));
       });
     });
   }

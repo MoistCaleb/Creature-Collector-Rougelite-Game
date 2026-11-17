@@ -19,6 +19,13 @@ export interface ArenaPick {
   speciesId: string;
   stage: number;
   moves: string[];
+  /** Bring it in its shiny colours (only for species you've caught shiny). */
+  shiny?: boolean;
+}
+
+/** Have you caught (or claimed) this species shiny? Then it can be brought shiny. */
+export function ownsShiny(meta: Meta, speciesId: string): boolean {
+  return (meta.shinyOwned ?? []).includes(speciesId);
 }
 
 /** Species you can bring: everything you've caught, plus your starters. */
@@ -76,6 +83,7 @@ export function makeArenaCreature(p: ArenaPick, opts: { level?: number } = {}): 
   c.moves = (moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage)).map((id) => ({ id, tier: 1 }));
   c.pendingMoves = [];
   c.learnIndex = learnset(SPECIES_BY_ID[p.speciesId]).length;
+  if (p.shiny) c.shiny = true;
   return c;
 }
 
@@ -87,7 +95,8 @@ export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): Aren
     .map((p) => {
       const moves = (p.moves ?? []).filter((id) => arenaMovePool(p.speciesId, p.stage).includes(id)).slice(0, MAX_MOVES);
       // No legal moves left: fall back to the ones it would naturally know.
-      return { ...p, moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage) };
+      const shiny = p.shiny && ownsShiny(meta, p.speciesId) ? true : undefined;
+      return { speciesId: p.speciesId, stage: p.stage, moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage), ...(shiny ? { shiny } : {}) };
     })
     .slice(0, ARENA_TEAM);
 }
@@ -165,6 +174,8 @@ export interface SavedLoadout {
   moves: string[];
   /** Where it came from, e.g. "Win · Wildlands". */
   label: string;
+  /** It was shiny. */
+  shiny?: boolean;
 }
 
 /** Save a run creature's loadout (newest first; the oldest drop off past the limit). */
@@ -175,6 +186,7 @@ export function saveLoadout(meta: Meta, c: Creature, label: string): SavedLoadou
     stage: c.stage,
     moves: c.moves.map((m) => m.id),
     label,
+    ...(c.shiny ? { shiny: true } : {}),
   };
   meta.loadouts = [l, ...(meta.loadouts ?? [])].slice(0, MAX_LOADOUTS);
   return l;
@@ -199,5 +211,6 @@ export function applyLoadout(meta: Meta, l: SavedLoadout): ArenaPick {
   const stage = forms.includes(l.stage) ? l.stage : Math.max(...forms.filter((f) => f <= l.stage), 0);
   const pool = arenaMovePool(l.speciesId, stage);
   const moves = l.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
-  return { speciesId: l.speciesId, stage, moves: moves.length ? moves : defaultArenaMoves(l.speciesId, stage) };
+  const shiny = l.shiny && ownsShiny(meta, l.speciesId);
+  return { speciesId: l.speciesId, stage, moves: moves.length ? moves : defaultArenaMoves(l.speciesId, stage), ...(shiny ? { shiny: true } : {}) };
 }

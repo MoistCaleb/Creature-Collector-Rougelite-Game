@@ -1,3 +1,4 @@
+import { makeArenaCreature as mkArena, ownsShiny, validArenaTeam as validTeam } from '../src/logic/arena';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BALANCE } from '../src/data/balance';
 import { emptyStats } from '../src/logic/achievements';
@@ -1693,5 +1694,26 @@ describe('shiny hunting', () => {
     expect(maxStars).toBe(HUNT_MAX_STARS);
     expect(shiny / total).toBeGreaterThan(1 / 25);
     expect(trainerShiny).toBeGreaterThan(0);
+  });
+});
+
+describe('shinies in the Arena and online duels', () => {
+  it('a species caught shiny can be brought shiny; others cannot', () => {
+    const meta = {
+      unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(),
+      coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+    } as Meta;
+    const id = DEFAULT_STARTERS[0];
+    const pick = { speciesId: id, stage: 0, moves: [], shiny: true };
+    expect(validTeam(meta, [pick])[0].shiny).toBeUndefined();
+    const run = startRun(meta, id, 3);
+    const e = makeEncounter(run, run.map.nodes[run.map.nodes[run.currentId].next[0]])[0];
+    e.shiny = true;
+    catchCreature(run, e);
+    expect(ownsShiny(meta, e.speciesId)).toBe(true);
+    meta.dex.caught.push(e.speciesId);
+    const team = validTeam(meta, [{ speciesId: e.speciesId, stage: 0, moves: [], shiny: true }]);
+    expect(team[0].shiny).toBe(true);
+    expect(mkArena(team[0]).shiny).toBe(true);
   });
 });

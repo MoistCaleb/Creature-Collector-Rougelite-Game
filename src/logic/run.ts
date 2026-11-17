@@ -144,6 +144,8 @@ export interface Meta {
   /** Deepest Shiny Hunting floor reached, and the most shinies caught in one hunt. */
   bestHunt?: number;
   bestHuntShinies?: number;
+  /** Species you've caught (or claimed) shiny: they can be brought shiny to the Arena and duels. */
+  shinyOwned?: string[];
   /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
   shinySeen?: string[];
   shinyCaught?: number;
@@ -202,6 +204,13 @@ export function recordRun(run: Run, won: boolean) {
   saveMeta(meta);
 }
 
+/** A shiny joined you: its species can now be brought shiny to the Arena and online duels. */
+export function noteShinyOwned(meta: Meta, speciesId: string) {
+  const owned = (meta.shinyOwned = meta.shinyOwned ?? []);
+  if (!owned.includes(speciesId)) owned.push(speciesId);
+  noteShiny(meta, speciesId);
+}
+
 /** A shiny was seen: remember its species for the Hexlidex. */
 export function noteShiny(meta: Meta, speciesId: string) {
   const seen = (meta.shinySeen = meta.shinySeen ?? []);
@@ -253,6 +262,8 @@ export function loadMeta(): Meta {
     const saved = JSON.parse(raw);
     const meta: Meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
     if (!saved.stats) meta.stats.caught = meta.dex.caught.length; // older saves: count known catches
+    // Saves from before shinies were tracked per species: count the ones seen shiny as caught.
+    if (!saved.shinyOwned && (saved.shinyCaught ?? 0) > 0) meta.shinyOwned = [...(saved.shinySeen ?? [])];
     checkAchievements(meta);
     return meta;
   } catch {
@@ -557,6 +568,8 @@ export function loadRun(meta: Meta): Run | null {
     const all = [...run.team, ...run.bench, ...(run.activeBattle?.enemies ?? [])];
     setNextUid(Math.max(0, ...all.map((c) => c.uid)) + 1);
     applyFloorCap(run);
+    // Any shiny already in your party counts as owned (runs saved before that was tracked).
+    for (const c of allCreatures(run)) if (c.shiny && !(meta.shinyOwned ?? []).includes(c.speciesId)) noteShinyOwned(meta, c.speciesId);
     return run;
   } catch {
     return null;
@@ -1012,6 +1025,7 @@ export function catchCreature(
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
   if (enemy.shiny) {
     c.shiny = true;
+    noteShinyOwned(run.meta, c.speciesId);
     run.meta.shinyCaught = (run.meta.shinyCaught ?? 0) + 1;
     if (run.hunt) run.hunt.shinies += 1;
   }
@@ -1045,6 +1059,11 @@ export function guardianLevel(run: Run, boss: Creature): number {
 export function claimGuardian(run: Run, boss: Creature, release?: Creature): Creature | null {
   if (!canMakeRoom(run, release)) return null;
   const c = createCreature(boss.speciesId, guardianLevel(run, boss), boss.stage);
+  // A shiny guardian Hexling (Shiny Hunting) keeps its colours.
+  if (boss.shiny) {
+    c.shiny = true;
+    noteShinyOwned(run.meta, c.speciesId);
+  }
   addToParty(run, c, release);
   return c;
 }

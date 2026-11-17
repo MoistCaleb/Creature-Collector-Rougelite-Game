@@ -75,6 +75,7 @@ function cleanCreatures(list: unknown): Creature[] {
         .map((m) => ({ id: m.id, tier: Math.max(1, Math.min(3, Math.round(Number(m.tier) || 1))) }))
         .slice(0, 4),
       held: c.held && HELD[c.held] ? c.held : undefined,
+      shiny: c.shiny === true ? true : undefined,
       pendingMoves: [],
     }))
     .filter((c) => c.moves.length > 0)
@@ -149,7 +150,13 @@ function cleanTeam(team: unknown): ArenaPick[] {
   if (!Array.isArray(team)) return [];
   return team
     .filter((p): p is ArenaPick => !!p && typeof p.speciesId === 'string' && !!SPECIES_BY_ID[p.speciesId] && [0, 1, 2].includes(p.stage))
-    .map((p) => ({ speciesId: p.speciesId, stage: p.stage, moves: (Array.isArray(p.moves) ? p.moves : []).filter((id) => typeof id === 'string' && !!MOVES[id]).slice(0, 4) }))
+    .map((p) => ({
+      speciesId: p.speciesId,
+      stage: p.stage,
+      moves: (Array.isArray(p.moves) ? p.moves : []).filter((id) => typeof id === 'string' && !!MOVES[id]).slice(0, 4),
+      // Their shiny shows up shiny on your screen too.
+      ...(p.shiny === true ? { shiny: true } : {}),
+    }))
     .slice(0, 4);
 }
 
