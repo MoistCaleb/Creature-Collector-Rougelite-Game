@@ -546,11 +546,11 @@ export class BattleScene extends Phaser.Scene {
     this.actions.setVisible(false);
     this.busy = true;
     void (async () => {
-      // Online duels open with the cut-in too: their trainer, their name and their Hexlings.
-      if (m.duel) {
+      // Online duels and Arena battles open with the cut-in too: their trainer, name and Hexlings.
+      {
         await trainerCutIn(this, {
           name: m.opponent,
-          sub: 'Online duel',
+          sub: m.duel ? 'Online duel' : `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
           look: m.opponentLook ?? lookForName(m.opponent),
           team: this.enemies,
           accent: ELEMENT_COLORS[creatureTypes(this.enemies[0])[0]],
