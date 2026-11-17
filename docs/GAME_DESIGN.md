@@ -136,6 +136,24 @@ during the fight:
 | Spirit | Wraithe, the Hollow King | Death Curse: each of his fainting creatures hits your active one for 1/5 HP |
 | Dragon | Vharos, the Last Wyrm | Dragon's Pride: his ace enters with +1 Attack and +1 Speed |
 
+**Extra rules at higher Heat:** from Heat 4 a guardian brings one extra rule on top of its own, and at Heat 8
+two. Extra rules are picked by the run's seed and floor (the same on reload) from every other rule, including
+eight that no guardian has as its own. Each extra rule takes 2 levels off the guardian's team to compensate.
+
+| Extra rule | Effect |
+|---|---|
+| Brittle Air | Your Hexlings lose 1 Defense whenever they enter battle |
+| Thick Fog | Your moves are 15% less accurate |
+| Keen Eye | Their moves never miss |
+| Leech Field | Every turn your active Hexling loses 1/16 HP and theirs heals that much |
+| Vengeance | When one of theirs faints, the next enters with +1 Attack |
+| Static Field | Your Hexlings may be paralysed when they enter (35%) |
+| Ironhide | Super-effective hits on them count ×1.25 per element instead of ×1.5 |
+| Second Wind | Once each, their Hexlings heal 35% when they drop below a third of their HP |
+
+The rule card shows every rule (an extra one is tagged HEAT), and the battle screen lists each rule's name and
+short summary for the whole fight.
+
 ### Boss reward (after each floor boss), choose 1
 - Full heal (team + bench)
 - Full team prestige
