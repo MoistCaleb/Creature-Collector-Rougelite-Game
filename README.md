@@ -50,7 +50,7 @@ Saves on the installed app live on that device. The claude.ai preview keeps its 
 - **Events** — 23 events with trade-offs; none repeats in a run until you've seen them all.
 - **Battle Arena** — build a Lv 50 team from creatures you've caught (forms you've seen, moves you pick) and climb a 5-round ladder of trainers.
 - **Duel a friend** — from the Battle Arena: one phone hosts and shows a 5-digit code, the other enters it, and you battle your Arena teams live, phone to phone (WebRTC via PeerJS). Reconnects if a phone drops.
-- **Stage race** — from a duel lobby, the host picks a map and both phones play it from the same seed (same starters, no passives or Heat, double battle rewards). The other racer's floor shows on your map; when both runs end, your teams fight a live final duel.
+- **Stage battle** — Play online → host or join with a 5-digit code; the host picks a map. You both play its first stage from the same start (same starters, no passives or Heat, double battle rewards). The boss at the end is the other player: reaching it starts a live battle between your run teams.
 - **Teams - **Bag** —  session settings** — save up to 6 named Lv 50 teams (Battle Arena → Teams). In a duel lobby the host sets best of 1/3/5, teams per player (1–3), creatures per battle (1–4) and level (25–100); each player picks which saved teams to bring and chooses one before each battle.
 - **Bag** — the map's Bag button shows potions, Evolution Stones and held items; give or take off items right there.
 - **Heat** — beat a run to unlock Heat 1–8: each level stacks a harder rule. Pick it after choosing a map; each Heat won on a map lights one of its 8 flame tokens.

@@ -80,6 +80,8 @@ export interface RaceProgress {
   /** Run over (won or lost). */
   finished: boolean;
   won: boolean;
+  /** Steps left to the boss node (map layouts with rows). */
+  steps?: number;
   /** Team to bring to the final duel (empty if wiped out). */
   team?: Creature[];
 }

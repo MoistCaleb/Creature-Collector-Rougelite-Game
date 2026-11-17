@@ -25,13 +25,21 @@ export class EndScene extends Phaser.Scene {
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>
       this.add.image(x, y, ensureCreatureTexture(this, speciesId, stage)).setScale(scale * SPRITE_FIT);
 
-    text(this, W / 2, 46, data.won ? 'VICTORY!' : 'RUN OVER', 40, data.won ? '#ffc94d' : '#e0524a', { fontStyle: 'bold' }).setOrigin(0.5);
+    const race = run.race;
+    const title = race ? (data.won ? 'STAGE CLEARED' : 'STAGE LOST') : data.won ? 'VICTORY!' : 'RUN OVER';
+    const sub = race
+      ? data.won
+        ? `You reached the boss. Your team now faces ${race.opponent}!`
+        : `Your team fell in the ${run.map.biome} lands before reaching the boss.`
+      : data.won
+        ? `${run.map.biome} lands conquered. All three floors cleared.`
+        : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`;
+    text(this, W / 2, 46, title, race ? 34 : 40, data.won ? '#ffc94d' : '#e0524a', { fontStyle: 'bold' }).setOrigin(0.5);
     text(
       this,
       W / 2,
       86,
-      (data.won ? `${run.map.biome} lands conquered. All three floors cleared.` : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`) +
-        (run.heat ? `  ·  Heat ${run.heat}` : ''),
+      sub + (run.heat ? `  ·  Heat ${run.heat}` : ''),
       15,
       COLORS.textDim,
       { align: 'center', wordWrap: { width: W - 40 } },
@@ -65,7 +73,7 @@ export class EndScene extends Phaser.Scene {
     const totalDamage = [...allCreatures(run), ...(run.log.fallen ?? [])].reduce((n, c) => n + (c.dealt ?? 0), 0);
     const stats: [string, string][] = [
       ['Battles won', String(run.log.battlesWon)],
-      ['Floors cleared', String(data.won ? 3 : run.floor)],
+      race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? 3 : run.floor)],
       ['Caught', String(run.log.caught)],
       ['Lost', String(run.log.lost)],
       ['Coins earned', String(run.log.coins ?? 0)],
@@ -147,20 +155,20 @@ export class EndScene extends Phaser.Scene {
       const verdict = raceVerdict();
       if (!session.connected && verdict !== 'win' && verdict !== 'lose' && verdict !== 'draw') {
         status.setText(`Lost the connection to ${opp}. If they come back, the final duel still happens.`);
-        finish('Leave the race');
+        finish('Leave the stage battle');
       } else if (!verdict) {
-        status.setText(`Race vs ${opp}: waiting for them to finish (${them ? (them.finished ? 'done' : `floor ${them.floor + 1}`) : 'starting'})…\nYour team is ready for the final duel.`);
-        finish('Give up the race');
+        status.setText(`Stage battle vs ${opp}: waiting for them to reach the boss (${them ? (them.finished ? 'done' : them.steps !== undefined ? `${them.steps} steps to go` : 'on the way') : 'starting'})…\nYour team is ready.`);
+        finish('Give up the stage battle');
       } else if (verdict === 'duel') {
         status.setText(`${opp} is done too. The final duel is starting…`);
         leave?.destroy();
       } else {
         status.setText(
           verdict === 'win'
-            ? `${opp} has no team left. You win the race!`
+            ? `${opp} has no team left. You win the stage battle!`
             : verdict === 'lose'
-              ? `You have no team left, so ${opp} wins the race.`
-              : 'Neither of you has a team left. The race is a draw.',
+              ? `You have no team left, so ${opp} wins the stage battle.`
+              : 'Neither of you has a team left. It\u2019s a draw.',
         );
         finish('Done');
       }

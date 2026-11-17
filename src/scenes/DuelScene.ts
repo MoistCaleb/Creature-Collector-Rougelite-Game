@@ -68,7 +68,7 @@ export class DuelScene extends Phaser.Scene {
     });
 
     button(this, 40, 28, 64, 36, '', () => this.leave(), { fontSize: 15, glyph: 'back' });
-    text(this, W / 2 + 20, 18, 'Duel a friend', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, W / 2 + 20, 18, 'Play with a friend', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     text(this, W / 2 + 20, 54, 'Live battles, phone to phone', 13, COLORS.textDim).setOrigin(0.5, 0);
     if (this.picking && duel.series) return this.drawPick();
 
@@ -78,9 +78,9 @@ export class DuelScene extends Phaser.Scene {
     text(this, 20, 136, 'Your team (active team from the Battle Arena):', 13, COLORS.textDim);
     this.drawTeam(160, team.map((p) => [p.speciesId, p.stage] as [string, number]));
     if (!team.length) {
-      text(this, W / 2, 190, 'Build a team in the Battle Arena first.', 15, '#ffc94d').setOrigin(0.5);
-      button(this, W / 2, 250, 240, 50, 'Go to the Arena', () => this.scene.start('Arena', {}), { fontSize: 16 });
-      return;
+      // Only Arena duels need a saved team; Stage battles use your run's team.
+      text(this, W / 2, 170, 'No Arena team yet (only needed for Arena duels).', 13, '#ffc94d').setOrigin(0.5, 0);
+      button(this, W / 2, 210, 200, 34, 'Build one in the Arena', () => this.scene.start('Arena', {}), { fontSize: 13 });
     }
 
     if (this.typed !== null) return this.drawKeypad();
@@ -100,12 +100,19 @@ export class DuelScene extends Phaser.Scene {
       button(this, W / 2, y + 250, 200, 44, 'Cancel', () => this.leave(true), { fontSize: 15 });
     } else {
       if (s === 'error' && session.error) text(this, W / 2, y - 6, session.error, 13, '#ff8a7a', { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 1);
-      button(this, W / 2, y + 40, W - 60, 70, 'Host a duel', () => this.host(), { color: 0x3b6d4a, fontSize: 20, sub: 'Get a code to share with a friend' });
+      button(this, W / 2, y + 40, W - 60, 70, 'Host a game', () => this.host(), { color: 0x3b6d4a, fontSize: 20, sub: 'Get a code to share with a friend' });
       button(this, W / 2, y + 126, W - 60, 70, 'Join with a code', () => this.scene.restart({ typed: '' }), { color: 0x2f4a6b, fontSize: 20, sub: 'Enter the code from your friend’s screen' });
       text(this, W / 2, y + 190, 'Works best on the same Wi-Fi. On mobile data some networks may not connect.', 12, COLORS.textDim, {
         align: 'center',
         wordWrap: { width: W - 60 },
       }).setOrigin(0.5, 0);
+      // What you can play once connected (the host chooses).
+      this.add.rectangle(16, y + 236, W - 32, 188, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+      text(this, 30, y + 248, 'Two ways to play together', 15, '#ffc94d', { fontStyle: 'bold' });
+      text(this, 30, y + 276, 'Arena duel', 14, COLORS.text, { fontStyle: 'bold' });
+      text(this, 30, y + 296, 'Your saved Lv 50 teams battle live. Best of 1, 3 or 5.', 12, COLORS.textDim, { wordWrap: { width: W - 60 } });
+      text(this, 30, y + 330, 'Stage battle', 14, COLORS.text, { fontStyle: 'bold' });
+      text(this, 30, y + 350, 'Both of you play the same stage with double rewards. The boss at the end is the other player: whoever\u2019s run team wins takes it.', 12, COLORS.textDim, { wordWrap: { width: W - 60 } });
     }
   }
 
@@ -189,13 +196,13 @@ export class DuelScene extends Phaser.Scene {
         enabled: ready,
         sub: ready ? `Lv ${s.level} · ${s.teamSize} per side` : `Waiting for both players to bring ${s.teamsPerPlayer} team${s.teamsPerPlayer > 1 ? 's' : ''} with creatures`,
       });
-      button(this, W / 2, by + 66, W - 60, 58, 'Stage race', () => this.pickRaceMap(), {
+      button(this, W / 2, by + 66, W - 60, 58, 'Stage battle', () => this.pickRaceMap(), {
         color: 0x2f4a6b,
         fontSize: 20,
-        sub: 'Both play the same map · double rewards · final duel',
+        sub: 'Both play one stage · double rewards · you are each other\u2019s boss',
       });
     } else {
-      const wait = text(this, W / 2, by - 10, `Waiting for ${opp.name} to start a duel or a race…`, 16, COLORS.text, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
+      const wait = text(this, W / 2, by - 10, `Waiting for ${opp.name} to start an Arena duel or a Stage battle…`, 16, COLORS.text, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
     button(this, W / 2, by + 132, 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
@@ -232,8 +239,8 @@ export class DuelScene extends Phaser.Scene {
   private pickRaceMap() {
     const open = MAPS.filter((m) => mapUnlocked(m, state.meta.wins));
     openPicker(this, {
-      title: 'Stage race',
-      subtitle: `You and ${duel.opponent?.name ?? 'your friend'} play this map from the same start, with double battle rewards and no passives or Heat. When you're both done, your teams duel.`,
+      title: 'Stage battle',
+      subtitle: `You and ${duel.opponent?.name ?? 'your friend'} each play the first stage of this map from the same start, with double battle rewards (no passives or Heat). The boss at the end is the other player: your teams battle live.`,
       options: open.map((m) => ({ label: m.name, sub: m.desc })),
       onPick: (i) => hostStartRace(open[i].id),
       onCancel: () => {},
@@ -295,7 +302,7 @@ export class DuelScene extends Phaser.Scene {
     const go = () => {
       leaveDuel();
       if (stay) this.scene.restart({});
-      else this.scene.start('Arena', {});
+      else this.scene.start('Title', {});
     };
     if (!session.role) return go();
     if (stay) return go();

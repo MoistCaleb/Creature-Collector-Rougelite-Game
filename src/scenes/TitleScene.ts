@@ -80,11 +80,17 @@ export class TitleScene extends Phaser.Scene {
       sub: best ? `Today: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'Today + past days',
     });
 
-    button(this, W / 2, 616, 320, 50, 'Battle Arena', () => this.scene.start('Arena', {}), {
-      fontSize: 17,
+    button(this, W / 2 - 82, 614, 156, 54, 'Battle Arena', () => this.scene.start('Arena', {}), {
+      fontSize: 16,
       glyph: 'swords',
       color: 0x5a2a3a,
-      sub: `Lv 50 teams from your Dex · best ${meta.arenaBest ?? 0}/5`,
+      sub: `Lv 50 · best ${meta.arenaBest ?? 0}/5`,
+    });
+    button(this, W / 2 + 82, 614, 156, 54, 'Play online', () => this.scene.start('Duel', {}), {
+      fontSize: 16,
+      glyph: 'phone',
+      color: 0x2f4a6b,
+      sub: 'Duels · Stage battles',
     });
 
     // "Install app" appears when the browser can install the game (or on iPhone, with steps).
