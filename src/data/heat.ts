@@ -10,7 +10,7 @@ export interface HeatLevel {
 
 export const HEAT_LEVELS: HeatLevel[] = [
   { name: 'Heat 0', desc: 'The standard game.' },
-  { name: 'Heat 1', desc: 'Enemies are 1/2/3 levels higher on floors 1/2/3.' },
+  { name: 'Heat 1', desc: 'Enemies are 1/1/2 levels higher on floors 1/2/3.' },
   { name: 'Heat 2', desc: 'Survivors only recover 25% HP after a win (Iron Will: 43%).' },
   { name: 'Heat 3', desc: 'Shop prices are 25% higher.' },
   { name: 'Heat 4', desc: 'Trainers are 1/2/3 more levels higher and always carry held items. Guardians bring a second rule (and are 2 levels lower for it).' },
@@ -27,7 +27,8 @@ export function heatRules(heat: number, floor = 0) {
   const at = (n: number) => heat >= n;
   const step = floor + 1;
   return {
-    enemyLevels: (at(1) ? step : 0) + (at(7) ? step : 0),
+    // Heat 1 is gentler than Heat 7's step (1/1/2 rather than 1/2/3): it's the first Heat players try.
+    enemyLevels: (at(1) ? [1, 1, 2][Math.min(floor, 2)] : 0) + (at(7) ? step : 0),
     healMult: at(2) ? 0.62 : 1,
     priceMult: at(3) ? 1.25 : 1,
     eliteLevels: at(4) ? step : 0,

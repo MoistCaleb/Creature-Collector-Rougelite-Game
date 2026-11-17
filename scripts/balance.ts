@@ -19,6 +19,7 @@ import { TIER_POWER } from '../src/data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../src/data/species';
 import { stabMultiplier, typeMultiplier, type Element } from '../src/data/types';
 import { Battle } from '../src/logic/battle';
+import { GLASS_MULT } from '../src/logic/run';
 import { emptyStats } from '../src/logic/achievements';
 import {
   addLevels, canPrestige, creatureTypes, evolve, healFraction, hasUses, isAlive, moveDef, prestige, readyToEvolve, restoreUses, sharesType, stats, usesLeft,
@@ -87,8 +88,8 @@ function fight(run: Run, kind: Kind): FightResult {
   const boss = kind === 'boss' ? BOSSES[run.map.biome] : null;
   const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
   const b = new Battle(run.team, enemies, run.rng, {
-    playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? 1.5 : 1),
-    enemyDamageMult: run.twist === 'glass' ? 1.5 : 1,
+    playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? GLASS_MULT : 1),
+    enemyDamageMult: run.twist === 'glass' ? GLASS_MULT : 1,
     enemyRandomness: BALANCE.enemyRandomness[kind],
     rules: rules.map((r) => ({ rule: r.rule, name: r.name })),
     synergy: synergyMults(run.team, run.passive === 'harmonist' ? 2 : 1),

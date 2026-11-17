@@ -499,7 +499,7 @@ export type TwistId = 'duo' | 'swarm' | 'glass' | 'lean' | 'gilded';
 export const TWISTS: Record<TwistId, { name: string; desc: string }> = {
   duo: { name: 'Element Duo', desc: 'Only two elements: every floor, wild Hexling, trainer and starter is one of them.' },
   swarm: { name: 'Swarm', desc: 'Every wild battle brings two Hexlings, from the very first.' },
-  glass: { name: 'Glass Cannon', desc: 'Every Hexling, yours and theirs, deals 50% more damage.' },
+  glass: { name: 'Glass Cannon', desc: 'Every Hexling, yours and theirs, deals 30% more damage.' },
   lean: { name: 'Lean Times', desc: 'Half the healing after battles, but 50% more coins.' },
   gilded: { name: 'Gilded Week', desc: 'One wild Hexling in 15 is Gilded. Catch them while you can!' },
 };
@@ -511,13 +511,16 @@ export function twistShort(info: WeeklyInfo): string {
     case 'swarm':
       return 'Every wild battle brings two Hexlings';
     case 'glass':
-      return 'Every Hexling deals +50% damage';
+      return 'Every Hexling deals +30% damage';
     case 'lean':
       return 'Half healing after battles · +50% coins';
     default:
       return 'One wild Hexling in 15 is Gilded';
   }
 }
+
+/** Glass Cannon: damage multiplier for both sides. */
+export const GLASS_MULT = 1.3;
 
 /** The twists in the order the weeks go through them. */
 export const TWIST_ORDER: TwistId[] = ['duo', 'swarm', 'glass', 'lean', 'gilded'];

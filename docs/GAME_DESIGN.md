@@ -319,7 +319,7 @@ Proposed math:
 - One run a week (Monday to Sunday, UTC), the same for everyone: fixed seed, 3 starters with suited passives
   (as dailies), Heat 0, and a **twist**. Twists rotate weekly: **Element Duo** (two elements only: every
   floor, wild Hexling, trainer and starter), **Swarm** (every wild battle is two Hexlings), **Glass Cannon**
-  (both sides deal +50% damage), **Lean Times** (half healing after battles, +50% coins), **Gilded Week**
+  (both sides deal +30% damage), **Lean Times** (half healing after battles, +50% coins), **Gilded Week**
   (1 wild Hexling in 15 is Gilded). From the Daily & weekly screen. Best result and attempts per week are kept
   (`meta.weeklies`); no Gilded Hunt after a weekly. The crown on the map bar shows the twist.
 

@@ -80,6 +80,7 @@ import {
   catchLevel,
   type XpResult,
   noteShiny,
+  GLASS_MULT,
 } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -240,8 +241,8 @@ export class BattleScene extends Phaser.Scene {
     const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
-      playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? 1.5 : 1),
-      enemyDamageMult: run.twist === 'glass' ? 1.5 : 1,
+      playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? GLASS_MULT : 1),
+      enemyDamageMult: run.twist === 'glass' ? GLASS_MULT : 1,
       enemyRandomness: BALANCE.enemyRandomness[this.kind],
       rules: rules.map((r) => ({ rule: r.rule, name: r.name })),
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
