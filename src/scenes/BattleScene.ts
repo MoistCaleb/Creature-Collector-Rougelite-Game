@@ -372,7 +372,7 @@ export class BattleScene extends Phaser.Scene {
         if (boss || this.kind === 'elite') {
           await trainerCutIn(this, {
             name: boss ? boss.name : trainer,
-            sub: boss ? `${boss.title} · Guardian of floor ${run.floor + 1}` : 'Trainer',
+            sub: boss ? `${boss.title} · ${run.hunt ? `Gilded Hunt floor ${run.hunt.depth}` : `Guardian of floor ${run.floor + 1}`}` : 'Trainer',
             look: boss ? bossLook(boss.element) : lookForName(trainer),
             team: this.enemies,
             boss: !!boss,
@@ -799,13 +799,16 @@ export class BattleScene extends Phaser.Scene {
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
     this.setStatus(p, c.status?.id ?? null);
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`).setScale(1);
+    // Long names with 5+ stars shrink to fit, leaving room for the held item and the status tag.
+    const room = 258 - 12 - (c.status ? 46 : 0) - (c.held ? 24 : 0);
+    if (p.name.width > room) p.name.setScale(room / p.name.width);
     // A shiny's panel is gold, with a SHINY tab.
     p.name.setColor(c.shiny ? '#ffd86b' : COLORS.text);
     p.frame.setStrokeStyle(c.shiny ? 3 : 2, c.shiny ? 0xffd86b : COLORS.stroke);
     p.shiny.setVisible(!!c.shiny);
     p.held.setVisible(!!c.held);
-    if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.width + 12);
+    if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.displayWidth + 12);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
