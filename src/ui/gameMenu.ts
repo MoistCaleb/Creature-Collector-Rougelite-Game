@@ -31,7 +31,7 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
       }
       openPicker(scene, {
         title: 'Abandon this run?',
-        subtitle: 'It ends here and can’t be continued. Starters you unlocked and Dex entries are kept.',
+        subtitle: 'It ends here and can’t be continued. Starters you unlocked and Hexlidex entries are kept.',
         options: [{ label: 'Abandon run', color: 0x8a2c2c }],
         onPick: () => {
           clearSavedRun();

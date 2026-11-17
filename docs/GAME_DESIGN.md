@@ -83,8 +83,8 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - Trainers' and bosses' creatures always faint and can't be caught.
 - **Catches keep their prestige:** a wild creature keeps the ★ it had in battle (floor 2–3 wilds carry 1–5 ★),
   so catching on higher floors pays off.
-- **First catch:** the first time you ever catch a species (tracked in the Dex) it gets **+1 ★** on top (max 5).
-- **After the Dex is complete:** the +1 ★ bonus goes per element, per run. A catch earns ★ if at least one of its
+- **First catch:** the first time you ever catch a species (tracked in the Hexlidex) it gets **+1 ★** on top (max 5).
+- **After the Hexlidex is complete:** the +1 ★ bonus goes per element, per run. A catch earns ★ if at least one of its
   elements hasn't earned it yet this run, and uses up whichever of its elements were new. E.g. Fire/Water
   earns it (uses Fire + Water); then Water/Earth still earns it for Earth; then Fire/Earth does not.
   Resets every run. Starters don't use up elements.
@@ -181,7 +181,7 @@ Proposed math:
   name hidden unless it's in your Dex). Items apply on purchase.
 - Prices scale +125% per floor. **Haggler** passive (-25%) unlocks after spending 500 coins total.
 
-## Creature Dex
+## Hexlidex
 - Persistent across runs: forms seen (per evolution stage), moves seen, elements seen.
 - Evolutions show as ??? until you've seen that form (starter cards, team screen, dex).
 - Elements tab reveals matchups once encountered.

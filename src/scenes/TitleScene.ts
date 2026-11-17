@@ -83,7 +83,7 @@ export class TitleScene extends Phaser.Scene {
       { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Passives & achievements', fontSize: 16 },
     );
 
-    button(this, cx - 82, ry(550), 156, 54, 'Hexling Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
+    button(this, cx - 82, ry(550), 156, 54, 'Hexlidex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
     // Daily run: the same seed for everyone today.
     const today = todayUtc();
     const best = dailyPlayed(meta, today)?.best ?? null;
