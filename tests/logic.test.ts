@@ -1492,3 +1492,37 @@ describe('duel forfeits', () => {
     expect(hostEnd).toEqual({ phase: 'end', won: true });
   });
 });
+
+describe('catch stars and loadouts', () => {
+  const mkMeta2 = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0,
+    dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands',
+    stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('catches keep their prestige stars, and a first catch adds one more (max 5)', () => {
+    const run = startRun(mkMeta2(), 'emberkit', 5);
+    const wild = createCreature('mossling', 30);
+    wild.stars = 2;
+    expect(catchCreature(run, wild)!.c.stars).toBe(3); // first catch: +1
+    expect(catchCreature(run, wild)!.c.stars).toBe(2); // repeat: keeps its own
+    const big = createCreature('golemite', 30);
+    big.stars = 5;
+    expect(catchCreature(run, big)!.c.stars).toBe(5);
+  });
+  it('saves a run creature as a loadout and applies it in the team builder', async () => {
+    const { saveLoadout, hasLoadout, loadoutsFor, applyLoadout, arenaMovePool } = await import('../src/logic/arena');
+    const m = mkMeta2();
+    m.dex.caught.push('golemite');
+    m.dex.forms.push('golemite:1');
+    const c = createCreature('golemite', 40, 1);
+    saveLoadout(m, c, 'Win · Wildlands');
+    expect(hasLoadout(m, c)).toBe(true);
+    expect(loadoutsFor(m, 'golemite')).toHaveLength(1);
+    const pick = applyLoadout(m, loadoutsFor(m, 'golemite')[0]);
+    expect(pick.stage).toBe(1);
+    expect(pick.moves.every((id) => arenaMovePool('golemite', 1).includes(id))).toBe(true);
+    // An unseen form falls back to one you've seen.
+    const final = createCreature('golemite', 70, 2);
+    expect(applyLoadout(m, saveLoadout(m, final, 'x')).stage).toBe(1);
+  });
+});

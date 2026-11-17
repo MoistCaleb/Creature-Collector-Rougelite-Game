@@ -26,6 +26,7 @@ import {
   stageCap,
   stats,
   MAX_MOVES,
+  MAX_STARS,
   teamElement,
   type Creature,
 } from './creature';
@@ -118,6 +119,8 @@ export interface Meta {
   arenaTeams?: import('./arena').SavedTeam[];
   arenaTeamIndex?: number;
   arenaBest?: number;
+  /** Creatures saved at the end of runs, to reuse in the team builder. */
+  loadouts?: import('./arena').SavedLoadout[];
   /** Name shown to the other player in duels. */
   duelName?: string;
   /** Heat levels (1-8) won on each map, for the map's Heat tokens. */
@@ -783,9 +786,14 @@ export const SCOUT_BONUS_LEVELS = 3;
 
 /** The level a caught creature joins at: its own level (+3 with Scout), within its level cap. */
 export function catchLevel(run: Run, enemy: Creature): number {
-  const stars = catchBonus(run, enemy.speciesId) ? 1 : 0;
+  const stars = catchStars(run, enemy);
   const bonus = run.passive === 'scout' ? SCOUT_BONUS_LEVELS : 0;
   return Math.min(stageCap({ stage: enemy.stage, stars }), enemy.level + bonus);
+}
+
+/** Stars a catch joins with: the ones it had in battle, +1 for a first-catch or type bonus (max 5). */
+export function catchStars(run: Run, enemy: Creature): number {
+  return Math.min(MAX_STARS, (enemy.stars ?? 0) + (catchBonus(run, enemy.speciesId) ? 1 : 0));
 }
 
 export function catchCreature(
@@ -801,7 +809,7 @@ export function catchCreature(
   c.moves = enemy.moves.map((m) => ({ ...m }));
   c.learnIndex = enemy.learnIndex;
   c.pendingMoves = [];
-  if (bonus) c.stars = 1;
+  c.stars = catchStars(run, enemy);
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
   const newlyClaimed: Element[] = [];
   if (bonus === 'type')

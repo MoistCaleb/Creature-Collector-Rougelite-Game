@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, ELEMENTS, elementTextColor, type Element } from '../data/types';
-import { activeTeamIndex, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, savedTeams, validArenaTeam } from '../logic/arena';
+import { activeTeamIndex, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, loadoutsFor, savedTeams, validArenaTeam } from '../logic/arena';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic } from '../ui/sound';
@@ -185,6 +185,8 @@ export class ArenaPickScene extends Phaser.Scene {
       const chips = this.add.container(0, 0);
       typeChipsInto(this, chips, x + CELL_W / 2, y + 96, sp.types);
       this.grid.add(chips);
+      const nSaved = loadoutsFor(meta, id).length;
+      if (nSaved) this.grid.add(text(this, x + 12, y + 6, `${nSaved} SAVED`, 10, '#c9a3ff', { fontStyle: 'bold' }));
       if (inTeam) {
         [bg, img].forEach((o) => o.setAlpha(0.4));
         this.grid.add(text(this, x + CELL_W - 10, y + 6, 'IN TEAM', 10, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0));

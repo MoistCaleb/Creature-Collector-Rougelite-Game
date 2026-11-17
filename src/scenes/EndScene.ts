@@ -2,7 +2,11 @@ import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
 import { state } from '../state';
-import { isAlive } from '../logic/creature';
+import { isAlive, type Creature } from '../logic/creature';
+import { hasLoadout, saveLoadout } from '../logic/arena';
+import { MOVES } from '../data/moves';
+import { MAP_BY_ID } from '../data/maps';
+import { openPicker } from '../ui/picker';
 import { duel, endRace, raceVerdict, sendProgress } from '../net/runtime';
 import { session } from '../net/session';
 import { playMusic, sfx } from '../ui/sound';
@@ -122,15 +126,48 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Achievements: ${earned.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name).join(', ')}`);
     }
-    if (extra.length && y < (run.race ? 610 : 690)) {
+    if (extra.length && y < (run.race ? 610 : 640)) {
       text(this, W / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: W - 40 }, lineSpacing: 4 }).setOrigin(0.5, 0);
     }
 
     if (run.race) return this.raceFinish(run, data.won);
-    button(this, W / 2, 752, 260, 56, 'Back to title', () => {
+    // Keep a good creature: save its form and moves for the team builder.
+    const alive = allCreatures(run).filter((c) => c.hp > 0);
+    if (alive.length) {
+      const label = `${data.won ? 'Win' : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
+      button(this, W / 2, 692, 320, 44, 'Save a loadout', () => this.saveLoadouts(alive, label), {
+        fontSize: 16,
+        color: 0x2f4a6b,
+        glyph: 'star',
+        sub: 'Keep its form and moves for the team builder',
+      });
+    }
+    button(this, W / 2, 756, 260, 52, 'Back to title', () => {
       state.run = null;
       this.scene.start('Title', {});
     }, { color: 0x3b6d4a, fontSize: 20 });
+  }
+
+  /** Pick survivors to save as loadouts (several can be saved; saved ones are marked). */
+  private saveLoadouts(survivors: Creature[], label: string) {
+    const meta = state.meta;
+    openPicker(this, {
+      title: 'Save a loadout',
+      subtitle: 'Its form and moves are saved. In the team builder, open this creature and tap Loadouts to use them.',
+      options: survivors.map((c) => ({
+        creature: c,
+        disabled: hasLoadout(meta, c),
+        note: hasLoadout(meta, c) ? 'Saved ✓' : c.moves.map((m) => MOVES[m.id].name).join(', '),
+      })),
+      onPick: (k) => {
+        saveLoadout(meta, survivors[k], label);
+        saveMeta(meta);
+        sfx.coin();
+        this.saveLoadouts(survivors, label);
+      },
+      onCancel: () => {},
+      cancelLabel: 'Done',
+    });
   }
 
   /** Stage race: hand in the finished team and wait for the other racer; the final duel starts itself. */
