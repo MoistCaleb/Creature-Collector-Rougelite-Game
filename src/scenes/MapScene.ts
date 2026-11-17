@@ -245,7 +245,7 @@ export class MapScene extends Phaser.Scene {
       text(this, 32, 60, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd');
     }
     button(this, W - 226, TOP_BAR / 2, 40, 44, '', () => openGameMenu(this), { glyph: 'menu' });
-    button(this, W - 170, TOP_BAR / 2, 60, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 15 });
+    button(this, W - 170, TOP_BAR / 2, 60, 44, 'Hexlidex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 12 });
     // The Bag shows a dot when it holds items nobody is using yet.
     const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });
     if ((run.bag ?? []).length) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
@@ -278,7 +278,7 @@ export class MapScene extends Phaser.Scene {
     button(this, SIDE_L / 2, 186, bw, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 16 });
     const bag = button(this, SIDE_L / 2, 238, bw, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 16 });
     if ((run.bag ?? []).length) bag.add(this.add.circle(bw / 2 - 12, -12, 5, 0xffc94d));
-    button(this, SIDE_L / 2, 290, bw, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
+    button(this, SIDE_L / 2, 290, bw, 44, 'Hexlidex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
     button(this, SIDE_L / 2, 342, bw, 44, 'Menu', () => openGameMenu(this), { fontSize: 16, glyph: 'menu' });
   }
 

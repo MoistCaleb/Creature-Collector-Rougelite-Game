@@ -1310,7 +1310,7 @@ export class BattleScene extends Phaser.Scene {
     const releasedNote = release ? `${releasedName} was released.\n\n` : '';
     const bonus =
       kind === 'species'
-        ? `\n\n★ First of its kind! New Dex entry: +1 prestige star.`
+        ? `\n\n★ First of its kind! New Hexlidex entry: +1 prestige star.`
         : kind === 'type'
           ? `\n\n★ Type bonus: +1 prestige star. ${newlyClaimed.join(' and ')} is now used up for this run.`
           : '';

@@ -64,7 +64,7 @@ export class DexScene extends Phaser.Scene {
 
     // Header drawn last so it sits on top (and catches taps meant for it, not rows scrolled under it).
     this.add.rectangle(0, 0, W, TOP, COLORS.bg).setOrigin(0).setInteractive();
-    text(this, 16, 14, 'Hexling Dex', 24, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 16, 14, 'Hexlidex', 24, '#ffc94d', { fontStyle: 'bold' });
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
     const totalForms = SPECIES.length * 3;
     text(
