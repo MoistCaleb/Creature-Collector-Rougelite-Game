@@ -420,6 +420,23 @@ export const sfx = {
     [0, 4, 7, 11, 14, 19].forEach((s, i) => tone(note(s, 1047), 0.09, { type: 'triangle', vol: 0.13, delay: i * 0.05 }));
     noise(0.5, { freq: 9000, to: 4000, vol: 0.08, type: 'highpass', delay: 0.1 });
   },
+  /** The big shiny reveal: a bright rising chord, a chime cascade and a glittery wash. */
+  shinyReveal() {
+    [0, 4, 7, 12, 16, 19, 24, 28].forEach((s, i) => tone(note(s, 784), 0.14, { type: 'triangle', vol: 0.14, delay: i * 0.045 }));
+    [0, 4, 7].forEach((s) => tone(note(s + 12, 523), 1.2, { type: 'sine', vol: 0.08, delay: 0.36, attack: 0.02 }));
+    [24, 19, 28, 24, 31].forEach((s, i) => tone(note(s, 523), 0.3, { type: 'sine', vol: 0.09, delay: 0.5 + i * 0.09 }));
+    noise(1.1, { freq: 10000, to: 3500, vol: 0.1, type: 'highpass', delay: 0.05 });
+  },
+  /** A shiny attacks: a quick sparkling sweep. */
+  shinyZing() {
+    tone(1568, 0.18, { type: 'triangle', vol: 0.09, slide: 3136 });
+    tone(2093, 0.14, { type: 'sine', vol: 0.06, delay: 0.05 });
+  },
+  /** A shiny's hit lands: a bright ping on top of the normal hit. */
+  shinyHit() {
+    tone(2637, 0.22, { type: 'sine', vol: 0.08 });
+    tone(3136, 0.2, { type: 'sine', vol: 0.05, delay: 0.04 });
+  },
   evolveDone() {
     [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(note(s, 523), 0.18, { type: 'square', vol: 0.14, delay: i * 0.06 }));
     noise(0.6, { freq: 6000, to: 800, vol: 0.2, type: 'highpass' });
@@ -759,6 +776,7 @@ const HAPTICS: Partial<Record<keyof typeof sfx, (...args: never[]) => number | n
   levelUp: () => [15, 40, 15],
   evolveDone: () => [40, 40, 40, 40, 120],
   stone: () => [25, 40, 25, 40, 90],
+  shinyReveal: () => [20, 30, 20, 30, 20, 30, 80],
 };
 for (const [key, pattern] of Object.entries(HAPTICS)) {
   const k = key as keyof typeof sfx;

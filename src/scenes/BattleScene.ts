@@ -1,5 +1,5 @@
 import { tip, tipDone } from '../ui/tips';
-import { shinyBurst } from '../ui/shiny';
+import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura } from '../ui/shiny';
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
@@ -94,6 +94,9 @@ interface SidePanel {
   status: Phaser.GameObjects.Container;
   /** Held item icon, just after the name. */
   held: Phaser.GameObjects.Image;
+  /** The panel's frame (gold for a shiny) and the SHINY tab on its bottom edge. */
+  frame: Phaser.GameObjects.Rectangle;
+  shiny: Phaser.GameObjects.Container;
 }
 
 /**
@@ -303,7 +306,7 @@ export class BattleScene extends Phaser.Scene {
     const intro = resuming
       ? 'The battle resumes!'
       : this.kind === 'battle'
-        ? `A ${this.enemies.map((e) => `${e.shiny ? 'shiny' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
+        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦SHINY✦' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
         : this.kind === 'elite'
           ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
@@ -323,6 +326,8 @@ export class BattleScene extends Phaser.Scene {
     };
     // Resuming after a reload: pick up wherever the battle was left.
     if (resuming) {
+      this.startAura('enemy');
+      this.startAura('player');
       const o = this.battle.outcome();
       if (o === 'win') this.onWin();
       else if (o === 'lose') this.onLose();
@@ -671,24 +676,51 @@ export class BattleScene extends Phaser.Scene {
     const c = this.battle.e.c;
     const el = creatureTypes(c)[0];
     const voice = () => cry(c.speciesId, c.stage);
-    const shine = <T,>(p: Promise<T>) => (c.shiny ? p.then((v) => (this.shinyFlash(c), v)) : p);
+    const shine = (p: Promise<unknown>) => (c.shiny ? p.then(() => this.shinyEntrance('enemy', c)) : p);
     if (this.kind === 'battle') return shine(emergeFrom(this, this.enemySprite, el, voice));
     this.order('enemy');
     return shine(releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el], voice));
   }
 
-  /** A shiny Hexling glitters as it appears (and goes into the Hexlidex as seen shiny). */
-  private shinyFlash(c: Creature) {
-    sfx.shiny();
-    shinyBurst(this, this.enemySprite.x, this.enemySprite.y, 80, (this.enemySprite.depth ?? 0) + 1);
-    this.tweens.add({ targets: this.enemySprite, alpha: 0.4, yoyo: true, repeat: 2, duration: 90 });
-    noteShiny(state.meta, c.speciesId);
-  }
-
   private enterPlayer() {
     const c = this.battle.p.c;
     this.order('player');
-    return releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(c)[0]], () => cry(c.speciesId, c.stage));
+    const p = releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(c)[0]], () => cry(c.speciesId, c.stage));
+    return c.shiny ? p.then(() => this.shinyEntrance('player', c)) : p;
+  }
+
+  // ------------------------------------------------------------ shiny Hexlings
+
+  /** Glitter on the field around each shiny Hexling that's out. */
+  private auras: Partial<Record<'player' | 'enemy', ShinyAura>> = {};
+
+  /**
+   * A shiny takes the field: the full reveal for a foe (the first time, with the SHINY! banner),
+   * a shorter one for yours, then it keeps glittering while it's out.
+   */
+  private async shinyEntrance(side: 'player' | 'enemy', c: Creature) {
+    const sprite = this.spriteOf(side);
+    if (side === 'enemy') {
+      const first = !this.revealed.has(c.uid);
+      this.revealed.add(c.uid);
+      noteShiny(state.meta, c.speciesId);
+      if (first) this.msg.setText(`Whoa! It's a SHINY ${creatureName(c)}!`);
+      await shinyReveal(this, sprite, first);
+    } else await shinyReveal(this, sprite, false);
+    this.startAura(side);
+  }
+  private revealed = new Set<number>();
+
+  private startAura(side: 'player' | 'enemy') {
+    this.clearAura(side);
+    const c = side === 'player' ? this.shownPlayer : this.shownEnemy;
+    const s = this.spriteOf(side);
+    if (c?.shiny && s.visible && s.alpha > 0.5) this.auras[side] = shinyAura(this, s);
+  }
+
+  private clearAura(side: 'player' | 'enemy') {
+    this.auras[side]?.destroy();
+    delete this.auras[side];
   }
 
   // ------------------------------------------------------------ panels
@@ -702,7 +734,14 @@ export class BattleScene extends Phaser.Scene {
     const status = this.add.container(262, 9);
     const held = icon(this, 0, 18, 'bag', 18).setVisible(false);
     root.add([name, chips, ...bar.objects(), status, held]);
-    return { root, name, chips, bar, status, held };
+    const frame = root.getAt(0) as Phaser.GameObjects.Rectangle;
+    // SHINY tab on the bottom edge.
+    const shiny = this.add.container(135, 74).setVisible(false);
+    shiny.add(this.add.rectangle(0, 0, 104, 22, 0xffd86b).setStrokeStyle(2, 0x7a4a00));
+    shiny.add(text(this, 0, 0, '✦ SHINY ✦', 13, '#4a2a00', { fontStyle: 'bold' }).setOrigin(0.5));
+    root.add(shiny);
+    this.tweens.add({ targets: shiny, scale: 1.08, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+    return { root, name, chips, bar, status, held, frame, shiny };
   }
 
   private setStatus(p: SidePanel, id: StatusId | null) {
@@ -715,7 +754,11 @@ export class BattleScene extends Phaser.Scene {
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
     this.setStatus(p, c.status?.id ?? null);
-    p.name.setText(`${creatureName(c)}${c.shiny ? ' ✦' : ''} Lv${c.level} ${stars(c.stars)}`);
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    // A shiny's panel is gold, with a SHINY tab.
+    p.name.setColor(c.shiny ? '#ffd86b' : COLORS.text);
+    p.frame.setStrokeStyle(c.shiny ? 3 : 2, c.shiny ? 0xffd86b : COLORS.stroke);
+    p.shiny.setVisible(!!c.shiny);
     p.held.setVisible(!!c.held);
     if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.width + 12);
     p.chips.removeAll(true);
@@ -730,6 +773,7 @@ export class BattleScene extends Phaser.Scene {
 
   private refreshEnemy(hp?: number) {
     const e = this.battle.e.c;
+    if (this.shownEnemy !== e) this.clearAura('enemy');
     this.shownEnemy = e;
     dex.creature(e);
     this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage, e.shiny)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
@@ -744,6 +788,7 @@ export class BattleScene extends Phaser.Scene {
 
   private refreshPlayer(hp?: number) {
     const p = this.battle.p.c;
+    if (this.shownPlayer !== p) this.clearAura('player');
     this.shownPlayer = p;
     dex.creature(p, true);
     this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
@@ -943,6 +988,7 @@ export class BattleScene extends Phaser.Scene {
     let lastEl: Element = 'Fire';
     let lastStyle: Style = 'element';
     let attackerHome: { x: number; y: number } | undefined;
+    let shinyHit = false;
     // "X used Y!" is shown as the attack starts, so the hit lands right as the effect arrives.
     let shownEarly: BattleEvent | null = null;
     for (let idx = 0; idx < events.length; idx++) {
@@ -979,6 +1025,9 @@ export class BattleScene extends Phaser.Scene {
             shownEarly = next;
           }
           attackerHome = { x: ev.side === 'player' ? PLAYER_POS.x : ENEMY_POS.x, y: ev.side === 'player' ? PLAYER_POS.y : ENEMY_POS.y };
+          // Shiny Hexlings attack with extra sparkle.
+          shinyHit = !!(ev.side === 'player' ? this.shownPlayer : this.shownEnemy)?.shiny;
+          if (shinyHit) shinyAttackStart(this, s, target);
           // Each move animates by what its name describes: bites bite, waves crash, roars shake.
           if (def) lastStyle = await playMove(this, def, s, target);
           // Status moves have no hit to follow, so keep their name up long enough to read.
@@ -993,6 +1042,7 @@ export class BattleScene extends Phaser.Scene {
             const big = ev.mult > 1.01;
             const weak = ev.mult < 0.99;
             moveImpact(this, lastStyle, ev.element ?? lastEl, at, big ? 1.7 : weak ? 0.6 : 1, attackerHome);
+            if (shinyHit) shinyImpact(this, at, s.depth + 3);
             sfx.hit(ev.mult);
             if (big) {
               // Hit-stop, flash and a heavy shake sell a super-effective blow.
@@ -1023,6 +1073,7 @@ export class BattleScene extends Phaser.Scene {
           const s = this.spriteOf(ev.side);
           const c = ev.side === 'player' ? this.battle.player[ev.index].c : this.battle.enemy[ev.index].c;
           sfx.faint();
+          this.clearAura(ev.side);
           cry(c.speciesId, c.stage, true);
           s.setTintFill(0xffffff);
           faintFx(this, s, ELEMENT_COLORS[creatureTypes(c)[0]]);
@@ -1056,6 +1107,7 @@ export class BattleScene extends Phaser.Scene {
           // Call the old creature back (unless it just fainted), then release the new one.
           const s = this.playerSprite;
           if (s.visible && s.alpha > 0.5 && this.shownPlayer) {
+            this.clearAura('player');
             await recallToHex(this, s, ELEMENT_COLORS[creatureTypes(this.shownPlayer)[0]]);
           }
           this.refreshPlayer(ev.hp);
@@ -1066,6 +1118,7 @@ export class BattleScene extends Phaser.Scene {
           // A voluntary switch: call the old one back first (a fainted one has already gone).
           const s = this.enemySprite;
           if (s.visible && s.alpha > 0.5 && this.shownEnemy && this.shownEnemy !== this.battle.enemy[ev.index].c) {
+            this.clearAura('enemy');
             await recallToHex(this, s, ELEMENT_COLORS[creatureTypes(this.shownEnemy)[0]]);
           }
           this.refreshEnemy(ev.hp);
@@ -1327,6 +1380,7 @@ export class BattleScene extends Phaser.Scene {
     const run = state.run!;
     this.actions.setVisible(false);
     this.tweens.killTweensOf(this.enemySprite);
+    this.clearAura('enemy');
     this.enemySprite.setVisible(false);
     const wasStarter = isUnlockedStarter(run, wild.speciesId);
     const releasedName = release ? creatureName(release) : '';
