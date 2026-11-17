@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
-import { clearSavedRun, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, todayUtc } from '../logic/run';
+import { clearSavedRun, dailyPassives, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, PASSIVES, todayUtc } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
@@ -100,12 +100,13 @@ export class DailyScene extends Phaser.Scene {
 
   private pickDay(date: string) {
     const rec = dailyPlayed(state.meta, date);
-    const starters = dailyStarters(date).map((id) => SPECIES_BY_ID[id].names[0]).join(', ');
+    const pv = dailyPassives(date);
+    const starters = dailyStarters(date).map((id) => `${SPECIES_BY_ID[id].names[0]} (${PASSIVES[pv[id]].name})`).join('\n');
     const [y, m, d] = date.split('-').map(Number);
     const when = date === todayUtc() ? 'Today' : `${MONTHS[m - 1]} ${d}, ${y}`;
     openPicker(this, {
       title: `Daily run · ${when}`,
-      subtitle: `Starters: ${starters}\nNo passives, Heat 0.\n${rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'}`,
+      subtitle: `Starters, each with a passive that suits it:\n${starters}\nHeat 0.\n${rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'}`,
       options: [{ label: rec ? 'Play again' : 'Play', color: 0x3b6d4a, glyph: 'play' }],
       onPick: () => this.play(date),
       onCancel: () => {},

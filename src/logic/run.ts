@@ -395,6 +395,42 @@ export function dailyPlayed(meta: Meta, date: string): DailyRecord | null {
   return rec && rec.attempts > 0 ? rec : null;
 }
 
+/** Trainer passives that suit each element (for daily runs: each starter comes with one). */
+export const ELEMENT_PASSIVES: Record<Element, PassiveId[]> = {
+  Fire: ['drill', 'afflicter', 'coinpurse'],
+  Frost: ['ironwill', 'tempered', 'bodyguard'],
+  Nature: ['medic', 'naturalist', 'harmonist'],
+  Earth: ['bodyguard', 'ironwill', 'trainer'],
+  Storm: ['drill', 'afflicter', 'lucky'],
+  Water: ['apothecary', 'medic', 'ironwill'],
+  Metal: ['quartermaster', 'haggler', 'tempered'],
+  Toxic: ['afflicter', 'tempered', 'apothecary'],
+  Shadow: ['hunter', 'afflicter', 'lucky'],
+  Light: ['medic', 'sage', 'explorer'],
+  Spirit: ['sage', 'lucky', 'mentor'],
+  Dragon: ['champion', 'evolutionist', 'drill'],
+};
+
+/**
+ * The passive each of a day's starters comes with: one that suits its elements, the same for
+ * everyone that day, and different for each of the three where possible.
+ */
+export function dailyPassives(date: string): Record<string, PassiveId> {
+  const out: Record<string, PassiveId> = {};
+  const used = new Set<PassiveId>();
+  for (const id of dailyStarters(date)) {
+    const [t1, t2] = SPECIES_BY_ID[id].types;
+    // The main element's picks first, then the second element's.
+    const pool = [...new Set([...ELEMENT_PASSIVES[t1], ...(t2 !== t1 ? ELEMENT_PASSIVES[t2] : [])])];
+    const fresh = pool.filter((p) => !used.has(p));
+    const from = fresh.length ? fresh : pool;
+    const pick = from[hashString(`daily-passive:${date}:${id}`) % from.length];
+    used.add(pick);
+    out[id] = pick;
+  }
+  return out;
+}
+
 /** Record a finished daily run. Returns true if it's a new best for that day. */
 export function recordDaily(run: Run, won: boolean): boolean {
   const meta = run.meta;
@@ -415,7 +451,8 @@ export function describeDaily(r: DailyResult): string {
   return r.won ? `Won! · ${r.battlesWon} battles` : `Floor ${r.floor + 1} · ${r.battlesWon} battles`;
 }
 
-/** `even`: no passive and Heat 0 (daily runs and stage races, so everyone starts level). */
+/** `even`: Heat 0 and no passive of your own (daily runs and stage races, so everyone starts level).
+ *  A daily run's starter brings the passive that day gives it (see dailyPassives). */
 export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string, even = !!daily): Run {
   const rng = new Rng(seed);
   const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
@@ -428,8 +465,9 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     rec.attempts += 1;
     meta.daily = rec;
   }
-  // Daily runs and races are the same for everyone: no passive, standard Heat.
-  const passive = even ? null : meta.equippedPassive;
+  // Daily runs and races are the same for everyone: standard Heat, and no passive of your own
+  // (a daily's starter comes with the passive the day gives it).
+  const passive = daily ? (dailyPassives(daily)[starterId] ?? null) : even ? null : meta.equippedPassive;
   saveMeta(meta);
   const run: Run = {
     heat: even ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
