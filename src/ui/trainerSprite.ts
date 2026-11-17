@@ -10,8 +10,11 @@ import {
 export const TRAINER_W = 32;
 export const TRAINER_H = 34;
 
-/** 'stand' faces you; 'command' points one arm forward (into battle). */
-export type TrainerPose = 'stand' | 'command';
+/**
+ * 'stand' faces you; 'command' faces you pointing one arm forward (opponents); 'back' is seen from
+ * behind with an arm raised toward the fight (your own trainer in battle).
+ */
+export type TrainerPose = 'stand' | 'command' | 'back';
 
 const OUTLINE = 0x16101e;
 const SHOE = 0x2a2230;
@@ -60,13 +63,15 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   const Y0 = 5;
   const Y1 = 18;
 
-  // Behind everything: hood, long hair, ponytail.
-  if (look.top === 2) round(X0 - 1, Y0 + 5, X1 + 1, Y1 + 2, shade(topC, 0.8));
-  if (look.hair === 2) {
+  const back = pose === 'back';
+
+  // Behind everything (seen from the front): hood, long hair, ponytail.
+  if (!back && look.top === 2) round(X0 - 1, Y0 + 5, X1 + 1, Y1 + 2, shade(topC, 0.8));
+  if (!back && look.hair === 2) {
     rect(X0 - 2, Y0 + 2, X0, Y1 + 6, hairC);
     rect(X1, Y0 + 2, X1 + 2, Y1 + 6, hairC);
   }
-  if (look.hair === 3) {
+  if (!back && look.hair === 3) {
     round(X1, Y0 + 1, X1 + 3, Y0 + 11, hairC, 1);
     put(X1 + 1, Y0 + 1, acc);
     put(X1 + 2, Y0 + 1, acc);
@@ -84,8 +89,8 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   // Body.
   round(9, 19, 18, 26, topC, 1);
   if (look.top === 0) rect(9, 22, 18, 22, acc); // tee stripe
-  if (look.top === 1) rect(13, 19, 14, 26, acc); // open jacket
-  if (look.top === 2) {
+  if (!back && look.top === 1) rect(13, 19, 14, 26, acc); // open jacket
+  if (!back && look.top === 2) {
     rect(11, 23, 16, 24, shade(topC, 0.82)); // pouch
     rect(12, 19, 12, 21, acc); // drawstrings
     rect(15, 19, 15, 21, acc);
@@ -93,16 +98,20 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   if (look.top === 3) {
     round(8, 19, 19, 30, topC, 1); // long coat over the legs
     rect(13, 27, 14, 30, legC);
-    rect(13, 19, 14, 26, acc);
+    if (!back) rect(13, 19, 14, 26, acc);
   }
-  if (look.top === 4) round(11, 20, 16, 24, acc, 1); // chest plate
+  if (look.top === 4) round(11, 20, 16, 24, acc, 1); // chest plate (back plate from behind)
   if (look.top !== 3) rect(9, 26, 18, 26, look.top === 1 ? shade(botC, 0.7) : acc); // belt
 
   // Arms: little sleeves, round hands.
   const sleeveEnd = look.top === 0 ? 20 : 22;
   rect(7, 19, 8, sleeveEnd, topC);
   rect(7, sleeveEnd + 1, 8, 24, skin);
-  if (pose === 'command') {
+  if (back) {
+    // Arm raised up and out toward the opponent (up-right).
+    for (let i = 0; i < 6; i++) rect(19 + i, 19 - i, 20 + i, 20 - i, look.top === 0 && i > 1 ? skin : topC);
+    round(24, 11, 27, 14, skin, 1);
+  } else if (pose === 'command') {
     rect(19, 20, look.top === 0 ? 21 : 25, 21, topC);
     if (look.top === 0) rect(22, 20, 25, 21, skin);
     round(25, 19, 27, 22, skin, 1);
@@ -115,8 +124,14 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     round(18, 18, 22, 20, acc, 1);
   }
 
+  // From behind: the hood lies on the back, long hair and a ponytail hang down over it.
+  if (back && look.top === 2) round(9, 17, 18, 22, shade(topC, 0.8), 1);
+
   // Head.
   round(X0, Y0, X1, Y1, skin, 2);
+  if (back) {
+    paintBackHair();
+  } else {
   // Big eyes: a white shine top-left, a darker bottom row.
   const eye = EYE_COLORS[look.eyes];
   for (const ex of [9, 17]) {
@@ -130,6 +145,42 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   rect(19, 14, 20, 14, blush);
   rect(13, 15, 14, 15, shade(skin, 0.6));
 
+  }
+
+  /** The back of the head: hair covers it down to the nape (styles keep their shape). */
+  function paintBackHair() {
+    const h = look.hair;
+    if (h === 7) {
+      put(X0 + 4, Y0 + 2, shade(skin, 1.15));
+      put(X0 + 5, Y0 + 2, shade(skin, 1.15));
+      return;
+    }
+    if (h === 5) return void round(12, Y0 - 4, 15, Y1 - 3, hairC, 1); // mohawk stripe
+    round(X0, Y0 - 2, X1, h === 6 || h === 2 ? Y1 : Y1 - 3, hairC, 2);
+    rect(X0 - 1, Y0 + 1, X0, Y0 + 7, hairC);
+    rect(X1, Y0 + 1, X1 + 1, Y0 + 7, hairC);
+    // A soft shine across the crown and a ragged hairline at the nape.
+    rect(X0 + 4, Y0 - 1, X0 + 8, Y0 - 1, shade(hairC, 1.25));
+    rect(X0 + 3, Y0, X0 + 4, Y0, shade(hairC, 1.25));
+    const nape = h === 6 || h === 2 ? Y1 : Y1 - 3;
+    for (let x = X0 + 2; x < X1 - 1; x++) if (x % 3 === 1) put(x, nape + 1, hairC);
+    if (h === 1) {
+      for (const x of [X0 + 1, X0 + 5, X0 + 9, X0 + 13]) {
+        rect(x, Y0 - 3, x + 2, Y0 - 3, hairC);
+        put(x + 1, Y0 - 4, hairC);
+      }
+    }
+    if (h === 2) round(X0 + 1, Y1 - 4, X1 - 1, Y1 + 4, hairC, 2); // long: down the back
+    if (h === 3) {
+      round(12, Y1 - 3, 15, Y1 + 6, hairC, 1); // ponytail
+      rect(12, Y1 - 3, 15, Y1 - 3, acc);
+    }
+    if (h === 4) {
+      round(X0 - 2, Y0 - 4, X0 + 1, Y0 - 1, hairC, 1);
+      round(X1 - 1, Y0 - 4, X1 + 2, Y0 - 1, hairC, 1);
+    }
+  }
+
   // Hair: a cap over the top of the head, sides, and jagged bangs.
   const cap = () => {
     round(X0, Y0 - 2, X1, Y0 + 3, hairC, 2);
@@ -140,7 +191,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       if (x % 3 === 1) put(x, Y0 + 5, hairC);
     }
   };
-  switch (look.hair) {
+  if (!back) switch (look.hair) {
     case 0: // short
     case 2: // long (the long part is drawn behind)
     case 3: // ponytail
@@ -176,8 +227,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   switch (look.hat) {
     case 1: // cap with a side brim
       round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);
-      rect(X0 - 1, Y0 + 2, X1 + 4, Y0 + 2, shade(hatC, 0.75));
-      rect(13, Y0 - 1, 14, Y0, acc);
+      if (back) rect(12, Y0 + 1, 15, Y0 + 1, acc); // strap
+      else {
+        rect(X0 - 1, Y0 + 2, X1 + 4, Y0 + 2, shade(hatC, 0.75));
+        rect(13, Y0 - 1, 14, Y0, acc);
+      }
       break;
     case 2: // beanie with a pom
       round(X0, Y0 - 3, X1, Y0 + 2, hatC, 2);
@@ -191,17 +245,20 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       break;
     case 4: // headband with tails
       rect(X0, Y0 + 2, X1, Y0 + 2, hatC);
-      rect(X1 + 1, Y0 + 3, X1 + 2, Y0 + 5, hatC);
+      if (back) rect(13, Y0 + 3, 14, Y0 + 7, hatC); // knot tails down the back
+      else rect(X1 + 1, Y0 + 3, X1 + 2, Y0 + 5, hatC);
       break;
     case 5: // crown
       rect(X0 + 3, Y0 - 3, X1 - 3, Y0, GOLD);
       for (const x of [X0 + 3, 13, 14, X1 - 3]) put(x, Y0 - 4, GOLD);
-      rect(13, Y0 - 2, 14, Y0 - 1, hatC);
+      if (!back) rect(13, Y0 - 2, 14, Y0 - 1, hatC);
       break;
     case 6: // goggles on the forehead
       rect(X0, Y0 + 2, X1, Y0 + 2, hatC);
-      round(X0 + 2, Y0 + 1, X0 + 5, Y0 + 3, LENS, 1);
-      round(X1 - 5, Y0 + 1, X1 - 2, Y0 + 3, LENS, 1);
+      if (!back) {
+        round(X0 + 2, Y0 + 1, X0 + 5, Y0 + 3, LENS, 1);
+        round(X1 - 5, Y0 + 1, X1 - 2, Y0 + 3, LENS, 1);
+      }
       break;
     default:
       break;

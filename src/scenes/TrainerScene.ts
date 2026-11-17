@@ -65,11 +65,11 @@ export class TrainerScene extends Phaser.Scene {
     // Preview: tap it to see the battle pose.
     const panel = this.add.rectangle(16, 62, 150, 212, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.add.ellipse(91, 248, 110, 22, 0x000000, 0.35);
-    const img = this.add.image(previewPose === 'command' ? 100 : 91, 164, ensureTrainerTexture(this, look, previewPose)).setScale(5);
+    const img = this.add.image(previewPose === 'back' ? 100 : 91, 164, ensureTrainerTexture(this, look, previewPose)).setScale(5);
     this.tweens.add({ targets: img, y: 160, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
-    text(this, 91, 266, previewPose === 'command' ? 'Battle pose · tap' : 'Tap for battle pose', 10, COLORS.textDim).setOrigin(0.5, 1);
+    text(this, 91, 266, previewPose === 'back' ? 'In battle (from behind) · tap' : 'Tap to see it in battle', 10, COLORS.textDim).setOrigin(0.5, 1);
     panel.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-      previewPose = previewPose === 'stand' ? 'command' : 'stand';
+      previewPose = previewPose === 'stand' ? 'back' : 'stand';
       this.scene.restart({ from: this.from });
     });
 

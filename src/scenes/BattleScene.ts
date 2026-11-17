@@ -284,13 +284,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * Trainers stand off to the side, behind their creatures: you bottom-left (pointing into the
+   * Trainers stand off to the side, behind their creatures: you bottom-left, seen from behind (arm raised toward the
    * fight), the opponent top-right (wild battles have no one there).
    */
   private drawTrainers(enemy: TrainerLook | null) {
     const pose = (img: Phaser.GameObjects.Image, delay: number) =>
       this.tweens.add({ targets: img, y: img.y - 3, yoyo: true, repeat: -1, duration: 900, delay, ease: 'Sine.easeInOut' });
-    const me = this.add.image(38, 440, ensureTrainerTexture(this, myLook(state.meta), 'command')).setScale(3.1);
+    const me = this.add.image(38, 440, ensureTrainerTexture(this, myLook(state.meta), 'back')).setScale(3.1);
     pose(me, 0);
     if (enemy) pose(this.add.image(404, 212, ensureTrainerTexture(this, enemy, 'command')).setScale(2.8).setFlipX(true), 450);
   }
