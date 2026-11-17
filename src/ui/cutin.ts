@@ -127,6 +127,28 @@ function inkLine(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: num
   }
 }
 
+/** Ink splatter flung off a strip's leading edge as it slams home (dir: which way it flies). */
+function splatter(scene: Phaser.Scene, x: number, y: number, dir: number, h: number) {
+  for (let k = 0; k < 9; k++) {
+    const r = 2 + Math.random() * 5;
+    const dot = scene.add.circle(x, y + (Math.random() - 0.5) * h, r, 0x111111).setDepth(3002);
+    scene.tweens.add({
+      targets: dot,
+      x: x + dir * (20 + Math.random() * 60),
+      y: dot.y + (Math.random() - 0.5) * 30,
+      scale: 0.3,
+      alpha: 0,
+      duration: 380 + Math.random() * 200,
+      ease: 'Cubic.easeOut',
+      onComplete: () => dot.destroy(),
+    });
+  }
+}
+
+/** When the first strip starts, and the time between strips (each lands on its own beat). */
+const STRIP_T0 = 150;
+const STRIP_GAP = 260;
+
 // ------------------------------------------------------------ the cut-in
 
 export interface CutInOpts {
@@ -212,17 +234,32 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
       }
       strip.setDepth(3001);
       strips.push(strip);
-      // Slide in from alternating sides.
-      const from = (i % 2 === 0 ? -1 : 1) * (W + 100);
+      // Impact flash, inside the strip.
+      const flash = scene.add.rectangle(sx, y, sw, sh, 0xffffff, 0).setOrigin(0);
+      strip.add(flash);
+      // Slam in from alternating sides: fast, overshooting a touch, then a hit.
+      const dir = i % 2 === 0 ? -1 : 1;
+      const from = dir * (W + 100);
       strip.x = from;
       maskG.x = from;
+      const baseScale = img.scale;
       scene.tweens.add({
         targets: [strip, maskG],
         x: 0,
-        delay: 120 + i * 110,
-        duration: 260,
-        ease: 'Cubic.easeOut',
+        delay: STRIP_T0 + i * STRIP_GAP,
+        duration: 170,
+        ease: 'Back.easeOut',
+        easeParams: [1.1],
         onStart: () => sfx.slash(i),
+        onComplete: () => {
+          sfx.stripHit(i);
+          scene.cameras.main.shake(90, 0.007);
+          flash.setFillStyle(0xffffff, 0.95);
+          scene.tweens.add({ targets: flash, fillAlpha: 0, duration: 220, ease: 'Quad.easeOut' });
+          img.setScale(baseScale * 1.14);
+          scene.tweens.add({ targets: img, scale: baseScale, duration: 260, ease: 'Back.easeOut' });
+          splatter(scene, dir < 0 ? sx + sw : sx, y + sh / 2, -dir, sh);
+        },
       });
     });
 
@@ -236,7 +273,7 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
     }
     inkLine(ink, sx - 6, top - 30, sx - 2, top + areaH + 30, rnd);
     inkLine(ink, sx + sw + 4, top - 30, sx + sw, top + areaH + 30, rnd);
-    scene.tweens.add({ targets: ink, alpha: 1, delay: 120 + n * 110 + 80, duration: 120 });
+    scene.tweens.add({ targets: ink, alpha: 1, delay: STRIP_T0 + n * STRIP_GAP, duration: 120 });
 
     // Name and "Approaching...".
     const tx = LANDSCAPE ? sx + sw + (W - sx - sw) / 2 + 6 : W / 2;
@@ -269,7 +306,7 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
     sub.setY(ty + slash.height / 2 + 6);
     appr.setY(sub.y + sub.height + 6);
     over.add([slash, name, sub, appr]);
-    const tLand = 120 + n * 110 + 220;
+    const tLand = STRIP_T0 + n * STRIP_GAP + 160;
     scene.tweens.add({ targets: slash, scaleX: 1, delay: tLand, duration: 160, ease: 'Cubic.easeOut' });
     scene.tweens.add({
       targets: name,
@@ -319,7 +356,7 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
         },
       });
     };
-    const hold = tLand + (o.boss ? 2000 : 1500);
+    const hold = tLand + (o.boss ? 3000 : 2600);
     scene.time.delayedCall(hold, () => finish());
     // Tap to skip (once it's had a moment to appear).
     scene.time.delayedCall(350, () => paper.once('pointerdown', () => finish(true)));

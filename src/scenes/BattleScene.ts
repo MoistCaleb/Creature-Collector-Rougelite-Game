@@ -1,5 +1,6 @@
 import { tip, tipDone } from '../ui/tips';
 import { trainerCutIn } from '../ui/cutin';
+import { bossRuleCard } from '../ui/bossCard';
 import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura } from '../ui/shiny';
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
@@ -364,12 +365,8 @@ export class BattleScene extends Phaser.Scene {
         this.msg.setText(intro);
         this.actions.setVisible(true);
         if (boss) {
-          openPicker(this, {
-            title: `${boss.name}, ${boss.title}`,
-            subtitle: `"${boss.quote}"\n\n${boss.ruleName}\n${boss.ruleDesc}`,
-            options: [{ label: 'Fight!', color: 0x8a2c2c }],
-            onPick: begin,
-          });
+          // The guardian's rule, impossible to miss.
+          bossRuleCard(this, boss, begin);
         } else begin();
       })();
     }
@@ -549,6 +546,16 @@ export class BattleScene extends Phaser.Scene {
     this.actions.setVisible(false);
     this.busy = true;
     void (async () => {
+      // Online duels open with the cut-in too: their trainer, their name and their Hexlings.
+      if (m.duel) {
+        await trainerCutIn(this, {
+          name: m.opponent,
+          sub: 'Online duel',
+          look: m.opponentLook ?? lookForName(m.opponent),
+          team: this.enemies,
+          accent: ELEMENT_COLORS[creatureTypes(this.enemies[0])[0]],
+        });
+      }
       await this.wait(250);
       await this.enterEnemy();
       await this.wait(200);

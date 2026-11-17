@@ -304,6 +304,13 @@ Proposed math:
 - "NAME" slams in over a brush slash of the floor's element color, with the trainer's role or the guardian's
   title and floor, then "Approaching..." (red for guardians) as the dots tick in. Guardians get a heavier hit
   sound and shake. Tap to skip. Then the strips slash away and the battle begins.
+- Each strip slams in on its own beat (fast, slightly overshooting) and lands with a thud, a white impact flash,
+  a punch-zoom on the face, ink splatter off its edge and a camera jolt. The page holds ~2.6s (guardians ~3s).
+- Online duels open with it too: the other player's trainer, name and Hexlings ("Online duel").
+- **Guardian rule card** (before the fight): a hazard-striped "GUARDIAN RULE" header, the guardian's name and
+  quote, then the rule in big red letters with a chip saying whether it HURTS YOUR HEXLINGS or POWERS UP THEIR
+  HEXLINGS, a short summary (e.g. "−1 SPEED WHEN YOU SEND ONE IN") and the full description. It slams in with a
+  shake; the rule box pulses red.
 
 ## Help, settings and records
 
