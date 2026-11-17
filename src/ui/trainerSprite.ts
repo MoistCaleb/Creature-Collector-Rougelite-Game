@@ -8,7 +8,7 @@ import {
 } from '../data/trainerLook';
 
 export const TRAINER_W = 32;
-export const TRAINER_H = 42;
+export const TRAINER_H = 34;
 
 /** 'stand' faces you; 'command' points one arm forward (into battle). */
 export type TrainerPose = 'stand' | 'command';
@@ -23,7 +23,10 @@ const shade = (c: number, k: number) => {
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 };
 
-/** Paint a trainer into a 32x42 grid of colors (null = empty), then outline and shade it. */
+/**
+ * Paint a chibi trainer: a big round head (half the height) with large shiny eyes, a small body
+ * and short legs. Built on a grid of colors (null = empty), then outlined and shaded.
+ */
 export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, pose: TrainerPose) {
   const g: (number | null)[][] = Array.from({ length: TRAINER_H }, () => Array<number | null>(TRAINER_W).fill(null));
   const put = (x: number, y: number, c: number | null) => {
@@ -32,6 +35,18 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   const rect = (x0: number, y0: number, x1: number, y1: number, c: number | null) => {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(x, y, c);
   };
+  /** A rectangle with its corners rounded off (r = 1 or 2 pixels). */
+  const round = (x0: number, y0: number, x1: number, y1: number, c: number, r = 2) => {
+    rect(x0, y0, x1, y1, c);
+    const cut = (x: number, y: number) => put(x, y, null);
+    for (const [cx, cy, dx, dy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]]) {
+      cut(cx, cy);
+      if (r > 1) {
+        cut(cx + dx, cy);
+        cut(cx, cy + dy);
+      }
+    }
+  };
   const skin = SKIN_TONES[look.skin];
   const hairC = HAIR_COLORS[look.hairColor];
   const hatC = CLOTH_COLORS[look.hatColor];
@@ -39,160 +54,160 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   const acc = CLOTH_COLORS[look.accent];
   const botC = CLOTH_COLORS[look.bottomColor];
 
-  // Hood and long hair hang behind the body, so they go first.
-  if (look.top === 2) rect(7, 7, 18, 16, shade(topC, 0.8));
+  // Head box.
+  const X0 = 6;
+  const X1 = 21;
+  const Y0 = 5;
+  const Y1 = 18;
+
+  // Behind everything: hood, long hair, ponytail.
+  if (look.top === 2) round(X0 - 1, Y0 + 5, X1 + 1, Y1 + 2, shade(topC, 0.8));
   if (look.hair === 2) {
-    rect(7, 6, 8, 20, hairC);
-    rect(17, 6, 18, 20, hairC);
+    rect(X0 - 2, Y0 + 2, X0, Y1 + 6, hairC);
+    rect(X1, Y0 + 2, X1 + 2, Y1 + 6, hairC);
   }
   if (look.hair === 3) {
-    rect(18, 7, 19, 16, hairC);
-    put(18, 7, acc);
+    round(X1, Y0 + 1, X1 + 3, Y0 + 11, hairC, 1);
+    put(X1 + 1, Y0 + 1, acc);
+    put(X1 + 2, Y0 + 1, acc);
   }
 
-  // Legs and shoes.
-  const legs = look.bottom === 0 ? botC : skin;
-  rect(9, 27, 16, 29, botC);
-  rect(9, 30, 11, 37, legs);
-  rect(14, 30, 16, 37, legs);
-  if (look.bottom === 1) rect(9, 30, 16, 31, botC);
-  if (look.bottom === 1) rect(12, 31, 13, 31, null);
-  if (look.bottom === 2) {
-    rect(8, 27, 17, 29, botC);
-    rect(7, 30, 18, 32, botC);
-  }
-  rect(8, 38, 11, 40, SHOE);
-  rect(14, 38, 17, 40, SHOE);
+  // Legs and shoes (short and stubby).
+  const legC = look.bottom === 0 ? botC : skin;
+  rect(10, 27, 17, 28, botC);
+  rect(10, 29, 12, 30, legC);
+  rect(15, 29, 17, 30, legC);
+  if (look.bottom === 2) round(8, 27, 19, 29, botC, 1);
+  round(9, 31, 12, 32, SHOE, 1);
+  round(15, 31, 18, 32, SHOE, 1);
 
-  // Torso.
-  rect(8, 16, 17, 26, topC);
-  if (look.top === 0) rect(8, 19, 17, 19, acc); // tee stripe
-  if (look.top === 1) rect(12, 16, 13, 26, acc); // open jacket, shirt underneath
+  // Body.
+  round(9, 19, 18, 26, topC, 1);
+  if (look.top === 0) rect(9, 22, 18, 22, acc); // tee stripe
+  if (look.top === 1) rect(13, 19, 14, 26, acc); // open jacket
   if (look.top === 2) {
-    rect(10, 22, 15, 24, shade(topC, 0.82)); // pouch
-    put(11, 17, acc);
-    put(11, 18, acc);
-    put(14, 17, acc);
-    put(14, 18, acc);
+    rect(11, 23, 16, 24, shade(topC, 0.82)); // pouch
+    rect(12, 19, 12, 21, acc); // drawstrings
+    rect(15, 19, 15, 21, acc);
   }
   if (look.top === 3) {
-    // Long coat: down past the knees, open at the front.
-    rect(7, 16, 18, 34, topC);
-    rect(12, 27, 13, 34, legs);
-    rect(12, 16, 13, 26, acc);
+    round(8, 19, 19, 30, topC, 1); // long coat over the legs
+    rect(13, 27, 14, 30, legC);
+    rect(13, 19, 14, 26, acc);
   }
-  if (look.top === 4) {
-    rect(10, 18, 15, 22, acc); // chest plate
-    rect(5, 15, 9, 17, acc); // shoulder pads
-    rect(16, 15, 20, 17, acc);
-  }
-  if (look.top !== 3) rect(8, 26, 17, 26, look.top === 1 ? shade(botC, 0.7) : acc); // belt
+  if (look.top === 4) round(11, 20, 16, 24, acc, 1); // chest plate
+  if (look.top !== 3) rect(9, 26, 18, 26, look.top === 1 ? shade(botC, 0.7) : acc); // belt
 
-  // Arms: sleeves in the top color, hands in skin.
-  const sleeve = look.top === 0 ? 18 : 21;
-  rect(6, 16, 7, sleeve, topC);
-  rect(6, sleeve + 1, 7, 24, skin);
+  // Arms: little sleeves, round hands.
+  const sleeveEnd = look.top === 0 ? 20 : 22;
+  rect(7, 19, 8, sleeveEnd, topC);
+  rect(7, sleeveEnd + 1, 8, 24, skin);
   if (pose === 'command') {
-    rect(18, 17, 26, 18, topC);
-    rect(27, 16, 28, 19, skin);
+    rect(19, 20, look.top === 0 ? 21 : 25, 21, topC);
+    if (look.top === 0) rect(22, 20, 25, 21, skin);
+    round(25, 19, 27, 22, skin, 1);
   } else {
-    rect(18, 16, 19, sleeve, topC);
-    rect(18, sleeve + 1, 19, 24, skin);
+    rect(19, 19, 20, sleeveEnd, topC);
+    rect(19, sleeveEnd + 1, 20, 24, skin);
   }
   if (look.top === 4) {
-    rect(5, 15, 9, 17, acc);
-    rect(16, 15, 20, 17, acc);
+    round(5, 18, 9, 20, acc, 1); // shoulder pads
+    round(18, 18, 22, 20, acc, 1);
   }
 
-  // Neck and head (rounded corners).
-  rect(12, 15, 13, 15, shade(skin, 0.85));
-  rect(8, 5, 17, 14, skin);
-  for (const [x, y] of [[8, 5], [17, 5], [8, 14], [17, 14]]) put(x, y, null);
-  // Eyes and mouth.
-  rect(10, 10, 10, 11, EYE_COLORS[look.eyes]);
-  rect(15, 10, 15, 11, EYE_COLORS[look.eyes]);
-  put(10, 10, 0xffffff);
-  put(15, 10, 0xffffff);
-  rect(12, 13, 13, 13, shade(skin, 0.7));
+  // Head.
+  round(X0, Y0, X1, Y1, skin, 2);
+  // Big eyes: a white shine top-left, a darker bottom row.
+  const eye = EYE_COLORS[look.eyes];
+  for (const ex of [9, 17]) {
+    rect(ex, 11, ex + 1, 13, eye);
+    put(ex, 11, 0xffffff);
+    rect(ex, 13, ex + 1, 13, shade(eye, 0.6));
+  }
+  // Blush and a small mouth.
+  const blush = 0xf08a9a;
+  rect(7, 14, 8, 14, blush);
+  rect(19, 14, 20, 14, blush);
+  rect(13, 15, 14, 15, shade(skin, 0.6));
 
-  // Hair.
+  // Hair: a cap over the top of the head, sides, and jagged bangs.
   const cap = () => {
-    rect(8, 4, 17, 7, hairC);
-    put(8, 4, null);
-    put(17, 4, null);
-    rect(8, 8, 8, 9, hairC);
-    rect(17, 8, 17, 9, hairC);
-    rect(9, 8, 11, 8, hairC);
+    round(X0, Y0 - 2, X1, Y0 + 3, hairC, 2);
+    rect(X0 - 1, Y0 + 1, X0, Y0 + 7, hairC);
+    rect(X1, Y0 + 1, X1 + 1, Y0 + 7, hairC);
+    for (let x = X0 + 1; x < X1; x++) {
+      if (x % 3 !== 0) put(x, Y0 + 4, hairC);
+      if (x % 3 === 1) put(x, Y0 + 5, hairC);
+    }
   };
   switch (look.hair) {
-    case 0:
-    case 2:
-    case 3:
+    case 0: // short
+    case 2: // long (the long part is drawn behind)
+    case 3: // ponytail
       cap();
       break;
-    case 1:
+    case 1: // spiky
       cap();
-      for (const [x, y] of [[9, 3], [10, 2], [10, 3], [12, 3], [13, 2], [13, 3], [15, 3], [16, 2], [16, 3]]) put(x, y, hairC);
+      for (const x of [X0 + 1, X0 + 5, X0 + 9, X0 + 13]) {
+        rect(x, Y0 - 3, x + 2, Y0 - 3, hairC);
+        put(x + 1, Y0 - 4, hairC);
+      }
       break;
-    case 4:
+    case 4: // buns
       cap();
-      rect(6, 3, 8, 5, hairC);
-      rect(17, 3, 19, 5, hairC);
+      round(X0 - 2, Y0 - 4, X0 + 1, Y0 - 1, hairC, 1);
+      round(X1 - 1, Y0 - 4, X1 + 2, Y0 - 1, hairC, 1);
       break;
-    case 5:
-      rect(12, 1, 13, 6, hairC);
+    case 5: // mohawk
+      round(12, Y0 - 4, 15, Y0 + 2, hairC, 1);
       break;
-    case 6:
+    case 6: // bob: thick sides down to the chin
       cap();
-      rect(7, 6, 8, 13, hairC);
-      rect(17, 6, 18, 13, hairC);
+      rect(X0 - 1, Y0 + 1, X0 + 1, Y0 + 11, hairC);
+      rect(X1 - 1, Y0 + 1, X1 + 1, Y0 + 11, hairC);
       break;
-    default:
-      break; // bald
+    default: // bald: a shine
+      put(X0 + 4, Y0 + 1, shade(skin, 1.15));
+      put(X0 + 5, Y0 + 1, shade(skin, 1.15));
+      break;
   }
 
-  // Hat.
+  // Hats.
   switch (look.hat) {
-    case 1: // cap with a brim
-      rect(8, 3, 17, 6, hatC);
-      put(8, 3, null);
-      put(17, 3, null);
-      rect(7, 7, 20, 7, shade(hatC, 0.75));
-      put(12, 4, acc);
-      put(13, 4, acc);
+    case 1: // cap with a side brim
+      round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);
+      rect(X0 - 1, Y0 + 2, X1 + 4, Y0 + 2, shade(hatC, 0.75));
+      rect(13, Y0 - 1, 14, Y0, acc);
       break;
     case 2: // beanie with a pom
-      rect(8, 2, 17, 7, hatC);
-      put(8, 2, null);
-      put(17, 2, null);
-      rect(8, 7, 17, 7, shade(hatC, 0.75));
-      rect(12, 0, 13, 1, acc);
+      round(X0, Y0 - 3, X1, Y0 + 2, hatC, 2);
+      rect(X0, Y0 + 1, X1, Y0 + 2, shade(hatC, 0.78));
+      round(12, Y0 - 5, 15, Y0 - 3, acc, 1);
       break;
     case 3: // wide hat
-      rect(9, 1, 16, 5, hatC);
-      rect(9, 5, 16, 5, acc);
-      rect(4, 6, 21, 6, shade(hatC, 0.8));
+      round(X0 + 3, Y0 - 5, X1 - 3, Y0, hatC, 1);
+      rect(X0 + 3, Y0, X1 - 3, Y0, acc);
+      rect(X0 - 4, Y0 + 1, X1 + 4, Y0 + 1, shade(hatC, 0.8));
       break;
-    case 4: // headband
-      rect(8, 7, 17, 7, hatC);
-      rect(18, 8, 19, 9, hatC);
+    case 4: // headband with tails
+      rect(X0, Y0 + 2, X1, Y0 + 2, hatC);
+      rect(X1 + 1, Y0 + 3, X1 + 2, Y0 + 5, hatC);
       break;
     case 5: // crown
-      rect(9, 2, 16, 5, GOLD);
-      for (const x of [9, 12, 13, 16]) put(x, 1, GOLD);
-      put(12, 3, hatC);
-      put(13, 3, hatC);
+      rect(X0 + 3, Y0 - 3, X1 - 3, Y0, GOLD);
+      for (const x of [X0 + 3, 13, 14, X1 - 3]) put(x, Y0 - 4, GOLD);
+      rect(13, Y0 - 2, 14, Y0 - 1, hatC);
       break;
-    case 6: // goggles
-      rect(8, 7, 17, 7, hatC);
-      rect(9, 6, 10, 7, LENS);
-      rect(15, 6, 16, 7, LENS);
+    case 6: // goggles on the forehead
+      rect(X0, Y0 + 2, X1, Y0 + 2, hatC);
+      round(X0 + 2, Y0 + 1, X0 + 5, Y0 + 3, LENS, 1);
+      round(X1 - 5, Y0 + 1, X1 - 2, Y0 + 3, LENS, 1);
       break;
     default:
       break;
   }
 
-  // Shade: darker on the right edge of each shape, a touch lighter on the left.
+  // Shade: darker on the right and bottom edges, a touch lighter on the left; then outline.
   const filled = (x: number, y: number) => x >= 0 && x < TRAINER_W && y >= 0 && y < TRAINER_H && g[y][x] !== null;
   const out: (number | null)[][] = g.map((row) => row.slice());
   for (let y = 0; y < TRAINER_H; y++) {
@@ -202,9 +217,10 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) out[y][x] = OUTLINE;
         continue;
       }
+      if (c === 0xffffff) continue;
       if (!filled(x + 1, y)) out[y][x] = shade(c, 0.78);
-      else if (!filled(x - 1, y)) out[y][x] = shade(c, 1.1);
-      else if (!filled(x, y + 1)) out[y][x] = shade(c, 0.88);
+      else if (!filled(x, y + 1)) out[y][x] = shade(c, 0.86);
+      else if (!filled(x - 1, y) || !filled(x, y - 1)) out[y][x] = shade(c, 1.08);
     }
   }
   for (let y = 0; y < TRAINER_H; y++) {
@@ -218,7 +234,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
 }
 
 export function trainerTextureKey(look: TrainerLook, pose: TrainerPose): string {
-  return `trainer:${pose}:${Object.values(look).join('.')}`;
+  return `trainer2:${pose}:${Object.values(look).join('.')}`;
 }
 
 /** Make (once) and return the texture for this look and pose. */
