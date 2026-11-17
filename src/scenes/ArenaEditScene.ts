@@ -20,7 +20,7 @@ import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, H, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
+import { background, button, clipList, COLORS, H, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
 
 const KIND_LABEL: Record<string, string> = { attack: 'Attack', buff: 'Boost', debuff: 'Hinder', heal: 'Heal' };
 const ROW = 42;
@@ -149,6 +149,7 @@ export class ArenaEditScene extends Phaser.Scene {
 
     // Below the card everything scrolls (drag), so long move lists fit.
     const list = this.add.container(0, 0).setDepth(1);
+    clipList(this, list, wide ? 52 : 246);
     const addTo = <T extends Phaser.GameObjects.GameObject>(o: T) => (list.add(o), o);
     const tap = (o: Phaser.GameObjects.Rectangle, f: () => void) =>
       o.setInteractive({ useHandCursor: true }).on('pointerup', () => {

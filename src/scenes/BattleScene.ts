@@ -78,7 +78,7 @@ import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H } from '../ui/widgets';
+import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
 
 interface SidePanel {
   root: Phaser.GameObjects.Container;
@@ -432,7 +432,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** The element's environment behind the field, and a pad under each side. */
   private drawField(el: Element, stage: number) {
-    battleBackdrop(this, el, stage, W, H, L.field);
+    battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
     battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72);
     battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72);
   }

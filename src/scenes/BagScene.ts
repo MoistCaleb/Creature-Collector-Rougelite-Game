@@ -10,7 +10,7 @@ import { sfx } from '../ui/sound';
 import { dex, persist, state } from '../state';
 import { icon as pixelIcon } from '../ui/icons';
 import { openPicker, showMessage } from '../ui/picker';
-import { background, button, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
+import { background, button, clipList, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 const HEADER = 186;
 
@@ -41,6 +41,7 @@ export class BagScene extends Phaser.Scene {
     const TOP = LANDSCAPE ? 62 : HEADER;
     // Scrolling list of items (drawn first so the header covers it as it scrolls).
     const list = this.add.container(LX, TOP);
+    clipList(this, list, TOP - 6);
     const bag = run.bag ?? [];
     const kinds = [...new Set(bag)] as HeldId[];
     const count = (id: HeldId) => bag.filter((x) => x === id).length;

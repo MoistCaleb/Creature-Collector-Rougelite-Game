@@ -11,6 +11,11 @@ Working doc. Items marked **[OPEN]** still need a decision.
   phone swaps the board and the screen lays itself out again; battles resume where they were. Typical
   splits: battle field left with message, moves and controls in a right column; map between an info column
   and a team column; lists and grids get more columns.
+- **Any screen shape:** the game measures the screen and its safe area (notch/Dynamic Island, rounded corners,
+  home bar) and fills the whole screen: the layout sits as large as it fits inside the safe area, and the
+  margins around it show the scene's background (battle scenery, map, menu), so there are no black bars.
+  Sideways, the home bar strip is ignored so the layout gets the full height. Very unusual shapes (nearly
+  square unfolded phones) stretch by up to 60% and are letterboxed beyond that.
 
 ## Saving
 - The run in progress saves after every map step, battle turn and choice (localStorage).
@@ -254,6 +259,8 @@ Proposed math:
   element), one of two prop sets and range shapes, which side the sun/moon is on, and a fresh layout. Two
   battles in a row in the same element never share a time of day. The stage is saved with the battle, so
   resuming or rotating the phone keeps it.
+- **Map:** the land's element as a tinted glow with its emblem (flame, snowflake, leaf...) scattered
+  across it, and its weather drifting faintly.
 - **Menus:** a soft glow and honeycomb with big element-colored hexagons drifting up and rising sparks; the
   title screen adds a glowing arcade floor.
 

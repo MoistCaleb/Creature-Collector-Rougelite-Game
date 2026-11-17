@@ -451,8 +451,8 @@ function themeFor(el: Element, stage: number): Theme {
 }
 
 /** Paint the still part of a stage (sky, range, props, ground) into a texture. */
-function paint(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, fieldH: number): string {
-  const key = `bd:${el}:${stage}:${bw}x${bh}:${fieldH}`;
+function paint(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, horizon: number, fieldH: number): string {
+  const key = `bd:${el}:${stage}:${bw}x${bh}:${horizon}:${fieldH}`;
   if (scene.textures.exists(key)) return key;
   // Keep only the newest few stage paintings.
   const old = scene.textures.getTextureKeys().filter((k) => k.startsWith('bd:'));
@@ -461,7 +461,7 @@ function paint(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: 
   const rng = new Rng(hashString(`backdrop:${el}:${stage}`));
   const w = Math.ceil(bw / PX);
   const h = Math.ceil(bh / PX);
-  const hz = Math.round((fieldH * 0.4) / PX);
+  const hz = Math.round(horizon / PX);
   const g = scene.make.graphics({}, false);
 
   // Sky in bands (pixel-art gradient).
@@ -644,18 +644,35 @@ function weather(scene: Phaser.Scene, el: Element, area: Phaser.Geom.Rectangle) 
   return em;
 }
 
+/** Where a scene sits on the screen: the layout (w x h) and the margins around it (see widgets). */
+export interface Board {
+  w: number;
+  h: number;
+  ox: number;
+  oy: number;
+  fw: number;
+  fh: number;
+}
+
 /**
- * A battle's environment for an element, across the whole board. The field (where the creatures
- * stand) is the top-left `fieldW x fieldH`; the rest (the controls) is dimmed so buttons read well.
+ * A battle's environment for an element, across the whole screen. `field` is the part of the
+ * layout where the creatures stand (top-left); it stretches into the margins, and the rest (the
+ * controls) is shaded so the buttons read well.
  */
-export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, field: { w: number; h: number }) {
-  const key = paint(scene, el, stage, bw, bh, field.h);
-  scene.add.image(0, 0, key).setOrigin(0).setScale(PX);
-  weather(scene, el, new Phaser.Geom.Rectangle(0, 0, field.w, field.h));
+export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, b: Board, field: { w: number; h: number }) {
+  // Field edges in layout coordinates; a field that reaches the layout's edge runs on to the screen's.
+  const left = -b.ox;
+  const top = -b.oy;
+  const right = field.w >= b.w ? b.fw - b.ox : field.w;
+  const bottom = field.h >= b.h ? b.fh - b.oy : field.h;
+  const key = paint(scene, el, stage, b.fw, b.fh, b.oy + field.h * 0.4, bottom + b.oy);
+  scene.add.image(left, top, key).setOrigin(0).setScale(PX);
+  const area = new Phaser.Geom.Rectangle(left, top, right - left, bottom - top);
+  weather(scene, el, area);
   const t = themeFor(el, stage);
   if (t.flash) {
     // Lightning now and then: a white flash over the field.
-    const flash = scene.add.rectangle(0, 0, field.w, field.h, 0xffffff, 0).setOrigin(0);
+    const flash = scene.add.rectangle(area.x, area.y, area.width, area.height, 0xffffff, 0).setOrigin(0);
     const strike = () => {
       scene.tweens.chain({ targets: flash, tweens: [{ alpha: 0.35, duration: 60 }, { alpha: 0.05, duration: 80 }, { alpha: 0.25, duration: 50 }, { alpha: 0, duration: 400 }] });
       scene.time.delayedCall(4000 + Math.random() * 6000, strike);
@@ -664,13 +681,13 @@ export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, 
   }
   // Shade under the controls, with a soft top/left edge.
   const shade = mix(t.ground[1], 0x000000, 0.55);
-  if (field.h < bh) {
-    for (let i = 0; i < 4; i++) scene.add.rectangle(0, field.h - 12 + i * 3, bw, 3, shade, 0.2 + i * 0.15).setOrigin(0);
-    scene.add.rectangle(0, field.h, bw, bh - field.h, shade, 0.82).setOrigin(0);
+  if (field.h < b.h) {
+    for (let i = 0; i < 4; i++) scene.add.rectangle(left, field.h - 12 + i * 3, b.fw, 3, shade, 0.2 + i * 0.15).setOrigin(0);
+    scene.add.rectangle(left, field.h, b.fw, b.fh - b.oy - field.h, shade, 0.82).setOrigin(0);
   }
-  if (field.w < bw) {
-    for (let i = 0; i < 4; i++) scene.add.rectangle(field.w - 12 + i * 3, 0, 3, bh, shade, 0.2 + i * 0.15).setOrigin(0);
-    scene.add.rectangle(field.w, 0, bw - field.w, bh, shade, 0.82).setOrigin(0);
+  if (field.w < b.w) {
+    for (let i = 0; i < 4; i++) scene.add.rectangle(field.w - 12 + i * 3, top, 3, b.fh, shade, 0.2 + i * 0.15).setOrigin(0);
+    scene.add.rectangle(field.w, top, b.fw - b.ox - field.w, b.fh, shade, 0.82).setOrigin(0);
   }
 }
 
@@ -736,25 +753,25 @@ function paintMenu(scene: Phaser.Scene, bw: number, bh: number, base: number, ti
  * Menu background: a soft glow and honeycomb, with a few big hexagons in element colors drifting
  * up and some rising sparks. The title screen also gets a glowing floor.
  */
-export function menuBackdrop(scene: Phaser.Scene, bw: number, bh: number, base: number, title = false) {
-  scene.add.image(0, 0, paintMenu(scene, bw, bh, base, title)).setOrigin(0).setScale(PX);
+export function menuBackdrop(scene: Phaser.Scene, ox: number, oy: number, bw: number, bh: number, base: number, title = false) {
+  scene.add.image(-ox, -oy, paintMenu(scene, bw, bh, base, title)).setOrigin(0).setScale(PX);
   const rng = new Rng((Math.random() * 2 ** 31) | 0);
   const n = title ? 7 : 5;
   for (let i = 0; i < n; i++) {
     const color = MENU_HUES[rng.int(0, MENU_HUES.length - 1)];
     const r = 24 + rng.next() * 40;
-    const hex = scene.add.graphics({ x: rng.next() * bw, y: rng.next() * bh });
+    const hex = scene.add.graphics({ x: rng.next() * bw - ox, y: rng.next() * bh - oy });
     hex.lineStyle(3, color, 0.18).strokePoints(hexPts(r), true);
     hex.fillStyle(color, 0.05).fillPoints(hexPts(r), true);
     const drift = () => {
       const d = 22000 + rng.next() * 18000;
       scene.tweens.add({
         targets: hex,
-        y: -r - 10,
+        y: -oy - r - 10,
         angle: hex.angle + (rng.next() < 0.5 ? -60 : 60),
-        duration: d * ((hex.y + r) / (bh + r)),
+        duration: d * ((hex.y + oy + r) / (bh + r)),
         onComplete: () => {
-          hex.setPosition(rng.next() * bw, bh + r + 10);
+          hex.setPosition(rng.next() * bw - ox, bh - oy + r + 10);
           drift();
         },
       });
@@ -762,7 +779,7 @@ export function menuBackdrop(scene: Phaser.Scene, bw: number, bh: number, base: 
     drift();
   }
   scene.add.particles(0, 0, ensurePixel(scene), {
-    emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(0, bh * 0.2, bw, bh * 0.8) as unknown as Phaser.Types.GameObjects.Particles.RandomZoneSource },
+    emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-ox, bh * 0.2 - oy, bw, bh * 0.8) as unknown as Phaser.Types.GameObjects.Particles.RandomZoneSource },
     speedY: { min: -26, max: -8 },
     speedX: { min: -5, max: 5 },
     lifespan: 5000,
@@ -772,4 +789,67 @@ export function menuBackdrop(scene: Phaser.Scene, bw: number, bh: number, base: 
     scale: { min: 0.5, max: 1 },
     advance: 4000,
   });
+}
+
+// ---------------------------------------------------------------- map
+
+/** A small pixel emblem for each element (7x7, '#' = filled), scattered over the map background. */
+const EMBLEMS: Record<Element, string[]> = {
+  Fire: ['...#...', '..##...', '..###..', '.#####.', '.##.##.', '.#...#.', '..###..'],
+  Frost: ['...#...', '.#.#.#.', '..###..', '#######', '..###..', '.#.#.#.', '...#...'],
+  Nature: ['....##.', '...###.', '..####.', '.####..', '.###...', '.#.....', '#......'],
+  Earth: ['.......', '...#...', '..###..', '.#####.', '.######', '#######', '.......'],
+  Storm: ['...###.', '..###..', '.###...', '.#####.', '...##..', '..##...', '.#.....'],
+  Water: ['...#...', '..###..', '.#####.', '.#####.', '#######', '.#####.', '..###..'],
+  Metal: ['.#.#.#.', '#######', '.##.##.', '###.###', '.##.##.', '#######', '.#.#.#.'],
+  Toxic: ['..##...', '.#..#..', '..##.#.', '....#.#', '.##..#.', '#..#...', '.##....'],
+  Shadow: ['..###..', '.##....', '##.....', '##.....', '##.....', '.##....', '..###..'],
+  Light: ['...#...', '...#...', '.#####.', '#######', '.#####.', '...#...', '...#...'],
+  Spirit: ['..###..', '.#####.', '.#.#.#.', '.#####.', '.#####.', '.#####.', '.#.#.#.'],
+  Dragon: ['#.....#', '##...##', '.##.##.', '..###..', '.##.##.', '##...##', '#.....#'],
+};
+
+function paintMap(scene: Phaser.Scene, el: Element, bw: number, bh: number, base: number): string {
+  const key = `bd-map:${el}:${bw}x${bh}:${base}`;
+  if (scene.textures.exists(key)) return key;
+  const w = Math.ceil(bw / PX);
+  const h = Math.ceil(bh / PX);
+  const col = ELEMENT_COLORS[el];
+  const g = scene.make.graphics({}, false);
+  // The element's color glowing in from the top and bottom, the base color in the middle.
+  const bands = 16;
+  for (let i = 0; i < bands; i++) {
+    const t = Math.abs(i / (bands - 1) - 0.5) * 2;
+    g.fillStyle(mix(base, col, 0.06 + t * t * 0.16)).fillRect(0, Math.floor((h * i) / bands), w, Math.ceil(h / bands) + 1);
+  }
+  // Emblems on a loose, staggered grid, a few of them bigger and brighter.
+  const rng = new Rng(hashString(`map:${el}`));
+  const rows = EMBLEMS[el];
+  const step = 26;
+  for (let y = 4, r = 0; y < h; y += step * 0.6, r++) {
+    for (let x = (r % 2 ? step / 2 : 0) + 4; x < w; x += step) {
+      const big = rng.next() < 0.2;
+      const sz = big ? 2 : 1;
+      const a = big ? 0.16 : 0.09;
+      const ex = Math.round(x + rng.int(-4, 4));
+      const ey = Math.round(y + rng.int(-3, 3));
+      rows.forEach((line, yy) => [...line].forEach((ch, xx) => ch === '#' && g.fillStyle(col, a).fillRect(ex + xx * sz, ey + yy * sz, sz, sz)));
+    }
+  }
+  // Darker corners so the hexes stand out in the middle.
+  for (let i = 1; i <= 6; i++) {
+    g.fillStyle(0x000000, 0.06).fillRect(0, 0, i * 2, h);
+    g.fillStyle(0x000000, 0.06).fillRect(w - i * 2, 0, i * 2, h);
+  }
+  g.generateTexture(key, w, h);
+  g.destroy();
+  return key;
+}
+
+/** The map's background: the land's element as a tinted glow with its emblem, and its weather (faint). */
+export function mapBackdrop(scene: Phaser.Scene, el: Element, b: Board, base: number) {
+  scene.add.image(-b.ox, -b.oy, paintMap(scene, el, b.fw, b.fh, base)).setOrigin(0).setScale(PX);
+  weather(scene, el, new Phaser.Geom.Rectangle(-b.ox, -b.oy, b.fw, b.fh));
+  // Soften the weather so the map stays easy to read.
+  scene.add.rectangle(-b.ox, -b.oy, b.fw, b.fh, base, 0.45).setOrigin(0);
 }
