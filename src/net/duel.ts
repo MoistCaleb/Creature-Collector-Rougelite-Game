@@ -85,6 +85,9 @@ export interface RaceProgress {
   steps?: number;
   /** Team to bring to the final duel (empty if wiped out). */
   team?: Creature[];
+  /** Map node they're on, and their lead Hexling (shown grayed out on the other player's map). */
+  at?: string;
+  lead?: { speciesId: string; stage: number; shiny?: boolean };
 }
 
 export type DuelMsg =

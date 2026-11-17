@@ -314,6 +314,13 @@ Proposed math:
   | Spirit | Sage, Lucky Charm, Mentor |
   | Dragon | Champion, Evolutionist, Drill Sergeant |
 
+## Map tokens
+
+- Your trainer stands on the current hex (gold ring) and hops to the next one; your lead Hexling follows
+  a beat behind and stands on the trailing side (remembered with the run, `run.followSide`).
+- **Stage battles**: the other player's trainer and lead Hexling are shown grayed out with their name,
+  hopping as they move. Each step sends `at` (node id) and `lead` with the race progress message.
+
 ## Weekly challenge
 
 - One run a week (Monday to Sunday, UTC), the same for everyone: fixed seed, 3 starters with suited passives

@@ -68,6 +68,16 @@ export const duel = {
 };
 
 /** Drop anything malformed from creatures the other phone sent for the race finale. */
+/** A map node id from the other player (shown only if it's on our map too). */
+const cleanNodeId = (x: unknown): string | undefined => (typeof x === 'string' && x.length <= 40 ? x : undefined);
+
+/** The other player's lead Hexling, for their grayed-out token on the map. */
+function cleanLead(x: unknown): { speciesId: string; stage: number; shiny?: boolean } | undefined {
+  const l = x as { speciesId?: unknown; stage?: unknown; shiny?: unknown } | null;
+  if (!l || typeof l.speciesId !== 'string' || !SPECIES_BY_ID[l.speciesId] || ![0, 1, 2].includes(l.stage as number)) return undefined;
+  return { speciesId: l.speciesId, stage: l.stage as number, ...(l.shiny === true ? { shiny: true } : {}) };
+}
+
 function cleanCreatures(list: unknown): Creature[] {
   if (!Array.isArray(list)) return [];
   return list
@@ -334,7 +344,7 @@ session.onMessage((msg: DuelMsg) => {
       return;
     case 'progress':
       if (!duel.race) return;
-      duel.race.theirs = { ...msg.p, team: msg.p.team ? cleanCreatures(msg.p.team) : undefined };
+      duel.race.theirs = { ...msg.p, team: msg.p.team ? cleanCreatures(msg.p.team) : undefined, at: cleanNodeId(msg.p.at), lead: cleanLead(msg.p.lead) };
       duel.onRaceChange?.();
       checkRaceEnd();
       return;

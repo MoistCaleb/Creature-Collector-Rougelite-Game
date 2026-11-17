@@ -14,6 +14,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: 'Hexbound 1.0',
     items: [
       'Your trainer now stands on the map where you are and hops to each new hex, with your lead Hexling following along.',
+      'Stage battles: your opponent and their lead Hexling show on your map, grayed out, moving as they move.',
       'Weekly challenge: one fixed run a week with a twist rule, the same for everyone.',
       'Gilded milestones: collect Gilded species to unlock trainer titles and gilded outfits.',
       'Save transfer: copy a save code to move your progress to another device (Settings).',
