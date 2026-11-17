@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.0';
+export const APP_VERSION = '1.1';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1',
+    title: 'Trainer titles',
+    items: [
+      '25 trainer titles to earn, from Common to Mythic: win streaks, high Heat, every map, the Hexlidex, the Arena, weeklies, online wins and more.',
+      'Each tier has its own look: Rare glows blue, Epic shimmers violet, Legendary pulses gold with sparkles, Mythic shifts through the rainbow.',
+      'Your opponent sees your title, with its effect, in the online lobby, the battle cut-in and on the battlefield.',
+      'See every title and how close you are: Edit trainer › your name › Titles.',
+    ],
+  },
   {
     version: '1.0',
     title: 'Hexbound 1.0',

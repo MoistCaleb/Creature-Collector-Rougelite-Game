@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { gildedCount, myTitle } from '../logic/gilded';
+import { gildedCount } from '../logic/gilded';
+import { earnedTitles, TITLES } from '../logic/titles';
 import { MAP_BY_ID } from '../data/maps';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { mostUsed, type RunRecord } from '../logic/run';
@@ -90,7 +91,7 @@ export class RecordsScene extends Phaser.Scene {
       ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
       ['Gilded species', `${gildedCount(meta)}/${SPECIES.length}`],
-      ['Trainer title', myTitle(meta) ?? '—'],
+      ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
       ['Dailies played', String(Object.values(meta.dailies ?? {}).filter((r) => r.attempts > 0).length)],
       ['Weeklies won', `${Object.values(meta.weeklies ?? {}).filter((r) => r.best?.won).length}/${Object.values(meta.weeklies ?? {}).filter((r) => r.attempts > 0).length}`],
     ];

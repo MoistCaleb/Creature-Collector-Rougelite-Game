@@ -1740,7 +1740,8 @@ describe('shinies in the Arena and online duels', () => {
 
 // ---------------------------------------------------------------- 1.0: weekly, gilded, save codes
 import { postBattleRecover, startWeekly, TWIST_ORDER, weekId, weeklyInfo, weeklyPlayed, recordWeekly } from '../src/logic/run';
-import { GILDED_MILESTONES, earnedTitles, gildedCount, lockedBy, myTitle, takeNewMilestones } from '../src/logic/gilded';
+import { GILDED_MILESTONES, gildedCount, lockedBy, takeNewMilestones } from '../src/logic/gilded';
+import { cleanTitle, earnedTitles, myTitle, takeNewTitles, TIERS, TITLES, TITLE_BY_NAME } from '../src/logic/titles';
 import { LOOK_PARTS, randomLook, lookForName, bossLook, FREE_COLORS } from '../src/data/trainerLook';
 import { decodeSave, encodeSave, summarize } from '../src/logic/saveCode';
 import { changesSince, CHANGELOG, APP_VERSION, versionNewer } from '../src/data/changelog';
@@ -1858,6 +1859,7 @@ describe('gilded milestones', () => {
     expect(gildedCount(meta)).toBe(16);
     expect(takeNewMilestones(meta).map((m) => m.count)).toEqual([5, 15]);
     expect(takeNewMilestones(meta)).toEqual([]);
+    expect(takeNewTitles(meta)).toEqual([]); // the milestone announces its title
     expect(myTitle(meta)).toBe('Gilded Seeker');
     expect(earnedTitles(meta)).toEqual(['Gilded Seeker']);
     meta.trainerTitle = 'Gilded Master'; // not earned: not shown
@@ -1900,7 +1902,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -1932,5 +1934,38 @@ describe('resuming a battle after a reload', () => {
     b.start();
     for (let i = 0; i < 8 && b.outcome() !== 'win' && b.outcome() !== 'lose'; i++) b.takeTurn({ kind: 'move', index: 0 });
     expect(b.e.atkStage).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('trainer titles', () => {
+  it('has every Gilded milestone title, at that count', () => {
+    for (const m of GILDED_MILESTONES.filter((x) => x.title)) {
+      const t = TITLE_BY_NAME[m.title!];
+      expect(t?.gilded).toBe(true);
+      expect(t.progress(blankMeta())[1]).toBe(m.count);
+    }
+    expect(new Set(TITLES.map((t) => t.name)).size).toBe(TITLES.length);
+    for (const tier of TIERS) expect(TITLES.some((t) => t.tier === tier)).toBe(true);
+  });
+  it('earns titles from records, rarest first, and announces each once', () => {
+    const meta = blankMeta();
+    expect(earnedTitles(meta)).toEqual([]);
+    meta.runs = 1;
+    meta.wins = 1;
+    meta.onlineWins = 1;
+    meta.mapHeats = { wildlands: [1, 4] };
+    expect(earnedTitles(meta)).toEqual(['Heatseeker', 'Champion', 'Duelist', 'Rookie']);
+    expect(takeNewTitles(meta).map((t) => t.name)).toEqual(['Rookie', 'Champion', 'Duelist', 'Heatseeker']);
+    expect(myTitle(meta)).toBe('Heatseeker'); // the rarest new one is worn
+    expect(takeNewTitles(meta)).toEqual([]);
+    meta.trainerTitle = 'Rookie';
+    meta.runs = 10;
+    expect(takeNewTitles(meta).map((t) => t.name)).toEqual(['Pathfinder']);
+    expect(myTitle(meta)).toBe('Rookie'); // a chosen title stays
+  });
+  it('only shows real titles from the other player', () => {
+    expect(cleanTitle('Hexbound')).toBe('Hexbound');
+    expect(cleanTitle('Supreme Hacker')).toBeUndefined();
+    expect(cleanTitle(42)).toBeUndefined();
   });
 });

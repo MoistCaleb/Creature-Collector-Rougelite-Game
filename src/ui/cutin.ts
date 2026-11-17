@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { titleBadge } from './titleBadge';
 import { calm } from './motion';
 import { EYE_COLORS, SKIN_TONES, type TrainerLook } from '../data/trainerLook';
 import type { Creature } from '../logic/creature';
@@ -157,6 +158,8 @@ export interface CutInOpts {
   name: string;
   /** Under the name (a guardian's title, or "Trainer"). */
   sub?: string;
+  /** A trainer title (online opponents), shown in its tier's color and effect. */
+  badge?: string;
   look: TrainerLook;
   team: Creature[];
   boss?: boolean;
@@ -186,7 +189,8 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
     const sw = LANDSCAPE ? 470 : W - 64;
     const sx = LANDSCAPE ? 40 : (W - sw) / 2;
     const top = LANDSCAPE ? 30 : 92;
-    const areaH = LANDSCAPE ? H - 60 : H - 290;
+    // Upright, a title badge under the name takes room from the strips.
+    const areaH = LANDSCAPE ? H - 60 : H - 290 - (o.badge ? 30 : 0);
     const gap = 14;
     const sh = (areaH - gap * (n - 1)) / n;
 
@@ -307,8 +311,15 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
       .setAlpha(0);
     // Stack the lines by their real heights (the subtitle can wrap on the narrow sideways column).
     sub.setY(ty + slash.height / 2 + 6);
-    appr.setY(sub.y + sub.height + 6);
+    const badgeSize = LANDSCAPE ? 16 : 19;
+    const badge = o.badge
+      ? titleBadge(scene, tx, sub.y + sub.height + 4 + badgeSize * 0.7, o.badge, badgeSize, { maxW: LANDSCAPE ? W - sx - sw - 30 : W - 40 })
+          .setAngle(-5)
+          .setAlpha(0)
+      : null;
+    appr.setY(badge ? badge.y + badgeSize * 0.7 + 8 : sub.y + sub.height + 6);
     over.add([slash, name, sub, appr]);
+    if (badge) over.add(badge);
     const tLand = STRIP_T0 + n * STRIP_GAP + 160;
     scene.tweens.add({ targets: slash, scaleX: 1, delay: tLand, duration: 160, ease: 'Cubic.easeOut' });
     scene.tweens.add({
@@ -322,6 +333,7 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
       onComplete: () => scene.cameras.main.shake(o.boss ? 260 : 140, o.boss ? 0.012 : 0.005),
     });
     scene.tweens.add({ targets: sub, alpha: 1, delay: tLand + 200, duration: 200 });
+    if (badge) scene.tweens.add({ targets: badge, alpha: 1, scale: { from: 1.4, to: 1 }, delay: tLand + 260, duration: 220, ease: 'Back.easeOut' });
     scene.tweens.add({ targets: appr, alpha: 1, delay: tLand + 320, duration: 160 });
     // The dots arrive one at a time.
     let dots = 0;

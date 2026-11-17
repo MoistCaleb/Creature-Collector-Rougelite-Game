@@ -31,6 +31,7 @@ import {
   type Creature,
   cureStatus,
 } from './creature';
+import { earnedTitles } from './titles';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
@@ -156,8 +157,12 @@ export interface Meta {
   shinyCaught?: number;
   /** Every weekly challenge played, by week (its Monday): best result and how many tries. */
   weeklies?: Record<string, DailyRecord>;
-  /** Trainer title shown under your name (a Gilded milestone reward). */
+  /** Trainer title shown under your name (see logic/titles). */
   trainerTitle?: string;
+  /** Titles already announced as earned. */
+  titlesAnnounced?: string[];
+  /** Online duels (series) and stage battles won. */
+  onlineWins?: number;
   /** Highest Gilded milestone (species count) already announced. */
   gildedAnnounced?: number;
 }
@@ -297,6 +302,8 @@ export function loadMeta(): Meta {
     // Saves from before shinies were tracked per species: count the ones seen shiny as caught.
     if (!saved.shinyOwned && (saved.shinyCaught ?? 0) > 0) meta.shinyOwned = [...(saved.shinySeen ?? [])];
     checkAchievements(meta);
+    // Saves from before titles had their own list: titles you already have aren't news.
+    if (!saved.titlesAnnounced) meta.titlesAnnounced = earnedTitles(meta);
     return meta;
   } catch {
     return fallback;

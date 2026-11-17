@@ -12,7 +12,10 @@ import {
   type TrainerLook,
 } from '../data/trainerLook';
 import { Rng } from '../logic/rng';
-import { earnedTitles, GILDED_MILESTONES, gildedCount, lockedBy, myTitle, nextMilestone } from '../logic/gilded';
+import { gildedCount, lockedBy, nextMilestone } from '../logic/gilded';
+import { earnedTitles, myTitle, TITLES } from '../logic/titles';
+import { openTitles } from '../ui/titlesUi';
+import { titleInButton, titleSub } from '../ui/titleBadge';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { openPicker, showMessage } from '../ui/picker';
 import { icon as pixelIcon } from '../ui/icons';
@@ -92,11 +95,12 @@ export class TrainerScene extends Phaser.Scene {
     const nx = LANDSCAPE ? 96 : 307;
     const nw = LANDSCAPE ? 160 : 262;
     const title = myTitle(meta);
-    button(this, nx, LANDSCAPE ? 306 : 92, nw, 56, myName(meta), () => this.nameMenu(), {
+    const nb = button(this, nx, LANDSCAPE ? 306 : 92, nw, 56, myName(meta), () => this.nameMenu(), {
       fontSize: 20,
-      sub: title ? `✦ ${title}` : LANDSCAPE ? 'Name and title' : 'Your name and title · tap to change',
+      sub: title ? titleSub(title) : LANDSCAPE ? 'Name and title' : 'Your name and title · tap to change',
       color: 0x2f4a6b,
     });
+    if (title) titleInButton(this, nb, title, 13);
     button(this, nx, LANDSCAPE ? 364 : 158, nw, 44, 'Shuffle look', () => {
       sfx.coin();
       this.set(randomLook(new Rng((Math.random() * 2 ** 31) | 0)));
@@ -191,35 +195,13 @@ export class TrainerScene extends Phaser.Scene {
     const next = nextMilestone(meta);
     openPicker(this, {
       title: myName(meta),
-      subtitle: myTitle(meta) ? `✦ ${myTitle(meta)}` : undefined,
+      subtitle: myTitle(meta) ? titleSub(myTitle(meta)!) : undefined,
       options: [
         { label: 'Change name', glyph: 'book' },
-        {
-          label: 'Choose a title',
-          glyph: 'crown',
-          disabled: !titles.length,
-          sub: titles.length ? `${titles.length} earned · shown online too` : `Own ${GILDED_MILESTONES.find((m) => m.title)!.count} Gilded species for your first title`,
-        },
+        { label: 'Titles', glyph: 'crown', sub: `${titles.length}/${TITLES.length} earned · shown to your opponent online` },
         { label: 'Gilded milestones', glyph: 'sparkle', sub: next ? `Next: ${next.count} Gilded species (you have ${gildedCount(meta)})` : 'All reached!' },
       ],
-      onPick: (i) => (i === 0 ? this.rename() : i === 1 ? this.pickTitle(titles) : openGildedMilestones(this, meta)),
-      onCancel: () => {},
-    });
-  }
-
-  private pickTitle(titles: string[]) {
-    const meta = state.meta;
-    const cur = myTitle(meta);
-    openPicker(this, {
-      title: 'Your title',
-      subtitle: 'Shown under your name, and to your opponent online.',
-      options: [{ label: 'No title', color: cur ? undefined : 0x3a4f7a }, ...titles.map((t) => ({ label: `✦ ${t}`, color: t === cur ? 0x7a5a1c : undefined }))],
-      onPick: (i) => {
-        meta.trainerTitle = i === 0 ? undefined : titles[i - 1];
-        saveMeta(meta);
-        sfx.coin();
-        this.scene.restart({ from: this.from });
-      },
+      onPick: (i) => (i === 0 ? this.rename() : i === 1 ? openTitles(this, meta, () => this.scene.restart({ from: this.from })) : openGildedMilestones(this, meta)),
       onCancel: () => {},
     });
   }

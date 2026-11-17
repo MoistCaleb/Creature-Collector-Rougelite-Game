@@ -7,7 +7,8 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { myLook, myName } from '../data/trainerLook';
-import { myTitle } from '../logic/gilded';
+import { myTitle } from '../logic/titles';
+import { titleBadge } from '../ui/titleBadge';
 import { playMusic } from '../ui/sound';
 import { openSettings } from '../ui/settings';
 import { openHowToPlay } from '../ui/howto';
@@ -45,9 +46,13 @@ export class TitleScene extends Phaser.Scene {
     const nm = text(this, 12, -8, myName(meta), 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
     if (nm.width > 76) nm.setScale(76 / nm.width);
     const ttl = myTitle(meta);
-    const sub = text(this, 12, 10, ttl ? `✦ ${ttl}` : 'Edit trainer', 10, ttl ? '#ffd86b' : COLORS.textDim).setOrigin(0.5);
-    if (sub.width > 78) sub.setScale(78 / sub.width);
-    tb.add([nm, sub]);
+    tb.add(nm);
+    if (ttl) tb.add(titleBadge(this, 12, 10, ttl, 10, { maxW: 78 }));
+    else {
+      const sub = text(this, 12, 10, 'Edit trainer', 10, COLORS.textDim).setOrigin(0.5);
+      if (sub.width > 78) sub.setScale(78 / sub.width);
+      tb.add(sub);
+    }
 
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);

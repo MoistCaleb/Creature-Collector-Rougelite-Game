@@ -1,3 +1,5 @@
+import { titleBadge } from '../ui/titleBadge';
+import { addOnlineWin, titleNews } from '../logic/titles';
 import { tip, tipDone } from '../ui/tips';
 import { trainerCutIn } from '../ui/cutin';
 import { bossRuleCard, RULE_TAGS } from '../ui/bossCard';
@@ -81,6 +83,7 @@ import {
   type XpResult,
   noteShiny,
   GLASS_MULT,
+  saveMeta,
 } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
@@ -552,6 +555,7 @@ export class BattleScene extends Phaser.Scene {
     this.pips = onField(text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0));
     onField(text(this, L.titleRight, L.titleY, m.title, 14, '#ff6a5a', { fontStyle: 'bold' }).setOrigin(1, 0));
     onField(text(this, 16, 96, m.opponent, 13, '#ffc94d', { fontStyle: 'bold' }));
+    if (m.duel && m.opponentTitle) titleBadge(this, 16, 113, m.opponentTitle, 11, { originX: 0, originY: 0, maxW: 150 });
     this.add.rectangle(L.msg.x, L.msg.y, L.msg.w, L.msg.h, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.msg = text(this, L.msg.x + 12, L.msg.y + 10, '', 16, COLORS.text, { wordWrap: { width: L.msg.w - 24 } });
     this.actions = this.add.container(0, 0);
@@ -576,7 +580,8 @@ export class BattleScene extends Phaser.Scene {
       {
         await trainerCutIn(this, {
           name: m.opponent,
-          sub: m.duel ? `Online duel${m.opponentTitle ? ` · ✦ ${m.opponentTitle}` : ''}` : `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
+          sub: m.duel ? 'Online duel' : `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
+          badge: m.duel ? m.opponentTitle : undefined,
           look: m.opponentLook ?? lookForName(m.opponent),
           team: this.enemies,
           accent: ELEMENT_COLORS[creatureTypes(this.enemies[0])[0]],
@@ -1251,9 +1256,11 @@ export class BattleScene extends Phaser.Scene {
     const opp = this.match!.opponent;
     const race = !!this.match!.duel!.info.hostCreatures;
     duel.controller = null;
+    const meta = state.meta;
     if (race) {
       const title = won ? 'You won the stage battle!' : `${opp} won the stage battle`;
-      const body = won ? `Your team beat ${opp}'s at the boss!` : `${opp}'s team beat yours at the boss.`;
+      const body = (won ? `Your team beat ${opp}'s at the boss!` : `${opp}'s team beat yours at the boss.`) + (won ? titleNews(addOnlineWin(meta)) : '');
+      if (won) saveMeta(meta);
       return showMessage(this, title, body, () => {
         endRace();
         state.run = null;
@@ -1266,11 +1273,17 @@ export class BattleScene extends Phaser.Scene {
     const score = sr && sr.settings.bestOf > 1 ? `\n\nYou ${sr.mine} – ${sr.theirs} ${opp}` : '';
     let title = won ? 'You win!' : 'You lost';
     let body = (won ? `You beat ${opp}!` : `${opp} wins this one.`) + score;
+    // A won series (or single battle) counts toward the online titles.
+    const seriesWon = result === 'won' || (won && !sr);
     if (sr && sr.settings.bestOf > 1) {
       if (result === 'won') title = 'You win the series!';
       else if (result === 'lost') title = `${opp} wins the series`;
       else if (result === 'draw') title = 'The series is a draw';
       else body += `\n\nNext: battle ${sr.game} of ${sr.settings.bestOf}.`;
+    }
+    if (seriesWon) {
+      body += titleNews(addOnlineWin(meta));
+      saveMeta(meta);
     }
     showMessage(this, title, body, () => afterSeriesGame(result !== null));
   }
