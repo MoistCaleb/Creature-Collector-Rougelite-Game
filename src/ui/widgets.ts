@@ -7,16 +7,42 @@ import { isMuted, setMuted, sfx } from './sound';
 import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
 import { ensureIcon, icon as iconImage, type IconId } from './icons';
 
-/** The game is laid out on a 450x800 board... */
-export const W = 450;
-export const H = 800;
+/**
+ * The game is laid out on a 450x800 board held upright, or an 800x450 board for screens that
+ * have a landscape layout when the device is held sideways. W and H always hold the current
+ * board (they're live: read them when laying out, never copy them into module constants).
+ */
+export let W = 450;
+export let H = 800;
+/** True while the wide 800x450 board is in use. */
+export let LANDSCAPE = false;
+
+/** Screens (scene keys) that have a landscape layout; the rest stay upright, centered. */
+const WIDE_READY = new Set<string>();
+export function landscapeReady(...keys: string[]) {
+  keys.forEach((k) => WIDE_READY.add(k));
+}
+/** Is the device held sideways (or a wide window)? */
+export const deviceWide = () => typeof window !== 'undefined' && window.innerWidth > window.innerHeight * 1.1;
+/** The board this scene should use right now. */
+export const wantsWide = (key: string) => deviceWide() && WIDE_READY.has(key);
+
+/** Switch the board (and resize the canvas) if this scene needs the other orientation. */
+function useBoard(scene: Phaser.Scene) {
+  const wide = wantsWide(scene.scene.key);
+  if (wide === LANDSCAPE) return;
+  LANDSCAPE = wide;
+  W = wide ? 800 : 450;
+  H = wide ? 450 : 800;
+  scene.scale.setGameSize(Math.round(W * ZOOM), Math.round(H * ZOOM));
+}
 
 /**
  * ...but rendered at the screen's real pixel density so it stays sharp on phones. The canvas is
  * ZOOM times larger and every scene's camera zooms by ZOOM (see `background`), so layout code
  * keeps using 450x800 coordinates. Capped at 3 to keep the canvas a sensible size.
- * Sized for the screen held upright, so it stays sharp whichever way the phone is turned (in
- * landscape the board is shorter on screen, so it only gets sharper).
+ * Sized for the screen held upright; the wide board fits a sideways screen at the same zoom, so
+ * the game stays sharp whichever way the phone is turned.
  */
 export const ZOOM = (() => {
   if (typeof window === 'undefined') return 1;
@@ -81,11 +107,18 @@ export function button(
   const bg = scene.add.rectangle(0, 0, w, h, color).setStrokeStyle(2, enabled ? 0xffffff : COLORS.stroke, enabled ? 0.35 : 0.6);
   const iconW = opts.icon ? 64 : 0;
   const tx = iconW / 2;
-  const t = text(scene, tx, opts.sub ? -9 : 0, label, opts.fontSize ?? 18, opts.textColor ?? COLORS.text, {
+  const t = text(scene, tx, 0, label, opts.fontSize ?? 18, opts.textColor ?? COLORS.text, {
     align: 'center',
     wordWrap: { width: w - 12 - iconW },
   }).setOrigin(0.5);
   c.add([bg, t]);
+  // Label above its sub-line, the pair centered (a sub that wraps pushes the label up, not over it).
+  const subT = opts.sub ? text(scene, tx, 0, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 - iconW } }).setOrigin(0.5, 0) : null;
+  if (subT) {
+    const total = t.height + 1 + subT.height;
+    t.setY(-total / 2 + t.height / 2);
+    subT.setY(t.y + t.height / 2 + 1);
+  }
   if (opts.glyph) {
     const size = Math.round((opts.fontSize ?? 18) * 1.25);
     const gap = label ? 6 : 0;
@@ -96,7 +129,7 @@ export function button(
     c.add(g);
   }
   if (opts.icon) c.add(creatureSprite(scene, -w / 2 + 32, -8, opts.icon, 1.6));
-  if (opts.sub) c.add(text(scene, tx, 12, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 - iconW } }).setOrigin(0.5));
+  if (subT) c.add(subT);
   if (opts.badge) {
     bg.setStrokeStyle(3, 0xffc94d, 1);
     const tag = text(scene, 0, 0, opts.badge, 10, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5);
@@ -244,7 +277,9 @@ export function creatureRow(
 }
 
 export function background(scene: Phaser.Scene, color = COLORS.bg) {
-  // Every scene draws its background first, so this is where the camera gets its zoom.
+  // Every scene draws its background first, so this is where the board is chosen (upright or
+  // wide) and the camera gets its zoom.
+  useBoard(scene);
   scene.cameras.main.setOrigin(0, 0).setZoom(ZOOM);
   scene.add.rectangle(0, 0, W, H, color).setOrigin(0);
 }

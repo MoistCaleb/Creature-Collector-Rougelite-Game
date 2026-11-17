@@ -34,10 +34,16 @@ import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
 import { Scroller } from '../ui/scroll';
-import { background, button, COLORS, H, HpBar, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, HpBar, LANDSCAPE, text, W } from '../ui/widgets';
 
 const TOP_BAR = 82;
 const BOTTOM_BAR = 96;
+/** Sideways: info and buttons in a left column, the team in a right column, the map between. */
+const SIDE_L = 176;
+const SIDE_R = 150;
+/** The map's area: [x, width, top, bottom] for the board in use. */
+const mapArea = () =>
+  LANDSCAPE ? { x: SIDE_L, w: W - SIDE_L - SIDE_R, top: 0, bottom: H } : { x: 0, w: W, top: TOP_BAR, bottom: H - BOTTOM_BAR };
 
 function hexPoints(w: number, h: number, pointy: boolean): number[] {
   // pointy-top (rows layout) or flat-top (older saved maps) hex in a w x h box
@@ -71,7 +77,8 @@ export class MapScene extends Phaser.Scene {
     const cols = map.cols;
     const pointy = map.layout === 'rows';
     // Pointy-top: half-hex columns, one row per step. Flat-top: the older half-row lattice.
-    const hexW = pointy ? Math.min(90, (W - 24) / ((cols - 1) / 2 + 1)) : Math.min(112, (W - 30) / ((cols - 1) * 0.75 + 1));
+    const area = mapArea();
+    const hexW = pointy ? Math.min(90, (area.w - 24) / ((cols - 1) / 2 + 1)) : Math.min(112, (area.w - 30) / ((cols - 1) * 0.75 + 1));
     const hexH = pointy ? hexW * 1.1547 : hexW * 0.866;
     const colStep = pointy ? hexW / 2 : hexW * 0.75;
     const rowStep = pointy ? hexH * 0.75 : hexH / 2;
@@ -79,7 +86,7 @@ export class MapScene extends Phaser.Scene {
     const minY = Math.min(...nodes.map((n) => n.y));
     const gridW = (cols - 1) * colStep;
     const pos = (n: MapNode) => ({
-      x: W / 2 - gridW / 2 + n.col * colStep,
+      x: area.x + area.w / 2 - gridW / 2 + n.col * colStep,
       y: 50 + (n.y - minY) * rowStep,
     });
 
@@ -136,11 +143,11 @@ export class MapScene extends Phaser.Scene {
 
     // scrolling
     const mapH = 50 + (map.maxY - minY) * rowStep + hexH;
-    const viewH = H - TOP_BAR - BOTTOM_BAR;
-    this.minScroll = Math.min(TOP_BAR, TOP_BAR + viewH - mapH);
-    this.maxScroll = TOP_BAR;
+    const viewH = area.bottom - area.top;
+    this.minScroll = Math.min(area.top, area.top + viewH - mapH);
+    this.maxScroll = area.top;
     const cur = pos(currentNode(run));
-    this.layer.y = Phaser.Math.Clamp(TOP_BAR + viewH * 0.7 - cur.y, this.minScroll, this.maxScroll);
+    this.layer.y = Phaser.Math.Clamp(area.top + viewH * 0.7 - cur.y, this.minScroll, this.maxScroll);
     // Drag to scroll the map, with flick momentum. A drag never counts as tapping a node.
     this.scroller = new Scroller(this, {
       get: () => this.layer.y,
@@ -211,6 +218,7 @@ export class MapScene extends Phaser.Scene {
   private drawTopBar() {
     const run = state.run!;
     if (run.race) this.drawRaceStatus();
+    if (LANDSCAPE) return this.drawSideInfo();
     this.add.rectangle(0, 0, W, TOP_BAR, 0x0b0912, 0.92).setOrigin(0);
     text(this, 14, 10, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
@@ -239,11 +247,41 @@ export class MapScene extends Phaser.Scene {
     button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
   }
 
+  /** Sideways: floor, land, coins, stones, steps to the boss and the buttons, in a left column. */
+  private drawSideInfo() {
+    const run = state.run!;
+    this.add.rectangle(0, 0, SIDE_L, H, 0x0b0912, 0.92).setOrigin(0);
+    text(this, 14, 12, run.race ? 'Stage battle' : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    const biome = text(this, 14, 40, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
+    let mx = 14 + biome.width + 12;
+    if (run.heat) {
+      pixelIcon(this, mx, 48, 'flame', 16);
+      const t = text(this, mx + 10, 40, String(run.heat), 14, '#ff8a3a', { fontStyle: 'bold' });
+      mx += 22 + t.width;
+    }
+    if (run.daily) pixelIcon(this, mx, 48, 'calendar', 16);
+    text(this, 14, 70, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
+    pixelIcon(this, 100, 80, 'stone', 16);
+    text(this, 112, 70, `${run.evoStones}`, 16, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
+    if (run.map.layout === 'rows' && !run.bossPending) {
+      const steps = stepsToBoss(run.map, run.currentId);
+      pixelIcon(this, 21, 109, 'skull', 14);
+      const foe = run.race ? run.race.opponent : 'Boss';
+      text(this, 32, 101, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd', { wordWrap: { width: SIDE_L - 40 } });
+    }
+    const bw = SIDE_L - 24;
+    button(this, SIDE_L / 2, 186, bw, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 16 });
+    const bag = button(this, SIDE_L / 2, 238, bw, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 16 });
+    if ((run.bag ?? []).length) bag.add(this.add.circle(bw / 2 - 12, -12, 5, 0xffc94d));
+    button(this, SIDE_L / 2, 290, bw, 44, 'Dex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
+    button(this, SIDE_L / 2, 342, bw, 44, 'Menu', () => openGameMenu(this), { fontSize: 16, glyph: 'menu' });
+  }
+
   /** Stage race: share where we are, and show where the other racer is. */
   private drawRaceStatus() {
     const run = state.run!;
     sendProgress({ floor: run.floor, finished: false, won: false, steps: run.map.layout === 'rows' ? stepsToBoss(run.map, run.currentId) : undefined });
-    const t = text(this, W - 8, 66, '', 12, '#8fd0ff', { fontStyle: 'bold' }).setOrigin(1, 0).setDepth(5);
+    const t = (LANDSCAPE ? text(this, 14, 400, '', 12, '#8fd0ff', { fontStyle: 'bold', wordWrap: { width: SIDE_L - 24 } }) : text(this, W - 8, 66, '', 12, '#8fd0ff', { fontStyle: 'bold' }).setOrigin(1, 0)).setDepth(5);
     const draw = () => {
       if (!t.active) return;
       const them = duel.race?.theirs;
@@ -269,6 +307,21 @@ export class MapScene extends Phaser.Scene {
 
   private drawBottomBar() {
     const run = state.run!;
+    if (LANDSCAPE) {
+      // Sideways: the team down a right column.
+      const x0 = W - SIDE_R;
+      this.add.rectangle(x0, 0, SIDE_R, H, 0x0b0912, 0.92).setOrigin(0);
+      const slotH = (H - 20) / 4;
+      run.team.forEach((c, i) => {
+        const y = 10 + slotH * i;
+        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage)).setScale(1.6 * SPRITE_FIT);
+        img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
+        text(this, x0 + 76, y + slotH / 2 - 18, `Lv ${c.level}`, 13, COLORS.text, { fontStyle: 'bold' });
+        new HpBar(this, x0 + 76, y + slotH / 2 + 4, SIDE_R - 88, 7, false).set(c.hp, stats(c).hp);
+      });
+      if (run.bench.length) text(this, W - 6, H - 4, `Bench: ${run.bench.length}`, 11, COLORS.textDim).setOrigin(1, 1);
+      return;
+    }
     const y0 = H - BOTTOM_BAR;
     this.add.rectangle(0, y0, W, BOTTOM_BAR, 0x0b0912, 0.92).setOrigin(0);
     const slotW = W / 4;
