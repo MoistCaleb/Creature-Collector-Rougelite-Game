@@ -1,11 +1,15 @@
 import Phaser from 'phaser';
 import { HELD, heldName, type HeldId } from '../data/held';
-import { creatureName } from '../logic/creature';
-import { allCreatures, equipHeld, maxPotions, needsPotion, potionHeal, unequipHeld, usePotion } from '../logic/run';
+import { canEvolve, creatureName, creatureTypes, evolveLevel, readyToEvolve } from '../logic/creature';
+import { ELEMENT_COLORS } from '../data/types';
+import { playEvolution } from '../ui/fx';
+import { cry } from '../ui/cries';
+import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { allCreatures, equipHeld, evolveTracked, maxPotions, needsPotion, potionHeal, releaseNote, unequipHeld, usePotion } from '../logic/run';
 import { sfx } from '../ui/sound';
-import { persist, state } from '../state';
+import { dex, persist, state } from '../state';
 import { icon as pixelIcon } from '../ui/icons';
-import { openPicker } from '../ui/picker';
+import { openPicker, showMessage } from '../ui/picker';
 import { background, button, COLORS, H, text, W } from '../ui/widgets';
 
 const HEADER = 186;
@@ -115,7 +119,48 @@ export class BagScene extends Phaser.Scene {
         enabled: (run.potions ?? 0) > 0 && hurt,
       }),
     );
-    card(24 + (W - 36) / 2, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a creature at Lv 30 / 65 from the Team screen.', '#e0a8ff');
+    card(24 + (W - 36) / 2, 'stone', `${run.evoStones}`, 'Evolution Stones · evolve a creature that has reached Lv 30 (or 65).', '#e0a8ff');
+    const ready = allCreatures(run).some(readyToEvolve);
+    head(
+      button(this, W - 52, 92, 64, 32, 'Use', () => this.useStone(), {
+        fontSize: 14,
+        color: 0x5b3c8a,
+        enabled: run.evoStones > 0 && ready,
+      }),
+    );
+  }
+
+  /** Use an Evolution Stone: choose a creature that has reached its evolution level. */
+  private useStone() {
+    const run = state.run!;
+    const all = allCreatures(run);
+    openPicker(this, {
+      title: 'Use an Evolution Stone',
+      subtitle: `${run.evoStones} left. A creature can evolve once it reaches Lv 30 (first evolution) or Lv 65 (final form).`,
+      options: all.map((c) => ({
+        creature: c,
+        disabled: !readyToEvolve(c),
+        note: readyToEvolve(c) ? 'Ready to evolve!' : canEvolve(c) ? `Evolves at Lv ${evolveLevel(c)}` : 'Final form',
+      })),
+      onPick: (k) => {
+        const c = all[k];
+        run.evoStones -= 1;
+        run.stonesSeen = run.evoStones;
+        const from = creatureName(c);
+        const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+        const lv = c.level;
+        evolveTracked(run, c);
+        const note = releaseNote(c, lv);
+        dex.creature(c, true);
+        persist();
+        const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+        playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
+          cry(c.speciesId, c.stage);
+          showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!${note}`, () => this.scene.restart({ from: this.from }));
+        });
+      },
+      onCancel: () => {},
+    });
   }
 
   /** Use a potion: choose a hurt (or afflicted) creature. */

@@ -78,7 +78,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   coinpurse: { name: 'Coin Purse', desc: 'Start each run with 50 coins.' },
   trainer: { name: 'Personal Trainer', desc: 'Level Up nodes give 50% more levels.' },
   sage: { name: 'Sage', desc: 'Skill Shrines offer 4 choices instead of 3.' },
-  ascendant: { name: 'Ascendant', desc: 'Prestige Altars need no sacrifice.' },
+  ascendant: { name: 'Ascendant', desc: 'Once per floor, a Prestige Altar needs no sacrifice.' },
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
   hunter: { name: 'Big Game Hunter', desc: 'Trainers always drop an Evolution Stone, sometimes 2.' },
   naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
@@ -122,8 +122,10 @@ export interface Meta {
   duelName?: string;
   /** Heat levels (1-8) won on each map, for the map's Heat tokens. */
   mapHeats?: Record<string, number[]>;
-  /** Today's daily run: best result and how many tries. */
+  /** The most recent daily played (kept for older saves; see dailies). */
   daily?: DailyRecord;
+  /** Every daily played, by date: best result and how many tries. */
+  dailies?: Record<string, DailyRecord>;
   /** Favorite evolution line (species id): always one of the starter choices. */
   favorite?: string;
 }
@@ -227,6 +229,8 @@ export interface Run {
   heat?: number;
   /** Set on a daily run: the UTC date it belongs to. */
   daily?: string;
+  /** Ascendant: the floor its free (no-sacrifice) prestige was used on. */
+  ascendFloor?: number;
   /** Stage race against a friend: same map and seed, double battle rewards, a live duel at the end. */
   race?: { opponent: string; role: 'host' | 'guest' };
   /** Potions carried (usable any time, including mid-battle). */
@@ -293,15 +297,31 @@ export function dailyScore(won: boolean, floor: number, battlesWon: number): num
   return (won ? 10000 : floor * 1000) + battlesWon;
 }
 
-/** Record a finished daily run. Returns true if it's a new best for the day. */
+/** The record for one day's daily (created empty if that day hasn't been played). */
+export function dailyRecord(meta: Meta, date: string): DailyRecord {
+  meta.dailies = meta.dailies ?? {};
+  // Carry over the single record older saves kept.
+  if (meta.daily && !meta.dailies[meta.daily.date]) meta.dailies[meta.daily.date] = meta.daily;
+  return (meta.dailies[date] = meta.dailies[date] ?? { date, attempts: 0, best: null });
+}
+
+/** Has this day's daily been played (and how did it go)? */
+export function dailyPlayed(meta: Meta, date: string): DailyRecord | null {
+  const rec = meta.dailies?.[date] ?? (meta.daily?.date === date ? meta.daily : undefined);
+  return rec && rec.attempts > 0 ? rec : null;
+}
+
+/** Record a finished daily run. Returns true if it's a new best for that day. */
 export function recordDaily(run: Run, won: boolean): boolean {
   const meta = run.meta;
   if (!run.daily) return false;
-  if (meta.daily?.date !== run.daily) meta.daily = { date: run.daily, attempts: 1, best: null };
+  const rec = dailyRecord(meta, run.daily);
+  rec.attempts = Math.max(1, rec.attempts);
   const floor = won ? FLOORS : run.floor;
   const result: DailyResult = { won, floor, battlesWon: run.log.battlesWon, score: dailyScore(won, floor, run.log.battlesWon) };
-  const better = !meta.daily.best || result.score > meta.daily.best.score;
-  if (better) meta.daily.best = result;
+  const better = !rec.best || result.score > rec.best.score;
+  if (better) rec.best = result;
+  meta.daily = rec;
   saveMeta(meta);
   return better;
 }
@@ -320,8 +340,9 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
   const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31));
   meta.runs += 1;
   if (daily) {
-    if (meta.daily?.date !== daily) meta.daily = { date: daily, attempts: 0, best: null };
-    meta.daily.attempts += 1;
+    const rec = dailyRecord(meta, daily);
+    rec.attempts += 1;
+    meta.daily = rec;
   }
   // Daily runs and races are the same for everyone: no passive, standard Heat.
   const passive = even ? null : meta.equippedPassive;

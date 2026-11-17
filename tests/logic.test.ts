@@ -998,6 +998,19 @@ describe('daily run', () => {
     expect(meta.daily!.best!.floor).toBe(1);
     expect(meta.daily!.attempts).toBe(2);
   });
+  it('keeps a separate record for every day, so past dailies can be played', async () => {
+    const { dailyPlayed } = await import('../src/logic/run');
+    const meta = mkMeta();
+    const old = startRun(meta, 'emberkit', dailySeed('2026-10-02'), 'wildlands', '2026-10-02');
+    old.floor = 2;
+    recordDaily(old, false);
+    const now = startRun(meta, 'emberkit', dailySeed('2026-11-16'), 'wildlands', '2026-11-16');
+    recordDaily(now, true);
+    expect(dailyPlayed(meta, '2026-10-02')!.best!.floor).toBe(2);
+    expect(dailyPlayed(meta, '2026-11-16')!.best!.won).toBe(true);
+    expect(dailyPlayed(meta, '2026-10-03')).toBeNull();
+    expect(dailyStarters('2026-10-02')).not.toEqual(dailyStarters('2026-11-16'));
+  });
 });
 
 describe('potions', () => {
