@@ -16,14 +16,17 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureTrainerTexture, type TrainerPose } from '../ui/trainerSprite';
-import { background, button, COLORS, H, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 type Part = (typeof LOOK_PARTS)[number];
 
-const TILE_TOP = 288;
-const TILE_W = (W - 38) / 2;
 const TILE_H = 50;
 const TILE_GAP = 6;
+/** Part tiles: two columns under the preview (upright), or three beside it (sideways). */
+const tiles = () =>
+  LANDSCAPE
+    ? { x0: 196, top: 60, cols: 3, w: (W - 196 - 16 - 12) / 3 }
+    : { x0: 16, top: 288, cols: 2, w: (W - 38) / 2 };
 
 /** Which preview pose is showing (kept while you edit). */
 let previewPose: TrainerPose = 'stand';
@@ -69,37 +72,42 @@ export class TrainerScene extends Phaser.Scene {
     text(this, W / 2 + 20, 14, 'Your trainer', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
 
     // Preview: tap it to see how you look in battle (from behind, giving an order).
-    const panel = this.add.rectangle(16, 62, 150, 212, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    this.add.ellipse(91, 248, 110, 22, 0x000000, 0.35);
+    const py = LANDSCAPE ? -6 : 0;
+    const panel = this.add.rectangle(16, 62 + py, 160, 212, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    this.add.ellipse(96, 248 + py, 110, 22, 0x000000, 0.35);
     const pose: TrainerPose = previewPose === 'stand' ? 'stand' : 'backCommand';
-    const img = this.add.image(pose === 'backCommand' ? 100 : 91, 164, ensureTrainerTexture(this, look, pose)).setScale(5);
-    this.tweens.add({ targets: img, y: 160, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
-    text(this, 91, 266, pose === 'backCommand' ? 'In battle (from behind) · tap' : 'Tap to see it in battle', 10, COLORS.textDim).setOrigin(0.5, 1);
+    const img = this.add.image(pose === 'backCommand' ? 105 : 96, 164 + py, ensureTrainerTexture(this, look, pose)).setScale(5);
+    this.tweens.add({ targets: img, y: 160 + py, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+    text(this, 96, 266 + py, pose === 'backCommand' ? 'In battle (from behind) · tap' : 'Tap to see it in battle', 10, COLORS.textDim).setOrigin(0.5, 1);
     panel.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       previewPose = previewPose === 'stand' ? 'back' : 'stand';
       this.scene.restart({ from: this.from });
     });
 
     // Name, shuffle and a note on where the trainer shows up.
-    button(this, 307, 92, 262, 56, myName(meta), () => this.rename(), { fontSize: 20, sub: 'Your name · tap to change', color: 0x2f4a6b });
-    button(this, 307, 158, 262, 44, 'Shuffle look', () => {
+    const nx = LANDSCAPE ? 96 : 307;
+    const nw = LANDSCAPE ? 160 : 262;
+    button(this, nx, LANDSCAPE ? 306 : 92, nw, 56, myName(meta), () => this.rename(), { fontSize: 20, sub: LANDSCAPE ? 'Tap to rename' : 'Your name · tap to change', color: 0x2f4a6b });
+    button(this, nx, LANDSCAPE ? 364 : 158, nw, 44, 'Shuffle look', () => {
       sfx.coin();
       this.set(randomLook(new Rng((Math.random() * 2 ** 31) | 0)));
     }, { fontSize: 16 });
     text(
       this,
-      180,
-      192,
+      LANDSCAPE ? 196 : 180,
+      LANDSCAPE ? 352 : 192,
       'Your trainer stands beside your team in every battle. Online, your opponent sees your trainer and name, and you see theirs.',
       12,
       COLORS.textDim,
-      { wordWrap: { width: 256 }, lineSpacing: 3 },
+      { wordWrap: { width: LANDSCAPE ? W - 212 : 256 }, lineSpacing: 3 },
     );
 
     // One tile per part, two columns; tap to choose from a grid of previews.
+    const t = tiles();
+    const TILE_W = t.w;
     LOOK_PARTS.forEach((part, i) => {
-      const x = 16 + (i % 2) * (TILE_W + 6);
-      const y = TILE_TOP + Math.floor(i / 2) * (TILE_H + TILE_GAP);
+      const x = t.x0 + (i % t.cols) * (TILE_W + 6);
+      const y = t.top + Math.floor(i / t.cols) * (TILE_H + TILE_GAP);
       const v = look[part.key];
       const bg = this.add.rectangle(x, y, TILE_W, TILE_H, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke);
       text(this, x + 10, y + 6, part.label, 11, COLORS.textDim);
@@ -115,14 +123,15 @@ export class TrainerScene extends Phaser.Scene {
   private openPart(part: Part, look: TrainerLook) {
     const layer = this.add.container(0, 0).setDepth(50);
     layer.add(this.add.rectangle(0, 0, W, H, 0x000000, 0.65).setOrigin(0).setInteractive());
-    layer.add(this.add.rectangle(10, 30, W - 20, H - 60, COLORS.bg).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
-    layer.add(text(this, W / 2, 44, part.label, 22, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0));
+    const pm = LANDSCAPE ? 10 : 30;
+    layer.add(this.add.rectangle(10, pm, W - 20, H - 2 * pm, COLORS.bg).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
+    layer.add(text(this, W / 2, pm + 10, part.label, 22, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0));
     const n = part.names.length;
-    const cols = 4;
+    const cols = LANDSCAPE ? 7 : 4;
     const cellW = (W - 36) / cols;
     const rows = Math.ceil(n / cols);
-    const cellH = Math.min(118, (H - 230) / rows);
-    const top = 84;
+    const top = LANDSCAPE ? 50 : 84;
+    const cellH = Math.min(118, (H - top - (LANDSCAPE ? 62 : 146)) / rows);
     // Colors of a hat you aren't wearing would show nothing: preview them on a cap.
     const base: TrainerLook = part.key === 'hatColor' && look.hat === 0 ? { ...look, hat: 1 } : look;
     const close = () => layer.destroy();
@@ -149,7 +158,7 @@ export class TrainerScene extends Phaser.Scene {
         this.set({ ...look, [part.key]: v });
       });
     });
-    layer.add(button(this, W / 2, H - 62, 200, 44, 'Close', close, { fontSize: 16 }));
+    layer.add(button(this, W / 2, LANDSCAPE ? H - 34 : H - 62, 200, LANDSCAPE ? 36 : 44, 'Close', close, { fontSize: 16 }));
   }
 
   private rename() {

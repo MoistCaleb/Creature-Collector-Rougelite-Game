@@ -4,7 +4,7 @@ import { clearSavedRun, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, 
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
-import { background, button, COLORS, text, W } from '../ui/widgets';
+import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
 
 /** The first day you can go back to. */
 const FIRST_DAY = '2026-01-01';
@@ -37,8 +37,14 @@ export class DailyScene extends Phaser.Scene {
     const today = todayUtc();
     const meta = state.meta;
     button(this, 40, 28, 64, 36, '', () => this.scene.start('Title', {}), { fontSize: 15, glyph: 'back' });
-    text(this, W / 2 + 20, 16, 'Daily runs', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
-    text(this, W / 2 + 20, 50, 'A new run every day, the same for everyone.\nPlay today’s or go back to any day you missed.', 12, COLORS.textDim, { align: 'center' }).setOrigin(0.5, 0);
+    // Upright: header, calendar, totals and the play button stacked. Sideways: header, totals and
+    // play button in a left column, the calendar on the right.
+    const wide = LANDSCAPE;
+    const hx = wide ? 140 : W / 2 + 20;
+    const gx = wide ? 272 : 12;
+    const gw = wide ? W - gx - 12 : W - 24;
+    text(this, hx, wide ? 66 : 16, 'Daily runs', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, hx, wide ? 100 : 50, 'A new run every day, the same for everyone.\nPlay today’s or go back to any day you missed.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: wide ? 240 : W } }).setOrigin(0.5, 0);
 
     // Month header with arrows.
     const first = FIRST_DAY.split('-').map(Number);
@@ -49,15 +55,16 @@ export class DailyScene extends Phaser.Scene {
       const d = new Date(Date.UTC(this.year, this.month + dm, 1));
       this.scene.restart({ year: d.getUTCFullYear(), month: d.getUTCMonth() });
     };
-    button(this, 40, 112, 56, 40, '‹', () => go(-1), { fontSize: 22, enabled: canPrev });
-    button(this, W - 40, 112, 56, 40, '›', () => go(1), { fontSize: 22, enabled: canNext });
-    text(this, W / 2, 112, `${MONTHS[this.month]} ${this.year}`, 20, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
+    const my = wide ? 26 : 112;
+    button(this, gx + 28, my, 56, wide ? 34 : 40, '‹', () => go(-1), { fontSize: 22, enabled: canPrev });
+    button(this, gx + gw - 28, my, 56, wide ? 34 : 40, '›', () => go(1), { fontSize: 22, enabled: canNext });
+    text(this, gx + gw / 2, my, `${MONTHS[this.month]} ${this.year}`, 20, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
     // Weekday labels and the day grid.
-    const cw = (W - 24) / 7;
-    const ch = 70;
-    const top = 160;
-    WEEKDAYS.forEach((d, i) => text(this, 12 + cw * i + cw / 2, top, d, 12, COLORS.textDim).setOrigin(0.5, 0));
+    const cw = gw / 7;
+    const ch = wide ? 62 : 70;
+    const top = wide ? 50 : 160;
+    WEEKDAYS.forEach((d, i) => text(this, gx + cw * i + cw / 2, top, d, 12, COLORS.textDim).setOrigin(0.5, 0));
     const startDow = new Date(Date.UTC(this.year, this.month, 1)).getUTCDay();
     const days = new Date(Date.UTC(this.year, this.month + 1, 0)).getUTCDate();
     let played = 0;
@@ -65,8 +72,8 @@ export class DailyScene extends Phaser.Scene {
     for (let d = 1; d <= days; d++) {
       const date = ymd(this.year, this.month, d);
       const cell = startDow + d - 1;
-      const x = 12 + (cell % 7) * cw;
-      const y = top + 22 + Math.floor(cell / 7) * ch;
+      const x = gx + (cell % 7) * cw;
+      const y = top + (wide ? 18 : 22) + Math.floor(cell / 7) * ch;
       const future = date > today;
       const tooOld = date < FIRST_DAY;
       const rec = dailyPlayed(meta, date);
@@ -83,11 +90,11 @@ export class DailyScene extends Phaser.Scene {
       if (future || tooOld) continue;
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.pickDay(date));
     }
-    text(this, W / 2, 640, `This month: ${played} played${won ? ` · ${won} won` : ''}`, 14, COLORS.textDim).setOrigin(0.5, 0);
+    text(this, hx, wide ? 160 : 640, `This month: ${played} played${won ? ` · ${won} won` : ''}`, 14, COLORS.textDim).setOrigin(0.5, 0);
     if (!(this.year === ty && this.month === tm - 1)) {
-      button(this, W / 2, 700, 200, 44, 'Back to today', () => this.scene.restart({}), { fontSize: 15 });
+      button(this, hx, wide ? 220 : 700, 200, 44, 'Back to today', () => this.scene.restart({}), { fontSize: 15 });
     } else {
-      button(this, W / 2, 700, 260, 52, 'Play today’s run', () => this.pickDay(today), { fontSize: 18, color: 0x2f4a6b, glyph: 'calendar' });
+      button(this, hx, wide ? 220 : 700, wide ? 240 : 260, 52, 'Play today’s run', () => this.pickDay(today), { fontSize: 18, color: 0x2f4a6b, glyph: 'calendar' });
     }
   }
 

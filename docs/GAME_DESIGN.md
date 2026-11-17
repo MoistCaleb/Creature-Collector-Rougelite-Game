@@ -7,6 +7,11 @@ Working doc. Items marked **[OPEN]** still need a decision.
 - Can be wrapped for app stores later (Capacitor).
 - Art: procedural pixel creatures generated from parts (body, head, limbs, palette by type).
 
+- **Landscape:** every screen has a sideways layout on an 800x450 board (upright is 450x800). Turning the
+  phone swaps the board and the screen lays itself out again; battles resume where they were. Typical
+  splits: battle field left with message, moves and controls in a right column; map between an info column
+  and a team column; lists and grids get more columns.
+
 ## Saving
 - The run in progress saves after every map step, battle turn and choice (localStorage).
 - "Continue run" resumes exactly: mid-battle with current HP, open shops, unresolved node choices, events

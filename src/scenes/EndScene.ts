@@ -11,7 +11,10 @@ import { duel, endRace, raceVerdict, sendProgress } from '../net/runtime';
 import { session } from '../net/session';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, text, W } from '../ui/widgets';
+import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
+
+/** Runs whose daily result is already recorded (so re-laying out the screen doesn't count it twice). */
+const recordedRuns = new WeakSet<object>();
 
 /** End of a run: what happened, who carried the team, who made it and who didn't. */
 export class EndScene extends Phaser.Scene {
@@ -38,19 +41,22 @@ export class EndScene extends Phaser.Scene {
       : data.won
         ? `${run.map.biome} lands conquered. All three floors cleared.`
         : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`;
-    text(this, W / 2, 46, title, race ? 34 : 40, data.won ? '#ffc94d' : '#e0524a', { fontStyle: 'bold' }).setOrigin(0.5);
+    text(this, W / 2, LANDSCAPE ? 28 : 46, title, race ? 34 : 40, data.won ? '#ffc94d' : '#e0524a', { fontStyle: 'bold' }).setOrigin(0.5);
     text(
       this,
       W / 2,
-      86,
+      LANDSCAPE ? 54 : 86,
       sub + (run.heat ? `  ·  Heat ${run.heat}` : ''),
       15,
       COLORS.textDim,
       { align: 'center', wordWrap: { width: W - 40 } },
     ).setOrigin(0.5, 0);
 
-    let y = 118;
-    const card = (h: number, stroke: number) => this.add.rectangle(16, y, W - 32, h, COLORS.panel).setOrigin(0).setStrokeStyle(2, stroke, 0.8);
+    // Upright: one column. Sideways: the summary on the left, who made it (and the buttons) on the right.
+    let y = LANDSCAPE ? 84 : 118;
+    let cx0 = 16;
+    const colW = LANDSCAPE ? (W - 48) / 2 : W - 32;
+    const card = (h: number, stroke: number) => this.add.rectangle(cx0, y, colW, h, COLORS.panel).setOrigin(0).setStrokeStyle(2, stroke, 0.8);
 
     // What ended the run.
     const ended = run.log.endedBy;
@@ -58,7 +64,7 @@ export class EndScene extends Phaser.Scene {
       card(64, 0xe0524a);
       sprite(52, y + 30, ended.speciesId, ended.stage, 2.2).setFlipX(true);
       text(this, 92, y + 12, 'Defeated by', 12, '#ff8a7a', { fontStyle: 'bold' });
-      text(this, 92, y + 30, ended.label, 16, COLORS.text, { wordWrap: { width: W - 130 } });
+      text(this, 92, y + 30, ended.label, 16, COLORS.text, { wordWrap: { width: colW - 98 } });
       y += 76;
     }
 
@@ -83,31 +89,35 @@ export class EndScene extends Phaser.Scene {
       ['Coins earned', String(run.log.coins ?? 0)],
       ['Damage dealt', totalDamage.toLocaleString()],
     ];
-    const colW = (W - 32) / 2;
+    const halfW = colW / 2;
     stats.forEach(([label, value], i) => {
-      const x = 16 + (i % 2) * colW;
+      const x = cx0 + (i % 2) * halfW;
       const yy = y + Math.floor(i / 2) * 44;
-      this.add.rectangle(x + 4, yy, colW - 8, 38, COLORS.panelLight).setOrigin(0);
+      this.add.rectangle(x + 4, yy, halfW - 8, 38, COLORS.panelLight).setOrigin(0);
       text(this, x + 14, yy + 19, label, 13, COLORS.textDim).setOrigin(0, 0.5);
-      text(this, x + colW - 16, yy + 19, value, 17, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5);
+      text(this, x + halfW - 16, yy + 19, value, 17, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5);
     });
     y += 3 * 44 + 10;
+    if (LANDSCAPE) {
+      cx0 = 32 + colW;
+      y = 84;
+    }
 
     // Who made it, and who didn't.
     const roster = (title: string, list: { speciesId: string; stage: number; level: number }[], dim: boolean) => {
       if (!list.length) return;
-      text(this, 20, y, title, 15, dim ? '#ff8a7a' : '#ffc94d', { fontStyle: 'bold' });
+      text(this, cx0 + 4, y, title, 15, dim ? '#ff8a7a' : '#ffc94d', { fontStyle: 'bold' });
       y += 24;
       const per = 7;
-      const cell = (W - 32) / per;
+      const cell = colW / per;
       list.slice(0, per * 2).forEach((c, i) => {
-        const x = 16 + cell / 2 + (i % per) * cell;
+        const x = cx0 + cell / 2 + (i % per) * cell;
         const yy = y + Math.floor(i / per) * 62 + 22;
         const img = sprite(x, yy, c.speciesId, c.stage, 1.6);
         if (dim) img.setTint(0xa49ac0).setAlpha(0.75);
         text(this, x, yy + 26, `Lv${c.level}`, 11, COLORS.textDim).setOrigin(0.5);
       });
-      if (list.length > per * 2) text(this, W - 20, y - 22, `+${list.length - per * 2} more`, 12, COLORS.textDim).setOrigin(1, 0);
+      if (list.length > per * 2) text(this, cx0 + colW - 4, y - 22, `+${list.length - per * 2} more`, 12, COLORS.textDim).setOrigin(1, 0);
       y += Math.ceil(Math.min(list.length, per * 2) / per) * 62 + 6;
     };
     const survivors = allCreatures(run);
@@ -116,7 +126,9 @@ export class EndScene extends Phaser.Scene {
 
     const extra: string[] = [];
     if (run.daily) {
-      const best = recordDaily(run, data.won);
+      // Record once per run (the screen lays itself out again when the phone turns).
+      const best = recordedRuns.has(run) ? false : recordDaily(run, data.won);
+      recordedRuns.add(run);
       const rec = dailyRecord(state.meta, run.daily);
       extra.push(`Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
     }
@@ -126,8 +138,8 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Achievements: ${earned.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name).join(', ')}`);
     }
-    if (extra.length && y < (run.race ? 610 : 640)) {
-      text(this, W / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: W - 40 }, lineSpacing: 4 }).setOrigin(0.5, 0);
+    if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : 310) : run.race ? 610 : 640)) {
+      text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
     }
 
     if (run.race) return this.raceFinish(run, data.won);
@@ -135,14 +147,14 @@ export class EndScene extends Phaser.Scene {
     const alive = allCreatures(run).filter((c) => c.hp > 0);
     if (alive.length) {
       const label = `${data.won ? 'Win' : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
-      button(this, W / 2, 692, 320, 44, 'Save a loadout', () => this.saveLoadouts(alive, label), {
+      button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 352 : 692, 320, 44, 'Save a loadout', () => this.saveLoadouts(alive, label), {
         fontSize: 16,
         color: 0x2f4a6b,
         glyph: 'star',
         sub: 'Keep its form and moves for the team builder',
       });
     }
-    button(this, W / 2, 756, 260, 52, 'Back to title', () => {
+    button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 410 : 756, 260, 52, 'Back to title', () => {
       state.run = null;
       this.scene.start('Title', {});
     }, { color: 0x3b6d4a, fontSize: 20 });
@@ -175,12 +187,16 @@ export class EndScene extends Phaser.Scene {
     const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
     sendProgress({ floor: run.floor, finished: true, won, team });
     const opp = run.race!.opponent;
-    this.add.rectangle(16, 640, W - 32, 76, 0x14223a).setOrigin(0).setStrokeStyle(2, 0x8fd0ff, 0.8);
-    const status = text(this, W / 2, 652, '', 15, '#8fd0ff', { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5, 0);
+    // Upright: under the summary. Sideways: at the bottom of the right column.
+    const bx = LANDSCAPE ? 32 + (W - 48) / 2 : 16;
+    const bw = LANDSCAPE ? (W - 48) / 2 : W - 32;
+    const by = LANDSCAPE ? 300 : 640;
+    this.add.rectangle(bx, by, bw, 76, 0x14223a).setOrigin(0).setStrokeStyle(2, 0x8fd0ff, 0.8);
+    const status = text(this, bx + bw / 2, by + 12, '', 15, '#8fd0ff', { align: 'center', wordWrap: { width: bw - 28 } }).setOrigin(0.5, 0);
     let leave: Phaser.GameObjects.Container | null = null;
     const finish = (label: string) => {
       leave?.destroy();
-      leave = button(this, W / 2, 752, 260, 56, label, () => {
+      leave = button(this, bx + bw / 2, LANDSCAPE ? 412 : 752, 260, 56, label, () => {
         endRace();
         state.run = null;
         this.scene.start(session.connected ? 'Duel' : 'Title', {});

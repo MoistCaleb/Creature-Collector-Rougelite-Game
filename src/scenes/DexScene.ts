@@ -6,7 +6,7 @@ import { Scroller } from '../ui/scroll';
 import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, H, text, typeChip, W } from '../ui/widgets';
+import { background, button, COLORS, H, LANDSCAPE, text, typeChip, W } from '../ui/widgets';
 import { createCreature, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
 import { toggleFavorite } from '../logic/run';
@@ -14,7 +14,8 @@ import { icon } from '../ui/icons';
 
 type Tab = 'creatures' | 'moves' | 'elements';
 /** Content starts below the header, tabs and the jump-to-element bar. */
-const TOP = 196;
+/** Where the list starts, under the header (a shorter header on the wide board). */
+let TOP = 196;
 /** Creature rows: collapsed, and expanded into a big card. */
 const ROW_H = 124;
 const CARD_H = 478;
@@ -46,6 +47,7 @@ export class DexScene extends Phaser.Scene {
 
   create() {
     background(this);
+    TOP = LANDSCAPE ? 124 : 196;
     const dex = state.meta.dex;
 
     this.content = this.add.container(0, TOP);
@@ -80,7 +82,7 @@ export class DexScene extends Phaser.Scene {
     ];
     tabs.forEach(([t, label], i) => {
       const bw = (W - 40) / 3;
-      button(this, 16 + bw / 2 + i * (bw + 4), 98, bw, 40, label, () => this.scene.restart({ from: this.from, tab: t }), {
+      button(this, 16 + bw / 2 + i * (bw + 4), LANDSCAPE ? 80 : 98, bw, LANDSCAPE ? 30 : 40, label, () => this.scene.restart({ from: this.from, tab: t }), {
         color: this.tab === t ? 0x5b4a8a : COLORS.panelLight,
         fontSize: 16,
       });
@@ -103,13 +105,13 @@ export class DexScene extends Phaser.Scene {
   /** Two rows of element buttons: tap to glide to that element; tap again for the next one. */
   private drawJumpBar() {
     const dex = state.meta.dex;
-    const cols = 6;
+    const cols = LANDSCAPE ? 12 : 6;
     const bw = (W - 32 - (cols - 1) * 4) / cols;
     ELEMENTS.forEach((el, i) => {
       const seen = dex.elements.includes(el);
       const x = 16 + bw / 2 + (i % cols) * (bw + 4);
-      const y = 136 + Math.floor(i / cols) * 30;
-      button(this, x, y, bw, 26, seen ? el : '???', () => this.jumpTo(el), {
+      const y = (LANDSCAPE ? 108 : 136) + Math.floor(i / cols) * 30;
+      button(this, x, y, bw, LANDSCAPE ? 24 : 26, seen ? el : '???', () => this.jumpTo(el), {
         color: seen ? ELEMENT_COLORS[el] : COLORS.panelLight,
         textColor: seen ? elementTextColor(el) : '#6d6588',
         fontSize: 11,

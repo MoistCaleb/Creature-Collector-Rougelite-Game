@@ -11,7 +11,7 @@ import { playMusic } from '../ui/sound';
 import { buzz, canVibrate } from '../ui/haptics';
 import type { IconId } from '../ui/icons';
 import { prefs } from '../ui/prefs';
-import { background, button, COLORS, H, muteButton, setGlyph, text, W } from '../ui/widgets';
+import { background, button, COLORS, H, LANDSCAPE, muteButton, setGlyph, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -33,6 +33,11 @@ export class TitleScene extends Phaser.Scene {
       }, { fontSize: 20, glyph: glyph() });
     }
     const meta = state.meta;
+    // Upright: one centered column. Sideways: the title and parade on the left, buttons on the right.
+    const lx = LANDSCAPE ? 215 : W / 2;
+    const cx = LANDSCAPE ? 600 : W / 2;
+    const ly = (y: number) => (LANDSCAPE ? { 70: 90, 115: 136, 190: 228, 180: 218, 270: 300, 294: 324 }[y] ?? y : y);
+    const ry = (y: number) => (LANDSCAPE ? y - 280 : y);
 
     // Your trainer (top-left): tap to edit name and look.
     const tb = button(this, 66, 30, 116, 46, '', () => this.scene.start('Trainer', { from: 'Title' }), { color: 0x2f4a6b });
@@ -45,22 +50,22 @@ export class TitleScene extends Phaser.Scene {
     const ids = meta.unlockedStarters.slice(0, 6);
     ids.forEach((id, i) => {
       const key = ensureCreatureTexture(this, id, 0);
-      const x = 55 + i * 68;
-      const img = this.add.image(x, 190, key).setScale(2.2 * SPRITE_FIT);
-      this.tweens.add({ targets: img, y: 180, yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
+      const x = lx - 170 + i * 68;
+      const img = this.add.image(x, ly(190), key).setScale(2.2 * SPRITE_FIT);
+      this.tweens.add({ targets: img, y: ly(180), yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
     });
 
-    text(this, W / 2, 70, 'CREATURE', 44, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
-    text(this, W / 2, 115, 'ROGUELITE', 30, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
+    text(this, lx, ly(70), 'CREATURE', 44, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    text(this, lx, ly(115), 'ROGUELITE', 30, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
-    text(this, W / 2, 270, `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
-    text(this, W / 2, 294, `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
+    text(this, lx, ly(270), `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
+    text(this, lx, ly(294), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
 
     if (hasSavedRun()) {
-      button(this, W / 2, 360, 280, 64, 'CONTINUE RUN', () => this.continueRun(), { color: 0x3b6d4a, fontSize: 24 });
-      button(this, W / 2, 420, 200, 40, 'New run', () => this.confirmNewRun(), { fontSize: 15 });
+      button(this, cx, ry(360), 280, 64, 'CONTINUE RUN', () => this.continueRun(), { color: 0x3b6d4a, fontSize: 24 });
+      button(this, cx, ry(420), 200, 40, 'New run', () => this.confirmNewRun(), { fontSize: 15 });
     } else {
-      button(this, W / 2, 380, 280, 70, 'START RUN', () => this.scene.start('MapSelect', {}), { color: 0x3b6d4a, fontSize: 26 });
+      button(this, cx, ry(380), 280, 70, 'START RUN', () => this.scene.start('MapSelect', {}), { color: 0x3b6d4a, fontSize: 26 });
     }
 
     const passiveLabel = () => {
@@ -69,8 +74,8 @@ export class TitleScene extends Phaser.Scene {
     };
     button(
       this,
-      W / 2,
-      480,
+      cx,
+      ry(480),
       320,
       58,
       passiveLabel(),
@@ -78,24 +83,24 @@ export class TitleScene extends Phaser.Scene {
       { sub: meta.equippedPassive ? PASSIVES[meta.equippedPassive].desc : 'Passives & achievements', fontSize: 16 },
     );
 
-    button(this, W / 2 - 82, 550, 156, 54, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
+    button(this, cx - 82, ry(550), 156, 54, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
     // Daily run: the same seed for everyone today.
     const today = todayUtc();
     const best = dailyPlayed(meta, today)?.best ?? null;
-    button(this, W / 2 + 82, 550, 156, 54, 'Daily runs', () => this.scene.start('Daily', {}), {
+    button(this, cx + 82, ry(550), 156, 54, 'Daily runs', () => this.scene.start('Daily', {}), {
       fontSize: 16,
       glyph: 'calendar',
       color: 0x2f4a6b,
       sub: best ? `Today: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'Today + past days',
     });
 
-    button(this, W / 2 - 82, 614, 156, 54, 'Battle Arena', () => this.scene.start('Arena', {}), {
+    button(this, cx - 82, ry(614), 156, 54, 'Battle Arena', () => this.scene.start('Arena', {}), {
       fontSize: 16,
       glyph: 'swords',
       color: 0x5a2a3a,
       sub: `Lv 50 · best ${meta.arenaBest ?? 0}/5`,
     });
-    button(this, W / 2 + 82, 614, 156, 54, 'Play online', () => this.scene.start('Duel', {}), {
+    button(this, cx + 82, ry(614), 156, 54, 'Play online', () => this.scene.start('Duel', {}), {
       fontSize: 16,
       glyph: 'phone',
       color: 0x2f4a6b,
@@ -111,8 +116,8 @@ export class TitleScene extends Phaser.Scene {
       if (!opt) return;
       install = button(
         this,
-        W / 2,
-        666,
+        cx,
+        ry(666),
         200,
         36,
         'Install app',
@@ -134,8 +139,8 @@ export class TitleScene extends Phaser.Scene {
 
     text(
       this,
-      W / 2,
-      H - 62,
+      lx,
+      LANDSCAPE ? 398 : H - 62,
       'Climb 3 floors. Pick your path.\nCatch creatures, evolve, prestige.\nDeath is permanent.',
       16,
       COLORS.textDim,

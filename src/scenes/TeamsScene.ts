@@ -6,7 +6,7 @@ import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, text, W } from '../ui/widgets';
+import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
 
 const ROW_H = 96;
 
@@ -29,28 +29,33 @@ export class TeamsScene extends Phaser.Scene {
     text(this, W / 2 + 20, 18, 'Your teams', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     text(this, W / 2 + 20, 54, `Up to ${MAX_SAVED_TEAMS} teams · tap one to edit it`, 13, COLORS.textDim).setOrigin(0.5, 0);
 
+    // Sideways: a 3-column grid of teams (the new-team button takes the next cell).
+    const cols = LANDSCAPE ? 3 : 1;
+    const cw = (W - 24 - (cols - 1) * 12) / cols;
+    const cell = (i: number) => ({ x: 12 + (i % cols) * (cw + 12), y: 84 + Math.floor(i / cols) * ROW_H });
     teams.forEach((t, i) => {
-      const y = 84 + i * ROW_H;
+      const { x: cx, y } = cell(i);
       const picks = validArenaTeam(meta, t.picks);
       const bg = this.add
-        .rectangle(12, y, W - 24, ROW_H - 8, COLORS.panel)
+        .rectangle(cx, y, cw, ROW_H - 8, COLORS.panel)
         .setOrigin(0)
         .setStrokeStyle(2, i === active ? COLORS.accent : COLORS.stroke);
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.edit(i));
-      text(this, 24, y + 8, t.name, 17, COLORS.text, { fontStyle: 'bold' });
-      if (i === active) text(this, 24, y + 30, 'ACTIVE · used by the Arena ladder', 11, '#ffc94d', { fontStyle: 'bold' });
-      else text(this, 24, y + 30, `${picks.length}/${ARENA_TEAM} creatures`, 11, COLORS.textDim);
+      text(this, cx + 12, y + 8, t.name, 17, COLORS.text, { fontStyle: 'bold' });
+      if (i === active) text(this, cx + 12, y + 30, LANDSCAPE ? 'ACTIVE · Arena ladder' : 'ACTIVE · used by the Arena ladder', 11, '#ffc94d', { fontStyle: 'bold' });
+      else text(this, cx + 12, y + 30, `${picks.length}/${ARENA_TEAM} creatures`, 11, COLORS.textDim);
       picks.forEach((p, k) => {
-        const x = 46 + k * 62;
+        const x = cx + 34 + k * 56;
         this.add.image(x, y + 64, ensureCreatureTexture(this, p.speciesId, p.stage)).setScale(1.1 * SPRITE_FIT);
       });
-      if (!picks.length) text(this, 24, y + 54, 'Empty', 13, COLORS.textDim);
-      button(this, W - 52, y + ROW_H / 2 - 4, 72, 34, '•••', () => this.menu(i), { fontSize: 16 });
+      if (!picks.length) text(this, cx + 12, y + 54, 'Empty', 13, COLORS.textDim);
+      button(this, cx + cw - 40, LANDSCAPE ? y + 24 : y + ROW_H / 2 - 4, LANDSCAPE ? 56 : 72, LANDSCAPE ? 30 : 34, '•••', () => this.menu(i), { fontSize: 16 });
     });
 
-    const y = 84 + teams.length * ROW_H + 6;
+    const next = cell(teams.length);
+    const y = LANDSCAPE ? next.y + (ROW_H - 8) / 2 - 26 : 84 + teams.length * ROW_H + 6;
     if (teams.length < MAX_SAVED_TEAMS) {
-      button(this, W / 2, y + 26, W - 40, 52, '+ New team', () => {
+      button(this, LANDSCAPE ? next.x + cw / 2 : W / 2, y + 26, LANDSCAPE ? cw : W - 40, 52, '+ New team', () => {
         teams.push({ name: nextTeamName(meta), picks: [] });
         meta.arenaTeamIndex = teams.length - 1;
         saveMeta(meta);
