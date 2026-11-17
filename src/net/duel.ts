@@ -98,6 +98,8 @@ export type DuelMsg =
   | { t: 'resume'; info: StartInfo; snap: Snap; next: Next }
   | { t: 'race'; race: RaceInfo }
   | { t: 'progress'; p: RaceProgress }
+  /** The sender gives up this battle. */
+  | { t: 'forfeit' }
   | { t: 'lobby' };
 
 // ---------------------------------------------------------------- snapshots
@@ -264,7 +266,21 @@ export class DuelController {
   }
 
   /** A message from the other phone. */
+  /** Give up this battle: the other player wins it. */
+  forfeit() {
+    if (this.phase === 'end') return;
+    this.phase = 'end';
+    this.link.send({ t: 'forfeit' });
+    this.view?.step([{ kind: 'text', text: 'You forfeit the battle.' }], { phase: 'end', won: false });
+  }
+
   receive(msg: DuelMsg) {
+    if (msg.t === 'forfeit') {
+      if (this.phase === 'end') return;
+      this.phase = 'end';
+      this.view?.step([{ kind: 'text', text: `${this.opponentName} forfeits!` }], { phase: 'end', won: true });
+      return;
+    }
     if (this.role === 'guest') {
       if (msg.t === 'step') {
         applySnap(this.battle, msg.snap);
