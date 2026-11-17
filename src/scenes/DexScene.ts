@@ -70,7 +70,7 @@ export class DexScene extends Phaser.Scene {
     // Shinies unlocked (any form of a line unlocks the whole line).
     const nShiny = (state.meta.shinyOwned ?? []).length;
     icon(this, hx.x + hx.width + 16, 28, 'sparkle', 16);
-    text(this, hx.x + hx.width + 28, 20, `${nShiny}/${SPECIES.length} shiny`, 14, nShiny ? '#ffd86b' : COLORS.textDim, { fontStyle: 'bold' });
+    text(this, hx.x + hx.width + 28, 20, `${nShiny}/${SPECIES.length} gilded`, 14, nShiny ? '#ffd86b' : COLORS.textDim, { fontStyle: 'bold' });
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
     button(this, W - 156, 30, 96, 40, 'Chart', () => openElementChart(this), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
     const totalForms = SPECIES.length * 3;
@@ -212,7 +212,7 @@ export class DexScene extends Phaser.Scene {
     const owned = (state.meta.shinyOwned ?? []).includes(sp.id);
     this.tapArea(row, y, h, i, true, owned);
     row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
-    if (owned) row.add(text(this, W - 138, y + 26, '✦ Shiny unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
+    if (owned) row.add(text(this, W - 138, y + 26, '✦ Gilded unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
     const caught = dex.caught.includes(sp.id);
@@ -246,13 +246,15 @@ export class DexScene extends Phaser.Scene {
           row.add(this.add.image(112, sy + 100, ensureCreatureTexture(this, sp.id, s, !owned)).setScale(1 * SPRITE_FIT));
           if (!owned) row.add(icon(this, 128, sy + 84, 'sparkle', 10));
         }
-        // Stats at this form's level cap (no prestige stars).
-        const c = createCreature(sp.id, 1, s);
-        c.level = stageCap(c);
-        const st = stats(c);
         row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
         row.add(text(this, 150, sy + 34, STAGE_LABEL[s], 12, '#8e86ad'));
-        row.add(text(this, 150, sy + 54, `At level cap (Lv ${c.level}):\nHP ${st.hp}   ATK ${st.atk}\nDEF ${st.def}   SPD ${st.spd}`, 13, COLORS.textDim, { lineSpacing: 2 }));
+        if (caught) {
+          // Stats at this form's level cap (no prestige stars): only once you've caught the line.
+          const c = createCreature(sp.id, 1, s);
+          c.level = stageCap(c);
+          const st = stats(c);
+          row.add(text(this, 150, sy + 54, `At level cap (Lv ${c.level}):\nHP ${st.hp}   ATK ${st.atk}\nDEF ${st.def}   SPD ${st.spd}`, 13, COLORS.textDim, { lineSpacing: 2 }));
+        } else row.add(text(this, 150, sy + 58, 'Catch one to see its stats.', 13, '#6d6588', { fontStyle: 'italic' }));
         row.add(button(this, W - 70, sy + 18, 80, 30, 'Cry', () => cry(sp.id, s), { fontSize: 13, glyph: 'sound', color: 0x2f4a6b }));
       } else {
         row.add(text(this, 80, sy + 62, '?', 40, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
@@ -287,7 +289,7 @@ export class DexScene extends Phaser.Scene {
       if (owned) {
         // Beside the element chips.
         const tx = 70 + (sp.types[0] === sp.types[1] ? 1 : 2) * 54 + 6;
-        const tag = text(this, tx + 6, y + 14, '✦ SHINY UNLOCKED', 10, '#2a1a00', { fontStyle: 'bold' }).setOrigin(0, 0.5);
+        const tag = text(this, tx + 6, y + 14, '✦ GILDED UNLOCKED', 10, '#2a1a00', { fontStyle: 'bold' }).setOrigin(0, 0.5);
         row.add(this.add.rectangle(tx, y + 14, tag.width + 12, 16, 0xffd86b).setOrigin(0, 0.5));
         row.add(tag);
       }

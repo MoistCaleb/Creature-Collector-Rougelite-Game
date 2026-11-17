@@ -202,7 +202,8 @@ Proposed math:
 ## Hexlidex
 - Persistent across runs: forms seen (per evolution stage), moves seen, elements seen.
 - Seen but never caught: the line's forms are drawn grayed out with "○ Seen" (the card says "Seen · not caught
-  yet"); once caught they show in full colour with "● Caught".
+  yet"); once caught they show in full colour with "● Caught". Seen-only forms show just their name, form
+  and cry: stats appear once you've caught the line, and only caught lines can be favourites.
 - Evolutions show as ??? until you've seen that form (starter cards, team screen, dex).
 - Elements tab reveals matchups once encountered.
 
@@ -314,9 +315,9 @@ Proposed math:
 - Removed. iPhone Safari has no vibration API, and the iOS 18 haptic-switch workaround didn't produce any
   vibration on a real iPhone, so the feature (Android vibration included) was dropped.
 
-## Shiny Hunting (endless)
+## Gilded Hunt (endless)
 
-- After winning a normal run (not a daily or a stage battle), the end screen offers **Shiny Hunting**: keep
+- After winning a normal run (not a daily or a stage battle), the end screen offers **Gilded Hunt**: keep
   climbing with the same team through endless floors. The win is already counted (history, streaks, unlocks).
 - The team is fully healed and restored to start. Each hunt floor has a random element and the last floor's
   map shape, shops and XP tables. The floor level ceiling is lifted, so your Hexlings can reach their own cap
@@ -324,16 +325,16 @@ Proposed math:
 - **Enemies out-scale you:** always final forms, starting around Lv 94 and climbing 8 levels a floor (trainers +3,
   guardians +8), past your cap from about the 4th hunt floor. They carry 2★ to start, one more every two
   floors, up to **6★** (one past yours).
-- **Shinies everywhere:** about 1 wild Hexling in 12, and 1 in 20 of trainers' and guardians' Hexlings (a
+- **Gilded Hexlings everywhere:** about 1 wild Hexling in 12, and 1 in 20 of trainers' and guardians' Hexlings (a
   claimed guardian keeps its colours).
 - Guardians keep their rules (and Heat extras). Beating one takes you a floor deeper; the hunt ends when your
-  team falls ("HUNT OVER"). Records keep the deepest hunt floor and the most shinies caught in one hunt.
+  team falls ("HUNT OVER"). Records keep the deepest hunt floor and the most gilded Hexlings caught in one hunt.
 
-## Catching a shiny that fainted first
+## Catching a gilded that fainted first
 
 - The one exception to "only the last wild Hexling can be caught": in a two-Hexling wild battle, if the first
-  one was shiny and fainted, the catch screen also offers **Catch ✦ [shiny]** (beside catching the second one).
-  You catch one or the other, or finish for the rewards. This applies in every run, not only Shiny Hunting.
+  one was gilded and fainted, the catch screen also offers **Catch ✦ [gilded]** (beside catching the second one).
+  You catch one or the other, or finish for the rewards. This applies in every run, not only Gilded Hunt.
 
 ## Trainer and guardian intros
 
@@ -369,33 +370,35 @@ Proposed math:
   Hexling, lifetime counts, and the last 20 finished runs (result, map, Heat, date, the team that finished).
   Stage battles don't count.
 
-## Shiny Hexlings
+## Gilded Hexlings
 
-- About 1 wild Hexling in 200 is **shiny**: the same Hexling in rare colors (its palette turned around the color
+(Called *shiny* in the code and save data: `shiny`, `shinyOwned`, `ui/shiny.ts`. Players only ever see "gilded".)
+
+- About 1 wild Hexling in 200 is **gilded**: the same Hexling in rare colors (its palette turned around the color
   wheel, by a fixed amount per family). Only wild battles; trainers and guardians never are.
-- **The reveal** (the first time a shiny foe appears): the field dims, gold light rays spin up behind it,
-  rainbow rings and a fountain of stars burst out, it shimmers through the rainbow, a "✦ SHINY! ✦" banner
-  slams in under it, and a chime cascade plays. The message reads "Whoa! It's a SHINY X!".
-  Your own shinies get a shorter reveal when sent out.
+- **The reveal** (the first time a gilded foe appears): the field dims, gold light rays spin up behind it,
+  rainbow rings and a fountain of stars burst out, it shimmers through the rainbow, a "✦ GILDED! ✦" banner
+  slams in under it, and a chime cascade plays. The message reads "Whoa! It's a GILDED X!".
+  Your own gilded Hexlings get a shorter reveal when sent out.
 - **While it's out**: a pulsing gold glow and halo, rising rainbow glitter, a gold panel and name, and a
-  pulsing "✦ SHINY ✦" tab on its panel.
+  pulsing "✦ GILDED ✦" tab on its panel.
 - **Its attacks**: it flashes through the rainbow and sprays stars at its target, and its hits land with a
   gold ring, rainbow sparks and a bright ping on top of the move's usual effect.
 - Keeps its colors when caught and when it evolves. Purely cosmetic.
-- The Hexlidex marks families you've seen shiny and shows their shiny forms; Records counts shinies caught.
+- The Hexlidex marks families you've seen gilded and shows their gilded forms; Records counts gilded Hexlings caught.
 - Rolled from a hash of the run seed (not the run's random rolls), so daily runs stay identical for everyone.
-- **One shiny unlocks the whole line:** catching (or claiming) a shiny in any of its three forms unlocks every
-  form of that species shiny. A shiny-unlocked species **starts runs shiny** (the starter card has a "✦ Shiny /
-  ✦ Normal" switch, remembered per species) and parades shiny on the title screen.
-- **In the Hexlidex:** a shiny count in the header ("✦ N/120 shiny"); unlocked lines have a gold frame, a
-  "✦ SHINY UNLOCKED" tag and every seen form drawn shiny with twinkling sparkles. The opened card shows each form
-  shiny and large (normal colours in the corner) with "✦ Shiny unlocked: every form". Lines only seen shiny keep a
-  small sparkle and the shiny in the corner.
-- **Shinies online:** every species you've caught (or claimed) shiny is recorded ("✦ Shiny caught" in the
-  Hexlidex). In the team builder it shows ✦ SHINY in the picker, joins teams shiny, and has a "✦ Shiny: on/off"
-  toggle. Shiny picks fight shiny in the Battle Arena and online duels (the other player sees it shiny too, with
-  the full reveal); saved loadouts remember it. A pick can only be shiny for a species you own shiny.
-  Older saves: if any shinies were caught, the species seen shiny count as owned.
+- **One gilded unlocks the whole line:** catching (or claiming) a gilded in any of its three forms unlocks every
+  form of that species gilded. A gilded-unlocked species **starts runs gilded** (the starter card has a "✦ Gilded /
+  ✦ Normal" switch, remembered per species) and parades gilded on the title screen.
+- **In the Hexlidex:** a gilded count in the header ("✦ N/120 gilded"); unlocked lines have a gold frame, a
+  "✦ GILDED UNLOCKED" tag and every seen form drawn gilded with twinkling sparkles. The opened card shows each form
+  gilded and large (normal colours in the corner) with "✦ Gilded unlocked: every form". Lines only seen gilded keep a
+  small sparkle and the gilded in the corner.
+- **Gilded Hexlings online:** every species you've caught (or claimed) gilded is recorded ("✦ Gilded caught" in the
+  Hexlidex). In the team builder it shows ✦ GILDED in the picker, joins teams gilded, and has a "✦ Gilded: on/off"
+  toggle. Gilded picks fight gilded in the Battle Arena and online duels (the other player sees it gilded too, with
+  the full reveal); saved loadouts remember it. A pick can only be gilded for a species you own gilded.
+  Older saves: if any gilded Hexlings were caught, the species seen gilded count as owned.
 
 ## Music
 

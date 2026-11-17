@@ -131,7 +131,7 @@ export class StarterScene extends Phaser.Scene {
     const meta = state.meta;
     if (!(meta.shinyOwned ?? []).includes(id)) return;
     const on = starterShiny(meta, id);
-    button(this, x, y, w, 24, on ? '✦ Shiny' : '✦ Normal', () => {
+    button(this, x, y, w, 24, on ? '✦ Gilded' : '✦ Normal', () => {
       toggleStarterShiny(meta, id);
       this.scene.restart({ mapId: this.mapId, daily: this.daily ?? undefined, race: this.race ?? undefined });
     }, { fontSize: 11, color: on ? 0x7a5a1c : 0x2a2440 });
