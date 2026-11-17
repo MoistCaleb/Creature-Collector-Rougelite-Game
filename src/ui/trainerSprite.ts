@@ -260,9 +260,6 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   }
   if (![3, 7, 8, 11, 13, 15, 16].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
 
-  // From behind, the back item sits on your back, under your arms.
-  if (back) backItem();
-
   // ---- arms
   const bare = top === 5;
   const sleeve = top === 9 ? acc : top === 15 ? VOID : top === 16 ? 0x8a94a8 : topC;
@@ -273,15 +270,23 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     if (top === 8) rect(x === 7 ? 6 : 21, 20, x === 7 ? 6 : 21, 22, topC); // robe: wide sleeves
   };
   armDown(7);
-  if (raised && back) {
-    // Up and out toward the opponent (up-right).
+  /** Up and out toward the opponent (up-right), seen from behind. */
+  const raisedBack = () => {
     for (let i = 0; i < 6; i++) rect(19 + i, 19 - i, 20 + i, 20 - i, i > 1 && sleeveEnd < 22 ? skin : sleeve);
     round(24, 11, 27, 14, skin, 1);
-  } else if (raised) {
+  };
+  if (raised && back) raisedBack();
+  else if (raised) {
     rect(19, 20, sleeveEnd < 22 ? 21 : 25, 21, sleeve);
     if (sleeveEnd < 22) rect(22, 20, 25, 21, skin);
     round(25, 19, 27, 22, skin, 1);
   } else armDown(19);
+  // From behind, the back item covers your back and arms (wings spread over them), except an arm
+  // raised to give an order, which stays in front.
+  if (back) {
+    backItem();
+    if (raised) raisedBack();
+  }
   if (top === 13) {
     round(6, 18, 9, 19, GOLD, 1); // gold epaulettes
     round(18, 18, 21, 19, GOLD, 1);
@@ -479,9 +484,13 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       const from = y < peak ? Math.max(0, max - 2 - (y - y0) * 2) : 0;
       let w = y < peak ? max : max - Math.floor(((y - peak) * max) / (y1 - peak + 2));
       if (y > peak && y % 2 === 1) w -= 1;
-      for (let i = from; i < w; i++) {
-        const c = color(i, w, y);
+      // From behind, the wings grow out of your spine: below the shoulders they cover the whole back.
+      const inner = back && y >= 17 && w > 0 ? 5 : 0;
+      for (let i = from - inner; i < w; i++) {
+        let c = color(Math.max(0, i), w, y);
         if (c === null) continue;
+        // On the back: a seam down the spine where the wings meet, and feathers sweeping out to the sides.
+        if (i < 0) c = i === -inner ? shade(c, 0.62) : (y - i) % 3 === 0 ? shade(c, 0.8) : c;
         put(8 - i, y, c);
         put(19 + i, y, c);
       }
@@ -549,7 +558,15 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         for (let y = 10; y <= 26; y++) {
           const upper = y <= 19;
           const w = upper ? 7 - Math.floor(Math.abs(y - 14.5)) : 5 - Math.abs(y - 23);
-          for (let i = 0; i < w; i++) {
+          const inner = back && y >= 17 && w > 0 ? 5 : 0;
+          for (let i = -inner; i < w; i++) {
+            if (i < 0) {
+              // Their roots on your back: a seam down the spine, shimmering scales either side.
+              const c = i === -inner ? 0x7ac8e0 : (y - i) % 3 === 0 ? 0xe8fcff : upper ? 0xa8f0ff : 0xf8b8e8;
+              put(8 - i, y, c);
+              put(19 + i, y, c);
+              continue;
+            }
             const c = i === w - 1 ? 0xffffff : upper ? ((i + y) % 4 === 0 ? 0xe8fcff : 0xa8f0ff) : (i + y) % 4 === 0 ? 0xffe0f8 : 0xf8b8e8;
             put(8 - i, y, c);
             put(19 + i, y, c);
