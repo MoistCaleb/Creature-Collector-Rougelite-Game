@@ -880,18 +880,20 @@ export class BattleScene extends Phaser.Scene {
   private drawTeamFx() {
     this.fxChips?.destroy();
     this.fxChips = this.add.container(0, 0).setDepth(5);
+    // Enemy chips go left to right under its panel (clear of the HP numbers and the menu button);
+    // the player's go right to left above its panel.
     for (const side of ['enemy', 'player'] as const) {
-      let x = W - 16;
-      const y = side === 'enemy' ? 74 : 424;
+      let x = side === 'enemy' ? 16 : W - 16;
+      const y = side === 'enemy' ? 118 : 424;
       for (const [fx, left] of Object.entries(this.battle.teamFx[side]) as [TeamFxId, number][]) {
         if (!left) continue;
         const def = TEAM_FX[fx];
-        const t = text(this, 0, 0, `${def.tag} ${left}`, 11, '#1a1426', { fontStyle: 'bold' });
+        const t = text(this, 0, 0, `${def.tag} · ${left}`, 11, '#1a1426', { fontStyle: 'bold' });
         const w = t.width + 10;
-        x -= w;
+        if (side === 'player') x -= w;
         this.fxChips.add(this.add.rectangle(x, y, w, 16, def.color).setOrigin(0));
         this.fxChips.add(t.setPosition(x + 5, y + 2));
-        x -= 4;
+        x += side === 'player' ? -4 : w + 4;
       }
     }
   }

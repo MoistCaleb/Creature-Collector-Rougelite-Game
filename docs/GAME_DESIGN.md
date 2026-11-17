@@ -195,10 +195,10 @@ Proposed math:
   (not two switches close together), and after a faint send in the creature with the best matchup. Arena
   ladder trainers do the same from round 3.
 - **Team moves:** every line learns its element's team move at Lv 26. Effects sit on your side for 5 turns
-  (+1 per skill tier), whoever is out, so switching keeps them: Rally (Fire/Dragon, +25% damage), Guard
-  (Earth/Metal, -25% damage taken), Tailwind (Storm/Spirit, +50% speed), Ward (Light/Frost, no status),
-  Venom coat (Toxic, hits poison 30%), Shroud (Shadow, attacks on you miss 20% more). Mend (Nature/Water)
-  instead heals the whole team 15% and cures statuses. 8 uses. Guardians from floor 2 use them too.
+  (+1 per skill tier), whoever is out, so switching keeps them: Power Boost (Fire/Dragon, +25% damage), Shield
+  Wall (Earth/Metal, -25% damage taken), Speed Boost (Storm/Spirit, +50% speed), Status Guard (Light/Frost,
+  no status), Poison Coating (Toxic, hits poison 30%), Dodge Boost (Shadow, attacks on you miss 20% more).
+  Team Heal (Nature/Water) instead heals the whole team 15% and cures statuses. 8 uses. Guardians from floor 2 use them too.
 - **Move uses:** basic attacks (ranks 1-2 of the main line, quick/multi/sap/boost specials) are unlimited.
   Mid attacks, drain moves and signatures have 15 uses; top-rank and 100+ power attacks and heals 10; buffs and
   debuffs 20. Uses carry between battles. Restored fully at rest nodes, on a new floor and by Full Restore;
