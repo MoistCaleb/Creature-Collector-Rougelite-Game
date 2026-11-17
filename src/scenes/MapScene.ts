@@ -35,6 +35,9 @@ import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } fr
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
+import { ensureTrainerTexture } from '../ui/trainerSprite';
+import { myLook } from '../data/trainerLook';
+import { calm } from '../ui/motion';
 import { Scroller } from '../ui/scroll';
 import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
 import { mapBackdrop } from '../ui/backdrops';
@@ -135,6 +138,12 @@ export class MapScene extends Phaser.Scene {
       const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
       const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
+      // Your token stands on the current hex: fade what's under it (it comes back as you hop away).
+      if (isCurrent) {
+        icon.setAlpha(0.15);
+        label.setAlpha(0.15);
+        this.underToken = [icon, label];
+      }
       if (!canGo && !isCurrent) {
         hex.setAlpha(visited ? 0.35 : 0.6);
         icon.setAlpha(visited ? 0.35 : 0.75);
@@ -148,6 +157,13 @@ export class MapScene extends Phaser.Scene {
         });
       }
     }
+
+    // Your token: your trainer standing on the hex you're on (see hopTo).
+    this.posOf = (id: string) => {
+      const q = pos(map.nodes[id]);
+      return { x: q.x, y: q.y + hexH * 0.12 };
+    };
+    this.makeToken();
 
     // scrolling
     const mapH = 50 + (map.maxY - minY) * rowStep + hexH;
@@ -361,13 +377,101 @@ export class MapScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ nodes
 
+  /** Where the token stands on a node (layer coordinates). */
+  private posOf: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
+  private token: Phaser.GameObjects.Container | null = null;
+  private tokenBody: Phaser.GameObjects.Image | null = null;
+  private hopping = false;
+  private underToken: Phaser.GameObjects.GameObject[] = [];
+
+  /** Your trainer on the current hex, bobbing gently, with a gold ring underfoot. */
+  private makeToken() {
+    const run = state.run!;
+    const at = this.posOf(run.currentId);
+    const c = this.add.container(at.x, at.y);
+    const ring = this.add.ellipse(0, 0, 40, 14, 0xffc94d, 0.35).setStrokeStyle(2, 0xffc94d, 0.9);
+    const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, 0.45);
+    const body = this.add.image(0, 0, ensureTrainerTexture(this, myLook(run.meta), 'stand')).setOrigin(0.5, 0.94).setScale(1.5);
+    c.add([ring, shadow, body]);
+    this.layer.add(c);
+    this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
+    this.token = c;
+    this.tokenBody = body;
+  }
+
+  /** Hop the token to a node: a jump in an arc, a squash on landing, then `done`. */
+  private hopTo(id: string, done: () => void) {
+    const c = this.token;
+    const body = this.tokenBody;
+    if (!c || !body) return done();
+    const to = this.posOf(id);
+    const from = { x: c.x, y: c.y };
+    this.hopping = true;
+    this.tweens.killTweensOf(body);
+    body.setY(0).setFlipX(to.x < from.x);
+    // Keep the landing spot in view.
+    const area = mapArea();
+    const want = Phaser.Math.Clamp(area.top + (area.bottom - area.top) * 0.65 - to.y, this.minScroll, this.maxScroll);
+    if (Math.abs(want - this.layer.y) > 4) this.tweens.add({ targets: this.layer, y: want, duration: 420, ease: 'Sine.easeInOut' });
+    const lift = calm() ? 10 : 34;
+    sfx.hop();
+    this.tweens.add({ targets: this.underToken, alpha: 0.5, duration: 300 });
+    // Crouch, then jump.
+    this.tweens.add({
+      targets: body,
+      scaleX: 1.7,
+      scaleY: 1.25,
+      duration: 70,
+      yoyo: true,
+      onComplete: () => {
+        const arc = { t: 0 };
+        this.tweens.add({
+          targets: arc,
+          t: 1,
+          duration: calm() ? 260 : 380,
+          ease: 'Sine.easeInOut',
+          onUpdate: () => {
+            c.setPosition(from.x + (to.x - from.x) * arc.t, from.y + (to.y - from.y) * arc.t);
+            body.setY(-Math.sin(arc.t * Math.PI) * lift);
+          },
+          onComplete: () => {
+            sfx.land();
+            body.setY(0);
+            this.tweens.add({
+              targets: body,
+              scaleX: 1.75,
+              scaleY: 1.2,
+              duration: 80,
+              yoyo: true,
+              onComplete: () => {
+                body.setScale(1.5);
+                this.time.delayedCall(90, () => {
+                  this.hopping = false;
+                  done();
+                });
+              },
+            });
+          },
+        });
+      },
+    });
+  }
+
   private enterNode(n: MapNode) {
     const run = state.run!;
+    if (this.hopping) return;
     if (run.bossPending) {
       this.scene.start('Battle', { kind: 'boss' });
       return;
     }
     if (!canMoveTo(run, n.id)) return;
+    this.hopTo(n.id, () => this.arrive(n));
+  }
+
+  /** After the hop: move there and do what the node does. */
+  private arrive(n: MapNode) {
+    const run = state.run!;
     moveTo(run, n.id);
     if (['levelup', 'skill', 'prestige', 'treasure', 'event'].includes(n.kind)) {
       // Remember the unresolved choice so a reload offers it again.
