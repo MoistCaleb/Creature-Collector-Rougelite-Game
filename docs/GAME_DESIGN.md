@@ -292,8 +292,11 @@ Proposed math:
 ## Vibration
 
 - Android: the browser vibration API, with patterns per moment (hits, catches, wins, evolutions...).
-- iPhone (iOS 18+): Safari has no vibration API, so a hidden system switch is toggled to get the system's
-  light haptic tick; each buzz in a pattern becomes a tick. On/off in Settings.
+- iPhone (iOS 18+): Safari has no vibration API, so a hidden system switch (kept in the page, off-screen) is
+  flipped to get the system's haptic tick. iOS only allows it while a touch is being handled, so every button
+  press ticks right inside the touch, and other buzzes (hits, catches) are tried too but iOS may skip them.
+  Needs iOS Settings > Sounds & Haptics > System Haptics on. On/off in the game's Settings.
+- Every button press gives a light tap (both platforms).
 
 ## Help, settings and records
 

@@ -4,48 +4,71 @@ import { prefs } from './prefs';
 const hasVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 
 /**
- * iPhone Safari has no vibration API, but from iOS 18 toggling a "switch" checkbox gives a light
- * haptic tick (the same one as the system switches). We click a hidden one to get a tap.
+ * iPhone Safari has no vibration API, but from iOS 18 flipping a "switch" checkbox gives the
+ * system's haptic tick. iOS only allows it while handling a real touch, so:
+ * - the switch lives in the page (off-screen, not display:none, which iOS can ignore), and
+ * - a tick asked for during a touch fires right inside that touch's event handler.
+ * Ticks asked for later (a hit landing a second after you tapped) are tried too; iOS may skip them.
  */
 const iosTicks = (() => {
   if (hasVibrate || typeof navigator === 'undefined' || typeof document === 'undefined') return false;
   const ua = navigator.userAgent;
-  const ios = /iPhone|iPod/.test(ua) || (/iPad|Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  const v = ua.match(/OS (\d+)_/);
-  return ios && (!v || Number(v[1]) >= 18);
+  return /iPhone|iPod|iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 })();
 
-/** True when this device can buzz: a real vibration motor API, or iPhone haptic ticks. */
+/** True when this device can buzz: a real vibration API, or iPhone haptic ticks. */
 export const canVibrate = hasVibrate || iosTicks;
+
+let label: HTMLLabelElement | null = null;
+function ensureSwitch(): HTMLLabelElement | null {
+  if (label?.isConnected) return label;
+  if (!document.body) return null;
+  label = document.createElement('label');
+  label.setAttribute('aria-hidden', 'true');
+  label.style.cssText = 'position:fixed;left:-200px;top:0;width:40px;height:30px;opacity:0.01;pointer-events:none;overflow:hidden';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.setAttribute('switch', '');
+  input.tabIndex = -1;
+  label.appendChild(input);
+  document.body.appendChild(label);
+  return label;
+}
 
 function tick() {
   try {
-    const label = document.createElement('label');
-    label.setAttribute('aria-hidden', 'true');
-    label.style.display = 'none';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.setAttribute('switch', '');
-    label.appendChild(input);
-    document.head.appendChild(label);
-    label.click();
-    label.remove();
+    ensureSwitch()?.click();
   } catch {
     // No haptics here; that's fine.
   }
 }
 
+/** Is a touch being handled right now (the only time iOS allows the tick)? */
+let inTouch = false;
+if (iosTicks) {
+  const start = () => {
+    inTouch = true;
+    // Cleared after this event finishes (the game handles the touch in between).
+    setTimeout(() => (inTouch = false), 0);
+  };
+  for (const ev of ['touchstart', 'touchend', 'pointerdown', 'pointerup', 'click'])
+    document.addEventListener(ev, start, { capture: true, passive: true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => ensureSwitch());
+  else ensureSwitch();
+}
+
 /** iPhone: a pattern becomes a tick at the start of each buzz (longer buzzes get a second tick). */
 function playTicks(pattern: number[]) {
-  let t = 0;
-  pattern.forEach((ms, i) => {
+  tick(); // the first one right away (inside the touch, when there is one)
+  let t = pattern[0] ?? 0;
+  if ((pattern[0] ?? 0) >= 60) setTimeout(tick, 70);
+  for (let i = 1; i < pattern.length; i++) {
     if (i % 2 === 0) {
-      const at = t;
-      setTimeout(tick, at);
-      if (ms >= 60) setTimeout(tick, at + Math.min(ms - 20, 70));
+      setTimeout(tick, t);
+      if (pattern[i] >= 60) setTimeout(tick, t + 70);
     }
-    t += ms;
-  });
+    t += pattern[i];
+  }
 }
 
 let last = 0;
@@ -53,7 +76,7 @@ let last = 0;
 export function buzz(pattern: number | number[]) {
   if (!canVibrate || !prefs.haptics) return;
   const now = Date.now();
-  if (now - last < 40) return;
+  if (now - last < 40 && !inTouch) return;
   last = now;
   if (iosTicks) return playTicks(Array.isArray(pattern) ? pattern : [pattern]);
   try {
@@ -61,4 +84,10 @@ export function buzz(pattern: number | number[]) {
   } catch {
     // Some browsers refuse vibration without a recent tap; that's fine.
   }
+}
+
+/** A light tap for pressing a button (always inside the touch, so it works on iPhone too). */
+export function tapFeel() {
+  if (iosTicks) buzz(10);
+  else buzz(8);
 }
