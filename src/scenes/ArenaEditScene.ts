@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { maxUses, MOVES, moveSummary } from '../data/moves';
+import { accText, maxUses, MOVES, moveSummary } from '../data/moves';
 import { SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS } from '../data/types';
 import {
@@ -245,7 +245,7 @@ export class ArenaEditScene extends Phaser.Scene {
     const d = MOVES[id];
     list.add(this.add.rectangle(24, y + 19, 10, 10, ELEMENT_COLORS[d.element]));
     list.add(text(this, 36, y + 4, d.name, 14, COLORS.text, { fontStyle: 'bold' }));
-    list.add(text(this, 36, y + 21, `${d.team ? 'Team' : KIND_LABEL[d.kind] ?? ''} · ${moveSummary(d, 1)}`, 11, COLORS.textDim));
+    list.add(text(this, 36, y + 21, `${d.team ? 'Team' : KIND_LABEL[d.kind] ?? ''} · ${moveSummary(d, 1)} · ${accText(d)}`, 11, COLORS.textDim));
     const max = maxUses(d);
     list.add(text(this, W - 22, y + 4, max === null ? '∞ uses' : `${max} uses`, 11, COLORS.textDim).setOrigin(1, 0));
     if (tag) list.add(text(this, W - 22, y + 21, tag, 11, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0));
@@ -260,7 +260,7 @@ export class ArenaEditScene extends Phaser.Scene {
       return openPicker(this, {
         title: `Learn ${MOVES[id].name}?`,
         subtitle: 'Choose a move to replace.',
-        options: moves.map((m) => ({ label: MOVES[m].name, sub: moveSummary(MOVES[m], 1) })),
+        options: moves.map((m) => ({ label: MOVES[m].name, sub: `${moveSummary(MOVES[m], 1)} · ${accText(MOVES[m])}` })),
         onPick: (k) => {
           moves[k] = id;
           picks[this.slot] = { ...p, moves };

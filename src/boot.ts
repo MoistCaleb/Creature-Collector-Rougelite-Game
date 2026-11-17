@@ -8,6 +8,7 @@ import { TeamsScene } from './scenes/TeamsScene';
 import { ArenaEditScene } from './scenes/ArenaEditScene';
 import { ArenaPickScene } from './scenes/ArenaPickScene';
 import { DailyScene } from './scenes/DailyScene';
+import { TrainerScene } from './scenes/TrainerScene';
 import { EndScene } from './scenes/EndScene';
 import { MapScene } from './scenes/MapScene';
 import { MapSelectScene } from './scenes/MapSelectScene';
@@ -44,6 +45,7 @@ export function startGame() {
       ArenaEditScene,
       ArenaPickScene,
       DailyScene,
+      TrainerScene,
       EndScene,
       DexScene,
       PassivesScene,

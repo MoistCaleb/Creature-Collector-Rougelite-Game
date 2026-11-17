@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
+import { myLook, myName } from '../data/trainerLook';
 import { SPECIES_BY_ID } from '../data/species';
 import { activeTeamIndex, savedTeams, validArenaTeam } from '../logic/arena';
 import { SETTING_CHOICES, type DuelSettings } from '../net/duel';
-import { saveMeta } from '../logic/run';
 import { duel, hostSetSettings, hostStartRace, hostStartSeries, leaveDuel, sendHello, submitPick } from '../net/runtime';
 import { MAPS, mapUnlocked } from '../data/maps';
 import { CODE_LENGTH, session } from '../net/session';
@@ -53,7 +53,7 @@ export class DuelScene extends Phaser.Scene {
     Object.assign(window, { duelSession: session });
     const brought = this.broughtTeams();
     const team = brought[0]?.picks ?? [];
-    duel.me = { name: meta.duelName || 'Trainer', teams: brought };
+    duel.me = { name: myName(meta), look: myLook(meta), teams: brought };
     const hello = JSON.stringify(duel.me);
     if (session.connected && hello !== DuelScene.lastHello) sendHello();
     DuelScene.lastHello = session.connected ? hello : '';
@@ -73,7 +73,7 @@ export class DuelScene extends Phaser.Scene {
     if (this.picking && duel.series) return this.drawPick();
 
     // Your name and team.
-    button(this, W / 2, 104, W - 40, 44, `Your name: ${duel.me.name}`, () => this.rename(), { fontSize: 15, sub: 'Tap to change' });
+    button(this, W / 2, 104, W - 40, 44, `Your trainer: ${duel.me.name}`, () => this.scene.start('Trainer', { from: 'Duel' }), { fontSize: 15, sub: 'Tap to change your name and look' });
     if (session.connected && duel.opponent && !this.busyText && this.typed === null) return this.drawConnected();
     text(this, 20, 136, 'Your team (active team from the Battle Arena):', 13, COLORS.textDim);
     this.drawTeam(160, team.map((p) => [p.speciesId, p.stage] as [string, number]));
@@ -286,16 +286,6 @@ export class DuelScene extends Phaser.Scene {
     const ok = await session.join(code);
     if (ok) sendHello();
     if (this.scene.isActive()) this.scene.restart({});
-  }
-
-  private rename() {
-    const meta = state.meta;
-    const name = window.prompt('Your name for duels', meta.duelName || 'Trainer');
-    if (name === null) return;
-    meta.duelName = name.trim().slice(0, 16) || 'Trainer';
-    saveMeta(meta);
-    if (session.connected) sendHello();
-    this.scene.restart({});
   }
 
   private leave(stay = false) {

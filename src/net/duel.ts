@@ -1,4 +1,5 @@
 import type { ArenaPick } from '../logic/arena';
+import type { TrainerLook } from '../data/trainerLook';
 import { makeArenaCreature } from '../logic/arena';
 import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { isAlive, stats, type Creature } from '../logic/creature';
@@ -87,7 +88,7 @@ export interface RaceProgress {
 }
 
 export type DuelMsg =
-  | { t: 'hello'; v: number; name: string; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean }
+  | { t: 'hello'; v: number; name: string; look?: TrainerLook; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean }
   | { t: 'settings'; s: DuelSettings }
   /** Host: start a series with these settings (both go pick a team for battle 1). */
   | { t: 'series'; s: DuelSettings }

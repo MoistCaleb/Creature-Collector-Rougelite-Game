@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { allMoveIds, elementPool, MOVES, moveSummary } from '../data/moves';
+import { accText, allMoveIds, elementPool, MOVES, moveSummary } from '../data/moves';
 import { SPECIES } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
@@ -237,7 +237,7 @@ export class DexScene extends Phaser.Scene {
     const sig = MOVES[sp.signature];
     const seenSig = dex.moves.includes(sig.id);
     row.add(
-      text(this, 22, y + h - 32, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)}` : 'Signature: ???', 12, seenSig ? '#ffc94d' : '#4a4068', {
+      text(this, 22, y + h - 32, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 12, seenSig ? '#ffc94d' : '#4a4068', {
         wordWrap: { width: W - 50 },
       }),
     );
@@ -270,7 +270,7 @@ export class DexScene extends Phaser.Scene {
           const sig = MOVES[sp.signature];
           const seenSig = dex.moves.includes(sig.id);
           row.add(
-            text(this, 22, y + 102, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)}` : 'Signature: ???', 11, seenSig ? '#ffc94d' : '#4a4068'),
+            text(this, 22, y + 102, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 11, seenSig ? '#ffc94d' : '#4a4068'),
           );
         }
         if (s < 2) row.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
@@ -302,7 +302,7 @@ export class DexScene extends Phaser.Scene {
             row.add(this.add.rectangle(22, my + 17, 8, 8, ELEMENT_COLORS[el]));
             row.add(text(this, 34, my + 9, m.name, 14, COLORS.text));
             row.add(text(this, 170, my + 10, kind, 12, COLORS.textDim));
-            row.add(text(this, W - 22, my + 10, `${moveSummary(m, 1)} · ${m.accuracy}%`, 12, COLORS.textDim).setOrigin(1, 0));
+            row.add(text(this, W - 22, my + 10, `${moveSummary(m, 1)} · ${accText(m)}`, 12, COLORS.textDim).setOrigin(1, 0));
           } else {
             row.add(text(this, 34, my + 9, '???', 14, '#4a4068'));
           }

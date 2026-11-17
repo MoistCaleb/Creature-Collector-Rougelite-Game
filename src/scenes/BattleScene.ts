@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import { maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
+import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
+import { ensureTrainerTexture } from '../ui/trainerSprite';
+import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
@@ -110,6 +112,8 @@ export interface BattleMatch {
   initialNext?: Next;
   /** Computer opponents that switch and use potions (see Battle's enemyTactics). */
   tactics?: { potions: number };
+  /** How the opponent's trainer looks (online: theirs; otherwise made from their name). */
+  opponentLook?: TrainerLook;
 }
 
 const ENEMY_POS = { x: 320, y: 200 };
@@ -184,6 +188,7 @@ export class BattleScene extends Phaser.Scene {
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[run.map.biome]).darken(78).color);
     this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
+    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
@@ -228,7 +233,7 @@ export class BattleScene extends Phaser.Scene {
       : this.kind === 'battle'
         ? `A wild ${this.enemies.map(creatureName).join(' and a wild ')} appeared!`
         : this.kind === 'elite'
-          ? `${trainer} wants to battle!`
+          ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
     this.msg.setText(intro);
     this.showActions();
@@ -278,6 +283,18 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Trainers stand off to the side, behind their creatures: you bottom-left (pointing into the
+   * fight), the opponent top-right (wild battles have no one there).
+   */
+  private drawTrainers(enemy: TrainerLook | null) {
+    const pose = (img: Phaser.GameObjects.Image, delay: number) =>
+      this.tweens.add({ targets: img, y: img.y - 3, yoyo: true, repeat: -1, duration: 900, delay, ease: 'Sine.easeInOut' });
+    const me = this.add.image(36, 438, ensureTrainerTexture(this, myLook(state.meta), 'command')).setScale(2.7);
+    pose(me, 0);
+    if (enemy) pose(this.add.image(418, 206, ensureTrainerTexture(this, enemy, 'command')).setScale(2.4).setFlipX(true), 450);
+  }
+
   /** A battle outside a run: same field, panels and animations; no rewards, potions or saving. */
   private createMatch(m: BattleMatch) {
     this.kind = 'elite';
@@ -319,6 +336,7 @@ export class BattleScene extends Phaser.Scene {
     background(this, m.background);
     this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
     this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
+    this.drawTrainers(m.opponentLook ?? lookForName(m.opponent));
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.enemyPanel = this.makePanel(16, 16);
@@ -577,7 +595,7 @@ export class BattleScene extends Phaser.Scene {
       this.actions.add(
         button(this, W / 2, 640, W - 24, 64, `${fb.name} (basic attack)`, () => this.act({ kind: 'move', index: -1 }), {
           color,
-          sub: `${moveSummary(fb, 1)}`,
+          sub: `${moveSummary(fb, 1)} · ${accText(fb)}`,
           fontSize: 17,
         }),
       );
@@ -599,7 +617,8 @@ export class BattleScene extends Phaser.Scene {
           enabled: hasUses(m),
         }),
       );
-      // Limited moves show their uses left in the corner.
+      // Hit chance in the top-left corner; limited moves show their uses left in the top-right.
+      this.actions.add(text(this, x - bw / 2 + 6, y - 30, accText(d), 11, d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(hasUses(m) ? 1 : 0.5));
       const left = usesLeft(m);
       if (Number.isFinite(left)) {
         const max = maxUses(d)!;
