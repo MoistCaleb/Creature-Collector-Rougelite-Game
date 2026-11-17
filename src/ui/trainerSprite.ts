@@ -270,23 +270,15 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     if (top === 8) rect(x === 7 ? 6 : 21, 20, x === 7 ? 6 : 21, 22, topC); // robe: wide sleeves
   };
   armDown(7);
-  /** Up and out toward the opponent (up-right), seen from behind. */
-  const raisedBack = () => {
+  if (raised && back) {
+    // Up and out toward the opponent (up-right).
     for (let i = 0; i < 6; i++) rect(19 + i, 19 - i, 20 + i, 20 - i, i > 1 && sleeveEnd < 22 ? skin : sleeve);
     round(24, 11, 27, 14, skin, 1);
-  };
-  if (raised && back) raisedBack();
-  else if (raised) {
+  } else if (raised) {
     rect(19, 20, sleeveEnd < 22 ? 21 : 25, 21, sleeve);
     if (sleeveEnd < 22) rect(22, 20, 25, 21, skin);
     round(25, 19, 27, 22, skin, 1);
   } else armDown(19);
-  // From behind, the back item covers your back and arms (wings spread over them), except an arm
-  // raised to give an order, which stays in front.
-  if (back) {
-    backItem();
-    if (raised) raisedBack();
-  }
   if (top === 13) {
     round(6, 18, 9, 19, GOLD, 1); // gold epaulettes
     round(18, 18, 21, 19, GOLD, 1);
@@ -312,8 +304,12 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
 
   // ---- head and face
   round(X0, Y0, X1, Y1, skin, 2);
-  if (back) backHair();
-  else {
+  if (back) {
+    backHair();
+    // From behind, the back item is nearest you: it covers the back, both arms, the neck and the
+    // back of the head wherever its shape reaches (the hat still sits on top).
+    backItem();
+  } else {
     const eye = EYE_COLORS[look.eyes];
     for (const ex of [9, 17]) {
       rect(ex, 11, ex + 1, 13, eye);
@@ -479,18 +475,20 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
    */
   function wings(color: (i: number, w: number, y: number) => number | null, y0 = 6, y1 = 27, max = 8) {
     const peak = y0 + 4;
+    const ROOT = 18;
     for (let y = y0; y <= y1; y++) {
       // Top: only the outer part (the tip leaning out); then full width; then tapering, notched.
       const from = y < peak ? Math.max(0, max - 2 - (y - y0) * 2) : 0;
       let w = y < peak ? max : max - Math.floor(((y - peak) * max) / (y1 - peak + 2));
       if (y > peak && y % 2 === 1) w -= 1;
-      // From behind, the wings grow out of your spine: below the shoulders they cover the whole back.
-      const inner = back && y >= 17 && w > 0 ? 5 : 0;
-      for (let i = from - inner; i < w; i++) {
+      // From behind, the wings grow out of your spine at the shoulder blades and their inner edge
+      // sweeps up and out to the tips, over your neck and the back of your head.
+      const start = back && w > 0 ? Math.min(from, y >= ROOT ? -5 : Math.round(-5 + ((ROOT - y) * (max + 3)) / (ROOT - y0))) : from;
+      for (let i = start; i < w; i++) {
         let c = color(Math.max(0, i), w, y);
         if (c === null) continue;
         // On the back: a seam down the spine where the wings meet, and feathers sweeping out to the sides.
-        if (i < 0) c = i === -inner ? shade(c, 0.62) : (y - i) % 3 === 0 ? shade(c, 0.8) : c;
+        if (i < 0) c = i === -5 ? shade(c, 0.62) : (y - i) % 3 === 0 ? shade(c, 0.8) : c;
         put(8 - i, y, c);
         put(19 + i, y, c);
       }
@@ -558,11 +556,12 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         for (let y = 10; y <= 26; y++) {
           const upper = y <= 19;
           const w = upper ? 7 - Math.floor(Math.abs(y - 14.5)) : 5 - Math.abs(y - 23);
-          const inner = back && y >= 17 && w > 0 ? 5 : 0;
+          // From behind: rooted at the spine, the inner edge rising toward the upper tips.
+          const inner = back && w > 0 ? Math.max(0, 5 - Math.max(0, 18 - y)) : 0;
           for (let i = -inner; i < w; i++) {
             if (i < 0) {
               // Their roots on your back: a seam down the spine, shimmering scales either side.
-              const c = i === -inner ? 0x7ac8e0 : (y - i) % 3 === 0 ? 0xe8fcff : upper ? 0xa8f0ff : 0xf8b8e8;
+              const c = i === -5 ? 0x7ac8e0 : (y - i) % 3 === 0 ? 0xe8fcff : upper ? 0xa8f0ff : 0xf8b8e8;
               put(8 - i, y, c);
               put(19 + i, y, c);
               continue;
