@@ -72,6 +72,7 @@ import {
 } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
+import { openGameMenu } from '../ui/gameMenu';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, HpBar, stars, text, typeChip, W } from '../ui/widgets';
 
@@ -211,6 +212,12 @@ export class BattleScene extends Phaser.Scene {
     this.actions = this.add.container(0, 0);
     this.controls = this.add.container(0, 0);
     this.drawControls();
+    // Menu: exit to the title mid-battle (the battle resumes from "Continue run").
+    button(this, W - 36, 116, 48, 36, '', () => {
+      if (this.busy) return;
+      this.cancelAuto();
+      openGameMenu(this, () => this.maybeAuto());
+    }, { glyph: 'menu' }).setDepth(5);
 
     this.refreshEnemy();
     this.refreshPlayer();
