@@ -6,6 +6,7 @@ import { ArenaScene } from './scenes/ArenaScene';
 import { DuelScene } from './scenes/DuelScene';
 import { TeamsScene } from './scenes/TeamsScene';
 import { ArenaEditScene } from './scenes/ArenaEditScene';
+import { ArenaPickScene } from './scenes/ArenaPickScene';
 import { EndScene } from './scenes/EndScene';
 import { MapScene } from './scenes/MapScene';
 import { MapSelectScene } from './scenes/MapSelectScene';
@@ -40,6 +41,7 @@ export function startGame() {
       DuelScene,
       TeamsScene,
       ArenaEditScene,
+      ArenaPickScene,
       EndScene,
       DexScene,
       PassivesScene,

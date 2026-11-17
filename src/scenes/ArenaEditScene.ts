@@ -7,7 +7,6 @@ import {
   ARENA_LEVEL,
   arenaForms,
   arenaMovePool,
-  arenaRoster,
   defaultArenaMoves,
   savedTeams,
   validArenaTeam,
@@ -92,7 +91,7 @@ export class ArenaEditScene extends Phaser.Scene {
     text(this, 150, 78, `${sp.names[p.stage]}  Lv ${ARENA_LEVEL}`, 18, COLORS.text, { fontStyle: 'bold' });
     typeChips(this, 150, 112, creatureTypes(c), true);
     text(this, 150, 130, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3 });
-    button(this, W - 74, 92, 104, 30, 'Change', () => this.changeSpecies(), { fontSize: 13, color: 0x2f4a6b, sub: undefined });
+    button(this, W - 74, 92, 104, 30, 'Change', () => this.scene.start('ArenaPick', { slot: this.slot }), { fontSize: 13, color: 0x2f4a6b, sub: undefined });
     const forms = arenaForms(state.meta, p.speciesId);
     const tw = (W - 48) / 3;
     [0, 1, 2].forEach((st) => {
@@ -221,27 +220,5 @@ export class ArenaEditScene extends Phaser.Scene {
     }
     picks[this.slot] = { ...p, moves };
     this.save(picks);
-  }
-
-  private changeSpecies() {
-    const picks = this.picks();
-    const taken = picks.filter((_, k) => k !== this.slot).map((x) => x.speciesId);
-    const roster = arenaRoster(state.meta).filter((id) => !taken.includes(id));
-    openPicker(this, {
-      title: 'Choose a creature',
-      subtitle: 'Any species you have caught, in its most evolved form you have seen.',
-      options: roster.map((id) => {
-        const forms = arenaForms(state.meta, id);
-        return { creature: createCreature(id, ARENA_LEVEL, forms[forms.length - 1]) };
-      }),
-      onPick: (k) => {
-        const id = roster[k];
-        const forms = arenaForms(state.meta, id);
-        const st = forms[forms.length - 1];
-        picks[this.slot] = { speciesId: id, stage: st, moves: defaultArenaMoves(id, st) };
-        this.save(picks);
-      },
-      onCancel: () => {},
-    });
   }
 }
