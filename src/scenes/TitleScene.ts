@@ -36,7 +36,7 @@ export class TitleScene extends Phaser.Scene {
 
     // Your trainer (top-left): tap to edit name and look.
     const tb = button(this, 66, 30, 116, 46, '', () => this.scene.start('Trainer', { from: 'Title' }), { color: 0x2f4a6b });
-    tb.add(this.add.image(-38, 0, ensureTrainerTexture(this, myLook(meta))).setScale(0.95));
+    tb.add(this.add.image(-38, 0, ensureTrainerTexture(this, myLook(meta))).setScale(1.15));
     const nm = text(this, 12, -8, myName(meta), 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
     if (nm.width > 76) nm.setScale(76 / nm.width);
     tb.add([nm, text(this, 12, 10, 'Edit trainer', 10, COLORS.textDim).setOrigin(0.5)]);
