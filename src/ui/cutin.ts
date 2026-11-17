@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { calm } from './motion';
 import { EYE_COLORS, SKIN_TONES, type TrainerLook } from '../data/trainerLook';
 import type { Creature } from '../logic/creature';
 import { sfx } from './sound';
@@ -254,10 +255,12 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
         onComplete: () => {
           sfx.stripHit(i);
           scene.cameras.main.shake(90, 0.007);
-          flash.setFillStyle(0xffffff, 0.95);
-          scene.tweens.add({ targets: flash, fillAlpha: 0, duration: 220, ease: 'Quad.easeOut' });
-          img.setScale(baseScale * 1.14);
-          scene.tweens.add({ targets: img, scale: baseScale, duration: 260, ease: 'Back.easeOut' });
+          if (!calm()) {
+            flash.setFillStyle(0xffffff, 0.95);
+            scene.tweens.add({ targets: flash, fillAlpha: 0, duration: 220, ease: 'Quad.easeOut' });
+            img.setScale(baseScale * 1.14);
+            scene.tweens.add({ targets: img, scale: baseScale, duration: 260, ease: 'Back.easeOut' });
+          }
           splatter(scene, dir < 0 ? sx + sw : sx, y + sh / 2, -dir, sh);
         },
       });

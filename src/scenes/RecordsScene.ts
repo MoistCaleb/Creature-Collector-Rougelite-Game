@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { gildedCount, myTitle } from '../logic/gilded';
 import { MAP_BY_ID } from '../data/maps';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { mostUsed, type RunRecord } from '../logic/run';
@@ -88,6 +89,10 @@ export class RecordsScene extends Phaser.Scene {
       ['Maps won', `${meta.clearedMaps.length}/${Object.keys(MAP_BY_ID).length}`],
       ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
+      ['Gilded species', `${gildedCount(meta)}/${SPECIES.length}`],
+      ['Trainer title', myTitle(meta) ?? '—'],
+      ['Dailies played', String(Object.values(meta.dailies ?? {}).filter((r) => r.attempts > 0).length)],
+      ['Weeklies won', `${Object.values(meta.weeklies ?? {}).filter((r) => r.best?.won).length}/${Object.values(meta.weeklies ?? {}).filter((r) => r.attempts > 0).length}`],
     ];
     const hw = (colW - 4) / 2;
     counts.forEach(([label, value], i) => {
@@ -131,7 +136,7 @@ export class RecordsScene extends Phaser.Scene {
     const map = MAP_BY_ID[r.mapId]?.name ?? r.mapId;
     list.add(text(this, x + 16, y + 8, r.won ? 'WON' : `Floor ${r.floor}`, 15, r.won ? '#8fe08a' : '#ff8a7a', { fontStyle: 'bold' }));
     const date = new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    list.add(text(this, x + 16, y + 28, `${map}${r.heat ? ` · Heat ${r.heat}` : ''}${r.daily ? ' · Daily' : ''}`, 12, COLORS.text));
+    list.add(text(this, x + 16, y + 28, `${map}${r.heat ? ` · Heat ${r.heat}` : ''}${r.daily ? ' · Daily' : ''}${r.weekly ? ' · Weekly' : ''}`, 12, COLORS.text));
     list.add(
       text(this, x + 16, y + 46, `${date} · ${r.battlesWon} wins · ${r.caught} caught${r.endedBy ? ` · ${r.endedBy}` : ''}`, 11, COLORS.textDim, {
         wordWrap: { width: w - 24 - Math.min(4, r.team.length) * 40 },

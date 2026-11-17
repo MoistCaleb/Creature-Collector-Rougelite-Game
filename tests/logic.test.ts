@@ -1737,3 +1737,170 @@ describe('shinies in the Arena and online duels', () => {
     expect(startRun(meta, id, 5).team[0].shiny).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------- 1.0: weekly, gilded, save codes
+import { postBattleRecover, startWeekly, TWIST_ORDER, weekId, weeklyInfo, weeklyPlayed, recordWeekly } from '../src/logic/run';
+import { GILDED_MILESTONES, earnedTitles, gildedCount, lockedBy, myTitle, takeNewMilestones } from '../src/logic/gilded';
+import { LOOK_PARTS, randomLook, lookForName, bossLook, FREE_COLORS } from '../src/data/trainerLook';
+import { decodeSave, encodeSave, summarize } from '../src/logic/saveCode';
+import { changesSince, CHANGELOG, APP_VERSION, versionNewer } from '../src/data/changelog';
+
+const blankMeta = (): Meta => ({
+  unlockedStarters: [...DEFAULT_STARTERS],
+  unlockedPassives: [],
+  equippedPassive: null,
+  runs: 0,
+  wins: 0,
+  dex: emptyDex(),
+  coinsSpent: 0,
+  bossesDefeated: 0,
+  clearedMaps: [],
+  lastMap: 'wildlands',
+  stats: emptyStats(),
+  achievements: [],
+  newAchievements: [],
+});
+
+describe('weekly challenge', () => {
+  it('names each week by its Monday', () => {
+    expect(weekId(new Date('2026-11-17T12:00:00Z'))).toBe('2026-11-16'); // a Tuesday
+    expect(weekId(new Date('2026-11-16T00:00:00Z'))).toBe('2026-11-16');
+    expect(weekId(new Date('2026-11-22T23:59:00Z'))).toBe('2026-11-16'); // Sunday
+    expect(weekId(new Date('2026-11-23T00:00:00Z'))).toBe('2026-11-23');
+  });
+  it('is the same for everyone and rotates through every twist', () => {
+    expect(weeklyInfo('2026-11-16')).toEqual(weeklyInfo('2026-11-16'));
+    const twists = new Set<string>();
+    let d = Date.parse('2026-11-16T00:00:00Z');
+    for (let i = 0; i < TWIST_ORDER.length; i++, d += 7 * 86400000) twists.add(weeklyInfo(new Date(d).toISOString().slice(0, 10)).twist);
+    expect(twists.size).toBe(TWIST_ORDER.length);
+    const w = weeklyInfo('2026-11-16');
+    expect(new Set(w.starters).size).toBe(3);
+    for (const id of w.starters) expect(w.passives[id]).toBeTruthy();
+  });
+  const weekWith = (twist: string) => {
+    let d = Date.parse('2026-11-16T00:00:00Z');
+    for (;;) {
+      const id = new Date(d).toISOString().slice(0, 10);
+      if (weeklyInfo(id).twist === twist) return id;
+      d += 7 * 86400000;
+    }
+  };
+  it('Element Duo keeps every floor, starter and wild Hexling to two elements', () => {
+    const week = weekWith('duo');
+    const info = weeklyInfo(week);
+    expect(info.duo).toHaveLength(2);
+    for (const id of info.starters) expect(SPECIES_BY_ID[id].types.some((t) => info.duo!.includes(t))).toBe(true);
+    const run = startWeekly(blankMeta(), week, info.starters[0]);
+    expect(run.twist).toBe('duo');
+    for (const b of run.biomes) expect(info.duo).toContain(b);
+    for (let i = 0; i < 40; i++) {
+      const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
+      for (const c of makeEncounter(run, node)) expect(SPECIES_BY_ID[c.speciesId].types.some((t) => info.duo!.includes(t))).toBe(true);
+    }
+  });
+  it('Swarm sends two wild Hexlings from the first battle', () => {
+    const week = weekWith('swarm');
+    const run = startWeekly(blankMeta(), week, weeklyInfo(week).starters[0]);
+    const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
+    for (let i = 0; i < 10; i++) expect(makeEncounter(run, node)).toHaveLength(2);
+  });
+  it('Lean Times halves healing and pays more coins', () => {
+    const week = weekWith('lean');
+    const meta = blankMeta();
+    const lean = startWeekly(meta, week, weeklyInfo(week).starters[0]);
+    const normal = startRun(blankMeta(), weeklyInfo(week).starters[0], 1, 'wildlands', undefined, true);
+    for (const r of [lean, normal]) r.team[0].hp = 1;
+    postBattleRecover(lean);
+    postBattleRecover(normal);
+    expect(lean.team[0].hp - 1).toBeLessThan(normal.team[0].hp - 1);
+    const foes = [createCreature('emberkit', 10)];
+    expect(battleCoins(foes, 'battle', 0, 'lean')).toBeGreaterThan(battleCoins(foes, 'battle', 0));
+  });
+  it('Glass Cannon makes the enemy side hit harder too', () => {
+    const dmg = (mult: number) => {
+      const me = createCreature('pebblin', 20);
+      const foe = createCreature('emberkit', 20);
+      const b = new Battle([me], [foe], new Rng(7), { enemyRandomness: 0, enemyDamageMult: mult });
+      b.start();
+      const hp = me.hp;
+      b.takeTurn({ kind: 'move', index: 0 });
+      return hp - me.hp;
+    };
+    expect(dmg(1.5)).toBeGreaterThan(dmg(1));
+  });
+  it('counts attempts and keeps the best result', () => {
+    const week = weekWith('glass');
+    const meta = blankMeta();
+    const run = startWeekly(meta, week, weeklyInfo(week).starters[0]);
+    expect(weeklyPlayed(meta, week)?.attempts).toBe(1);
+    run.floor = 1;
+    expect(recordWeekly(run, false)).toBe(true);
+    expect(recordWeekly(run, false)).toBe(false);
+    expect(meta.lastMap).toBe('wildlands'); // a weekly doesn't change your chosen map
+  });
+});
+
+describe('gilded milestones', () => {
+  it('locks gilded outfit pieces until enough Gilded species are owned', () => {
+    const meta = blankMeta();
+    const laurel = GILDED_MILESTONES[0].unlocks[0];
+    expect(lockedBy(meta, 'hat', laurel.value)?.count).toBe(5);
+    expect(lockedBy(meta, 'hat', 1)).toBeNull();
+    meta.shinyOwned = SPECIES.slice(0, 5).map((s) => s.id);
+    expect(lockedBy(meta, 'hat', laurel.value)).toBeNull();
+    expect(lockedBy(meta, 'aura', 1)?.count).toBe(120);
+    expect(lockedBy(meta, 'topColor', FREE_COLORS)?.count).toBe(60);
+  });
+  it('announces each milestone once and wears the first title', () => {
+    const meta = blankMeta();
+    meta.shinyOwned = SPECIES.slice(0, 16).map((s) => s.id);
+    expect(gildedCount(meta)).toBe(16);
+    expect(takeNewMilestones(meta).map((m) => m.count)).toEqual([5, 15]);
+    expect(takeNewMilestones(meta)).toEqual([]);
+    expect(myTitle(meta)).toBe('Gilded Seeker');
+    expect(earnedTitles(meta)).toEqual(['Gilded Seeker']);
+    meta.trainerTitle = 'Gilded Master'; // not earned: not shown
+    expect(myTitle(meta)).toBeNull();
+  });
+  it('never dresses NPC trainers or guardians in gilded gear', () => {
+    for (let i = 0; i < 400; i++) {
+      const looks = [randomLook(new Rng(i)), lookForName(`npc${i}`)];
+      for (const look of looks)
+        for (const p of LOOK_PARTS) expect(look[p.key]).toBeLessThan(p.free ?? p.names.length);
+    }
+    for (const el of ELEMENTS) for (const p of LOOK_PARTS) expect(bossLook(el)[p.key]).toBeLessThan(p.free ?? p.names.length);
+  });
+});
+
+describe('save codes', () => {
+  const bundle = { at: 1763380000000, meta: JSON.stringify({ ...blankMeta(), runs: 12, wins: 3, shinyOwned: ['emberkit'] }), run: JSON.stringify({ floor: 1 }) };
+  it('round-trips a save', async () => {
+    const code = await encodeSave(bundle);
+    expect(code.startsWith('HEXB')).toBe(true);
+    // Line breaks and spaces picked up while pasting don't matter.
+    const back = await decodeSave(`  ${code.slice(0, 20)}\n${code.slice(20)} `);
+    expect(back).toEqual(bundle);
+    expect(summarize(back)).toMatchObject({ runs: 12, wins: 3, gilded: 1, runInProgress: true });
+  });
+  it('rejects cut-off, edited and foreign codes', async () => {
+    const code = await encodeSave(bundle);
+    await expect(decodeSave(code.slice(0, -10))).rejects.toThrow();
+    const i = 12;
+    const edited = code.slice(0, i) + (code[i] === 'A' ? 'B' : 'A') + code.slice(i + 1);
+    await expect(decodeSave(edited)).rejects.toThrow();
+    await expect(decodeSave('hello there')).rejects.toThrow(/HEXB/);
+    await expect(decodeSave('')).rejects.toThrow();
+  });
+});
+
+describe('changelog', () => {
+  it('lists the current version first and compares versions', () => {
+    expect(CHANGELOG[0].version).toBe(APP_VERSION);
+    expect(versionNewer('1.0', '0.9')).toBe(true);
+    expect(versionNewer('0.9', '1.0')).toBe(false);
+    expect(versionNewer('1.0', '1.0')).toBe(false);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.0']);
+    expect(changesSince(APP_VERSION)).toEqual([]);
+  });
+});

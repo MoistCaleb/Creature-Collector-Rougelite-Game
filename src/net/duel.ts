@@ -88,7 +88,7 @@ export interface RaceProgress {
 }
 
 export type DuelMsg =
-  | { t: 'hello'; v: number; name: string; look?: TrainerLook; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean }
+  | { t: 'hello'; v: number; name: string; look?: TrainerLook; title?: string; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean }
   | { t: 'settings'; s: DuelSettings }
   /** Host: start a series with these settings (both go pick a team for battle 1). */
   | { t: 'series'; s: DuelSettings }

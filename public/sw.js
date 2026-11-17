@@ -3,7 +3,7 @@
 // arrives on the next launch; fall back to the cached copy offline.
 // Everything else (the game bundle, icons): cache first. Bundle files have content hashes in
 // their names, so a new version always fetches fresh files.
-const CACHE = 'creature-roguelite-v2';
+const CACHE = 'creature-roguelite-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -26,7 +26,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // The update check must always reach the network.
+  if (url.pathname.endsWith('/version.json')) return;
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req.url, { cache: 'no-store' })

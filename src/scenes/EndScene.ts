@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { takeNewMilestones } from '../logic/gilded';
+import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
 import { persist, state } from '../state';
@@ -146,13 +148,24 @@ export class EndScene extends Phaser.Scene {
       const rec = dailyRecord(state.meta, run.daily);
       extra.push(`Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
     }
+    if (run.weekly && run.twist) {
+      const best = recordedRuns.has(run) ? false : recordWeekly(run, data.won);
+      recordedRuns.add(run);
+      const rec = weeklyRecord(state.meta, run.weekly);
+      extra.push(`Weekly ${TWISTS[run.twist].name}: ${best ? 'new best!' : `best this week: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
+    }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
     const earned = state.meta.newAchievements.splice(0);
     if (earned.length) {
       saveMeta(state.meta);
       extra.push(`Achievements: ${earned.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name).join(', ')}`);
     }
-    const huntRoom = data.won && !run.daily && !hunt && !run.race;
+    const milestones = takeNewMilestones(state.meta);
+    if (milestones.length) {
+      saveMeta(state.meta);
+      extra.push(`Gilded milestone: ${milestones.map((m) => m.title ?? `${m.count} Gilded`).join(', ')} (new outfit pieces)`);
+    }
+    const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race;
     if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
       text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
     }
@@ -161,7 +174,7 @@ export class EndScene extends Phaser.Scene {
     // Keep a good creature: save its form and moves for the team builder.
     const alive = allCreatures(run).filter((c) => c.hp > 0);
     // Won a normal run: keep climbing as a Shiny Hunt.
-    const canHunt = data.won && !run.daily && !hunt;
+    const canHunt = data.won && !run.daily && !run.weekly && !hunt;
     if (canHunt) {
       const hb = button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 296 : 630, 320, 52, 'Gilded Hunt', () => this.confirmHunt(run), {
         fontSize: 20,

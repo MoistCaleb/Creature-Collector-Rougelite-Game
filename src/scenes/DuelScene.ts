@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { myTitle } from '../logic/gilded';
 import { myLook, myName } from '../data/trainerLook';
 import { SPECIES_BY_ID } from '../data/species';
 import { activeTeamIndex, savedTeams, validArenaTeam } from '../logic/arena';
@@ -57,7 +58,7 @@ export class DuelScene extends Phaser.Scene {
     Object.assign(window, { duelSession: session });
     const brought = this.broughtTeams();
     const team = brought[0]?.picks ?? [];
-    duel.me = { name: myName(meta), look: myLook(meta), teams: brought };
+    duel.me = { name: myName(meta), look: myLook(meta), title: myTitle(meta) ?? undefined, teams: brought };
     const hello = JSON.stringify(duel.me);
     if (session.connected && hello !== DuelScene.lastHello) sendHello();
     DuelScene.lastHello = session.connected ? hello : '';

@@ -58,6 +58,7 @@ export class Battle {
   eActive = 0;
   private rng: Rng;
   private playerDamageMult: number;
+  private enemyDamageMult: number;
   private playerStatusMult: number;
   private playerImmune: StatusId[];
   private reserve: Creature[];
@@ -145,6 +146,8 @@ export class Battle {
     rng: Rng = new Rng(),
     opts: {
       playerDamageMult?: number;
+      /** Multiplies damage the enemy side deals (weekly Glass Cannon). */
+      enemyDamageMult?: number;
       enemyRandomness?: number;
       /** Your fainted creatures are gone for good (runs); off for Arena and duels. */
       permadeath?: boolean;
@@ -177,6 +180,7 @@ export class Battle {
     } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
+    this.enemyDamageMult = opts.enemyDamageMult ?? 1;
     this.enemyRandomness = opts.enemyRandomness ?? 0.25;
     this.permadeath = opts.permadeath ?? true;
     this.tactics = opts.enemyTactics ? { ...opts.enemyTactics } : null;
@@ -754,7 +758,7 @@ export class Battle {
         (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
         // Ironhide: each super-effective element only counts x1.25 against their Hexlings.
         (side === 'player' && this.has('ironhide') ? Math.pow(1.25 / 1.5, r.mult >= 2 ? 2 : r.mult > 1.01 ? 1 : 0) : 1);
-      const raw = Math.max(1, Math.round(r.dmg * (side === 'player' ? this.playerDamageMult : 1) * fxMult));
+      const raw = Math.max(1, Math.round(r.dmg * (side === 'player' ? this.playerDamageMult : this.enemyDamageMult) * fxMult));
       const dmg = this.hurt(target, raw);
       total += dmg;
       if (side === 'player') {

@@ -29,6 +29,8 @@ import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
+import { announceGilded } from '../ui/gildedUi';
+import { TWISTS } from '../logic/run';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -175,13 +177,13 @@ export class MapScene extends Phaser.Scene {
     const next = () => {
       const meta = state.meta;
       const ids = meta.newAchievements.splice(0);
-      if (!ids.length) return after();
+      if (!ids.length) return announceGilded(this, meta, after);
       persist();
       const lines = ids.map((id) => {
         const a = ACHIEVEMENTS.find((x) => x.id === id)!;
         return `${a.name}: ${a.desc}\nUnlocked passive: ${PASSIVES[a.passive].name}`;
       });
-      showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', after);
+      showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', () => announceGilded(this, meta, after));
     };
     const afterBanner = () => (data.banner ? showMessage(this, run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
     // New held items and Evolution Stones since the map was last shown get their own moments.
@@ -238,6 +240,13 @@ export class MapScene extends Phaser.Scene {
       mx += 22 + t.width;
     }
     if (run.daily) pixelIcon(this, mx, 46, 'calendar', 16);
+    if (run.weekly && run.twist) {
+      // The weekly twist: tap the crown to read it again.
+      const tw = TWISTS[run.twist];
+      pixelIcon(this, mx, 46, 'crown', 16)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => showMessage(this, `Weekly: ${tw.name}`, tw.desc));
+    }
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 158, 45, 'stone', 16);
     text(this, 170, 36, `${run.evoStones}`, 14, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
@@ -268,6 +277,13 @@ export class MapScene extends Phaser.Scene {
       mx += 22 + t.width;
     }
     if (run.daily) pixelIcon(this, mx, 48, 'calendar', 16);
+    if (run.weekly && run.twist) {
+      // The weekly twist: tap the crown to read it again.
+      const tw = TWISTS[run.twist];
+      pixelIcon(this, mx, 48, 'crown', 16)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => showMessage(this, `Weekly: ${tw.name}`, tw.desc));
+    }
     text(this, 14, 70, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 100, 80, 'stone', 16);
     text(this, 112, 70, `${run.evoStones}`, 16, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });

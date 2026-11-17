@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { BossDef, BossRule } from '../data/trainers';
 import { icon } from './icons';
+import { calm } from './motion';
 import { sfx } from './sound';
 import { button, COLORS, fullRect, H, LANDSCAPE, text, W } from './widgets';
 
@@ -112,7 +113,7 @@ export function bossRuleCard(scene: Phaser.Scene, boss: BossDef, rules: RuleInfo
     onComplete: () => {
       sfx.statDown();
       scene.cameras.main.shake(180, 0.006);
-      scene.tweens.add({ targets: panel, x: { from: W / 2 - 6, to: W / 2 + 6 }, yoyo: true, repeat: 2, duration: 40, onComplete: () => panel.setX(W / 2) });
+      if (!calm()) scene.tweens.add({ targets: panel, x: { from: W / 2 - 6, to: W / 2 + 6 }, yoyo: true, repeat: 2, duration: 40, onComplete: () => panel.setX(W / 2) });
     },
   });
   return root;

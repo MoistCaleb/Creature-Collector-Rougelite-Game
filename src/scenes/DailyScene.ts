@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
+import { TWISTS, twistShort, weekId, weeklyInfo, weeklyPlayed } from '../logic/run';
+import { MAP_BY_ID } from '../data/maps';
 import { clearSavedRun, dailyPassives, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, PASSIVES, todayUtc } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
@@ -43,7 +45,7 @@ export class DailyScene extends Phaser.Scene {
     const hx = wide ? 140 : W / 2 + 20;
     const gx = wide ? 272 : 12;
     const gw = wide ? W - gx - 12 : W - 24;
-    text(this, hx, wide ? 66 : 16, 'Daily runs', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, hx, wide ? 66 : 16, 'Daily & weekly', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     text(this, hx, wide ? 100 : 50, 'A new run every day, the same for everyone.\nPlay today’s or go back to any day you missed.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: wide ? 240 : W } }).setOrigin(0.5, 0);
 
     // Month header with arrows.
@@ -96,6 +98,16 @@ export class DailyScene extends Phaser.Scene {
     } else {
       button(this, hx, wide ? 220 : 700, wide ? 240 : 260, 52, 'Play today’s run', () => this.pickDay(today), { fontSize: 18, color: 0x2f4a6b, glyph: 'calendar' });
     }
+
+    // This week's challenge: a fixed run with a twist.
+    const week = weeklyInfo(weekId());
+    const wrec = weeklyPlayed(meta, week.week);
+    button(this, hx, wide ? 300 : 758, wide ? 240 : 380, wide ? 64 : 54, `Weekly: ${TWISTS[week.twist].name}`, () => this.pickWeekly(), {
+      fontSize: 17,
+      color: 0x5a3a7a,
+      glyph: 'crown',
+      sub: wrec?.best ? `Your best: ${describeDaily(wrec.best)}` : twistShort(week),
+    });
   }
 
   private pickDay(date: string) {
@@ -109,6 +121,39 @@ export class DailyScene extends Phaser.Scene {
       subtitle: `Starters, each with a passive that suits it:\n${starters}\nHeat 0.\n${rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'}`,
       options: [{ label: rec ? 'Play again' : 'Play', color: 0x3b6d4a, glyph: 'play' }],
       onPick: () => this.play(date),
+      onCancel: () => {},
+    });
+  }
+
+  private pickWeekly() {
+    const meta = state.meta;
+    const week = weeklyInfo(weekId());
+    const rec = weeklyPlayed(meta, week.week);
+    const [y, m, d] = week.week.split('-').map(Number);
+    const left = 7 - Math.floor((Date.now() - Date.UTC(y, m - 1, d)) / 86400000);
+    const starters = week.starters.map((id) => `${SPECIES_BY_ID[id].names[0]} (${PASSIVES[week.passives[id]].name})`).join('\n');
+    openPicker(this, {
+      title: `Weekly: ${TWISTS[week.twist].name}`,
+      subtitle:
+        `${TWISTS[week.twist].desc}\n\nWeek of ${MONTHS[m - 1]} ${d} · ${MAP_BY_ID[week.mapId]?.name ?? 'Wildlands'} · Heat 0 · ${left <= 1 ? 'last day!' : `${left} days left`}\n` +
+        `Starters:\n${starters}\n` +
+        (rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'),
+      options: [{ label: rec ? 'Play again' : 'Play', color: 0x3b6d4a, glyph: 'play' }],
+      onPick: () => this.go(() => this.scene.start('Starter', { weekly: week.week }), 'Starting the weekly challenge ends your current run.', 'Abandon and play the weekly'),
+      onCancel: () => {},
+    });
+  }
+
+  private go(start: () => void, subtitle: string, label: string) {
+    if (!hasSavedRun()) return start();
+    openPicker(this, {
+      title: 'Abandon your run?',
+      subtitle,
+      options: [{ label, color: 0x8a2c2c }],
+      onPick: () => {
+        clearSavedRun();
+        start();
+      },
       onCancel: () => {},
     });
   }

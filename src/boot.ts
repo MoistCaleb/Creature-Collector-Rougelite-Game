@@ -18,6 +18,7 @@ import { TeamScene } from './scenes/TeamScene';
 import { TitleScene } from './scenes/TitleScene';
 import { RecordsScene } from './scenes/RecordsScene';
 import { openSettings } from './ui/settings';
+import { installMotionGuard } from './ui/motion';
 import { openElementChart } from './ui/elementChart';
 import { openHowToPlay } from './ui/howto';
 import { tip } from './ui/tips';
@@ -28,6 +29,7 @@ import { boardChanged, COLORS, FH, FW, landscapeReady, ZOOM } from './ui/widgets
 /** Start the game. Call once the save storage is ready. */
 export function startGame() {
   state.meta = loadMeta();
+  installMotionGuard();
   // Screens with a landscape layout (the rest stay upright, centered, when the phone is sideways).
   landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel', 'Records');
   const game = new Phaser.Game({

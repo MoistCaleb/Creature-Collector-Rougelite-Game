@@ -13,6 +13,7 @@ npm run dev        # dev server; open the printed Network URL on your phone (sam
 npm run build      # production build into dist/
 npm test           # logic unit tests
 npx vite-node scripts/simulate.ts 500   # balance simulator: plays 500 runs headlessly
+npx vite-node scripts/balance.ts        # full balance report (~10,000 bot runs) -> docs/BALANCE_REPORT.md
 ```
 
 ## Install it as an app
@@ -30,6 +31,11 @@ Then open the site on your phone:
 - **iPhone (Safari):** tap Share → **Add to Home Screen** (the title screen button explains this).
 
 Saves on the installed app live on that device. The claude.ai preview keeps its own cloud save.
+To move progress between them (or to a new phone), use **Settings → Save transfer**: copy a save code
+on one, load it on the other.
+
+The installed app checks `version.json` (written by every build) and shows **New version ready → Update**
+when a newer build is online, instead of reloading by itself mid-battle.
 
 ## What's in the first playable
 
@@ -55,6 +61,9 @@ Saves on the installed app live on that device. The claude.ai preview keeps its 
 - **Bag** — the map's Bag button shows potions, Evolution Stones and held items; give or take off items right there.
 - **Heat** — beat a run to unlock Heat 1–8: each level stacks a harder rule. Pick it after choosing a map; each Heat won on a map lights one of its 8 flame tokens.
 - **Daily run** — the same seed, starters and map for everyone each day; your best result is kept.
+- **Weekly challenge** — one run a week with a twist rule (Element Duo, Swarm, Glass Cannon, Lean Times, Gilded Week), the same for everyone.
+- **Gilded milestones** — own 5/15/30/60/120 Gilded species for trainer titles and gilded outfit pieces (shown online too).
+- **Save transfer, Reduce motion, Credits & What's new** — in Settings.
 - **Battle controls** — 1×/2×/3× speed and auto-battle.
 - **Run summary** — what beat you, your MVP, stats, survivors and the fallen.
 
@@ -65,6 +74,6 @@ src/data/      species, moves, types chart, balance knobs
 src/logic/     pure game logic (no Phaser): battle, map gen, creature growth, run state
 src/scenes/    Phaser scenes: Title, Starter, Map, Battle, Team, End
 src/ui/        widgets, modal picker, procedural sprite generator
-scripts/       balance simulator
+scripts/       balance simulator and report (balance.ts)
 tests/         vitest unit tests
 ```

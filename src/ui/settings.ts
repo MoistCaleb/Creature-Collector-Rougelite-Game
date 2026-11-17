@@ -3,22 +3,27 @@ import { resetProgress } from '../logic/run';
 import { openElementChart } from './elementChart';
 import { openHowToPlay } from './howto';
 import { openPanel } from './panel';
+import { openCredits } from './credits';
+import { APP_VERSION } from '../data/changelog';
+import { decodeSave, exportSave, importSave, summarize } from '../logic/saveCode';
+import { copyText, openTextBox } from './textBox';
 import { openPicker } from './picker';
 import { BATTLE_SPEEDS, prefs } from './prefs';
 import { applyVolumes, isMuted, setMuted, sfx } from './sound';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
 
-const ROW = 52;
+const ROW = 50;
 
 /**
  * Settings, as a panel over any screen (title, map, battle): volumes, sound on/off,
  * battle speed, first-time tips, How to play, the element chart, and erasing all progress.
  */
 export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}) {
-  const rows = 5;
+  const rows = 6;
+  const bigs = 5;
   const p = openPanel(scene, 'Settings', {
     w: LANDSCAPE ? 760 : 430,
-    h: LANDSCAPE ? 430 : 50 + rows * ROW + 4 + 3 * 54 + 66,
+    h: LANDSCAPE ? 440 : 50 + rows * ROW + 4 + bigs * 54 + 66,
     onClose,
   });
   const body = scene.add.container(0, 0);
@@ -84,6 +89,10 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
       if (prefs.tips) prefs.tipsSeen = [];
     });
 
+    toggle('Reduce motion', 'Less screen shake, flashes and zooms', prefs.reduceMotion, () => {
+      prefs.reduceMotion = !prefs.reduceMotion;
+    });
+
     // Battle speed: three choices.
     label('Battle speed', 'Also on the battle screen');
     BATTLE_SPEEDS.forEach((s, i) => {
@@ -107,6 +116,8 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
     };
     big('How to play', 'The basics, in a few pages', () => openHowToPlay(scene), 0x2f4a6b, 'book');
     big('Element chart', 'What beats what', () => openElementChart(scene), 0x2f4a6b);
+    big('Save transfer', 'Move your progress to another device', () => openSaveTransfer(scene), 0x2f5a4a, 'phone');
+    big('Credits & version', `v${APP_VERSION} · what’s new`, () => openCredits(scene), 0x3a3352, 'star');
     big('Erase all progress', 'Start over from scratch', () => confirmErase(scene), 0x5a2a2a, 'skull');
   };
   draw();
@@ -132,5 +143,100 @@ function confirmErase(scene: Phaser.Scene) {
       }),
     onCancel: () => {},
     cancelLabel: 'Cancel',
+  });
+}
+
+/** Save transfer: copy your save as a code, or load one from another device. */
+function openSaveTransfer(scene: Phaser.Scene) {
+  openPicker(scene, {
+    title: 'Save transfer',
+    subtitle:
+      'Your save lives on this device. To move it (say from the browser to the installed app, or to a new phone), copy your save code here and load it on the other device.\n\nKeep a copy somewhere safe, like your notes, as a backup.',
+    options: [
+      { label: 'Copy my save code', color: 0x2f5a4a, glyph: 'phone', sub: 'Everything: Hexlidex, Gilded, unlocks, teams, records and your run' },
+      { label: 'Load a save code', color: 0x2f4a6b, glyph: 'arrowUp', sub: 'Replaces the progress on this device' },
+    ],
+    onPick: (i) => (i === 0 ? void showCode() : pasteCode(scene)),
+    onCancel: () => {},
+  });
+}
+
+async function showCode() {
+  const code = await exportSave();
+  const share = typeof navigator.share === 'function';
+  const box = openTextBox({
+    title: 'Your save code',
+    body: `Copy all of it (${code.length.toLocaleString()} characters), then paste it into Settings › Save transfer › Load a save code on the other device.`,
+    value: code,
+    readOnly: true,
+    actions: [
+      {
+        label: 'Copy',
+        primary: true,
+        onClick: async (b) => {
+          const ok = await copyText(code);
+          if (ok) {
+            b.setLabel(0, 'Copied!');
+            b.setStatus('Copied. Paste it somewhere safe or on your other device.', 'ok');
+          } else b.setStatus('Couldn’t copy here: tap the code, select all and copy it.', 'error');
+          return false;
+        },
+      },
+      ...(share
+        ? [
+            {
+              label: 'Share…',
+              onClick: async (b: import('./textBox').TextBoxHandle) => {
+                try {
+                  await navigator.share({ title: 'Hexbound save code', text: code });
+                } catch {
+                  b.setStatus('Not shared.', 'info');
+                }
+                return false;
+              },
+            },
+          ]
+        : []),
+      { label: 'Done', onClick: () => true },
+    ],
+  });
+  box.setStatus('Anyone with this code can load your progress, so keep it to yourself.', 'info');
+}
+
+function pasteCode(scene: Phaser.Scene) {
+  openTextBox({
+    title: 'Load a save code',
+    body: 'Paste a code you copied from Hexbound. It replaces all progress on this device.',
+    placeholder: 'HEXB1.…',
+    actions: [
+      {
+        label: 'Load',
+        primary: true,
+        onClick: async (b) => {
+          try {
+            const bundle = await decodeSave(b.value());
+            const s = summarize(bundle);
+            b.close();
+            const when = s.at ? new Date(s.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'an unknown date';
+            openPicker(scene, {
+              title: 'Replace your progress?',
+              subtitle: `The code is from ${when}:\n${s.runs} runs · ${s.wins} wins · ${s.caught} species caught · ${s.gilded} Gilded${s.runInProgress ? '\nIt has a run in progress.' : ''}\n\nEverything on this device is replaced. Copy your own code first if you want to keep it.`,
+              options: [{ label: 'Load this save', color: 0x8a2c2c, glyph: 'arrowUp' }],
+              onPick: async () => {
+                await importSave(bundle);
+                window.location.reload();
+              },
+              onCancel: () => {},
+              cancelLabel: 'Cancel',
+            });
+            return true;
+          } catch (e) {
+            b.setStatus(e instanceof Error ? e.message : 'That code didn’t work.', 'error');
+            return false;
+          }
+        },
+      },
+      { label: 'Cancel', onClick: () => true },
+    ],
   });
 }

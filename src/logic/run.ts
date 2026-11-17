@@ -154,6 +154,12 @@ export interface Meta {
   /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
   shinySeen?: string[];
   shinyCaught?: number;
+  /** Every weekly challenge played, by week (its Monday): best result and how many tries. */
+  weeklies?: Record<string, DailyRecord>;
+  /** Trainer title shown under your name (a Gilded milestone reward). */
+  trainerTitle?: string;
+  /** Highest Gilded milestone (species count) already announced. */
+  gildedAnnounced?: number;
 }
 
 /** One finished run, for the Records screen. */
@@ -166,6 +172,7 @@ export interface RunRecord {
   mapId: string;
   heat: number;
   daily?: string;
+  weekly?: string;
   battlesWon: number;
   caught: number;
   /** Who finished the run (survivors), up to 7. */
@@ -192,6 +199,7 @@ export function recordRun(run: Run, won: boolean) {
     mapId: run.mapId,
     heat: run.heat ?? 0,
     daily: run.daily,
+    ...(run.weekly ? { weekly: run.weekly } : {}),
     battlesWon: run.log.battlesWon,
     caught: run.log.caught,
     team: allCreatures(run)
@@ -355,6 +363,9 @@ export interface Run {
   heat?: number;
   /** Set on a daily run: the UTC date it belongs to. */
   daily?: string;
+  /** Set on a weekly challenge: the week (its Monday, UTC) and its twist rule. */
+  weekly?: string;
+  twist?: TwistId;
   /** Ascendant: the floor its free (no-sacrifice) prestige was used on. */
   ascendFloor?: number;
   /** Stage race against a friend: same map and seed, double battle rewards, a live duel at the end. */
@@ -460,20 +471,137 @@ export const ELEMENT_PASSIVES: Record<Element, PassiveId[]> = {
  * everyone that day, and different for each of the three where possible.
  */
 export function dailyPassives(date: string): Record<string, PassiveId> {
+  return suitedPassives(dailyStarters(date), `daily-passive:${date}`);
+}
+
+/** A passive for each starter that suits its elements, different for each where possible. */
+function suitedPassives(starters: string[], salt: string): Record<string, PassiveId> {
   const out: Record<string, PassiveId> = {};
   const used = new Set<PassiveId>();
-  for (const id of dailyStarters(date)) {
+  for (const id of starters) {
     const [t1, t2] = SPECIES_BY_ID[id].types;
     // The main element's picks first, then the second element's.
     const pool = [...new Set([...ELEMENT_PASSIVES[t1], ...(t2 !== t1 ? ELEMENT_PASSIVES[t2] : [])])];
     const fresh = pool.filter((p) => !used.has(p));
     const from = fresh.length ? fresh : pool;
-    const pick = from[hashString(`daily-passive:${date}:${id}`) % from.length];
+    const pick = from[hashString(`${salt}:${id}`) % from.length];
     used.add(pick);
     out[id] = pick;
   }
   return out;
 }
+
+// ---------------------------------------------------------------- weekly challenge
+
+/** A weekly challenge's twist: one rule that changes the whole run. */
+export type TwistId = 'duo' | 'swarm' | 'glass' | 'lean' | 'gilded';
+
+export const TWISTS: Record<TwistId, { name: string; desc: string }> = {
+  duo: { name: 'Element Duo', desc: 'Only two elements: every floor, wild Hexling, trainer and starter is one of them.' },
+  swarm: { name: 'Swarm', desc: 'Every wild battle brings two Hexlings, from the very first.' },
+  glass: { name: 'Glass Cannon', desc: 'Every Hexling, yours and theirs, deals 50% more damage.' },
+  lean: { name: 'Lean Times', desc: 'Half the healing after battles, but 50% more coins.' },
+  gilded: { name: 'Gilded Week', desc: 'One wild Hexling in 15 is Gilded. Catch them while you can!' },
+};
+/** One line about a week's twist (Element Duo names its elements). */
+export function twistShort(info: WeeklyInfo): string {
+  switch (info.twist) {
+    case 'duo':
+      return `Only ${info.duo![0]} and ${info.duo![1]} Hexlings this week`;
+    case 'swarm':
+      return 'Every wild battle brings two Hexlings';
+    case 'glass':
+      return 'Every Hexling deals +50% damage';
+    case 'lean':
+      return 'Half healing after battles · +50% coins';
+    default:
+      return 'One wild Hexling in 15 is Gilded';
+  }
+}
+
+/** The twists in the order the weeks go through them. */
+export const TWIST_ORDER: TwistId[] = ['duo', 'swarm', 'glass', 'lean', 'gilded'];
+
+const DAY = 86400000;
+
+/** The week a date falls in, named by its Monday (UTC, YYYY-MM-DD): everyone shares it. */
+export function weekId(now = new Date()): string {
+  const day = Math.floor(now.getTime() / DAY);
+  // 1970-01-01 was a Thursday, so Mondays are the days where (day + 3) % 7 === 0.
+  const monday = day - ((day + 3) % 7);
+  return new Date(monday * DAY).toISOString().slice(0, 10);
+}
+
+/** Everything about a week's challenge: the same for everyone that week. */
+export interface WeeklyInfo {
+  week: string;
+  seed: number;
+  twist: TwistId;
+  mapId: string;
+  /** Element Duo: the two elements. */
+  duo?: [Element, Element];
+  starters: string[];
+  passives: Record<string, PassiveId>;
+}
+
+export function weeklyInfo(week: string): WeeklyInfo {
+  const index = Math.floor(Date.parse(`${week}T00:00:00Z`) / (7 * DAY));
+  const twist = TWIST_ORDER[((index % TWIST_ORDER.length) + TWIST_ORDER.length) % TWIST_ORDER.length];
+  const rng = new Rng(hashString(`weekly-setup:${week}`));
+  let duo: [Element, Element] | undefined;
+  let pool = SPECIES;
+  let mapId = rng.pick(MAPS).id;
+  if (twist === 'duo') {
+    // Two elements with enough Hexlings between them for real choices.
+    const els = rng.shuffle([...ELEMENTS]);
+    duo = [els[0], els[1]];
+    pool = SPECIES.filter((sp) => sp.types.some((t) => duo!.includes(t)));
+    mapId = 'wildlands';
+  }
+  const starters = rng.shuffle(pool.map((sp) => sp.id)).slice(0, 3);
+  return { week, seed: hashString(`weekly:${week}`), twist, mapId, duo, starters, passives: suitedPassives(starters, `weekly-passive:${week}`) };
+}
+
+/** The record for one week's challenge (created empty if it hasn't been played). */
+export function weeklyRecord(meta: Meta, week: string): DailyRecord {
+  meta.weeklies = meta.weeklies ?? {};
+  return (meta.weeklies[week] = meta.weeklies[week] ?? { date: week, attempts: 0, best: null });
+}
+
+export function weeklyPlayed(meta: Meta, week: string): DailyRecord | null {
+  const rec = meta.weeklies?.[week];
+  return rec && rec.attempts > 0 ? rec : null;
+}
+
+/** Record a finished weekly challenge. Returns true if it's a new best for that week. */
+export function recordWeekly(run: Run, won: boolean): boolean {
+  if (!run.weekly) return false;
+  const rec = weeklyRecord(run.meta, run.weekly);
+  rec.attempts = Math.max(1, rec.attempts);
+  const floor = won ? FLOORS : run.floor;
+  const result: DailyResult = { won, floor, battlesWon: run.log.battlesWon, score: dailyScore(won, floor, run.log.battlesWon) };
+  const better = !rec.best || result.score > rec.best.score;
+  if (better) rec.best = result;
+  saveMeta(run.meta);
+  return better;
+}
+
+/** Start this week's challenge with one of its starters. */
+export function startWeekly(meta: Meta, week: string, starterId: string): Run {
+  const info = weeklyInfo(week);
+  const run = startRun(meta, starterId, info.seed, info.mapId, undefined, true, week);
+  if (info.duo) {
+    const [a, b] = info.duo;
+    run.biomes = [a, b, run.rng.pick([a, b])];
+    run.map = generateFloor(0, run.biomes[0], run.rng.int(0, 2 ** 31));
+    run.currentId = run.map.startId;
+    run.visited = [run.map.startId];
+  }
+  return run;
+}
+
+/** A run's twist (weekly challenges only). */
+export const twistOf = (run: Run): TwistId | null => run.twist ?? null;
 
 /** Record a finished daily run. Returns true if it's a new best for that day. */
 export function recordDaily(run: Run, won: boolean): boolean {
@@ -497,11 +625,11 @@ export function describeDaily(r: DailyResult): string {
 
 /** `even`: Heat 0 and no passive of your own (daily runs and stage races, so everyone starts level).
  *  A daily run's starter brings the passive that day gives it (see dailyPassives). */
-export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string, even = !!daily): Run {
+export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string, even = !!daily, weekly?: string): Run {
   const rng = new Rng(seed);
   const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
   const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
-  if (!daily) meta.lastMap = def.id;
+  if (!daily && !weekly) meta.lastMap = def.id;
   const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31));
   meta.runs += 1;
   if (daily) {
@@ -509,13 +637,21 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     rec.attempts += 1;
     meta.daily = rec;
   }
+  if (weekly) weeklyRecord(meta, weekly).attempts += 1;
   // Daily runs and races are the same for everyone: standard Heat, and no passive of your own
   // (a daily's starter comes with the passive the day gives it).
-  const passive = daily ? (dailyPassives(daily)[starterId] ?? null) : even ? null : meta.equippedPassive;
+  const passive = daily
+    ? (dailyPassives(daily)[starterId] ?? null)
+    : weekly
+      ? (weeklyInfo(weekly).passives[starterId] ?? null)
+      : even
+        ? null
+        : meta.equippedPassive;
   saveMeta(meta);
   const run: Run = {
     heat: even ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
     ...(daily ? { daily } : {}),
+    ...(weekly ? { weekly, twist: weeklyInfo(weekly).twist } : {}),
     rng,
     seed,
     meta,
@@ -666,7 +802,8 @@ export function runMvp(run: Run): { speciesId: string; stage: number; level: num
 
 /** Survivors catch their breath after a win. */
 export function postBattleRecover(run: Run) {
-  const frac = (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult;
+  const frac =
+    (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult * (run.twist === 'lean' ? 0.5 : 1);
   for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * frac));
   // Resting on the bench restores some move uses.
   for (const c of run.bench) restoreUses(c, BALANCE.benchUseRestore);
@@ -736,13 +873,22 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const f = run.floor;
   const biome = run.biomes[f];
   const count =
-    kind === 'boss' ? (f === 0 ? 2 : 3) : kind === 'elite' ? (f === 0 ? 2 : 3) : f === 0 ? 1 : rng.chance(0.5) ? 2 : 1;
+    kind === 'boss'
+      ? f === 0 ? 2 : 3
+      : kind === 'elite'
+        ? f === 0 ? 2 : 3
+        : run.twist === 'swarm'
+          ? 2
+          : f === 0 ? 1 : rng.chance(0.5) ? 2 : 1;
+  // Element Duo (weekly): everything is one of the week's two elements.
+  const duo = run.twist === 'duo' && run.weekly ? weeklyInfo(run.weekly).duo : undefined;
+  const duoPool = duo ? SPECIES.filter((sp) => sp.types.some((t) => duo.includes(t))) : null;
 
   const enemies: Creature[] = [];
   const boss = kind === 'boss' ? BOSSES[biome] : null;
   const heat = heatRules(run.heat ?? 0, f);
   for (let i = 0; i < count; i++) {
-    let pool = rng.chance(0.7) ? speciesWithElement(biome) : SPECIES;
+    let pool = rng.chance(0.7) ? speciesWithElement(biome) : (duoPool ?? SPECIES);
     if (boss) {
       // Guardians field a themed team; their ace pairs the boss element with its partner.
       const own = speciesWithElement(biome);
@@ -750,7 +896,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
       pool = i === count - 1 && ace.length ? ace : own;
     }
     // The run's first battle is always a neutral matchup with your starter.
-    if (!boss && run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup);
+    if (!boss && run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup, duoPool ?? SPECIES);
     const sp = rng.pick(pool);
     let level = BALANCE.floorBaseLevel[f] + Math.round(Math.pow(node.progress, BALANCE.rampCurve) * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
     let stage = f;
@@ -779,7 +925,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     if (holds) c.held = rollHeld(rng);
     // About 1 wild Hexling in 200 is shiny (a hash, so the run's random rolls are untouched).
     // Shiny Hunting: far more often, and trainers' and guardians' Hexlings can be shiny too.
-    const odds = run.hunt ? (kind === 'battle' ? HUNT_SHINY_IN.wild : HUNT_SHINY_IN.trainer) : kind === 'battle' ? SHINY_IN : 0;
+    const odds = run.hunt
+      ? kind === 'battle' ? HUNT_SHINY_IN.wild : HUNT_SHINY_IN.trainer
+      : kind === 'battle' ? (run.twist === 'gilded' ? GILDED_WEEK_IN : SHINY_IN) : 0;
     if (odds && hashString(`${run.seed}:shiny:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`) % odds === 0) c.shiny = true;
     c.hp = stats(c).hp;
     enemies.push(c);
@@ -790,6 +938,8 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
 
 /** One wild Hexling in this many is shiny. */
 export const SHINY_IN = 200;
+/** Gilded Week (a weekly twist): one wild Hexling in this many is shiny. */
+export const GILDED_WEEK_IN = 15;
 /** Shiny Hunting: one in this many wild Hexlings, and trainers' / guardians' Hexlings, is shiny. */
 export const HUNT_SHINY_IN = { wild: 12, trainer: 20 };
 /** Shiny Hunting enemies can carry one more star than yours can. */
@@ -855,12 +1005,12 @@ export function neutralMatchup(sp: Species, lead: TypePair): boolean {
 }
 
 /** Filter a spawn pool, widening to every species (then to "no advantage") if nothing fits. */
-function fairPool(pool: Species[], lead: TypePair, test: (sp: Species, lead: TypePair) => boolean): Species[] {
+function fairPool(pool: Species[], lead: TypePair, test: (sp: Species, lead: TypePair) => boolean, all: Species[] = SPECIES): Species[] {
   const a = pool.filter((sp) => test(sp, lead));
   if (a.length) return a;
-  const b = SPECIES.filter((sp) => test(sp, lead));
+  const b = all.filter((sp) => test(sp, lead));
   if (b.length) return b;
-  const c = SPECIES.filter((sp) => noAdvantageOver(sp, lead));
+  const c = all.filter((sp) => noAdvantageOver(sp, lead));
   return c.length ? c : pool;
 }
 
@@ -888,8 +1038,8 @@ function giveXp(run: Run, c: Creature, xp: number): XpResult {
   return { name: creatureName(c), xp, levels: g.levels, banked: g.banked, coins, full: capped > 0 && (c.banked ?? 0) >= bankLimit(c) };
 }
 
-export function battleCoins(enemies: Creature[], kind: EncounterKind, heat = 0): number {
-  const mult = (kind === 'boss' ? 3 : kind === 'elite' ? BALANCE.trainerCoinMult : 1) * heatRules(heat).coinMult;
+export function battleCoins(enemies: Creature[], kind: EncounterKind, heat = 0, twist: TwistId | null = null): number {
+  const mult = (kind === 'boss' ? 3 : kind === 'elite' ? BALANCE.trainerCoinMult : 1) * heatRules(heat).coinMult * (twist === 'lean' ? 1.5 : 1);
   return Math.round(enemies.reduce((s, e) => s + BALANCE.coinsBase + e.level * BALANCE.coinsPerEnemyLevel, 0) * mult);
 }
 

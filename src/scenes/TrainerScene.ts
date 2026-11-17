@@ -12,6 +12,10 @@ import {
   type TrainerLook,
 } from '../data/trainerLook';
 import { Rng } from '../logic/rng';
+import { earnedTitles, GILDED_MILESTONES, gildedCount, lockedBy, myTitle, nextMilestone } from '../logic/gilded';
+import { openGildedMilestones } from '../ui/gildedUi';
+import { openPicker, showMessage } from '../ui/picker';
+import { icon as pixelIcon } from '../ui/icons';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { playMusic, sfx } from '../ui/sound';
@@ -87,7 +91,12 @@ export class TrainerScene extends Phaser.Scene {
     // Name, shuffle and a note on where the trainer shows up.
     const nx = LANDSCAPE ? 96 : 307;
     const nw = LANDSCAPE ? 160 : 262;
-    button(this, nx, LANDSCAPE ? 306 : 92, nw, 56, myName(meta), () => this.rename(), { fontSize: 20, sub: LANDSCAPE ? 'Tap to rename' : 'Your name · tap to change', color: 0x2f4a6b });
+    const title = myTitle(meta);
+    button(this, nx, LANDSCAPE ? 306 : 92, nw, 56, myName(meta), () => this.nameMenu(), {
+      fontSize: 20,
+      sub: title ? `✦ ${title}` : LANDSCAPE ? 'Name and title' : 'Your name and title · tap to change',
+      color: 0x2f4a6b,
+    });
     button(this, nx, LANDSCAPE ? 364 : 158, nw, 44, 'Shuffle look', () => {
       sfx.coin();
       this.set(randomLook(new Rng((Math.random() * 2 ** 31) | 0)));
@@ -146,7 +155,15 @@ export class TrainerScene extends Phaser.Scene {
       layer.add(cell);
       const preview = { ...base, [part.key]: v } as TrainerLook;
       const scale = Math.min(2.4, (cellH - 30) / 34);
-      layer.add(this.add.image(x + cellW / 2, y + (cellH - 22) / 2, ensureTrainerTexture(this, preview, 'stand')).setScale(scale));
+      // Gilded milestone rewards stay locked (dimmed, with what unlocks them) until you reach them.
+      const lock = lockedBy(state.meta, part.key, v);
+      layer.add(this.add.image(x + cellW / 2, y + (cellH - 22) / 2, ensureTrainerTexture(this, preview, 'stand')).setScale(scale).setAlpha(lock ? 0.3 : 1));
+      if (lock) {
+        layer.add(pixelIcon(this, x + cellW / 2, y + (cellH - 22) / 2, 'lock', 22));
+        const need = text(this, x + cellW / 2, y + 8, `✦ ${lock.count} Gilded`, 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+        if (need.width > cellW - 8) need.setScale((cellW - 8) / need.width);
+        layer.add(need);
+      } else if (v >= (part.free ?? part.names.length)) layer.add(text(this, x + cellW - 8, y + 6, '✦', 13, '#ffd86b').setOrigin(1, 0));
       const sw = swatch(part.key, v);
       if (sw !== null) layer.add(this.add.rectangle(x + 8, y + 6, 12, 12, sw).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.6));
       const label = text(this, x + cellW / 2, y + cellH - 18, name, 11, current ? '#ffc94d' : COLORS.text, { fontStyle: current ? 'bold' : 'normal' }).setOrigin(0.5);
@@ -154,11 +171,57 @@ export class TrainerScene extends Phaser.Scene {
       layer.add(label);
       cell.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         if (current) return close();
+        if (lock)
+          return showMessage(
+            this,
+            `✦ ${name}`,
+            `A Gilded milestone reward: own ${lock.count} Gilded species to wear it (you have ${gildedCount(state.meta)}).\n\nCatch a Gilded Hexling in any form to own its whole line.`,
+          );
         sfx.coin();
         this.set({ ...look, [part.key]: v });
       });
     });
     layer.add(button(this, W / 2, LANDSCAPE ? H - 34 : H - 62, 200, LANDSCAPE ? 36 : 44, 'Close', close, { fontSize: 16 }));
+  }
+
+  /** Change your name, or the title shown under it. */
+  private nameMenu() {
+    const meta = state.meta;
+    const titles = earnedTitles(meta);
+    const next = nextMilestone(meta);
+    openPicker(this, {
+      title: myName(meta),
+      subtitle: myTitle(meta) ? `✦ ${myTitle(meta)}` : undefined,
+      options: [
+        { label: 'Change name', glyph: 'book' },
+        {
+          label: 'Choose a title',
+          glyph: 'crown',
+          disabled: !titles.length,
+          sub: titles.length ? `${titles.length} earned · shown online too` : `Own ${GILDED_MILESTONES.find((m) => m.title)!.count} Gilded species for your first title`,
+        },
+        { label: 'Gilded milestones', glyph: 'sparkle', sub: next ? `Next: ${next.count} Gilded species (you have ${gildedCount(meta)})` : 'All reached!' },
+      ],
+      onPick: (i) => (i === 0 ? this.rename() : i === 1 ? this.pickTitle(titles) : openGildedMilestones(this, meta)),
+      onCancel: () => {},
+    });
+  }
+
+  private pickTitle(titles: string[]) {
+    const meta = state.meta;
+    const cur = myTitle(meta);
+    openPicker(this, {
+      title: 'Your title',
+      subtitle: 'Shown under your name, and to your opponent online.',
+      options: [{ label: 'No title', color: cur ? undefined : 0x3a4f7a }, ...titles.map((t) => ({ label: `✦ ${t}`, color: t === cur ? 0x7a5a1c : undefined }))],
+      onPick: (i) => {
+        meta.trainerTitle = i === 0 ? undefined : titles[i - 1];
+        saveMeta(meta);
+        sfx.coin();
+        this.scene.restart({ from: this.from });
+      },
+      onCancel: () => {},
+    });
   }
 
   private rename() {
