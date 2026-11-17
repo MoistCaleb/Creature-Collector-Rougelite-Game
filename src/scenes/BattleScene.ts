@@ -106,6 +106,8 @@ export interface BattleMatch {
   duel?: DuelController;
   /** Duel resumed after a dropped connection: what to do first. */
   initialNext?: Next;
+  /** Computer opponents that switch and use potions (see Battle's enemyTactics). */
+  tactics?: { potions: number };
 }
 
 const ENEMY_POS = { x: 320, y: 200 };
@@ -167,6 +169,11 @@ export class BattleScene extends Phaser.Scene {
       playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
       playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
       reserve: run.bench,
+      // Trainers and guardians switch and use potions (guardians carry more).
+      enemyTactics:
+        this.kind === 'battle'
+          ? undefined
+          : { potions: this.kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss ? boss.name : (run.activeBattle.trainer ?? 'The trainer') },
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -276,6 +283,7 @@ export class BattleScene extends Phaser.Scene {
       m.duel?.battle ??
       new Battle(m.team, m.enemies, new Rng(m.seed), {
         enemyRandomness: m.randomness,
+        enemyTactics: m.tactics ? { ...m.tactics, name: m.opponent } : undefined,
         permadeath: false,
         synergy: synergyMults(m.team),
         enemySynergy: synergyMults(m.enemies),
@@ -462,8 +470,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** hp: what the bar should show now (during playback the logic may already be ahead). */
+  /** The creature the enemy sprite is showing. */
+  private shownEnemy: Creature | null = null;
+
   private refreshEnemy(hp?: number) {
     const e = this.battle.e.c;
+    this.shownEnemy = e;
     dex.creature(e);
     this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
@@ -793,10 +805,16 @@ export class BattleScene extends Phaser.Scene {
           await this.enterPlayer();
           break;
         }
-        case 'enemySend':
+        case 'enemySend': {
+          // A voluntary switch: call the old one back first (a fainted one has already gone).
+          const s = this.enemySprite;
+          if (s.visible && s.alpha > 0.5 && this.shownEnemy && this.shownEnemy !== this.battle.enemy[ev.index].c) {
+            await recallToHex(this, s, ELEMENT_COLORS[creatureTypes(this.shownEnemy)[0]]);
+          }
           this.refreshEnemy(ev.hp);
           await this.enterEnemy();
           break;
+        }
       }
     }
     this.fast = false;
