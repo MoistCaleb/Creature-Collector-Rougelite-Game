@@ -238,7 +238,7 @@ Runs unlock:
   | Prospector | Earn 2,000 coins | Coin Purse: start with ◉50 |
   | Drill Master | Train at 15 Level Up nodes | Personal Trainer: Level Up nodes give 50% more levels |
   | Scholar | Upgrade 15 moves | Sage: Skill Shrines offer 4 choices |
-  | Ascension | Earn 10 prestige stars | Ascendant: Prestige Altars need no sacrifice |
+  | Ascension | Earn 10 prestige stars | Ascendant: once per floor, a Prestige Altar needs no sacrifice |
   | Second Wind | Survive 3 team wipes | Bodyguard: bench steps in fully healed |
   | Trainer Hunter | Defeat 10 trainers | Big Game Hunter: trainers always drop a stone, sometimes 2 |
   | Naturalist | Catch 40 different species | Naturalist: +25% XP from wild battles |

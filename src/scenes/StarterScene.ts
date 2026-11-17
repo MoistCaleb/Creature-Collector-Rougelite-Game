@@ -76,7 +76,7 @@ export class StarterScene extends Phaser.Scene {
       button(this, W - 82, y + 189, 96, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
     });
 
-    if (!this.race) button(this, 40, 28, 64, 36, '', () => this.scene.start(this.daily ? 'Title' : 'MapSelect', {}), { fontSize: 15, glyph: 'back' });
+    if (!this.race) button(this, 40, 28, 64, 36, '', () => this.scene.start(this.daily ? 'Daily' : 'MapSelect', {}), { fontSize: 15, glyph: 'back' });
   }
 
   private pick(id: string) {

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, todayUtc } from '../logic/run';
+import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, todayUtc, dailyPlayed } from '../logic/run';
 import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
@@ -72,12 +72,12 @@ export class TitleScene extends Phaser.Scene {
     button(this, W / 2 - 82, 550, 156, 54, 'Creature Dex', () => this.scene.start('Dex', { from: 'Title' }), { fontSize: 16 });
     // Daily run: the same seed for everyone today.
     const today = todayUtc();
-    const best = meta.daily?.date === today ? meta.daily.best : null;
-    button(this, W / 2 + 82, 550, 156, 54, 'Daily run', () => this.startDaily(today), {
+    const best = dailyPlayed(meta, today)?.best ?? null;
+    button(this, W / 2 + 82, 550, 156, 54, 'Daily runs', () => this.scene.start('Daily', {}), {
       fontSize: 16,
       glyph: 'calendar',
       color: 0x2f4a6b,
-      sub: best ? `Best: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'New run every day',
+      sub: best ? `Today: ${best.won ? 'won!' : `floor ${best.floor + 1}`}` : 'Today + past days',
     });
 
     button(this, W / 2, 616, 320, 50, 'Battle Arena', () => this.scene.start('Arena', {}), {
@@ -137,21 +137,6 @@ export class TitleScene extends Phaser.Scene {
     }
     state.run = run;
     this.scene.start('Map', {});
-  }
-
-  private startDaily(date: string) {
-    const go = () => this.scene.start('Starter', { daily: date });
-    if (!hasSavedRun()) return go();
-    openPicker(this, {
-      title: 'Abandon your run?',
-      subtitle: 'Starting the daily run ends your current run.',
-      options: [{ label: 'Abandon and play the daily', color: 0x8a2c2c }],
-      onPick: () => {
-        clearSavedRun();
-        go();
-      },
-      onCancel: () => {},
-    });
   }
 
   private confirmNewRun() {

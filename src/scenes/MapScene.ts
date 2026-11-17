@@ -511,13 +511,15 @@ export class MapScene extends Phaser.Scene {
 
   private doPrestige() {
     const run = state.run!;
-    if (run.passive === 'ascendant') {
+    // Ascendant: one sacrifice-free prestige per floor.
+    if (run.passive === 'ascendant' && run.ascendFloor !== run.floor) {
       return this.pickCreature(
         'Prestige Altar',
-        'Ascendant: choose a creature to empower, no sacrifice needed (+15% stats, +5 level cap)',
+        'Ascendant: this floor\u2019s free prestige, no sacrifice needed (+15% stats, +5 level cap)',
         allCreatures(run),
         (c) => !canPrestige(c),
         (target) => {
+          run.ascendFloor = run.floor;
           const lv = target.level;
           prestigeTracked(run, target);
           showMessage(this, 'Prestige!', `${creatureName(target)} is now ${'★'.repeat(target.stars)}${releaseNote(target, lv)}`, this.done);

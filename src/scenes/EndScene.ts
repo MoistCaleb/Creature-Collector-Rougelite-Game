@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
+import { allCreatures, clearSavedRun, dailyRecord, describeDaily, recordDaily, runMvp, saveMeta } from '../logic/run';
 import { state } from '../state';
 import { isAlive } from '../logic/creature';
 import { duel, endRace, raceVerdict, sendProgress } from '../net/runtime';
@@ -105,7 +105,7 @@ export class EndScene extends Phaser.Scene {
     const extra: string[] = [];
     if (run.daily) {
       const best = recordDaily(run, data.won);
-      const rec = state.meta.daily!;
+      const rec = dailyRecord(state.meta, run.daily);
       extra.push(`Daily ${run.daily}: ${best ? 'new best!' : `best today: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
     }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
