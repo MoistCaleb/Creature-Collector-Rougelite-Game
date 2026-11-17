@@ -1,3 +1,4 @@
+import { takeNewTitles, titleNews } from '../logic/titles';
 import Phaser from 'phaser';
 import { MOVES } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
@@ -159,7 +160,9 @@ export class ArenaScene extends Phaser.Scene {
       meta.arenaBest = wins;
       saveMeta(meta);
     }
-    const best = record ? `\n\nNew best: ${wins}/${ARENA_ROUNDS}!` : '';
+    const fresh = takeNewTitles(meta);
+    if (fresh.length) saveMeta(meta);
+    const best = (record ? `\n\nNew best: ${wins}/${ARENA_ROUNDS}!` : '') + titleNews(fresh);
     if (won && wins >= ARENA_ROUNDS) {
       return showMessage(battle, 'Arena Champion!', `You beat all ${ARENA_ROUNDS} rounds.${best}`, () => battle.scene.start('Arena', {}));
     }

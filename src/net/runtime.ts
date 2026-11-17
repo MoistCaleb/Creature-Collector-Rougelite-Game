@@ -1,9 +1,6 @@
 import type Phaser from 'phaser';
 import { cleanLook, type TrainerLook } from '../data/trainerLook';
-import { GILDED_MILESTONES } from '../logic/gilded';
-
-/** Only real titles from the other player are shown. */
-const cleanTitle = (t: unknown): string | undefined => (GILDED_MILESTONES.some((m) => m.title === t) ? (t as string) : undefined);
+import { cleanTitle } from '../logic/titles';
 import type { ArenaPick } from '../logic/arena';
 import { SPECIES_BY_ID } from '../data/species';
 import { MOVES } from '../data/moves';
@@ -30,7 +27,7 @@ export interface BroughtTeam {
 export interface Opponent {
   name: string;
   look?: TrainerLook;
-  /** Trainer title (a Gilded milestone), if they show one. */
+  /** Trainer title (see logic/titles), if they show one. */
   title?: string;
   teams: BroughtTeam[];
 }

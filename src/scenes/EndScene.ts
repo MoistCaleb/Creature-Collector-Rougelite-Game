@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { takeNewMilestones } from '../logic/gilded';
+import { addOnlineWin, takeNewTitles, titleNews } from '../logic/titles';
 import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
@@ -25,7 +26,11 @@ export class EndScene extends Phaser.Scene {
     super('End');
   }
 
+  /** Title news from a stage battle won without the final duel (null: not counted yet). */
+  private raceWin: string | null = null;
+
   create(data: { won: boolean }) {
+    this.raceWin = null;
     background(this);
     playMusic(data.won ? 'win' : 'lose');
     if (data.won) sfx.victory();
@@ -165,6 +170,9 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Gilded milestone: ${milestones.map((m) => m.title ?? `${m.count} Gilded`).join(', ')} (new outfit pieces)`);
     }
+    const titles = takeNewTitles(state.meta);
+    if (titles.length || milestones.length) saveMeta(state.meta);
+    if (titles.length) extra.push(`New title${titles.length > 1 ? 's' : ''}: ${titles.map((t) => t.name).join(', ')} (Edit trainer › Titles)`);
     const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race;
     if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
       text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
@@ -242,6 +250,15 @@ export class EndScene extends Phaser.Scene {
     });
   }
 
+  /** Count a stage battle won without the final duel (once) and announce any title it earned. */
+  private raceWinNews(): string {
+    if (this.raceWin === null) {
+      this.raceWin = titleNews(addOnlineWin(state.meta)).replace(/^\n+/, '\n');
+      saveMeta(state.meta);
+    }
+    return this.raceWin;
+  }
+
   /** Stage race: hand in the finished team and wait for the other racer; the final duel starts itself. */
   private raceFinish(run: NonNullable<typeof state.run>, won: boolean) {
     const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
@@ -278,7 +295,7 @@ export class EndScene extends Phaser.Scene {
       } else {
         status.setText(
           verdict === 'win'
-            ? `${opp} has no team left. You win the stage battle!`
+            ? `${opp} has no team left. You win the stage battle!${this.raceWinNews()}`
             : verdict === 'lose'
               ? `You have no team left, so ${opp} wins the stage battle.`
               : 'Neither of you has a team left. It\u2019s a draw.',

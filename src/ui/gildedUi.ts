@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
-import { GILDED_MILESTONES, gildedCount, milestoneText, myTitle, takeNewMilestones } from '../logic/gilded';
+import { GILDED_MILESTONES, gildedCount, milestoneText, takeNewMilestones } from '../logic/gilded';
+import { myTitle, takeNewTitles } from '../logic/titles';
 import { saveMeta, type Meta } from '../logic/run';
 import { SPECIES } from '../data/species';
 import { openPanel } from './panel';
@@ -12,6 +13,7 @@ import { COLORS, H, LANDSCAPE, text, W } from './widgets';
 export function announceGilded(scene: Phaser.Scene, meta: Meta, then: () => void) {
   const ms = takeNewMilestones(meta);
   if (!ms.length) return then();
+  takeNewTitles(meta);
   saveMeta(meta);
   sfx.shinyReveal();
   shinyBurst(scene, W / 2, H / 2 - 120);

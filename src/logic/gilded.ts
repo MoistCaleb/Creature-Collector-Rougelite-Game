@@ -43,18 +43,6 @@ export function lockedBy(meta: Meta, key: keyof TrainerLook, value: number): Gil
   return gildedCount(meta) >= m.count ? null : m;
 }
 
-/** Titles you've earned, lowest first. */
-export function earnedTitles(meta: Meta): string[] {
-  const n = gildedCount(meta);
-  return GILDED_MILESTONES.filter((m) => m.title && n >= m.count).map((m) => m.title!);
-}
-
-/** Your shown title (null: none chosen, or no longer valid). */
-export function myTitle(meta: Meta): string | null {
-  const t = meta.trainerTitle;
-  return t && earnedTitles(meta).includes(t) ? t : null;
-}
-
 /** The next milestone to reach, if any. */
 export function nextMilestone(meta: Meta): GildedMilestone | null {
   const n = gildedCount(meta);
@@ -62,18 +50,14 @@ export function nextMilestone(meta: Meta): GildedMilestone | null {
 }
 
 /**
- * Milestones reached since they were last announced (and marks them announced). A new title is
- * worn straight away when you weren't showing one. Caller saves meta.
+ * Milestones reached since they were last announced (and marks them announced). Their titles are
+ * worn and announced through takeNewTitles (logic/titles). Caller saves meta.
  */
 export function takeNewMilestones(meta: Meta): GildedMilestone[] {
   const n = gildedCount(meta);
   const seen = meta.gildedAnnounced ?? 0;
   const fresh = GILDED_MILESTONES.filter((m) => m.count > seen && m.count <= n);
-  if (fresh.length) {
-    meta.gildedAnnounced = Math.max(...fresh.map((m) => m.count));
-    const title = [...fresh].reverse().find((m) => m.title)?.title;
-    if (title && !myTitle(meta)) meta.trainerTitle = title;
-  }
+  if (fresh.length) meta.gildedAnnounced = Math.max(...fresh.map((m) => m.count));
   return fresh;
 }
 

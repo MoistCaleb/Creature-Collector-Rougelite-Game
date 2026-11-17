@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { myTitle } from '../logic/gilded';
+import { myTitle } from '../logic/titles';
+import { titleBadge } from '../ui/titleBadge';
 import { myLook, myName } from '../data/trainerLook';
 import { SPECIES_BY_ID } from '../data/species';
 import { activeTeamIndex, savedTeams, validArenaTeam } from '../logic/arena';
@@ -140,10 +141,12 @@ export class DuelScene extends Phaser.Scene {
     const host = session.role === 'host';
     const s = duel.settings;
     const { lx, lw, rx, rw } = cols();
-    text(this, lx, 132, `Connected to ${opp.name}`, 18, '#8fe08a', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, lx, opp.title ? 129 : 132, `Connected to ${opp.name}`, opp.title ? 16 : 18, '#8fe08a', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    // Their title, in its tier's color and effect.
+    if (opp.title) titleBadge(this, lx, 155, opp.title, 12, { maxW: lw });
 
     // Session settings: tap to cycle (host only).
-    text(this, 20, 160, host ? 'Session settings · tap to change' : `Session settings · set by ${opp.name}`, 13, COLORS.textDim);
+    text(this, 20, opp.title ? 167 : 160, host ? 'Session settings · tap to change' : `Session settings · set by ${opp.name}`, 13, COLORS.textDim);
     const labels: [keyof DuelSettings, string][] = [
       ['bestOf', s.bestOf === 1 ? 'Single battle' : `Best of ${s.bestOf}`],
       ['teamsPerPlayer', `${s.teamsPerPlayer} team${s.teamsPerPlayer > 1 ? 's' : ''} each`],
