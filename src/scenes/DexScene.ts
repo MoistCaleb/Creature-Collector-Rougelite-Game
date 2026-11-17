@@ -5,7 +5,7 @@ import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Elemen
 import { Scroller } from '../ui/scroll';
 import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, LANDSCAPE, text, typeChip, W } from '../ui/widgets';
 import { createCreature, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
@@ -215,7 +215,8 @@ export class DexScene extends Phaser.Scene {
     if (owned) row.add(text(this, W - 138, y + 26, '✦ Shiny unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
-    if (dex.caught.includes(sp.id)) row.add(text(this, W - 138, y + 10, '● Caught', 12, '#8fe08a').setOrigin(1, 0));
+    const caught = dex.caught.includes(sp.id);
+    row.add(text(this, W - 138, y + 10, caught ? '● Caught' : '○ Seen · not caught yet', 12, caught ? '#8fe08a' : '#8e86ad').setOrigin(1, 0));
     // Favorite: this line always shows up among your starter choices.
     const meta = state.meta;
     const fav = meta.favorite === sp.id;
@@ -236,7 +237,9 @@ export class DexScene extends Phaser.Scene {
       if (seen) {
         // Shiny unlocked: the big picture is the shiny, its normal colours in the corner.
         // Only seen shiny: normal big, the shiny in the corner.
-        row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s, owned)).setScale(3.4 * SPRITE_FIT));
+        // Seen but never caught: grayed out.
+        const big = caught ? ensureCreatureTexture(this, sp.id, s, owned) : ensureGrayTexture(this, sp.id, s);
+        row.add(this.add.image(80, sy + 62, big).setScale(3.4 * SPRITE_FIT));
         if (owned) row.add(shinySparkle(this, 36, sy + 14, 14));
         if (shinySeen || owned) {
           row.add(this.add.rectangle(112, sy + 100, 44, 44, 0x2a2244).setStrokeStyle(1, owned ? COLORS.stroke : 0xffc94d, 0.7));
@@ -277,7 +280,9 @@ export class DexScene extends Phaser.Scene {
       if (state.meta.favorite === sp.id) row.add(icon(this, W - 100, y + 13, 'star', 14));
       if (!owned && (state.meta.shinySeen ?? []).includes(sp.id)) row.add(icon(this, W - 120, y + 13, 'sparkle', 14));
       row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
-      if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
+      const caught = dex.caught.includes(sp.id);
+      if (caught) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
+      else if (anySeen) row.add(text(this, W - 24, y + 6, '○ Seen', 11, '#8e86ad').setOrigin(1, 0));
       // Caught shiny: it can be brought shiny to the Arena and online duels.
       if (owned) {
         // Beside the element chips.
@@ -294,7 +299,8 @@ export class DexScene extends Phaser.Scene {
         const cx = 70 + s * 130;
         const cy = y + 54;
         if (hasSeenForm(dex, sp.id, s)) {
-          row.add(this.add.image(cx, cy, ensureCreatureTexture(this, sp.id, s, owned)).setScale(1.7 * SPRITE_FIT));
+          // Seen but never caught: grayed out.
+          row.add(this.add.image(cx, cy, caught ? ensureCreatureTexture(this, sp.id, s, owned) : ensureGrayTexture(this, sp.id, s)).setScale(1.7 * SPRITE_FIT));
           if (owned) row.add(shinySparkle(this, cx + 26, cy - 24, 11));
         } else {
           row.add(this.add.rectangle(cx, cy, 52, 52, 0x15111f).setStrokeStyle(1, COLORS.stroke));
