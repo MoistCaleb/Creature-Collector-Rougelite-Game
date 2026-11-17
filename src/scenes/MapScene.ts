@@ -58,6 +58,9 @@ function hexPoints(w: number, h: number, pointy: boolean): number[] {
   return [w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2];
 }
 
+/** Where your lead Hexling stands relative to your trainer (behind and to the side). */
+const FOLLOW = { x: -22, y: 9 };
+
 export class MapScene extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private minScroll = 0;
@@ -382,12 +385,32 @@ export class MapScene extends Phaser.Scene {
   private token: Phaser.GameObjects.Container | null = null;
   private tokenBody: Phaser.GameObjects.Image | null = null;
   private hopping = false;
+  /** Your lead Hexling, trailing just behind your trainer. */
+  private follower: Phaser.GameObjects.Container | null = null;
+  private followerBody: Phaser.GameObjects.Image | null = null;
   private underToken: Phaser.GameObjects.GameObject[] = [];
 
   /** Your trainer on the current hex, bobbing gently, with a gold ring underfoot. */
   private makeToken() {
     const run = state.run!;
     const at = this.posOf(run.currentId);
+    // Your lead Hexling follows a step behind (drawn first so your trainer stays in front).
+    const lead = run.team[0];
+    if (lead) {
+      const f = this.add.container(at.x + FOLLOW.x, at.y + FOLLOW.y);
+      const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, 0.4);
+      const fBody = this.add
+        .image(0, 0, ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny))
+        .setOrigin(0.5, 0.92)
+        .setScale(1.4 * SPRITE_FIT)
+        .setFlipX(true); // facing your trainer
+      f.add([fShadow, fBody]);
+      this.layer.add(f);
+      // A little out of step with your trainer's bob, like it's walking along.
+      this.tweens.add({ targets: fBody, y: -2, yoyo: true, repeat: -1, duration: 430, delay: 200, ease: 'Sine.easeInOut' });
+      this.follower = f;
+      this.followerBody = fBody;
+    }
     const c = this.add.container(at.x, at.y);
     const ring = this.add.ellipse(0, 0, 40, 14, 0xffc94d, 0.35).setStrokeStyle(2, 0xffc94d, 0.9);
     const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, 0.45);
@@ -425,6 +448,7 @@ export class MapScene extends Phaser.Scene {
       duration: 70,
       yoyo: true,
       onComplete: () => {
+        this.followHop(to, from, lift);
         const arc = { t: 0 };
         this.tweens.add({
           targets: arc,
@@ -454,6 +478,33 @@ export class MapScene extends Phaser.Scene {
             });
           },
         });
+      },
+    });
+  }
+
+  /** The lead Hexling hops after your trainer, a beat later and a little lower. */
+  private followHop(to: { x: number; y: number }, from: { x: number; y: number }, lift: number) {
+    const f = this.follower;
+    const body = this.followerBody;
+    if (!f || !body) return;
+    const start = { x: f.x, y: f.y };
+    const end = { x: to.x + FOLLOW.x * (to.x < from.x ? -1 : 1), y: to.y + FOLLOW.y };
+    this.tweens.killTweensOf(body);
+    body.setY(0).setFlipX(end.x > start.x);
+    const arc = { t: 0 };
+    this.tweens.add({
+      targets: arc,
+      t: 1,
+      delay: calm() ? 60 : 170,
+      duration: calm() ? 240 : 360,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        f.setPosition(start.x + (end.x - start.x) * arc.t, start.y + (end.y - start.y) * arc.t);
+        body.setY(-Math.sin(arc.t * Math.PI) * lift * 0.7);
+      },
+      onComplete: () => {
+        body.setY(0);
+        this.tweens.add({ targets: body, scaleX: 1.55 * SPRITE_FIT, scaleY: 1.25 * SPRITE_FIT, duration: 70, yoyo: true });
       },
     });
   }
