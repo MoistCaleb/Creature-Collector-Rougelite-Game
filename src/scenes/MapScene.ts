@@ -59,7 +59,7 @@ function hexPoints(w: number, h: number, pointy: boolean): number[] {
 }
 
 /** Where your lead Hexling stands relative to your trainer (behind and to the side). */
-const FOLLOW = { x: -22, y: 9 };
+const FOLLOW = { x: 22, y: 9 };
 
 export class MapScene extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
@@ -397,13 +397,15 @@ export class MapScene extends Phaser.Scene {
     // Your lead Hexling follows a step behind (drawn over your trainer, see below).
     const lead = run.team[0];
     if (lead) {
-      const f = this.add.container(at.x + FOLLOW.x, at.y + FOLLOW.y);
+      // The side it last stood on (saved with the run): -1 left of your trainer, 1 right.
+      const side = run.followSide ?? -1;
+      const f = this.add.container(at.x + FOLLOW.x * side, at.y + FOLLOW.y);
       const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, 0.4);
       const fBody = this.add
         .image(0, 0, ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny))
         .setOrigin(0.5, 0.92)
         .setScale(1.4 * SPRITE_FIT)
-        .setFlipX(true); // facing your trainer
+        .setFlipX(side < 0); // facing your trainer
       f.add([fShadow, fBody]);
       this.layer.add(f);
       // A little out of step with your trainer's bob, like it's walking along.
@@ -490,7 +492,12 @@ export class MapScene extends Phaser.Scene {
     const body = this.followerBody;
     if (!f || !body) return;
     const start = { x: f.x, y: f.y };
-    const end = { x: to.x + FOLLOW.x * (to.x < from.x ? -1 : 1), y: to.y + FOLLOW.y };
+    // It trails behind: the right side when heading left, the left side when heading right
+    // (straight up keeps its side). Remembered so it stands there again next time.
+    const run = state.run!;
+    const side = to.x < from.x - 1 ? 1 : to.x > from.x + 1 ? -1 : (run.followSide ?? -1);
+    run.followSide = side;
+    const end = { x: to.x + FOLLOW.x * side, y: to.y + FOLLOW.y };
     this.tweens.killTweensOf(body);
     body.setY(0).setFlipX(end.x > start.x);
     const arc = { t: 0 };
