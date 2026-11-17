@@ -47,14 +47,14 @@ export interface MoveDef {
  */
 export type TeamFxId = 'rally' | 'guard' | 'tailwind' | 'ward' | 'venom' | 'shroud' | 'mend';
 
-export const TEAM_FX: Record<TeamFxId, { name: string; tag: string; color: number; desc: string }> = {
-  rally: { name: 'Rally', tag: 'RALLY', color: 0xff7a3a, desc: 'your team deals 25% more damage' },
-  guard: { name: 'Guard', tag: 'GUARD', color: 0xc9a36a, desc: 'your team takes 25% less damage' },
-  tailwind: { name: 'Tailwind', tag: 'WIND', color: 0xf0d040, desc: 'your team is 50% faster' },
-  ward: { name: 'Ward', tag: 'WARD', color: 0x8fdcf0, desc: "your team can't get status conditions" },
-  venom: { name: 'Venom coat', tag: 'VENOM', color: 0xb05ae0, desc: "your team's hits may poison (30%)" },
-  shroud: { name: 'Shroud', tag: 'SHROUD', color: 0x7a6aa0, desc: 'attacks on your team miss 20% more' },
-  mend: { name: 'Mend', tag: 'MEND', color: 0x5ad06a, desc: 'heals your whole team and cures their status' },
+export const TEAM_FX: Record<TeamFxId, { name: string; tag: string; short: string; color: number; desc: string }> = {
+  rally: { name: 'Power Boost', tag: 'DMG +25%', short: '+25% damage', color: 0xff7a3a, desc: 'your team deals 25% more damage' },
+  guard: { name: 'Shield Wall', tag: 'SHIELD -25%', short: '-25% dmg taken', color: 0xc9a36a, desc: 'your team takes 25% less damage' },
+  tailwind: { name: 'Speed Boost', tag: 'SPEED +50%', short: '+50% speed', color: 0xf0d040, desc: 'your team is 50% faster' },
+  ward: { name: 'Status Guard', tag: 'NO STATUS', short: 'status immune', color: 0x8fdcf0, desc: "your team can't get status conditions" },
+  venom: { name: 'Poison Coating', tag: 'POISON HITS', short: '30% poison hits', color: 0xb05ae0, desc: "your team's hits may poison (30%)" },
+  shroud: { name: 'Dodge Boost', tag: 'DODGE +20%', short: 'foes miss +20%', color: 0x7a6aa0, desc: 'attacks on your team miss 20% more' },
+  mend: { name: 'Team Heal', tag: 'HEAL', short: 'heal + cure', color: 0x5ad06a, desc: 'heals your whole team and cures their status' },
 };
 
 /** Turns a team effect lasts (counting the turn it's used); skill tiers add one each. */
@@ -63,18 +63,18 @@ export const teamFxTurns = (tier: number) => 4 + tier;
 export const mendHeal = (tier: number) => 0.15 + 0.05 * (tier - 1);
 
 const TEAM_MOVES: Record<Element, [string, TeamFxId]> = {
-  Fire: ['Ember Anthem', 'rally'],
-  Dragon: ['Wyrm Roar', 'rally'],
-  Earth: ['Stone Bulwark', 'guard'],
-  Metal: ['Iron Phalanx', 'guard'],
-  Storm: ['Gale Wake', 'tailwind'],
-  Spirit: ['Spirit Draft', 'tailwind'],
-  Light: ['Sanctum Glow', 'ward'],
-  Frost: ['Hoarfrost Veil', 'ward'],
-  Toxic: ['Venom Coat', 'venom'],
-  Shadow: ['Shadow Shroud', 'shroud'],
-  Nature: ['Bloom Mend', 'mend'],
-  Water: ['Tide Mend', 'mend'],
+  Fire: ['Blaze Power Boost', 'rally'],
+  Dragon: ['Dragon Power Boost', 'rally'],
+  Earth: ['Stone Shield Wall', 'guard'],
+  Metal: ['Iron Shield Wall', 'guard'],
+  Storm: ['Storm Speed Boost', 'tailwind'],
+  Spirit: ['Spirit Speed Boost', 'tailwind'],
+  Light: ['Holy Status Guard', 'ward'],
+  Frost: ['Frost Status Guard', 'ward'],
+  Toxic: ['Poison Coating', 'venom'],
+  Shadow: ['Shadow Dodge Boost', 'shroud'],
+  Nature: ['Bloom Team Heal', 'mend'],
+  Water: ['Tide Team Heal', 'mend'],
 };
 export const teamMoveId = (el: Element) => `${el}:team`;
 
@@ -381,7 +381,7 @@ export function describeEffects(m: MoveDef, tier: number): string {
 /** Short summary for UI. */
 export function moveSummary(m: MoveDef, tier: number): string {
   if (m.team === 'mend') return `Team: heal ${Math.round(mendHeal(tier) * 100)}% + cure`;
-  if (m.team) return `Team: ${TEAM_FX[m.team].name.toLowerCase()} ${teamFxTurns(tier)} turns`;
+  if (m.team) return `Team ${teamFxTurns(tier)}t: ${TEAM_FX[m.team].short}`;
   if (m.kind === 'heal') {
     const h = `Heal ${Math.round(healAtTier(m, tier) * 100)}%`;
     return m.effects.length ? `${h}, ${fmtFx(effectsAtTier(m, tier))}` : h;
