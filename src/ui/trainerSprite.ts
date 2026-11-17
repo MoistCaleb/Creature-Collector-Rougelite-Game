@@ -269,16 +269,67 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(x, sleeveEnd + 1, x + 1, 24, skin);
     if (top === 8) rect(x === 7 ? 6 : 21, 20, x === 7 ? 6 : 21, 22, topC); // robe: wide sleeves
   };
+  /** The arm giving an order: up and out toward the opponent from behind, straight out from the front. */
+  const raisedArm = () => {
+    if (back) {
+      for (let i = 0; i < 6; i++) rect(19 + i, 19 - i, 20 + i, 20 - i, i > 1 && sleeveEnd < 22 ? skin : sleeve);
+      round(24, 11, 27, 14, skin, 1);
+    } else {
+      rect(19, 20, sleeveEnd < 22 ? 21 : 25, 21, sleeve);
+      if (sleeveEnd < 22) rect(22, 20, 25, 21, skin);
+      round(25, 19, 27, 22, skin, 1);
+    }
+  };
   armDown(7);
-  if (raised && back) {
-    // Up and out toward the opponent (up-right).
-    for (let i = 0; i < 6; i++) rect(19 + i, 19 - i, 20 + i, 20 - i, i > 1 && sleeveEnd < 22 ? skin : sleeve);
-    round(24, 11, 27, 14, skin, 1);
-  } else if (raised) {
-    rect(19, 20, sleeveEnd < 22 ? 21 : 25, 21, sleeve);
-    if (sleeveEnd < 22) rect(22, 20, 25, 21, skin);
-    round(25, 19, 27, 22, skin, 1);
-  } else armDown(19);
+  if (raised) raisedArm();
+  else armDown(19);
+  if (top === 15) {
+    // Void cloak: drapes over the shoulders and both arms to the ankles; the hands peek out.
+    for (const [x0, x1] of [[6, 8], [19, 21]] as const) {
+      if (raised && x0 === 19) continue;
+      round(x0, 18, x1, 30, VOID, 1);
+      put(x0 === 6 ? 7 : 20, 23, 0xc8a8f0);
+      put(x0 === 6 ? 6 : 21, 27, 0xffffff);
+      if (!back) rect(x0 === 6 ? 7 : 19, 24, x0 === 6 ? 8 : 20, 24, skin);
+    }
+    rect(6, 18, raised ? 18 : 21, 18, 0x8a3ad8); // glowing mantle edge
+    if (back) {
+      // One sweep down the back, flaring at the hem, with folds and stars.
+      round(6, 17, 21, 29, VOID, 1);
+      round(4, 28, 23, 32, VOID, 1);
+      for (const x of [9, 13, 18]) rect(x, 23, x, 31, 0x2a1a48);
+      for (const [x, y] of [[10, 20], [16, 22], [12, 26], [19, 28], [7, 30], [15, 31], [11, 19]]) put(x, y, (x + y) % 2 ? 0xffffff : 0xc8a8f0);
+      rect(6, 17, 21, 17, 0x8a3ad8);
+      rect(5, 32, 22, 32, 0x8a3ad8);
+    }
+    if (raised) raisedArm();
+  }
+  if (top === 14) {
+    // Dragon armor: scaled sleeves, bracers at the wrists, greaves on the shins.
+    const arms = raised ? [7] : [7, 19];
+    for (const x of arms) {
+      for (let y = 19; y <= 22; y++) if ((x + y) % 2 === 0) put(x, y, shade(topC, 0.7));
+      rect(x, 22, x + 1, 23, acc);
+      put(x, 22, GOLD);
+    }
+    for (const x of [10, 15]) {
+      rect(x, 29, x + 2, 30, acc);
+      rect(x, 30, x + 2, 30, shade(acc, 0.75));
+      put(x + 1, 28, GOLD); // knee
+    }
+  }
+  if (top === 16) {
+    // Mech suit: armored hips and legs, plated forearm cuffs.
+    rect(9, 27, 18, 28, STEEL_DARK);
+    for (const x of [10, 15]) {
+      rect(x, 29, x + 2, 30, STEEL);
+      put(x + 1, 29, STEEL_DARK);
+    }
+    for (const x of raised ? [7] : [7, 19]) {
+      rect(x, 21, x + 1, 22, STEEL_DARK);
+      put(x, 21, GLOW_CYAN);
+    }
+  }
   if (top === 13) {
     round(6, 18, 9, 19, GOLD, 1); // gold epaulettes
     round(18, 18, 21, 19, GOLD, 1);
@@ -301,11 +352,24 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     round(18, 18, 22, 20, acc, 1);
   }
   if (back && top === 2) round(9, 17, 18, 22, shade(topC, 0.8), 1); // hood on the back
+  if (!back && look.back === 3) {
+    // Jetpack straps over the shoulders and a buckle across the chest.
+    rect(10, 19, 10, 25, STEEL_DARK);
+    rect(17, 19, 17, 25, STEEL_DARK);
+    rect(11, 22, 16, 22, STEEL_DARK);
+    rect(13, 22, 14, 22, GOLD);
+  }
 
   // ---- head and face
   round(X0, Y0, X1, Y1, skin, 2);
   if (back) {
     backHair();
+    if (top === 15) {
+      // The cloak's hood over the back of the head.
+      round(X0, Y0 - 1, X1, Y1, VOID, 2);
+      rect(X0, Y1 - 1, X1, Y1, 0x2a1a48);
+      for (const [x, y] of [[9, 8], [16, 11], [12, 14], [18, 6]]) put(x, y, (x + y) % 2 ? 0xffffff : 0xc8a8f0);
+    }
     // From behind, the back item is nearest you: it covers the back, both arms, the neck and the
     // back of the head wherever its shape reaches (the hat still sits on top).
     backItem();
@@ -757,7 +821,15 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         if (!back) {
           rect(X0 + 1, Y0 + 1, X1 - 1, Y0 + 1, GOLD); // brow
           rect(13, Y0 + 2, 14, Y0 + 3, dark); // snout
-        } else rect(13, Y0 - 3, 14, Y0 + 2, dark);
+        } else {
+          // From behind it covers the back of the head down to the neck, the crest running down it.
+          round(X0 - 1, Y0 - 3, X1 + 1, Y1 - 4, hatC, 2);
+          round(X0 + 1, Y1 - 5, X1 - 1, Y1, hatC, 1); // a narrower neck guard
+          for (let y = Y0 - 2; y <= Y1; y++) for (let x = X0; x <= X1; x++) if ((x + 2 * y) % 5 === 0 && g[y]?.[x] === hatC) put(x, y, dark);
+          rect(X0 + 1, Y1, X1 - 1, Y1, dark);
+          for (let y = Y0 - 4; y <= Y1 - 1; y += 2) rect(13, y, 14, y, acc); // the crest down the back
+          put(13, Y0 - 5, acc);
+        }
         break;
       }
       case 23: // wizard hat: a tall cone leaning out to the side, with stars
