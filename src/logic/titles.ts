@@ -109,9 +109,6 @@ export function takeNewTitles(meta: Meta): TitleDef[] {
   return fresh.filter((t) => !t.gilded);
 }
 
-/** A line announcing new titles (empty when there are none). */
-export const titleNews = (ts: TitleDef[]): string => (ts.length ? `\n\nNew title${ts.length > 1 ? 's' : ''}: ${ts.map((t) => t.name).join(', ')}!` : '');
-
 /** Count an online win (a duel series or a stage battle) and return any titles it earned. Caller saves meta. */
 export function addOnlineWin(meta: Meta): TitleDef[] {
   meta.onlineWins = (meta.onlineWins ?? 0) + 1;
