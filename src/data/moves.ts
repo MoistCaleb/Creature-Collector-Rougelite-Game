@@ -123,9 +123,10 @@ const KITS: Record<Element, ElementKit> = {
     specials: [
       { t: 'quick', name: 'Flare Dash' },
       { t: 'heavy', name: 'Blaze Rush' },
-      { t: 'boost', name: 'Stoking Claw', fx: fx(['atk', 1]) },
+      // Fire is fast but frail: a draining hit and a defensive buff give it staying power.
+      { t: 'drain', name: 'Cauterize' },
     ],
-    extra: { buff: ['Fire Dance', fx(['spd', 2])] },
+    extra: { buff: ['Heat Haze', fx(['def', 2])] },
   },
   Frost: {
     buff: ['Frost Armor', fx(['def', 2])],

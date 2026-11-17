@@ -23,6 +23,11 @@ export interface Combatant {
   sash?: 'fired' | 'spent';
 }
 
+/** Thornwall: your hits on their Hexlings cut you for this share of the damage. */
+export const THORNS_RECOIL = 0.1;
+/** Overclock: their Attack climbs one stage a turn, up to this many. */
+export const OVERCLOCK_MAX = 3;
+
 export type PlayerAction =
   | { kind: 'move'; index: number }
   | { kind: 'swap'; index: number }
@@ -788,7 +793,7 @@ export class Battle {
       }
     }
     if (this.has('thorns') && side === 'player' && total > 0 && isAlive(user.c)) {
-      const th = Math.max(1, Math.round(total * 0.15));
+      const th = Math.max(1, Math.round(total * THORNS_RECOIL));
       user.c.hp = Math.max(0, user.c.hp - th);
       ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: th });
       ev.push({ kind: 'text', text: `${this.rn('thorns')}: ${creatureName(user.c)} is cut by thorns!` });
@@ -1033,7 +1038,7 @@ export class Battle {
       ev.push({ kind: 'text', text: `${this.rn('scorch')}: ${creatureName(p.c)} is scorched!` });
       if (!isAlive(p.c)) this.handleFaint('player', ev);
     }
-    if (this.has('overclock') && isAlive(e.c)) this.ruleBump(e, 'enemy', 'atk', 1, ev, 'overclock');
+    if (this.has('overclock') && isAlive(e.c) && e[stageKey('atk')] < OVERCLOCK_MAX) this.ruleBump(e, 'enemy', 'atk', 1, ev, 'overclock');
     if (this.has('sanctuary') && isAlive(e.c)) {
       const max = stats(e.c).hp;
       if (e.c.hp < max) {

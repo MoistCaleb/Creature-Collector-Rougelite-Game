@@ -5,6 +5,7 @@
  *
  * Usage: npx vite-node scripts/balance.ts [scale]
  *   scale multiplies the number of runs (default 1, about 12,000 runs; 0.2 for a quick look).
+ *   RULES_ONLY=1 runs about 8,000 Heat 4-8 runs and prints only the guardian rule loss rates.
  *
  * The bot is a decent player, not a great one: it picks the strongest move by type and power,
  * switches out of bad matchups, drinks potions when low, rests when hurt, buys useful items and
@@ -305,6 +306,31 @@ const tally = (r: RunResult, heat: number) => {
     }
   }
 };
+
+// Focused check of the extra guardian rules: many Heat 4-8 runs, then just the rule table.
+if (process.env.RULES_ONLY) {
+  const own: Record<string, { fights: number; lost: number }> = {};
+  for (let heat = 4; heat <= 8; heat++)
+    for (let i = 0; i < N(1600); i++) {
+      const seed = nextSeed();
+      const r = play({ seed, starter: pickStarter(seed), heat });
+      tally(r, heat);
+      for (const f of r.bossFights) {
+        const t = (own[f.rules[0]] ??= { fights: 0, lost: 0 });
+        t.fights++;
+        if (!f.won) t.lost++;
+      }
+    }
+  const show = (title: string, tab: Record<string, { fights: number; lost: number }>) => {
+    console.log(title);
+    Object.entries(tab)
+      .sort((a, b) => b[1].lost / b[1].fights - a[1].lost / a[1].fights)
+      .forEach(([rule, t]) => console.log(`  ${RULES[rule as BossRule].name.padEnd(16)} ${String(t.fights).padStart(5)}  ${pct(t.lost, t.fights)}`));
+  };
+  show('Extra rules (Heat 4-8):', ruleTally);
+  show("Guardians' own rules (Heat 4-8):", own);
+  process.exit(0);
+}
 
 // 1. Heat.
 const byHeat: { heat: number; runs: number; wins: number; ends: Record<string, number>; floors: number[] }[] = [];

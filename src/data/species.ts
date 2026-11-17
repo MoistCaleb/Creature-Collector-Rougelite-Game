@@ -60,10 +60,10 @@ function f(
 
 export const SPECIES: Species[] = [
   // ------------------------------------------------------------ Fire
-  f('emberkit', 'Emberkit/Blazefang/Infernox', 'Fire', 'Fire', 55, 70, 45, 65, 'Ember Pounce'),
-  f('cinderpup', 'Cinderpup/Scorchound/Pyreberus', 'Fire', 'Fire', 60, 72, 48, 60, 'Hearth Howl'),
-  f('flicklet', 'Flicklet/Candlewick/Wickerpyre', 'Fire', 'Fire', 56, 68, 48, 76, 'Wick Flare'),
-  f('magmite', 'Magmite/Lavalurk/Calderath', 'Fire', 'Fire', 70, 64, 62, 38, 'Molten Core'),
+  f('emberkit', 'Emberkit/Blazefang/Infernox', 'Fire', 'Fire', 59, 70, 47, 65, 'Ember Pounce'),
+  f('cinderpup', 'Cinderpup/Scorchound/Pyreberus', 'Fire', 'Fire', 64, 72, 50, 60, 'Hearth Howl'),
+  f('flicklet', 'Flicklet/Candlewick/Wickerpyre', 'Fire', 'Fire', 60, 68, 50, 76, 'Wick Flare'),
+  f('magmite', 'Magmite/Lavalurk/Calderath', 'Fire', 'Fire', 74, 64, 64, 38, 'Molten Core'),
   // ------------------------------------------------------------ Frost
   f('frostling', 'Frostling/Glacimaw/Hailwyrm', 'Frost', 'Frost', 60, 60, 60, 55, 'Glacial Gale'),
   f('snowmote', 'Snowmote/Driftling/Avalanx', 'Frost', 'Frost', 58, 58, 56, 66, 'Whiteout'),
@@ -100,7 +100,7 @@ export const SPECIES: Species[] = [
   f('stingit', 'Stingit/Venospid/Arachnox', 'Toxic', 'Toxic', 54, 70, 48, 70, 'Venom Web'),
   f('oozel', 'Oozel/Sludgeworm/Rotwyrm', 'Toxic', 'Toxic', 72, 58, 64, 40, 'Ooze Flood'),
   // ------------------------------------------------------------ Shadow
-  f('gloomkit', 'Gloomkit/Duskfang/Nightreaver', 'Shadow', 'Shadow', 58, 72, 48, 74, 'Dusk Pounce'),
+  f('gloomkit', 'Gloomkit/Duskfang/Nightreaver', 'Shadow', 'Shadow', 62, 72, 52, 74, 'Dusk Pounce'),
   f('mothlet', 'Mothlet/Duskwing/Eclipsara', 'Shadow', 'Shadow', 56, 64, 48, 72, 'Eclipse Dust'),
   f('murkpup', 'Murkpup/Gloomhound/Umbracerb', 'Shadow', 'Shadow', 60, 74, 50, 62, 'Night Howl'),
   f('creepet', 'Creepet/Lurkspider/Widowmaw', 'Shadow', 'Shadow', 58, 68, 54, 64, 'Shadow Web'),
@@ -121,21 +121,21 @@ export const SPECIES: Species[] = [
   f('hatchwyrm', 'Hatchwyrm/Scaleguard/Elderwyrm', 'Dragon', 'Dragon', 74, 68, 70, 36, 'Elder Roar'),
 
   // ------------------------------------------------------------ Dual: Fire/Earth
-  f('magmole', 'Magmole/Lavaburrow/Calderock', 'Fire', 'Earth', 65, 65, 60, 40, 'Magma Burrow'),
-  f('lavapup', 'Lavapup/Magmhound/Volcanox', 'Fire', 'Earth', 68, 74, 60, 46, 'Lava Burst'),
-  f('ashtoad', 'Ashtoad/Basaltoad/Cratergrog', 'Earth', 'Fire', 72, 62, 66, 34, 'Ash Geyser'),
+  f('magmole', 'Magmole/Lavaburrow/Calderock', 'Fire', 'Earth', 69, 65, 62, 40, 'Magma Burrow'),
+  f('lavapup', 'Lavapup/Magmhound/Volcanox', 'Fire', 'Earth', 72, 74, 62, 46, 'Lava Burst'),
+  f('ashtoad', 'Ashtoad/Basaltoad/Cratergrog', 'Earth', 'Fire', 76, 62, 68, 34, 'Ash Geyser'),
   // Fire/Dragon
-  f('pyrling', 'Pyrling/Scorchwing/Infernadrake', 'Fire', 'Dragon', 58, 74, 48, 60, 'Pyre Breath'),
-  f('kindrake', 'Kindrake/Blazewyrm/Solardrake', 'Dragon', 'Fire', 64, 74, 54, 52, 'Solar Roar'),
-  f('scaldlet', 'Scaldlet/Scaldwing/Scaldrax', 'Fire', 'Dragon', 56, 70, 50, 66, 'Ash Dive'),
+  f('pyrling', 'Pyrling/Scorchwing/Infernadrake', 'Fire', 'Dragon', 62, 74, 50, 60, 'Pyre Breath'),
+  f('kindrake', 'Kindrake/Blazewyrm/Solardrake', 'Dragon', 'Fire', 68, 74, 56, 52, 'Solar Roar'),
+  f('scaldlet', 'Scaldlet/Scaldwing/Scaldrax', 'Fire', 'Dragon', 60, 70, 52, 66, 'Ash Dive'),
   // Fire/Shadow
-  f('ashcat', 'Ashcat/Smoldershade/Hellprowl', 'Shadow', 'Fire', 54, 72, 44, 68, 'Ash Claw'),
-  f('hexkit', 'Hexkit/Hexflare/Hellmage', 'Fire', 'Shadow', 56, 70, 46, 66, 'Hexfire'),
-  f('dimember', 'Dimember/Gloomflame/Abyssblaze', 'Shadow', 'Fire', 60, 68, 52, 58, 'Black Flame'),
+  f('ashcat', 'Ashcat/Smoldershade/Hellprowl', 'Shadow', 'Fire', 58, 72, 46, 68, 'Ash Claw'),
+  f('hexkit', 'Hexkit/Hexflare/Hellmage', 'Fire', 'Shadow', 60, 70, 48, 66, 'Hexfire'),
+  f('dimember', 'Dimember/Gloomflame/Abyssblaze', 'Shadow', 'Fire', 64, 68, 54, 58, 'Black Flame'),
   // Fire/Storm
-  f('sparkfox', 'Sparkfox/Pyrovolt/Plasmane', 'Fire', 'Storm', 56, 72, 46, 73, 'Spark Fang'),
-  f('blazejay', 'Blazejay/Thunderjay/Stormphoenix', 'Storm', 'Fire', 54, 68, 44, 74, 'Firestorm'),
-  f('plasmite', 'Plasmite/Arcflare/Plasmagon', 'Fire', 'Storm', 58, 74, 48, 62, 'Plasma Lance'),
+  f('sparkfox', 'Sparkfox/Pyrovolt/Plasmane', 'Fire', 'Storm', 60, 72, 48, 73, 'Spark Fang'),
+  f('blazejay', 'Blazejay/Thunderjay/Stormphoenix', 'Storm', 'Fire', 58, 68, 46, 74, 'Firestorm'),
+  f('plasmite', 'Plasmite/Arcflare/Plasmagon', 'Fire', 'Storm', 62, 74, 50, 62, 'Plasma Lance'),
   // Water/Frost
   f('slushpup', 'Slushpup/Floetusk/Glaciorca', 'Frost', 'Water', 68, 58, 62, 47, 'Slush Pounce'),
   f('penglet', 'Penglet/Floepeng/Glacipeng', 'Water', 'Frost', 64, 62, 58, 54, 'Ice Slide'),
@@ -209,11 +209,11 @@ export const SPECIES: Species[] = [
   f('woollet', 'Woollet/Mammoss/Mastodire', 'Earth', 'Frost', 80, 70, 64, 26, 'Tusk Quake'),
   f('slablet', 'Slablet/Glaciolith/Icecap', 'Frost', 'Earth', 74, 60, 74, 30, 'Glacier Fall'),
   // ------------------------------------------------------------ Dual singles
-  f('steamle', 'Steamle/Geyserp/Vaporeign', 'Fire', 'Water', 58, 62, 55, 55, 'Steam Blast'),
+  f('steamle', 'Steamle/Geyserp/Vaporeign', 'Fire', 'Water', 62, 62, 57, 55, 'Steam Blast'),
   f('shalebeak', 'Shalebeak/Cliffrider/Stormspire', 'Earth', 'Storm', 60, 66, 55, 54, 'Shale Peck'),
   f('coralite', 'Coralite/Reefguard/Atollith', 'Water', 'Earth', 70, 55, 72, 38, 'Coral Shards'),
   f('frostfern', 'Frostfern/Iceblossom/Winterbloom', 'Frost', 'Nature', 62, 60, 58, 55, 'Frost Bloom'),
-  f('cinderwisp', 'Cinderwisp/Ashveil/Pyrewraith', 'Fire', 'Nature', 54, 68, 48, 65, 'Ash Bloom'),
+  f('cinderwisp', 'Cinderwisp/Ashveil/Pyrewraith', 'Fire', 'Nature', 58, 68, 50, 65, 'Ash Bloom'),
   f('gildwing', 'Gildwing/Sunwyrm/Aurumdrake', 'Light', 'Dragon', 64, 70, 58, 54, 'Golden Breath'),
 ];
 

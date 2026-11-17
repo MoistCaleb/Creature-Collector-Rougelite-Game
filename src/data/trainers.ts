@@ -4,12 +4,12 @@ import type { Element } from './types';
 export type BossRule =
   | 'scorch' // end of turn: your active creature takes 1/16 max HP (Fire types are immune)
   | 'riptide' // switching in costs your creature 1/8 max HP
-  | 'thorns' // hitting a boss creature hurts the attacker for 15% of the damage
+  | 'thorns' // hitting a boss creature hurts the attacker for 10% of the damage
   | 'bulwark' // boss creatures enter with +1 Defense
   | 'tailwind' // the boss always moves first (priority moves still win)
   | 'whiteout' // your creatures enter with -1 Speed
   | 'miasma' // your creatures are poisoned when they enter
-  | 'overclock' // end of turn: the boss's active creature gains +1 Attack
+  | 'overclock' // end of turn: the boss's active creature gains +1 Attack (up to +3)
   | 'sanctuary' // end of turn: the boss's active creature heals 1/12 max HP
   | 'dread' // your creatures enter with -1 Attack
   | 'curse' // a fainting boss creature curses your active one for 1/5 max HP
@@ -51,7 +51,7 @@ export const BOSSES: Record<Element, BossDef> = {
   Nature: {
     element: 'Nature', name: 'Bramble', title: 'the Thornmother', partner: 'Toxic',
     quote: 'Touch my children and you will bleed.',
-    rule: 'thorns', ruleName: 'Thornwall', ruleDesc: 'Your attacks on her Hexlings hurt you for 15% of the damage dealt.',
+    rule: 'thorns', ruleName: 'Thornwall', ruleDesc: 'Your attacks on her Hexlings hurt you for 10% of the damage dealt.',
   },
   Earth: {
     element: 'Earth', name: 'Gorran', title: 'the Unmoved', partner: 'Metal',
@@ -71,7 +71,7 @@ export const BOSSES: Record<Element, BossDef> = {
   Metal: {
     element: 'Metal', name: 'Forge', title: 'the Iron Engine', partner: 'Storm',
     quote: 'Every turn I grow stronger. Can you keep up?',
-    rule: 'overclock', ruleName: 'Overclock', ruleDesc: 'His active Hexling gains +1 Attack at the end of every turn.',
+    rule: 'overclock', ruleName: 'Overclock', ruleDesc: 'His active Hexling gains +1 Attack at the end of every turn, up to +3.',
   },
   Toxic: {
     element: 'Toxic', name: 'Morva', title: 'the Plague Bloom', partner: 'Shadow',
@@ -117,12 +117,12 @@ export function trainerName(pick: <T>(xs: readonly T[]) => T): string {
 export const RULES: Record<BossRule, { name: string; desc: string }> = {
   scorch: { name: 'Scorched Ground', desc: 'Your active Hexling takes damage every turn unless it is Fire type.' },
   riptide: { name: 'Riptide', desc: 'Each Hexling you send in takes 1/8 of its HP as damage.' },
-  thorns: { name: 'Thornwall', desc: 'Your attacks on their Hexlings hurt you for 15% of the damage dealt.' },
+  thorns: { name: 'Thornwall', desc: 'Your attacks on their Hexlings hurt you for 10% of the damage dealt.' },
   bulwark: { name: 'Bulwark', desc: 'Their Hexlings enter battle with +1 Defense.' },
   tailwind: { name: 'Tailwind', desc: 'Their Hexlings always strike first, unless you use a priority move.' },
   whiteout: { name: 'Whiteout', desc: 'Your Hexlings lose 1 Speed whenever they enter battle.' },
   miasma: { name: 'Miasma', desc: 'Your Hexlings are poisoned whenever they enter battle.' },
-  overclock: { name: 'Overclock', desc: 'Their active Hexling gains +1 Attack at the end of every turn.' },
+  overclock: { name: 'Overclock', desc: 'Their active Hexling gains +1 Attack at the end of every turn, up to +3.' },
   sanctuary: { name: 'Sanctuary', desc: 'Their active Hexling heals at the end of every turn.' },
   dread: { name: 'Dread', desc: 'Your Hexlings lose 1 Attack whenever they enter battle.' },
   curse: { name: 'Death Curse', desc: 'When one of their Hexlings faints, your active Hexling takes heavy damage.' },
