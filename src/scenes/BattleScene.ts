@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
+import { battleBackdrop, battlePad, onField } from '../ui/backdrops';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, trainerName } from '../data/trainers';
@@ -77,7 +78,7 @@ import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE } from '../ui/widgets';
+import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H } from '../ui/widgets';
 
 interface SidePanel {
   root: Phaser.GameObjects.Container;
@@ -141,6 +142,8 @@ const TALL = {
   waiting: { x: 225, y: 700 },
   catchBtn: { x: 225, y: 652, w: 426, h: 72 },
   finishY: { wild: 738, other: 690 },
+  /** Where the environment shows (the rest is shaded under the controls). */
+  field: { w: 450, h: 520 },
 };
 /** Sideways: the field on the left, the message, moves and controls in a column on the right. */
 const WIDE: typeof TALL = {
@@ -166,6 +169,7 @@ const WIDE: typeof TALL = {
   waiting: { x: 660, y: 270 },
   catchBtn: { x: 660, y: 210, w: 256, h: 70 },
   finishY: { wild: 290, other: 210 },
+  field: { w: 524, h: 450 },
 };
 let L = TALL;
 let ENEMY_POS = L.enemy;
@@ -245,8 +249,7 @@ export class BattleScene extends Phaser.Scene {
 
     background(this, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[run.map.biome]).darken(78).color);
     useLayout();
-    this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
-    this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
+    this.drawField(run.map.biome);
     this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
@@ -254,9 +257,9 @@ export class BattleScene extends Phaser.Scene {
 
     this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
     this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
-    this.pips = text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0);
+    this.pips = onField(text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0));
     const title = boss ? boss.name.toUpperCase() : this.kind === 'elite' ? 'TRAINER' : 'WILD';
-    text(this, L.titleRight, L.titleY, title, 14, this.kind === 'battle' ? COLORS.textDim : '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
+    onField(text(this, L.titleRight, L.titleY, title, 14, this.kind === 'battle' ? COLORS.text : '#ff6a5a', { fontStyle: 'bold' }).setOrigin(1, 0));
     if (boss) {
       // The boss's rule stays on screen for the whole fight.
       this.add.rectangle(16, 96, 214, 58, 0x2a0f1a, 0.9).setOrigin(0).setStrokeStyle(2, 0xe0524a, 0.7);
@@ -269,7 +272,7 @@ export class BattleScene extends Phaser.Scene {
         text(this, 16, 160, `Synergy: ${line}`, 10, '#ff8a7a', { wordWrap: { width: 214 } });
       }
     } else if (this.kind === 'elite') {
-      text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' });
+      onField(text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' }));
     }
 
     this.add.rectangle(L.msg.x, L.msg.y, L.msg.w, L.msg.h, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
@@ -350,6 +353,7 @@ export class BattleScene extends Phaser.Scene {
     this.foeName = foeName;
     // Each trainer sits in a holder that idles up and down; the image inside it hops on its own.
     const place = (x: number, y: number, key: string, scale: number, delay: number) => {
+      this.add.ellipse(x, y + 17 * scale - 4, 15 * scale, 4 * scale, 0x000000, 0.3);
       const holder = this.add.container(x, y);
       const img = this.add.image(0, 0, key).setScale(scale);
       holder.add(img);
@@ -422,6 +426,13 @@ export class BattleScene extends Phaser.Scene {
     if (side) this.hop(side);
   }
 
+  /** The element's environment behind the field, and a pad under each side. */
+  private drawField(el: Element) {
+    battleBackdrop(this, el, W, H, L.field);
+    battlePad(this, el, ENEMY_POS.x, ENEMY_POS.y + 72);
+    battlePad(this, el, PLAYER_POS.x, PLAYER_POS.y + 72);
+  }
+
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
   private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; timer?: Phaser.Time.TimerEvent; hopping?: boolean }>> = {};
 
@@ -476,16 +487,16 @@ export class BattleScene extends Phaser.Scene {
     });
     background(this, m.background);
     useLayout();
-    this.add.ellipse(ENEMY_POS.x, ENEMY_POS.y + 72, 200, 44, 0x000000, 0.35);
-    this.add.ellipse(PLAYER_POS.x, PLAYER_POS.y + 72, 200, 44, 0x000000, 0.35);
+    // Outside a run, the field is the opponent's lead creature's home ground.
+    this.drawField(creatureTypes(this.enemies[0])[0]);
     this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
     this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
-    this.pips = text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0);
-    text(this, L.titleRight, L.titleY, m.title, 14, '#e0524a', { fontStyle: 'bold' }).setOrigin(1, 0);
-    text(this, 16, 96, m.opponent, 13, '#ffc94d', { fontStyle: 'bold' });
+    this.pips = onField(text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0));
+    onField(text(this, L.titleRight, L.titleY, m.title, 14, '#ff6a5a', { fontStyle: 'bold' }).setOrigin(1, 0));
+    onField(text(this, 16, 96, m.opponent, 13, '#ffc94d', { fontStyle: 'bold' }));
     this.add.rectangle(L.msg.x, L.msg.y, L.msg.w, L.msg.h, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     this.msg = text(this, L.msg.x + 12, L.msg.y + 10, '', 16, COLORS.text, { wordWrap: { width: L.msg.w - 24 } });
     this.actions = this.add.container(0, 0);
@@ -918,7 +929,7 @@ export class BattleScene extends Phaser.Scene {
           const s = this.spriteOf(ev.side);
           ev.up ? sfx.statUp() : sfx.statDown();
           statusFx(this, s, lastEl, ev.up);
-          const arrow = text(this, s.x, s.y - 60, ev.up ? '▲▲' : '▼▼', 28, ev.up ? '#8fe08a' : '#f08a80', { fontStyle: 'bold' }).setOrigin(0.5);
+          const arrow = onField(text(this, s.x, s.y - 60, ev.up ? '▲▲' : '▼▼', 28, ev.up ? '#8fe08a' : '#f08a80', { fontStyle: 'bold' }).setOrigin(0.5));
           s.setTint(ev.up ? 0xaaffaa : 0xff9a9a);
           this.tweens.add({ targets: arrow, y: arrow.y + (ev.up ? -30 : 30), alpha: 0, duration: 500, onComplete: () => arrow.destroy() });
           await this.wait(300);
