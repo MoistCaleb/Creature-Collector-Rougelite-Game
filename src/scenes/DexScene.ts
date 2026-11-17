@@ -11,6 +11,7 @@ import { createCreature, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
 import { toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
+import { openElementChart } from '../ui/elementChart';
 
 type Tab = 'creatures' | 'moves' | 'elements';
 /** Content starts below the header, tabs and the jump-to-element bar. */
@@ -66,6 +67,7 @@ export class DexScene extends Phaser.Scene {
     this.add.rectangle(0, 0, W, TOP, COLORS.bg).setOrigin(0).setInteractive();
     text(this, 16, 14, 'Hexlidex', 24, '#ffc94d', { fontStyle: 'bold' });
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
+    button(this, W - 156, 30, 96, 40, 'Chart', () => openElementChart(this), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
     const totalForms = SPECIES.length * 3;
     text(
       this,
@@ -215,12 +217,19 @@ export class DexScene extends Phaser.Scene {
         this.refreshRows();
       }, { fontSize: 12, glyph: 'star', color: fav ? 0x7a5a1c : 0x3a3450, enabled: canFav || fav }),
     );
+    const shinySeen = (meta.shinySeen ?? []).includes(sp.id);
     for (let s = 0; s < 3; s++) {
       const sy = y + 38 + s * 136;
       const seen = hasSeenForm(dex, sp.id, s);
       row.add(this.add.rectangle(24, sy, 112, 124, 0x15111f).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       if (seen) {
         row.add(this.add.image(80, sy + 62, ensureCreatureTexture(this, sp.id, s)).setScale(3.4 * SPRITE_FIT));
+        // Seen this family shiny: its rare colors in the corner.
+        if (shinySeen) {
+          row.add(this.add.rectangle(112, sy + 100, 44, 44, 0x2a2244).setStrokeStyle(1, 0xffc94d, 0.7));
+          row.add(this.add.image(112, sy + 100, ensureCreatureTexture(this, sp.id, s, true)).setScale(1 * SPRITE_FIT));
+          row.add(icon(this, 128, sy + 84, 'sparkle', 10));
+        }
         // Stats at this form's level cap (no prestige stars).
         const c = createCreature(sp.id, 1, s);
         c.level = stageCap(c);
@@ -252,6 +261,7 @@ export class DexScene extends Phaser.Scene {
       this.tapArea(row, y, rowH, i, anySeen);
       if (anySeen) row.add(icon(this, W - 30, y + rowH - 22, 'arrowUp', 12).setAngle(180).setAlpha(0.45));
       if (state.meta.favorite === sp.id) row.add(icon(this, W - 100, y + 13, 'star', 14));
+      if ((state.meta.shinySeen ?? []).includes(sp.id)) row.add(icon(this, W - 120, y + 13, 'sparkle', 14));
       row.add(text(this, 22, y + 6, `#${String(i + 1).padStart(3, '0')}`, 11, COLORS.textDim));
       if (dex.caught.includes(sp.id)) row.add(text(this, W - 24, y + 6, '● Caught', 11, '#8fe08a').setOrigin(1, 0));
       if (anySeen) {

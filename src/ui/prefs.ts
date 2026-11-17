@@ -1,4 +1,4 @@
-/** Small per-device preferences (battle speed, auto-battle, vibration). Never part of a save. */
+/** Small per-device preferences (volumes, battle speed, auto-battle, vibration, tips). Never part of a save. */
 
 function read(key: string): string | null {
   try {
@@ -48,4 +48,36 @@ export const prefs = {
   set haptics(v: boolean) {
     set('ccr-haptics', v ? '1' : '0');
   },
+  /** Music and sound-effect volume, 0-10. */
+  get musicVol(): number {
+    return vol(get('ccr-music-vol', '10'));
+  },
+  set musicVol(v: number) {
+    set('ccr-music-vol', String(vol(String(v))));
+  },
+  get sfxVol(): number {
+    return vol(get('ccr-sfx-vol', '10'));
+  },
+  set sfxVol(v: number) {
+    set('ccr-sfx-vol', String(vol(String(v))));
+  },
+  /** First-time tips (see ui/tips.ts). */
+  get tips(): boolean {
+    return get('ccr-tips', '1') === '1';
+  },
+  set tips(v: boolean) {
+    set('ccr-tips', v ? '1' : '0');
+  },
+  /** Tips already shown, comma-separated ids. */
+  get tipsSeen(): string[] {
+    return get('ccr-tips-seen', '').split(',').filter(Boolean);
+  },
+  set tipsSeen(v: string[]) {
+    set('ccr-tips-seen', v.join(','));
+  },
 };
+
+function vol(s: string): number {
+  const n = Math.round(Number(s));
+  return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : 10;
+}

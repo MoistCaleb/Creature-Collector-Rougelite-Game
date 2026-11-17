@@ -8,10 +8,9 @@ import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { myLook, myName } from '../data/trainerLook';
 import { playMusic } from '../ui/sound';
-import { buzz, canVibrate } from '../ui/haptics';
-import type { IconId } from '../ui/icons';
-import { prefs } from '../ui/prefs';
-import { background, button, COLORS, H, LANDSCAPE, muteButton, setGlyph, text, W } from '../ui/widgets';
+import { openSettings } from '../ui/settings';
+import { openHowToPlay } from '../ui/howto';
+import { background, button, COLORS, H, LANDSCAPE, muteButton, text, W } from '../ui/widgets';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -23,15 +22,8 @@ export class TitleScene extends Phaser.Scene {
     playMusic('title');
     text(this, 8, H - 8, `build ${__BUILD__}`, 10, '#4a4068').setOrigin(0, 1);
     muteButton(this, W - 30, 30);
-    if (canVibrate) {
-      // Vibration toggle (only on devices that can vibrate).
-      const glyph = (): IconId => (prefs.haptics ? 'vibe' : 'vibeOff');
-      const b = button(this, W - 78, 30, 40, 40, '', () => {
-        prefs.haptics = !prefs.haptics;
-        setGlyph(b, glyph());
-        buzz(30);
-      }, { fontSize: 20, glyph: glyph() });
-    }
+    // Settings: volumes, vibration, battle speed, tips, erasing progress.
+    button(this, W - 78, 30, 40, 40, '', () => openSettings(this, () => this.scene.restart({})), { fontSize: 20, glyph: 'gear' });
     const meta = state.meta;
     // Upright: one centered column. Sideways: the title and parade on the left, buttons on the right.
     const lx = LANDSCAPE ? 215 : W / 2;
@@ -117,7 +109,7 @@ export class TitleScene extends Phaser.Scene {
       install = button(
         this,
         cx,
-        ry(666),
+        LANDSCAPE ? ry(666) : ry(734),
         200,
         36,
         'Install app',
@@ -137,15 +129,15 @@ export class TitleScene extends Phaser.Scene {
     const off = onInstallChange(drawInstall);
     this.events.once('shutdown', off);
 
-    text(
-      this,
-      lx,
-      LANDSCAPE ? 398 : H - 62,
-      'Climb 3 floors. Pick your path.\nCatch Hexlings, evolve, prestige.\nDeath is permanent.',
-      16,
-      COLORS.textDim,
-      { align: 'center', lineSpacing: 6 },
-    ).setOrigin(0.5);
+    // How to play and Records (sideways: under the title, on the left).
+    const hx = LANDSCAPE ? lx : cx;
+    const hy = LANDSCAPE ? 392 : ry(676);
+    button(this, hx - 82, hy, 156, 46, 'How to play', () => openHowToPlay(this), { fontSize: 15, glyph: 'book' });
+    button(this, hx + 82, hy, 156, 46, 'Records', () => this.scene.start('Records', {}), {
+      fontSize: 15,
+      glyph: 'chart',
+      sub: meta.streak ? `Win streak ${meta.streak}` : undefined,
+    });
   }
 
   private continueRun() {

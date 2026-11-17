@@ -160,13 +160,13 @@ export class BagScene extends Phaser.Scene {
         run.evoStones -= 1;
         run.stonesSeen = run.evoStones;
         const from = creatureName(c);
-        const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+        const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
         const lv = c.level;
         evolveTracked(run, c);
         const note = releaseNote(c, lv);
         dex.creature(c, true);
         persist();
-        const toKey = ensureCreatureTexture(this, c.speciesId, c.stage);
+        const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
         playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
           cry(c.speciesId, c.stage);
           showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!${note}`, () => this.scene.restart({ from: this.from }));

@@ -11,7 +11,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, type Meta } from '../src/logic/run';
+import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1542,5 +1542,61 @@ describe('trainer looks', () => {
       for (const p of LOOK_PARTS) expect(l[p.key]).toBeLessThan(p.names.length);
     }
     expect(bossLook('Fire')).not.toEqual(bossLook('Water'));
+  });
+});
+
+describe('shiny Hexlings and run history', () => {
+  const meta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands',
+    stats: emptyStats(),
+    achievements: [],
+    newAchievements: [],
+  });
+
+  it('about 1 wild Hexling in 200 is shiny, only in wild battles, and a catch keeps it', () => {
+    let wild = 0;
+    let shiny = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const run = startRun(meta(), DEFAULT_STARTERS[0], seed);
+      const node = run.map.nodes[run.map.nodes[run.currentId].next[0]];
+      for (let k = 0; k < 10; k++) {
+        for (const e of makeEncounter(run, { ...node, kind: 'battle' })) {
+          wild++;
+          if (e.shiny) shiny++;
+        }
+        for (const e of makeEncounter(run, { ...node, kind: 'elite' })) expect(e.shiny).toBeFalsy();
+      }
+    }
+    expect(shiny / wild).toBeGreaterThan(1 / 400);
+    expect(shiny / wild).toBeLessThan(1 / 100);
+    const run = startRun(meta(), DEFAULT_STARTERS[0], 5);
+    const e = makeEncounter(run, run.map.nodes[run.map.nodes[run.currentId].next[0]])[0];
+    e.shiny = true;
+    const got = catchCreature(run, e);
+    expect(got?.c.shiny).toBe(true);
+    expect(run.meta.shinyCaught).toBe(1);
+  });
+
+  it('keeps the last 20 runs, newest first, with win streaks and most-used Hexlings', () => {
+    const m = meta();
+    for (let i = 0; i < 25; i++) {
+      const run = startRun(m, DEFAULT_STARTERS[0], i + 1);
+      recordRun(run, i % 5 !== 0);
+    }
+    expect(m.history).toHaveLength(HISTORY_MAX);
+    expect(m.history![0].at).toBeGreaterThanOrEqual(m.history![19].at);
+    // Runs 21-24 won after run 20 lost: a streak of 4; the best was also 4.
+    expect(m.streak).toBe(4);
+    expect(m.bestStreak).toBe(4);
+    expect(mostUsed(m)).toEqual({ speciesId: DEFAULT_STARTERS[0], runs: 25 });
   });
 });

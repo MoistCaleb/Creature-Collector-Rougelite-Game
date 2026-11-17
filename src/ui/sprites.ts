@@ -799,7 +799,48 @@ const SIGNATURE_COLOR: Record<Element, number> = {
   Dragon: 0xff8a3d,
 };
 
-function paletteFor(speciesId: string, stage: number) {
+/** Rotate a color's hue by `deg` degrees (and lift its saturation a little). */
+function hueShift(color: number, deg: number): number {
+  const r = ((color >> 16) & 255) / 255;
+  const g = ((color >> 8) & 255) / 255;
+  const b = (color & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  let h = 0;
+  let sat = 0;
+  if (d > 0) {
+    sat = d / (1 - Math.abs(2 * l - 1));
+    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  h = (h + deg + 360) % 360;
+  sat = Math.min(1, sat * 1.15);
+  const c = (1 - Math.abs(2 * l - 1)) * sat;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [rr, gg, bb] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const to = (v: number) => Math.round(Math.max(0, Math.min(1, v + m)) * 255);
+  return (to(rr) << 16) | (to(gg) << 8) | to(bb);
+}
+
+/** How far a species' shiny colors are turned around the color wheel (fixed per family). */
+export function shinyHue(speciesId: string): number {
+  let h = 0;
+  for (const ch of speciesId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return 120 + (h % 120);
+}
+
+function paletteFor(speciesId: string, stage: number, shiny = false) {
+  const p = basePalette(speciesId, stage);
+  if (!shiny) return p;
+  const deg = shinyHue(speciesId);
+  for (const k of [1, 2, 3, 9, 10, 11]) p.pal[k] = hueShift(p.pal[k], deg);
+  return { pal: p.pal, outline: hueShift(p.outline, deg), shadow: hueShift(p.shadow, deg), light: hueShift(p.light, deg) };
+}
+
+function basePalette(speciesId: string, stage: number) {
   const types = SPECIES_BY_ID[speciesId].types;
   const [t1, t2] = types;
   const fam = familyPlan(speciesId, types);
@@ -830,9 +871,9 @@ function paletteFor(speciesId: string, stage: number) {
 }
 
 /** Paints a creature onto any 2D canvas context at (ox, oy), one canvas pixel per sprite pixel. */
-export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox = 0, oy = 0) {
+export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox = 0, oy = 0, shiny = false) {
   const grid = buildGrid(speciesId, stage);
-  const { pal, outline, shadow, light } = paletteFor(speciesId, stage);
+  const { pal, outline, shadow, light } = paletteFor(speciesId, stage, shiny);
   const S = SPRITE_SIZE;
   const filled = (x: number, y: number) => x >= 0 && y >= 0 && x < S && y < S && grid[y][x] !== 0;
   for (let y = 0; y < S; y++)
@@ -855,18 +896,18 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
     }
 }
 
-export function creatureTextureKey(speciesId: string, stage: number): string {
-  return `cr-${speciesId}-${stage}`;
+export function creatureTextureKey(speciesId: string, stage: number, shiny = false): string {
+  return `cr-${speciesId}-${stage}${shiny ? '-s' : ''}`;
 }
 
-/** Draws (once) and returns the texture key for a creature sprite. */
-export function ensureCreatureTexture(scene: Phaser.Scene, speciesId: string, stage: number): string {
-  const key = creatureTextureKey(speciesId, stage);
+/** Draws (once) and returns the texture key for a creature sprite (`shiny`: its rare colors). */
+export function ensureCreatureTexture(scene: Phaser.Scene, speciesId: string, stage: number, shiny = false): string {
+  const key = creatureTextureKey(speciesId, stage, shiny);
   if (scene.textures.exists(key)) return key;
   const canvas = document.createElement('canvas');
   canvas.width = SPRITE_SIZE;
   canvas.height = SPRITE_SIZE;
-  paintCreature(canvas.getContext('2d')!, speciesId, stage);
+  paintCreature(canvas.getContext('2d')!, speciesId, stage, 0, 0, shiny);
   scene.textures.addCanvas(key, canvas);
   return key;
 }

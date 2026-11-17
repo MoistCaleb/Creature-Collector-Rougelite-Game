@@ -7,6 +7,7 @@ import type { Voice } from '../data/cries';
  */
 
 import { buzz } from './haptics';
+import { prefs } from './prefs';
 
 const MUTE_KEY = 'ccr-audio-muted';
 let ctx: AudioContext | null = null;
@@ -35,10 +36,10 @@ export function unlockAudio() {
       master.gain.value = muted ? 0 : 0.8;
       master.connect(ctx.destination);
       sfxBus = ctx.createGain();
-      sfxBus.gain.value = 0.55;
+      sfxBus.gain.value = SFX_GAIN * (prefs.sfxVol / 10);
       sfxBus.connect(master);
       musicBus = ctx.createGain();
-      musicBus.gain.value = 0.22;
+      musicBus.gain.value = MUSIC_GAIN * (prefs.musicVol / 10);
       musicBus.connect(master);
       if (wantedTheme) startTheme(wantedTheme);
     }
@@ -46,6 +47,16 @@ export function unlockAudio() {
   } catch {
     ctx = null;
   }
+}
+
+const SFX_GAIN = 0.55;
+const MUSIC_GAIN = 0.22;
+
+/** Apply the music / sound-effect volumes from prefs (0-10). */
+export function applyVolumes() {
+  if (!ctx) return;
+  sfxBus?.gain.setTargetAtTime(SFX_GAIN * (prefs.sfxVol / 10), ctx.currentTime, 0.05);
+  musicBus?.gain.setTargetAtTime(MUSIC_GAIN * (prefs.musicVol / 10), ctx.currentTime, 0.05);
 }
 
 export function isMuted() {
@@ -404,6 +415,11 @@ export const sfx = {
     tone(note(24, 659), 0.9, { type: 'sine', vol: 0.1, delay: 0.42 });
     noise(0.5, { freq: 7000, to: 2500, vol: 0.08, type: 'highpass' });
   },
+  /** A shiny Hexling appears: a quick glittering run up high. */
+  shiny() {
+    [0, 4, 7, 11, 14, 19].forEach((s, i) => tone(note(s, 1047), 0.09, { type: 'triangle', vol: 0.13, delay: i * 0.05 }));
+    noise(0.5, { freq: 9000, to: 4000, vol: 0.08, type: 'highpass', delay: 0.1 });
+  },
   evolveDone() {
     [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(note(s, 523), 0.18, { type: 'square', vol: 0.14, delay: i * 0.06 }));
     noise(0.6, { freq: 6000, to: 800, vol: 0.2, type: 'highpass' });
@@ -412,100 +428,315 @@ export const sfx = {
 
 // ------------------------------------------------------------ music
 
-export type Theme = 'title' | 'map' | 'battle' | 'boss';
+/**
+ * Music is composed on the fly from a few parameters: a mode, two 4-chord progressions and a seed.
+ * Each song is 16 bars (A A' B A'') of eighth notes: a 2-bar motif repeats with variations and
+ * cadences, over bass, drums, pads, arpeggios and bells. Map and battle songs take the colour of the
+ * floor's element (its mode, tempo and instruments), so every element sounds different.
+ */
+export type Theme = 'title' | 'map' | 'battle' | 'trainer' | 'boss' | 'final' | 'shop' | 'event' | 'arena' | 'win' | 'lose';
 
-interface ThemeDef {
+type Drums = 'none' | 'soft' | 'drive' | 'march' | 'half';
+
+interface SongDef {
   bpm: number;
   root: number; // Hz
   scale: number[];
-  chords: number[]; // chord roots per bar, in semitones
+  /** Chords per bar as scale degrees (0 = the home chord), for the A and B sections. */
+  progA: number[];
+  progB: number[];
   lead: Wave;
   bass: Wave;
-  drums: boolean;
+  drums: Drums;
+  arp?: boolean;
+  pad?: boolean;
+  echo?: boolean;
+  bells?: boolean;
+  /** How busy the melody is (0-1). */
+  density?: number;
   seed: number;
 }
 
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const PHRYGIAN = [0, 1, 3, 5, 7, 8, 10];
+const HARMONIC = [0, 2, 3, 5, 7, 8, 11];
+const DORIAN = [0, 2, 3, 5, 7, 9, 10];
+const LYDIAN = [0, 2, 4, 6, 7, 9, 11];
+const MIXOLYDIAN = [0, 2, 4, 5, 7, 9, 10];
 
-const THEMES: Record<Theme, ThemeDef> = {
-  title: { bpm: 88, root: 220, scale: MINOR, chords: [0, 8, 3, 10], lead: 'triangle', bass: 'triangle', drums: false, seed: 11 },
-  map: { bpm: 104, root: 262, scale: MAJOR, chords: [0, 5, 9, 7], lead: 'triangle', bass: 'square', drums: false, seed: 23 },
-  battle: { bpm: 144, root: 220, scale: MINOR, chords: [0, 8, 10, 7], lead: 'square', bass: 'square', drums: true, seed: 37 },
-  boss: { bpm: 156, root: 196, scale: PHRYGIAN, chords: [0, 1, 0, 10], lead: 'sawtooth', bass: 'sawtooth', drums: true, seed: 53 },
+const isMajor = (scale: number[]) => scale[2] === 4;
+
+/** Each element's musical colour. */
+interface Flavor {
+  scale: number[];
+  root: number;
+  tempo: number;
+  lead: Wave;
+  arp?: boolean;
+  echo?: boolean;
+  bells?: boolean;
+  seed: number;
+}
+const FLAVOR: Record<Element, Flavor> = {
+  Fire: { scale: HARMONIC, root: 220, tempo: 1.08, lead: 'sawtooth', seed: 101 },
+  Frost: { scale: MINOR, root: 247, tempo: 0.9, lead: 'triangle', bells: true, arp: true, seed: 202 },
+  Nature: { scale: DORIAN, root: 262, tempo: 1, lead: 'triangle', echo: true, seed: 303 },
+  Earth: { scale: MIXOLYDIAN, root: 196, tempo: 0.94, lead: 'square', seed: 404 },
+  Storm: { scale: MINOR, root: 233, tempo: 1.14, lead: 'square', arp: true, seed: 505 },
+  Water: { scale: DORIAN, root: 233, tempo: 0.96, lead: 'sine', echo: true, arp: true, seed: 606 },
+  Metal: { scale: PHRYGIAN, root: 208, tempo: 1.04, lead: 'square', seed: 707 },
+  Toxic: { scale: PHRYGIAN, root: 185, tempo: 1, lead: 'sawtooth', echo: true, seed: 808 },
+  Shadow: { scale: HARMONIC, root: 175, tempo: 0.88, lead: 'sawtooth', bells: true, seed: 909 },
+  Light: { scale: LYDIAN, root: 262, tempo: 1.02, lead: 'triangle', bells: true, arp: true, seed: 1010 },
+  Spirit: { scale: DORIAN, root: 220, tempo: 0.86, lead: 'sine', echo: true, bells: true, seed: 1111 },
+  Dragon: { scale: HARMONIC, root: 196, tempo: 1.1, lead: 'sawtooth', arp: true, seed: 1212 },
 };
 
-/** Builds a deterministic 4-bar melody of eighth notes for a theme (null = rest). */
-function melody(def: ThemeDef): (number | null)[] {
-  let s = def.seed;
-  const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-  const out: (number | null)[] = [];
-  let deg = 4;
-  for (let bar = 0; bar < 4; bar++) {
-    for (let i = 0; i < 8; i++) {
-      if (i % 2 === 1 && rnd() < 0.3) {
-        out.push(null);
-        continue;
-      }
-      deg = Math.max(0, Math.min(11, deg + Math.round((rnd() - 0.5) * 4)));
-      if (i === 0) deg = [0, 2, 4][Math.floor(rnd() * 3)] + 4; // land near a chord tone on the downbeat
-      const oct = Math.floor(deg / 7);
-      out.push(def.scale[deg % 7] + 12 * oct);
-    }
-  }
-  return out;
+const PROGS_MINOR = [
+  [0, 5, 2, 6],
+  [0, 3, 4, 0],
+  [0, 6, 5, 4],
+  [0, 5, 3, 4],
+];
+const PROGS_MAJOR = [
+  [0, 4, 5, 3],
+  [0, 3, 4, 4],
+  [0, 5, 3, 4],
+  [0, 3, 0, 4],
+];
+const BRIDGES_MINOR = [
+  [3, 4, 0, 0],
+  [5, 6, 0, 4],
+  [3, 0, 4, 4],
+];
+const BRIDGES_MAJOR = [
+  [3, 4, 2, 5],
+  [5, 3, 4, 4],
+  [3, 0, 4, 4],
+];
+
+function progs(scale: number[], seed: number): { progA: number[]; progB: number[] } {
+  const major = isMajor(scale);
+  const a = major ? PROGS_MAJOR : PROGS_MINOR;
+  const b = major ? BRIDGES_MAJOR : BRIDGES_MINOR;
+  return { progA: a[seed % a.length], progB: b[(seed >> 2) % b.length] };
 }
 
-let wantedTheme: Theme | null = null;
-let playing: Theme | null = null;
-let timer: ReturnType<typeof setInterval> | null = null;
+/** A song for a theme, coloured by an element where it has one. */
+function songFor(theme: Theme, el: Element | null): SongDef {
+  const f = el ? FLAVOR[el] : null;
+  switch (theme) {
+    case 'title':
+      return { bpm: 88, root: 220, scale: MINOR, progA: [0, 5, 2, 6], progB: [3, 4, 0, 4], lead: 'triangle', bass: 'triangle', drums: 'soft', pad: true, bells: true, density: 0.5, seed: 11 };
+    case 'arena':
+      return { bpm: 128, root: 220, scale: MIXOLYDIAN, progA: [0, 6, 3, 0], progB: [3, 4, 6, 4], lead: 'square', bass: 'square', drums: 'half', pad: true, density: 0.6, seed: 61 };
+    case 'shop':
+      return { bpm: 112, root: 294, scale: MAJOR, progA: [0, 5, 1, 4], progB: [3, 2, 1, 4], lead: 'square', bass: 'triangle', drums: 'soft', arp: true, density: 0.7, seed: 71 };
+    case 'event':
+      return { bpm: 80, root: 233, scale: DORIAN, progA: [0, 3, 0, 4], progB: [5, 3, 1, 4], lead: 'sine', bass: 'triangle', drums: 'none', pad: true, echo: true, bells: true, density: 0.35, seed: 81 };
+    case 'win':
+      return { bpm: 120, root: 262, scale: MAJOR, progA: [0, 3, 4, 0], progB: [5, 3, 4, 4], lead: 'square', bass: 'square', drums: 'march', pad: true, bells: true, density: 0.6, seed: 91 };
+    case 'lose':
+      return { bpm: 70, root: 196, scale: MINOR, progA: [0, 5, 3, 4], progB: [5, 2, 3, 4], lead: 'triangle', bass: 'sine', drums: 'none', pad: true, echo: true, density: 0.3, seed: 97 };
+    case 'final':
+      return { bpm: 164, root: 185, scale: HARMONIC, progA: [0, 5, 6, 4], progB: [3, 1, 4, 4], lead: 'sawtooth', bass: 'sawtooth', drums: 'drive', arp: true, bells: true, density: 0.8, seed: 131 };
+    case 'map': {
+      const fl = f ?? FLAVOR.Nature;
+      return { bpm: Math.round(100 * fl.tempo), root: fl.root, scale: fl.scale, ...progs(fl.scale, fl.seed), lead: fl.lead === 'sawtooth' ? 'triangle' : fl.lead, bass: 'triangle', drums: 'soft', pad: true, echo: fl.echo, bells: fl.bells, arp: false, density: 0.5, seed: fl.seed };
+    }
+    case 'battle':
+    case 'trainer': {
+      const fl = f ?? FLAVOR.Fire;
+      const trainer = theme === 'trainer';
+      const seed = fl.seed + (trainer ? 17 : 3);
+      return {
+        bpm: Math.round((trainer ? 150 : 140) * fl.tempo),
+        root: fl.root,
+        scale: fl.scale,
+        ...progs(fl.scale, seed),
+        lead: fl.lead,
+        bass: trainer ? 'sawtooth' : 'square',
+        drums: trainer ? 'march' : 'drive',
+        arp: fl.arp || trainer,
+        echo: fl.echo,
+        bells: false,
+        density: 0.75,
+        seed,
+      };
+    }
+    case 'boss': {
+      const fl = f ?? FLAVOR.Dragon;
+      // Guardians always sound dark, whatever their element's usual mode.
+      const scale = isMajor(fl.scale) ? HARMONIC : fl.scale === DORIAN ? PHRYGIAN : fl.scale;
+      return { bpm: Math.round(154 * Math.max(0.95, fl.tempo)), root: fl.root * 0.9, scale, progA: [0, 1, 0, 6], progB: [5, 6, 4, 4], lead: 'sawtooth', bass: 'sawtooth', drums: 'drive', arp: true, bells: fl.bells, density: 0.8, seed: fl.seed + 41 };
+    }
+  }
+}
 
-export function playMusic(theme: Theme | null) {
-  wantedTheme = theme;
-  if (theme === playing) return;
+/** Steps of a 16-bar song: a melody note (scale degree), a tie (-1) or a rest (null). */
+type Step = number | null;
+const TIE = -1000;
+
+function compose(def: SongDef): Step[] {
+  let s = def.seed;
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const density = def.density ?? 0.6;
+  const chordTones = (deg: number) => [deg, deg + 2, deg + 4];
+  /** One bar of melody over a chord; `end` lands it on the chord root (a cadence). */
+  const bar = (chord: number, start: number, end = false): Step[] => {
+    const out: Step[] = [];
+    let d = start;
+    for (let i = 0; i < 8; i++) {
+      if (i === 0) {
+        // Downbeat: the nearest chord tone (in the melody's octave).
+        const tones = chordTones(chord).flatMap((t) => [t + 7, t + 14]);
+        d = tones.reduce((b, t) => (Math.abs(t - d) < Math.abs(b - d) ? t : b), tones[0]);
+        out.push(d);
+        continue;
+      }
+      if (end && i >= 4) {
+        out.push(i === 4 ? chord + 7 : TIE);
+        continue;
+      }
+      const r = rnd();
+      if (r > density + 0.25 && i % 2 === 1) out.push(null);
+      else if (r > density && i % 2 === 1) out.push(TIE);
+      else {
+        d = Math.max(5, Math.min(15, d + Math.round((rnd() - 0.5) * 4)));
+        out.push(d);
+      }
+    }
+    return out;
+  };
+  const section = (prog: number[], seedStart: number): Step[][] => {
+    const m0 = bar(prog[0], seedStart);
+    const m1 = bar(prog[1], (m0[7] as number) > 0 ? (m0[7] as number) : seedStart + 2);
+    const m2 = bar(prog[2], seedStart);
+    const m3 = bar(prog[3], seedStart + 1, true);
+    // Bar 3 echoes bar 1's rhythm and shape, moved to its own chord.
+    const shift = prog[2] - prog[0];
+    const m2b = m0.map((n, i) => (n === null || n === TIE ? n : i === 0 ? m2[0] : n + shift));
+    return [m0, m1, rnd() < 0.6 ? m2b : m2, m3];
+  };
+  const A = section(def.progA, 9);
+  const A2 = [A[0], A[1], A[2], bar(def.progA[3], 10, true)];
+  const B = section(def.progB, 11);
+  return [...A.flat(), ...A2.flat(), ...B.flat(), ...A.flat()];
+}
+
+let wantedTheme: string | null = null;
+let playing: string | null = null;
+let timer: ReturnType<typeof setInterval> | null = null;
+/** Fades the outgoing song while the next one starts. */
+let songGain: GainNode | null = null;
+
+/** Play a theme (coloured by an element for map and battle songs). null: silence. */
+export function playMusic(theme: Theme | null, el: Element | null = null) {
+  const key = theme ? `${theme}${el ? ':' + el : ''}` : null;
+  wantedTheme = key;
+  if (key === playing) return;
   stopTheme();
-  if (theme && ctx) startTheme(theme);
+  if (key && ctx) startTheme(key);
 }
 
 function stopTheme() {
   if (timer) clearInterval(timer);
   timer = null;
   playing = null;
+  if (songGain && ctx) {
+    const g = songGain;
+    g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.08);
+    setTimeout(() => g.disconnect(), 600);
+  }
+  songGain = null;
 }
 
-function startTheme(theme: Theme) {
+function startTheme(key: string) {
   if (!ctx || !musicBus) return;
   stopTheme();
-  playing = theme;
-  const def = THEMES[theme];
-  const mel = melody(def);
+  playing = key;
+  const [theme, el] = key.split(':') as [Theme, Element | undefined];
+  const def = songFor(theme, el ?? null);
+  const steps = compose(def);
+  const bus = ctx.createGain();
+  bus.gain.value = 1;
+  bus.connect(musicBus);
+  songGain = bus;
   const step = 60 / def.bpm / 2; // eighth note
+  const deg = (d: number, base: number) => {
+    const o = Math.floor(d / 7);
+    return note(def.scale[((d % 7) + 7) % 7] + 12 * o, base);
+  };
+  const leadVol = def.lead === 'sawtooth' ? 0.08 : def.lead === 'square' ? 0.1 : def.lead === 'sine' ? 0.17 : 0.14;
   let i = 0;
   let next = ctx.currentTime + 0.1;
   const schedule = () => {
-    if (!ctx || playing !== theme) return;
-    while (next < ctx.currentTime + 0.25) {
+    if (!ctx || playing !== key) return;
+    while (next < ctx.currentTime + 0.3) {
       const delay = Math.max(0, next - ctx.currentTime);
-      const bar = Math.floor(i / 8) % 4;
-      const beat = i % 8;
-      const chord = def.chords[bar];
-      const m = mel[i % mel.length];
-      if (m !== null) tone(note(m, def.root * 2), step * 0.9, { type: def.lead, vol: def.lead === 'sawtooth' ? 0.1 : 0.14, delay, bus: musicBus });
-      // bass: root on beats, fifth on offbeats for driving themes
-      if (def.drums || beat % 2 === 0) {
-        const b = beat % 4 === 2 && def.drums ? chord + 7 : chord;
-        tone(note(b, def.root / 2), step * 0.85, { type: def.bass, vol: 0.18, delay, bus: musicBus });
+      const pos = i % steps.length;
+      const barNo = Math.floor(pos / 8);
+      const beat = pos % 8;
+      const section = Math.floor(barNo / 4);
+      const prog = section === 2 ? def.progB : def.progA;
+      const chord = prog[barNo % 4];
+      const lastBar = barNo % 4 === 3;
+      // Melody (ties lengthen the note before them).
+      const m = steps[pos];
+      if (m !== null && m !== TIE) {
+        let len = 1;
+        while (steps[(pos + len) % steps.length] === TIE && len < 8) len++;
+        tone(deg(m, def.root), step * len * 0.92, { type: def.lead, vol: leadVol, delay, bus });
+        if (def.echo) tone(deg(m, def.root), step * len * 0.8, { type: 'sine', vol: leadVol * 0.35, delay: delay + step * 1.5, bus });
       }
-      if (!def.drums && beat === 0) {
-        // soft pad: chord third and fifth
-        tone(note(chord + (def.scale === MAJOR ? 4 : 3), def.root), step * 7, { type: 'sine', vol: 0.06, delay, bus: musicBus, attack: 0.2 });
-        tone(note(chord + 7, def.root), step * 7, { type: 'sine', vol: 0.05, delay, bus: musicBus, attack: 0.2 });
+      // Bass.
+      const root = deg(chord, def.root / 2);
+      const fifth = deg(chord + 4, def.root / 2);
+      const bassVol = def.bass === 'sawtooth' ? 0.13 : 0.18;
+      if (def.drums === 'drive') tone(beat % 2 ? root * 2 : root, step * 0.8, { type: def.bass, vol: bassVol, delay, bus });
+      else if (def.drums === 'march') {
+        if (beat % 2 === 0) tone(beat === 4 ? fifth : root, step * 1.6, { type: def.bass, vol: bassVol, delay, bus });
+      } else if (def.drums === 'half') {
+        if (beat === 0 || beat === 3 || beat === 6) tone(beat === 6 ? fifth : root, step * 1.8, { type: def.bass, vol: bassVol, delay, bus });
+      } else if (beat === 0 || beat === 4) tone(beat === 4 ? fifth : root, step * 3.6, { type: def.bass, vol: bassVol * 0.9, delay, bus, attack: 0.02 });
+      // Pad: the chord's third and fifth held through the bar.
+      if (def.pad && beat === 0) {
+        tone(deg(chord + 2, def.root), step * 7.5, { type: 'sine', vol: 0.05, delay, bus, attack: 0.25 });
+        tone(deg(chord + 4, def.root), step * 7.5, { type: 'sine', vol: 0.045, delay, bus, attack: 0.25 });
       }
-      if (def.drums) {
-        if (beat % 4 === 0) tone(110, 0.12, { type: 'sine', vol: 0.5, slide: 40, delay, bus: musicBus });
-        if (beat % 4 === 2) noise(0.1, { freq: 1800, vol: 0.25, delay, bus: musicBus });
-        noise(0.03, { freq: 8000, vol: 0.06, type: 'highpass', delay, bus: musicBus });
+      // Arpeggio: chord tones climbing, quietly.
+      if (def.arp && section !== 0) {
+        const t = [0, 2, 4, 7][beat % 4];
+        tone(deg(chord + t, def.root), step * 0.5, { type: 'square', vol: 0.035, delay, bus });
+      }
+      // Bells on the first beat of every other bar.
+      if (def.bells && beat === 0 && barNo % 2 === 0) tone(deg(chord + 7, def.root * 2), step * 6, { type: 'sine', vol: 0.06, delay, bus, attack: 0.005 });
+      // Drums.
+      const kick = () => tone(110, 0.12, { type: 'sine', vol: 0.45, slide: 40, delay, bus });
+      const snare = (v = 0.22) => noise(0.1, { freq: 1800, vol: v, delay, bus });
+      const hat = (v = 0.05) => noise(0.03, { freq: 8000, vol: v, type: 'highpass', delay, bus });
+      switch (def.drums) {
+        case 'drive':
+          if (beat === 0 || beat === 4 || (beat === 7 && barNo % 2)) kick();
+          if (beat === 2 || beat === 6) snare();
+          if (lastBar && beat >= 5) snare(0.14);
+          hat();
+          break;
+        case 'march':
+          if (beat === 0 || beat === 4) kick();
+          if (beat === 2 || beat === 6) snare(0.18);
+          if (lastBar && beat >= 6) snare(0.12);
+          break;
+        case 'half':
+          if (beat === 0 || beat === 3) kick();
+          if (beat === 4) snare();
+          if (beat % 2 === 0) hat(0.05);
+          break;
+        case 'soft':
+          if (beat === 0) tone(90, 0.1, { type: 'sine', vol: 0.22, slide: 45, delay, bus });
+          if (beat === 4) hat(0.03);
+          break;
       }
       i++;
       next += step;

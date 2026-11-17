@@ -287,7 +287,7 @@ export class HpBar {
 }
 
 export function creatureSprite(scene: Phaser.Scene, x: number, y: number, c: Creature, scale = 3): Phaser.GameObjects.Image {
-  const key = ensureCreatureTexture(scene, c.speciesId, c.stage);
+  const key = ensureCreatureTexture(scene, c.speciesId, c.stage, c.shiny);
   return scene.add.image(x, y, key).setScale(scale * SPRITE_FIT);
 }
 
@@ -311,7 +311,8 @@ export function creatureRow(
     .setOrigin(0)
     .setStrokeStyle(2, opts.highlight ? COLORS.accent : COLORS.stroke);
   cont.add(bg);
-  cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage)).setScale(1.8 * SPRITE_FIT));
+  cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage, c.shiny)).setScale(1.8 * SPRITE_FIT));
+  if (c.shiny) cont.add(iconImage(scene, 56, 12, 'sparkle', 14));
   const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16);
   cont.add(nameText);
   let tagX = 66 + nameText.width + 8;

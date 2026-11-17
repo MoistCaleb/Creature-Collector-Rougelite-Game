@@ -61,7 +61,7 @@ export class ArenaEditScene extends Phaser.Scene {
     this.events.once('shutdown', () => setFloorCeiling(ceiling));
     background(this);
     const firstFixed = this.children.list.length;
-    playMusic('title');
+    playMusic('arena');
     const picks = this.picks();
     const p = picks[this.slot];
     if (!p) return void this.scene.start('Arena', {});

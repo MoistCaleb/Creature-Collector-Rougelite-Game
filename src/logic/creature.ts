@@ -35,6 +35,8 @@ export interface Creature {
   banked?: number;
   /** Has been offered its team move (learned at TEAM_MOVE_LEVEL). */
   teamOffered?: boolean;
+  /** A rare color variant (about 1 wild Hexling in 200). Cosmetic; kept when caught and evolved. */
+  shiny?: boolean;
 }
 
 export type Stats = BaseStats;
