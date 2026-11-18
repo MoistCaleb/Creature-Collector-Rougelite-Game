@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.7';
+export const APP_VERSION = '1.8';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.8',
+    title: 'Calmer team screen',
+    items: [
+      'Tapping Hexlings on the team screen just shows them: nothing moves around.',
+      'To swap places (team \u2194 bench too), tap Order Hexlings, then tap two Hexlings. Tap Done ordering when finished.',
+    ],
+  },
   {
     version: '1.7',
     title: 'Land moves',
