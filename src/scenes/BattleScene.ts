@@ -444,12 +444,13 @@ export class BattleScene extends Phaser.Scene {
   /** The opposing trainer's (or guardian's / opponent's) name, to tell which side a message is about. */
   private foeName: string | null = null;
 
-  /** The winner celebrates: arm up, a few hops and a flare of their aura's color. */
+  /** The winner celebrates facing forward: arm out, a few hops and a flare of their aura's color. */
   private cheer(side: 'player' | 'enemy') {
     const t = this.trainers[side];
     if (!t || !t.img.active) return;
     t.timer?.remove();
-    t.img.setTexture(t.act);
+    // Your trainer turns around to face you to celebrate (seen from the front, arm out).
+    t.img.setTexture(side === 'player' ? ensureTrainerTexture(this, t.look, 'command') : t.act);
     trainerFlare(this, t.img, t.look);
     if (calm()) return;
     this.tweens.killTweensOf(t.img);
