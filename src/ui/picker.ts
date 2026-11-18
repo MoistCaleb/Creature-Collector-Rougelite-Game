@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Creature } from '../logic/creature';
-import { button, COLORS, creatureRow, creatureSprite, fullRect, H, OX, OY, text, W } from './widgets';
+import { button, COLORS, creatureRow, creatureSprite, fullRect, H, LANDSCAPE, OX, OY, text, W } from './widgets';
 
 export interface PickOption {
   label?: string;
@@ -39,15 +39,20 @@ export interface PickConfig {
 
 /** Full-screen modal list of choices, drawn on top of the current scene. */
 export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObjects.Container {
-  // On the wide board the panel keeps an upright width, centered.
-  const PW = Math.min(W, 480);
+  // Upright: the full width. Sideways (wide windows, Mac and PC): a wide panel with the options in two
+  // columns, so a long list fits on one page instead of paging one at a time.
+  const PW = LANDSCAPE ? Math.min(W - 30, 760) : Math.min(W, 480);
+  const cols = LANDSCAPE && cfg.options.length > 2 ? 2 : 1;
+  const colW = (PW - 60 - (cols - 1) * 10) / cols;
+  // Sideways, a creature's info row stays compact.
+  const big = (r: PickRow) => !!r.big && !LANDSCAPE;
   const root = scene.add.container((W - PW) / 2, 0).setDepth(1000);
   const dim = fullRect(scene, 0x000000, 0.78).setPosition(-(W - PW) / 2 - OX, -OY).setInteractive();
   root.add(dim);
 
   const close = () => root.destroy();
 
-  const rowHeight = (r: PickRow) => (r.big ? 84 : 48);
+  const rowHeight = (r: PickRow) => (big(r) ? 84 : 48);
   const infoH = (cfg.rows ?? []).reduce((h, r) => h + rowHeight(r), 0) + (cfg.rows?.length ? 10 : 0);
   const title = text(scene, PW / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: PW - 60 } }).setOrigin(0.5, 0);
   const sub = cfg.subtitle
@@ -57,15 +62,16 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
 
   // Long lists: shrink rows a little, then split into pages.
   const n = cfg.options.length;
+  const lines = Math.ceil(n / cols);
   const hasCreatures = cfg.options.some((o) => o.creature);
   let rowH = cfg.rowHeight ?? (hasCreatures ? 72 : 76);
   const room = (footer: number) => H - 40 - headerH - infoH - footer - 10;
-  if (!cfg.rowHeight && !hasCreatures && n * rowH > room(cfg.onCancel ? 70 : 10)) rowH = Math.max(60, Math.floor(room(70) / n));
-  const paged = n * rowH > room(cfg.onCancel ? 70 : 10);
+  if (!cfg.rowHeight && !hasCreatures && lines * rowH > room(cfg.onCancel ? 70 : 10)) rowH = Math.max(60, Math.floor(room(70) / lines));
+  const paged = lines * rowH > room(cfg.onCancel ? 70 : 10);
   const footerH = cfg.onCancel || paged ? 70 : 10;
-  const perPage = paged ? Math.max(1, Math.floor(room(footerH) / rowH)) : n;
+  const perPage = paged ? Math.max(1, Math.floor(room(footerH) / rowH)) * cols : n;
   const pages = Math.ceil(n / perPage);
-  const listH = Math.min(n, perPage) * rowH + infoH;
+  const listH = Math.ceil(Math.min(n, perPage) / cols) * rowH + infoH;
   const panelH = Math.min(H - 40, headerH + listH + footerH + 10);
   const top = Math.max(20, (H - panelH) / 2);
 
@@ -80,11 +86,10 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   let y = top + headerH;
   for (const r of cfg.rows ?? []) {
     const h = rowHeight(r) - 6;
+    const b = big(r);
     root.add(scene.add.rectangle(30, y, PW - 60, h, COLORS.panelLight).setOrigin(0));
-    root.add(creatureSprite(scene, r.big ? 76 : 58, y + h / 2 - (r.big ? 12 : 7), r.creature, r.big ? 2.6 : 1.3));
-    root.add(
-      text(scene, r.big ? 124 : 88, y + h / 2, r.text, r.big ? 18 : 15, COLORS.text, { wordWrap: { width: PW - (r.big ? 170 : 130) } }).setOrigin(0, 0.5),
-    );
+    root.add(creatureSprite(scene, b ? 76 : 58, y + h / 2 - (b ? 12 : 7), r.creature, b ? 2.6 : 1.3));
+    root.add(text(scene, b ? 124 : 88, y + h / 2, r.text, b ? 18 : 15, COLORS.text, { wordWrap: { width: PW - (b ? 170 : 130) } }).setOrigin(0, 0.5));
     y += rowHeight(r);
   }
   if (cfg.rows?.length) y += 10;
@@ -97,18 +102,20 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   if (pageLabel) root.add(pageLabel);
   const drawPage = () => {
     list.removeAll(true);
-    let yy = listTop;
     for (let i = page * perPage; i < Math.min(n, (page + 1) * perPage); i++) {
       const o = cfg.options[i];
+      const k = i - page * perPage;
+      const x0 = 30 + (k % cols) * (colW + 10);
+      const yy = listTop + Math.floor(k / cols) * rowH;
       const pick = () => {
         close();
         cfg.onPick(i);
       };
       if (o.creature) {
-        list.add(creatureRow(scene, 30, yy, PW - 60, o.creature, { onClick: o.disabled ? undefined : pick, dim: o.disabled, note: o.note }));
+        list.add(creatureRow(scene, x0, yy, colW, o.creature, { onClick: o.disabled ? undefined : pick, dim: o.disabled, note: o.note }));
       } else {
         list.add(
-          button(scene, PW / 2, yy + (rowH - 8) / 2, PW - 60, rowH - 10, o.label ?? '', pick, {
+          button(scene, x0 + colW / 2, yy + (rowH - 8) / 2, colW, rowH - 10, o.label ?? '', pick, {
             sub: o.sub,
             enabled: !o.disabled,
             color: o.color,
@@ -119,7 +126,6 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
           }),
         );
       }
-      yy += rowH;
     }
     pageLabel?.setText(`Page ${page + 1} of ${pages}`);
   };
