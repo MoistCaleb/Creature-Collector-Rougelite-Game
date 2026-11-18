@@ -80,7 +80,7 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((r) => scene
  * behind it, rings and stars burst out, it shimmers through the rainbow, and a "SHINY!" banner
  * slams in. `big` (the first look at a foe) adds the banner and the longer hold.
  */
-export async function shinyReveal(scene: Phaser.Scene, sprite: Phaser.GameObjects.Image, big = true): Promise<void> {
+export async function shinyReveal(scene: Phaser.Scene, sprite: Phaser.GameObjects.Image, big = true, restore?: () => void): Promise<void> {
   const { x, y } = sprite;
   // Lift it into a spotlight above everything else for the reveal.
   const home = sprite.depth;
@@ -152,6 +152,8 @@ export async function shinyReveal(scene: Phaser.Scene, sprite: Phaser.GameObject
   }
   await wait(scene, big ? 1500 : 800);
   if (sprite.active) sprite.setDepth(home);
+  // Raising its depth re-sorted it to the end of the draw order: the caller puts it back in place.
+  restore?.();
 }
 
 // ------------------------------------------------------------ while it's on the field
