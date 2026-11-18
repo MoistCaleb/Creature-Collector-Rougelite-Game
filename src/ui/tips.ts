@@ -30,7 +30,7 @@ export const TIPS = {
   },
   prestige: {
     title: 'Prestige ★',
-    body: 'Prestige gives a Hexling a big stat boost and raises its level cap. It costs a bench Hexling that shares one of its elements.',
+    body: 'Prestige gives a Hexling a star: +15% to every stat and +5 to its level cap (up to 5★).\n\nIt costs a Hexling from your bench that shares an element with it, and the sacrifice leaves your team for good. Catch spare Hexlings to keep on the bench if you want to use altars.',
   },
   titles: {
     title: 'Trainer titles',

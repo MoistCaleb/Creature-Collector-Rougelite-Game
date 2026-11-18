@@ -201,7 +201,7 @@ export const NODE_INFO: Record<NodeKind, { label: string; color: number; desc: s
   battle: { label: 'Battle', color: 0x6a6f8a, desc: 'Fight a wild Hexling. Win to earn XP or catch it.' },
   elite: { label: 'Trainer', color: 0xc0392b, desc: 'A trainer battle. No catching, but big XP, coins and an Evolution Stone.' },
   levelup: { label: 'Level Up', color: 0x27ae60, desc: 'Train your Hexlings.' },
-  prestige: { label: 'Prestige', color: 0xe84393, desc: 'Sacrifice a bench Hexling to prestige another.' },
+  prestige: { label: 'Prestige', color: 0xe84393, desc: 'Sacrifice a bench Hexling to give a teammate that shares its element a star (+15% stats, +5 level cap).' },
   skill: { label: 'Skill', color: 0x8e6bff, desc: 'Buff one of your moves.' },
   heal: { label: 'Rest', color: 0x16a085, desc: 'Heal your team 50% and cure status conditions.' },
   shop: { label: 'Shop', color: 0xb8862b, desc: 'Spend coins on items and recruits.' },

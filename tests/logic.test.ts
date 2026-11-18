@@ -2052,3 +2052,31 @@ describe('auto-battle', () => {
     expect(b.bestPlayerAnswer()).not.toBe(0);
   });
 });
+
+import { altarOptions, altarUsable } from '../src/logic/run';
+
+describe('Prestige Altar options', () => {
+  const mono = (el: string) => SPECIES.find((s) => s.types[0] === el && (s.types[1] === el || !s.types[1]))!.id;
+  it('pairs each Hexling with bench Hexlings that share an element', () => {
+    const run = startRun(blankMeta(), mono('Fire'), 1);
+    run.team = [createCreature(mono('Fire'), 10)];
+    run.bench = [];
+    expect(altarUsable(run)).toBe(false);
+    run.bench = [createCreature(mono('Water'), 5)];
+    expect(altarUsable(run)).toBe(false); // nothing shares an element
+    const spare = createCreature(mono('Fire'), 5);
+    run.bench.push(spare);
+    const o = altarOptions(run);
+    expect(o.pairs.map((p) => p.target)).toContain(run.team[0]);
+    expect(o.pairs.find((p) => p.target === run.team[0])!.fodder).toEqual([spare]);
+    expect(altarUsable(run)).toBe(true);
+  });
+  it('Ascendant’s free prestige counts once per floor', () => {
+    const run = startRun(blankMeta(), mono('Fire'), 1);
+    run.bench = [];
+    run.passive = 'ascendant';
+    expect(altarUsable(run)).toBe(true);
+    run.ascendFloor = run.floor;
+    expect(altarUsable(run)).toBe(false);
+  });
+});

@@ -17,13 +17,12 @@ import {
   moveDef,
   recommendForget,
   resolvePending,
-  sharesType,
   stats,
   type Creature,
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { allCreatures, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
+import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
@@ -43,6 +42,10 @@ import { calm } from '../ui/motion';
 import { Scroller } from '../ui/scroll';
 import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
 import { mapBackdrop } from '../ui/backdrops';
+
+/** How the Prestige Altar works, in one place for every prompt. */
+const ALTAR_RULES =
+  'Give a Hexling a star (★): +15% to every stat and +5 to its level cap, up to 5★. It costs a Hexling from your bench that shares an element with it, and the sacrifice leaves your team for good.';
 import { tip, tipDone } from '../ui/tips';
 
 const TOP_BAR = 82;
@@ -642,6 +645,23 @@ export class MapScene extends Phaser.Scene {
       return;
     }
     if (!canMoveTo(run, n.id)) return;
+    // A Prestige Altar with nothing to sacrifice does nothing: say so, and let you pick another hex.
+    if (n.kind === 'prestige' && !altarUsable(run)) {
+      const others = currentNode(run).next.filter((id) => id !== n.id);
+      openPicker(this, {
+        title: 'Nothing to sacrifice',
+        subtitle: `This Prestige Altar can\u2019t do anything for you right now.\n\n${ALTAR_RULES}`,
+        options: [
+          ...(others.length ? [{ label: 'Choose another hex', sub: 'Stay where you are', color: 0x2f4a6b }] : []),
+          { label: 'Go anyway', sub: others.length ? 'Move here; the altar stays silent' : 'It\u2019s the only way forward; the altar stays silent' },
+        ],
+        onPick: (i) => {
+          if (others.length && i === 0) return;
+          this.hopTo(n.id, () => this.arrive(n));
+        },
+      });
+      return;
+    }
     this.hopTo(n.id, () => this.arrive(n));
   }
 
@@ -891,57 +911,70 @@ export class MapScene extends Phaser.Scene {
   private doPrestige() {
     const run = state.run!;
     if (!tipDone('prestige')) return void tip(this, 'prestige', () => this.doPrestige());
+    const { free, pairs } = altarOptions(run);
+    const starLine = (c: Creature) => `${c.stars}★ → ${c.stars + 1}★`;
+    const empowered = (sac: Creature | null, target: Creature, lv: number) =>
+      showMessage(
+        this,
+        'Prestige!',
+        `${sac ? `${creatureName(sac)} was sacrificed.\n` : ''}${creatureName(target)} is now ${'★'.repeat(target.stars)}: +15% to every stat and +5 to its level cap.${releaseNote(target, lv)}`,
+        this.done,
+      );
     // Ascendant: one sacrifice-free prestige per floor.
-    if (run.passive === 'ascendant' && run.ascendFloor !== run.floor) {
+    if (free) {
       return this.pickCreature(
         'Prestige Altar',
-        'Ascendant: this floor\u2019s free prestige, no sacrifice needed (+15% stats, +5 level cap)',
+        'Ascendant: this floor\u2019s prestige is free, no sacrifice needed. Give one Hexling a star: +15% to every stat and +5 to its level cap.',
         allCreatures(run),
         (c) => !canPrestige(c),
         (target) => {
           run.ascendFloor = run.floor;
           const lv = target.level;
           prestigeTracked(run, target);
-          showMessage(this, 'Prestige!', `${creatureName(target)} is now ${'★'.repeat(target.stars)}${releaseNote(target, lv)}`, this.done);
+          empowered(null, target, lv);
         },
         true,
       );
     }
-    const targets = allCreatures(run).filter(
-      (t) => canPrestige(t) && run.bench.some((b) => b !== t && sharesType(b, t)),
-    );
-    if (targets.length === 0) {
+    if (pairs.length === 0) {
       showMessage(
         this,
         'Prestige Altar',
-        'Prestige requires sacrificing a bench Hexling that shares a type with the one you empower.\n\nYou have no valid pair. The altar stays silent.',
+        `The altar stays silent: you have no Hexling to sacrifice.\n\n${ALTAR_RULES}`,
         this.done,
       );
       return;
     }
-    this.pickCreature(
-      'Prestige Altar',
-      'Choose a Hexling to empower (+15% stats, +5 level cap)',
-      allCreatures(run),
-      (c) => !targets.includes(c),
-      (target) => {
-        const fodder = run.bench.filter((b) => b !== target && sharesType(b, target));
+    // Step 1: who gets the star (and who could pay for it).
+    openPicker(this, {
+      title: 'Prestige Altar',
+      subtitle: ALTAR_RULES,
+      options: pairs.map(({ target, fodder }) => ({
+        icon: target,
+        label: `${creatureName(target)}  ${starLine(target)}`,
+        sub: `Sacrifice: ${fodder.map(creatureName).join(', ')}`,
+      })),
+      cancelLabel: 'Leave the altar',
+      onCancel: this.done,
+      onPick: (i) => {
+        const { target, fodder } = pairs[i];
+        // Step 2: who pays.
         this.pickCreature(
-          'Choose a sacrifice',
-          `This bench Hexling will be gone forever to empower ${creatureName(target)}.`,
+          `Sacrifice for ${creatureName(target)}`,
+          `The Hexling you pick leaves your team for good. ${creatureName(target)} goes ${starLine(target)}: +15% to every stat and +5 to its level cap.`,
           fodder,
           () => false,
           (sac) => {
             run.bench = run.bench.filter((b) => b !== sac);
             const lv = target.level;
             prestigeTracked(run, target);
-            showMessage(this, 'Prestige!', `${creatureName(sac)} was sacrificed.\n${creatureName(target)} is now ${'★'.repeat(target.stars)}${releaseNote(target, lv)}`, this.done);
+            empowered(sac, target, lv);
           },
           true,
+          'Leave the altar',
         );
       },
-      true,
-    );
+    });
   }
 
   // ------------------------------------------------------------ shop
@@ -1040,6 +1073,7 @@ export class MapScene extends Phaser.Scene {
     disabled: (c: Creature) => boolean,
     onPick: (c: Creature) => void,
     cancellable = false,
+    cancelLabel = 'Skip',
   ) {
     openPicker(this, {
       title,
@@ -1047,7 +1081,7 @@ export class MapScene extends Phaser.Scene {
       options: list.map((c) => ({ creature: c, disabled: disabled(c), note: disabled(c) ? 'Not eligible' : undefined })),
       onPick: (i) => onPick(list[i]),
       onCancel: cancellable ? this.done : undefined,
-      cancelLabel: 'Skip',
+      cancelLabel,
     });
   }
 }
