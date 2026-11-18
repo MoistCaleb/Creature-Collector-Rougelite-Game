@@ -159,6 +159,10 @@ export interface ButtonOpts {
   badge?: string;
   /** A pixel icon drawn just left of the label (or alone, when the label is empty). */
   glyph?: IconId;
+  /** Keep the label on one line, shrinking it to fit (narrow buttons with long names). */
+  oneLine?: boolean;
+  /** Move the label and sub-line down (room for corner tags). */
+  contentDy?: number;
 }
 
 export function button(
@@ -179,15 +183,20 @@ export function button(
   const tx = iconW / 2;
   const t = text(scene, tx, 0, label, opts.fontSize ?? 18, opts.textColor ?? COLORS.text, {
     align: 'center',
-    wordWrap: { width: w - 12 - iconW },
+    ...(opts.oneLine ? {} : { wordWrap: { width: w - 12 - iconW } }),
   }).setOrigin(0.5);
+  if (opts.oneLine && t.width > w - 12 - iconW) t.setScale((w - 12 - iconW) / t.width);
   c.add([bg, t]);
   // Label above its sub-line, the pair centered (a sub that wraps pushes the label up, not over it).
   const subT = opts.sub ? text(scene, tx, 0, opts.sub, 12, COLORS.textDim, { align: 'center', wordWrap: { width: w - 12 - iconW } }).setOrigin(0.5, 0) : null;
   if (subT) {
-    const total = t.height + 1 + subT.height;
-    t.setY(-total / 2 + t.height / 2);
-    subT.setY(t.y + t.height / 2 + 1);
+    const total = t.displayHeight + 1 + subT.height;
+    t.setY(-total / 2 + t.displayHeight / 2);
+    subT.setY(t.y + t.displayHeight / 2 + 1);
+  }
+  if (opts.contentDy) {
+    t.y += opts.contentDy;
+    if (subT) subT.y += opts.contentDy;
   }
   if (opts.glyph) {
     const size = Math.round((opts.fontSize ?? 18) * 1.25);
