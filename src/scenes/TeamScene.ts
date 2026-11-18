@@ -17,13 +17,16 @@ type Ref = { list: 'team' | 'bench'; i: number };
 
 export class TeamScene extends Phaser.Scene {
   private selected: Ref | null = null;
+  /** Order mode: tapping two Hexlings swaps them. Otherwise a tap just shows that Hexling. */
+  private ordering = false;
 
   constructor() {
     super('Team');
   }
 
-  init(data: { selected?: Ref | null }) {
+  init(data: { selected?: Ref | null; ordering?: boolean }) {
     this.selected = data.selected ?? null;
+    this.ordering = !!data.ordering;
     // Never keep a selection that points at an empty slot (creatures can leave between visits).
     if (this.selected && !state.run?.[this.selected.list][this.selected.i]) this.selected = null;
   }
@@ -31,7 +34,14 @@ export class TeamScene extends Phaser.Scene {
   create() {
     const run = state.run!;
     background(this);
-    text(this, 16, 14, 'Your Hexlings', 24, '#ffc94d', { fontStyle: 'bold' });
+    const title = text(this, 16, 14, 'Your Hexlings', 24, '#ffc94d', { fontStyle: 'bold' });
+    // Upright the title shares the top row with three buttons.
+    if (!LANDSCAPE && title.width > 140) title.setScale(140 / title.width);
+    const ordW = LANDSCAPE ? 140 : 96;
+    button(this, W - 184 - 8 - ordW / 2, 30, ordW, 42, this.ordering ? 'Done ordering' : 'Order Hexlings', () => this.scene.restart({ ordering: !this.ordering, selected: null }), {
+      fontSize: LANDSCAPE ? 14 : 12,
+      color: this.ordering ? 0x7a5a1c : 0x2f4a6b,
+    });
     button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
     const bagBtn = button(this, W - 150, 30, 68, 42, 'Bag', () => this.scene.start('Bag', { from: 'Team' }), { fontSize: 16, glyph: 'bag' });
     if ((run.bag ?? []).length) bagBtn.add(this.add.circle(28, -15, 5, 0xffc94d));
@@ -49,7 +59,7 @@ export class TeamScene extends Phaser.Scene {
     } else {
       const hint = dexComplete(run)
         ? `★ Type bonus left: ${unclaimedTypes(run).join(', ') || 'none'}`
-        : 'Tap two Hexlings to swap. 2+ of an element on the team = synergy.';
+        : '2+ of an element on the main team = synergy.';
       text(this, 16, 50, hint, 12, dexComplete(run) ? '#ffc94d' : COLORS.textDim);
     }
 
@@ -62,8 +72,20 @@ export class TeamScene extends Phaser.Scene {
     const benchY = LANDSCAPE ? 70 : 90 + TEAM_MAX * 68 + 6;
     text(this, benchX, benchY, LANDSCAPE ? `Bench  ${run.bench.length}/${BENCH_MAX}` : `Bench  ${run.bench.length}/${BENCH_MAX}  (second life + prestige fuel)`, 15, COLORS.text);
     run.bench.forEach((c, i) => this.row(benchX, benchY + 20 + i * 68, rowW, c, { list: 'bench', i }));
+    if (this.ordering) {
+      const a = this.selectedCreature();
+      const msg = a
+        ? `Now tap where ${creatureName(a)} should go (or tap it again to cancel).`
+        : 'Tap a Hexling, then tap another to swap their places (team \u2194 bench too).';
+      if (LANDSCAPE) text(this, 552, 90, `Ordering\n\n${msg}\n\nTap Done ordering when finished.`, 13, '#ffc94d', { wordWrap: { width: 232 }, lineSpacing: 3 });
+      else {
+        const y = 90 + TEAM_MAX * 68 + 26 + BENCH_MAX * 68 + 8;
+        text(this, W / 2, Math.min(y, H - 40), msg, 14, '#ffc94d', { wordWrap: { width: W - 40 }, align: 'center' }).setOrigin(0.5, 0);
+      }
+      return;
+    }
     if (LANDSCAPE && !this.selectedCreature()) {
-      text(this, 552, 90, 'Tap a Hexling to see its moves, items and options.\n\nTap two Hexlings to swap them (team ↔ bench too).\n\nThe bench is a second life and prestige fuel.', 13, COLORS.textDim, { wordWrap: { width: 232 }, lineSpacing: 3 });
+      text(this, 552, 90, 'Tap a Hexling to see its moves, items and options.\n\nTo change who\u2019s on the team or the order, tap Order Hexlings.\n\nThe bench is a second life and prestige fuel.', 13, COLORS.textDim, { wordWrap: { width: 232 }, lineSpacing: 3 });
     }
 
     const sel = this.selectedCreature();
@@ -87,20 +109,22 @@ export class TeamScene extends Phaser.Scene {
 
   private tap(ref: Ref) {
     const run = state.run!;
-    if (!this.selected || (this.selected.list === ref.list && this.selected.i === ref.i)) {
-      this.scene.restart({ selected: this.selected && this.selected.i === ref.i && this.selected.list === ref.list ? null : ref });
+    const same = !!this.selected && this.selected.list === ref.list && this.selected.i === ref.i;
+    // Not ordering: a tap shows that Hexling (tap it again to close).
+    if (!this.ordering || !this.selected || same) {
+      this.scene.restart({ selected: same ? null : ref, ordering: this.ordering });
       return;
     }
     const a = this.selected;
     const ca = run[a.list][a.i];
     const cb = run[ref.list][ref.i];
     if (!ca || !cb) {
-      this.scene.restart({ selected: cb ? ref : null });
+      this.scene.restart({ selected: cb ? ref : null, ordering: true });
       return;
     }
     run[a.list][a.i] = cb;
     run[ref.list][ref.i] = ca;
-    this.scene.restart({ selected: null });
+    this.scene.restart({ selected: null, ordering: true });
   }
 
   private details(c: Creature) {
