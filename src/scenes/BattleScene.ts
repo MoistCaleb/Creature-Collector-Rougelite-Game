@@ -13,7 +13,7 @@ import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
-import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
+import { accText, MAX_STAGE, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, guardianRules, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
@@ -837,7 +837,7 @@ export class BattleScene extends Phaser.Scene {
   private panelPress: 'player' | 'enemy' | null = null;
 
   /**
-   * A Hexling's stats right now: each stat with its change (stages go up to ±2: x1.5 / x0.67) and
+   * A Hexling's stats right now: each stat with its change (stages go up to ±MAX_STAGE: ±4, x2 / x0.5) and
    * what it comes to with synergy, a Swift Scarf and paralysis; its condition, held item and moves
    * (a foe's moves only once you've seen them).
    */
@@ -891,7 +891,7 @@ export class BattleScene extends Phaser.Scene {
       y += 28;
     }
     r.add(
-      text(this, x0, y, 'Moves can raise or lower a stat by up to 2 steps (+2 = ×1.5, −2 = ×0.67). Changes wear off when it switches out. “Now” includes synergy, Swift Scarf and paralysis.', 11, COLORS.textDim, {
+      text(this, x0, y, `Moves can raise or lower a stat by up to ${MAX_STAGE} steps (+${MAX_STAGE} = ×${+stageMult(MAX_STAGE).toFixed(2)}, −${MAX_STAGE} = ×${+stageMult(-MAX_STAGE).toFixed(2)}). Changes wear off when it switches out. “Now” includes synergy, Swift Scarf and paralysis.`, 11, COLORS.textDim, {
         wordWrap: { width: w },
         lineSpacing: 2,
       }),

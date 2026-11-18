@@ -2105,3 +2105,14 @@ describe('multi-hit moves and conditions', () => {
     expect(para / n).toBeLessThan(0.6);
   });
 });
+
+import { stageMult } from '../src/logic/battle';
+import { MAX_STAGE as STAT_STAGE_CAP } from '../src/data/moves';
+
+describe('stat stages', () => {
+  it('cap at ±4 steps: ×2 at most, ×0.5 at least', () => {
+    expect(STAT_STAGE_CAP).toBe(4);
+    expect(stageMult(STAT_STAGE_CAP)).toBe(2);
+    expect(stageMult(-STAT_STAGE_CAP)).toBe(0.5);
+  });
+});
