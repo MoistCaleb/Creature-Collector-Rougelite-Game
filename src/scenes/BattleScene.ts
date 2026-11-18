@@ -27,7 +27,8 @@ import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvoluti
 import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
-import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
+import { Battle, stageMult, type BattleEvent, type PlayerAction } from '../logic/battle';
+import { openPanel } from '../ui/panel';
 import { Rng } from '../logic/rng';
 import type { DuelController, Next } from '../net/duel';
 import { session } from '../net/session';
@@ -227,6 +228,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(data: { kind: EncounterKind; match?: BattleMatch }) {
+    this.statsOpen = false;
+    this.panelPress = null;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
     const run = state.run!;
@@ -281,8 +284,8 @@ export class BattleScene extends Phaser.Scene {
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.trainerInFront();
 
-    this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
-    this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
+    this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y, 'enemy');
+    this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y, 'player');
     this.pips = onField(text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0));
     const title = boss ? boss.name.toUpperCase() : this.kind === 'elite' ? 'TRAINER' : 'WILD';
     onField(text(this, L.titleRight, L.titleY, title, 14, this.kind === 'battle' ? COLORS.text : '#ff6a5a', { fontStyle: 'bold' }).setOrigin(1, 0));
@@ -603,8 +606,8 @@ export class BattleScene extends Phaser.Scene {
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.trainerInFront();
-    this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
-    this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
+    this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y, 'enemy');
+    this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y, 'player');
     this.pips = onField(text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0));
     onField(text(this, L.titleRight, L.titleY, m.title, 14, '#ff6a5a', { fontStyle: 'bold' }).setOrigin(1, 0));
     onField(text(this, 16, 96, m.opponent, 13, '#ffc94d', { fontStyle: 'bold' }));
@@ -828,9 +831,119 @@ export class BattleScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ panels
 
-  private makePanel(x: number, y: number): SidePanel {
+  /** Open while a Hexling's stats are showing (one at a time). */
+  private statsOpen = false;
+  /** Which panel the current press started on. */
+  private panelPress: 'player' | 'enemy' | null = null;
+
+  /**
+   * A Hexling's stats right now: each stat with its change (stages go up to ±2: x1.5 / x0.67) and
+   * what it comes to with synergy, a Swift Scarf and paralysis; its condition, held item and moves
+   * (a foe's moves only once you've seen them).
+   */
+  private showCombatant(side: 'player' | 'enemy') {
+    if (this.statsOpen || !this.battle) return;
+    const x = side === 'player' ? this.battle.p : this.battle.e;
+    const c = x.c;
+    if (!c) return;
+    this.statsOpen = true;
+    const p = openPanel(this, `${creatureName(c)}  Lv ${c.level}${c.stars ? '  ' + '★'.repeat(c.stars) : ''}`, {
+      w: LANDSCAPE ? 640 : W - 20,
+      h: LANDSCAPE ? H - 16 : 640,
+      depth: 1500,
+      onClose: () => (this.statsOpen = false),
+    });
+    const r = p.root;
+    const x0 = p.x + 18;
+    const w = p.w - 36;
+    let y = p.top - 4;
+    // Who, elements and condition.
+    const t = creatureTypes(c);
+    (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => r.add(typeChip(this, x0 + i * 64, y + 10, el, false)));
+    r.add(text(this, x0 + w, y + 2, side === 'player' ? 'Your Hexling' : this.match ? 'Opponent' : 'Enemy', 13, side === 'player' ? '#8fd0ff' : '#ff8a7a', { fontStyle: 'bold' }).setOrigin(1, 0));
+    y += 30;
+    const max = stats(c).hp;
+    const cond = x.status ? `${STATUS[x.status].name} (${x.statusTurns} turn${x.statusTurns === 1 ? '' : 's'} left): ${STATUS[x.status].desc}` : 'No condition';
+    r.add(text(this, x0, y, `HP ${c.hp} / ${max}  ·  ${cond}`, 13, x.status ? '#ffc94d' : COLORS.textDim, { wordWrap: { width: w } }));
+    y += 22 + (x.status ? 16 : 0);
+
+    // Stats: base, change, now.
+    const s = stats(c);
+    const syn = x.syn ?? { atk: 1, def: 1, spd: 1 };
+    const rows: [string, number, number, number][] = [
+      ['Attack', s.atk, x.atkStage, s.atk * syn.atk * stageMult(x.atkStage)],
+      ['Defense', s.def, x.defStage, s.def * syn.def * stageMult(x.defStage)],
+      ['Speed', s.spd, x.spdStage, s.spd * syn.spd * stageMult(x.spdStage) * (c.held === 'scarf' ? 1.25 : 1) * (x.status === 'para' ? 0.5 : 1)],
+    ];
+    const cx = [x0, x0 + w * 0.36, x0 + w * 0.62, x0 + w];
+    r.add(text(this, cx[1], y, 'Base', 12, COLORS.textDim));
+    r.add(text(this, cx[2], y, 'Change', 12, COLORS.textDim));
+    r.add(text(this, cx[3], y, 'Now', 12, COLORS.textDim).setOrigin(1, 0));
+    y += 18;
+    for (const [label, base, stage, now] of rows) {
+      r.add(this.add.rectangle(x0 - 6, y - 3, w + 12, 24, COLORS.panelLight, 0.6).setOrigin(0));
+      r.add(text(this, cx[0], y, label, 15, COLORS.text, { fontStyle: 'bold' }));
+      r.add(text(this, cx[1], y, String(base), 15, COLORS.text));
+      const ch = stage === 0 ? '—' : `${stage > 0 ? '▲ +' : '▼ '}${stage}  (×${stageMult(stage).toFixed(2).replace(/0$/, '')})`;
+      r.add(text(this, cx[2], y, ch, 15, stage > 0 ? '#8fe08a' : stage < 0 ? '#ff8a7a' : COLORS.textDim, { fontStyle: stage ? 'bold' : 'normal' }));
+      const n = Math.round(now);
+      r.add(text(this, cx[3], y, String(n), 15, n > base ? '#8fe08a' : n < base ? '#ff8a7a' : COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0));
+      y += 28;
+    }
+    r.add(
+      text(this, x0, y, 'Moves can raise or lower a stat by up to 2 steps (+2 = ×1.5, −2 = ×0.67). Changes wear off when it switches out. “Now” includes synergy, Swift Scarf and paralysis.', 11, COLORS.textDim, {
+        wordWrap: { width: w },
+        lineSpacing: 2,
+      }),
+    );
+    y += LANDSCAPE ? 34 : 46;
+
+    // Held item.
+    r.add(text(this, x0, y, c.held ? `Held: ${HELD[c.held].name} · ${HELD[c.held].desc}` : 'Held: nothing', 13, c.held ? COLORS.text : COLORS.textDim, { wordWrap: { width: w } }));
+    y += 24;
+
+    // Moves (a foe's only once seen).
+    const seen = state.meta.dex.moves;
+    const cols = LANDSCAPE ? 2 : 1;
+    const mw = (w - (cols - 1) * 10) / cols;
+    c.moves.forEach((m, i) => {
+      const d = moveDef(m);
+      const mx = x0 + (i % cols) * (mw + 10);
+      const my = y + Math.floor(i / cols) * 40;
+      const known = side === 'player' || seen.includes(m.id);
+      r.add(this.add.rectangle(mx - 6, my - 3, mw + 12, 36, known ? Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(55).color : COLORS.panelLight, 0.9).setOrigin(0));
+      if (!known) {
+        r.add(text(this, mx, my + 8, '??? · not seen yet', 13, '#6d6888'));
+        return;
+      }
+      const left = usesLeft(m);
+      const uses = Number.isFinite(left) ? ` · ${left}/${maxUses(d)} uses` : '';
+      const top = text(this, mx, my, `${d.name} · T${m.tier}${uses}`, 13, COLORS.text, { fontStyle: 'bold' });
+      if (top.width > mw) top.setScale(mw / top.width);
+      const sub = text(this, mx, my + 16, `${d.element} · ${moveSummary(d, m.tier)} · ${accText(d)}`, 11, COLORS.textDim);
+      if (sub.width > mw) sub.setScale(mw / sub.width);
+      r.add([top, sub]);
+    });
+  }
+
+  private makePanel(x: number, y: number, side: 'player' | 'enemy'): SidePanel {
     const root = this.add.container(x, y);
-    root.add(this.add.rectangle(0, 0, 270, 74, COLORS.panel, 0.92).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
+    // Tap the panel to see this Hexling's stats, stat changes, condition, item and moves.
+    root.add(
+      this.add
+        .rectangle(0, 0, 270, 74, COLORS.panel, 0.92)
+        .setOrigin(0)
+        .setStrokeStyle(2, COLORS.stroke)
+        .setInteractive({ useHandCursor: true })
+        // Both the press and the release on the panel: a tap that skipped the cut-in (pressed on it,
+        // released here once it was gone) doesn't open the stats.
+        .on('pointerdown', () => (this.panelPress = side))
+        .on('pointerup', () => {
+          if (this.panelPress === side) this.showCombatant(side);
+          this.panelPress = null;
+        }),
+    );
+    root.add(text(this, 12, 58, 'ⓘ tap for stats', 10, '#8e86ad'));
     const name = text(this, 12, 8, '', 17, COLORS.text, { fontStyle: 'bold' });
     const chips = this.add.container(12, 40);
     const bar = new HpBar(this, 140, 40, 118, 10, true);

@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.4';
+export const APP_VERSION = '1.5';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.5',
+    title: 'Battle info',
+    items: [
+      'Tap a Hexling\u2019s panel in battle to see its stats, stat changes (up to ±2 steps), condition, held item and moves (a foe\u2019s once you\u2019ve seen them).',
+      'Multi-hit moves roll their condition on every hit (Static Burst, Spore Burst, Hailstones).',
+      'The Prestige Altar explains how it works, and warns you before you step on one with nothing to sacrifice.',
+      'Mac, PC and sideways screens: two-column choices, and fixes for overlapping text on several screens.',
+    ],
+  },
   {
     version: '1.4',
     title: 'Smarter auto-battle',
