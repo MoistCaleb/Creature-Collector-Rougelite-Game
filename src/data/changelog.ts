@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.5';
+export const APP_VERSION = '1.6';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.6',
+    title: 'Fewer, stronger conditions',
+    items: [
+      'Far fewer attacks inflict a condition: one to three per element (e.g. Ember and Scorch burn; Flame Lash, Inferno and Blaze Rush no longer do). Signature moves named for a condition keep theirs.',
+      'The ones that still do land it more often: burn 25%, poison 30%, paralysis 25%, freeze 15%, sleep 20%, confusion 25%.',
+      'Multi-hit moves roll a smaller chance on each hit (about 39% over three hits for Static Burst and Spore Burst).',
+    ],
+  },
   {
     version: '1.5',
     title: 'Battle info',

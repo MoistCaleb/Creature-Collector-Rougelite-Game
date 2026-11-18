@@ -285,9 +285,28 @@ for (const el of ELEMENTS) {
       : { id: extraId(el), name: ex.buff[0], element: el, kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: ex.buff[1] };
 }
 
-// Moves whose names describe a condition can inflict it (Spark paralyzes, Acid Spit poisons...).
+/**
+ * The shared attacks that can inflict a condition: one to three per element, so a condition is part
+ * of an element's identity without riding on every hit. (Status-type moves still inflict theirs, and
+ * signatures named for a condition keep it.)
+ */
+export const STATUS_ATTACKS = new Set([
+  'Ember', 'Scorch', // Fire: burn
+  'Frostbite', 'Hailstones', // Frost: freeze
+  'Thunderclap', 'Static Burst', // Storm: paralysis
+  'Venom Fang', 'Sludge Bomb', 'Spore Burst', // Toxic: poison
+  'Night Slash', 'Fear Claw', // Shadow: confusion
+  'Prism Lance', // Light: confusion
+  'Wisp Touch', 'Spook', // Spirit: sleep, confusion
+]);
+
+// Moves whose names describe a condition can inflict it (Thunderclap paralyzes, Venom Fang
+// poisons...): every status-type move, and only the listed shared attacks.
 for (const m of Object.values(MOVES)) {
+  if (m.kind === 'attack' && !STATUS_ATTACKS.has(m.name)) continue;
   const st = statusFromName(m.name, m.kind);
+  // Multi-hit moves roll on every hit, so each roll gets about half the chance.
+  if (st && m.hits) st.chance = Math.max(0.05, Math.round((st.chance / 2) * 20) / 20);
   if (st) m.status = st;
 }
 
