@@ -15,6 +15,8 @@ import {
   createCreature,
   creatureName,
   prestige,
+  canPrestige,
+  sharesType,
   evolve,
   setNextUid,
   xpToNext,
@@ -1307,6 +1309,26 @@ export function earnCoins(run: Run, n: number) {
 }
 
 /** Prestige a creature (counts toward the Ascension achievement). */
+/**
+ * What the Prestige Altar can do for you right now: each Hexling that can gain a star, with the bench
+ * Hexlings it could take as a sacrifice (they share an element with it), and whether Ascendant's
+ * free prestige is available on this floor.
+ */
+export function altarOptions(run: Run): { free: boolean; pairs: { target: Creature; fodder: Creature[] }[] } {
+  const free = run.passive === 'ascendant' && run.ascendFloor !== run.floor && allCreatures(run).some(canPrestige);
+  const pairs = allCreatures(run)
+    .filter(canPrestige)
+    .map((target) => ({ target, fodder: run.bench.filter((b) => b !== target && sharesType(b, target)) }))
+    .filter((p) => p.fodder.length > 0);
+  return { free, pairs };
+}
+
+/** True when the altar has something for you (a valid pair, or Ascendant's free prestige). */
+export const altarUsable = (run: Run) => {
+  const o = altarOptions(run);
+  return o.free || o.pairs.length > 0;
+};
+
 export function prestigeTracked(run: Run, c: Creature): boolean {
   if (!prestige(c)) return false;
   trackStat(run, 'stars');
