@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.8';
+export const APP_VERSION = '1.9';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,13 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.9',
+    title: 'Upgrade fix',
+    items: [
+      'Stone Skin and Roar of Kings: their top upgrade now removes the drawback (+4 is the most any stat can rise, so it no longer claims +5).',
+    ],
+  },
   {
     version: '1.8',
     title: 'Calmer team screen',

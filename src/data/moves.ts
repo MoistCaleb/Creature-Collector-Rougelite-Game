@@ -383,9 +383,18 @@ export const MAX_STAGE = 4;
 const STAT_NAME: Record<StatKey, string> = { atk: 'ATK', def: 'DEF', spd: 'SPD' };
 export const STAT_LABEL = STAT_NAME;
 
-/** Stat effects at a given tier: each tier above 1 adds one stage to the first effect. */
+/**
+ * Stat effects at a given tier: each tier above 1 adds one stage to the first effect, up to the
+ * stage cap. A tier that would go past the cap drops the move's drawback (an effect the other way)
+ * instead, so every upgrade does something (Stone Skin T3: +4 DEF, no SPD loss).
+ */
 export function effectsAtTier(m: MoveDef, tier: number): StatEffect[] {
-  return m.effects.map((e, i) => (i === 0 ? { ...e, stages: e.stages + Math.sign(e.stages) * (tier - 1) } : e));
+  const [first, ...rest] = m.effects;
+  if (!first) return [];
+  const raw = first.stages + Math.sign(first.stages) * (tier - 1);
+  if (Math.abs(raw) <= MAX_STAGE) return [{ ...first, stages: raw }, ...rest];
+  const sign = Math.sign(first.stages);
+  return [{ ...first, stages: sign * MAX_STAGE }, ...rest.filter((e) => Math.sign(e.stages) === sign)];
 }
 
 export function healAtTier(m: MoveDef, tier: number): number {
