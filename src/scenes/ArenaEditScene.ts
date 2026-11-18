@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { Scroller } from '../ui/scroll';
 import { accText, maxUses, MOVES, moveSummary } from '../data/moves';
 import { SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS } from '../data/types';
@@ -160,7 +161,7 @@ export class ArenaEditScene extends Phaser.Scene {
     const addTo = <T extends Phaser.GameObjects.GameObject>(o: T) => (list.add(o), o);
     const tap = (o: Phaser.GameObjects.Rectangle, f: () => void) =>
       o.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-        if (!this.dragged) f();
+        if (!this.scroller?.moved) f();
       });
 
     // The four move slots.
@@ -209,24 +210,15 @@ export class ArenaEditScene extends Phaser.Scene {
     // Drag to scroll when it doesn't fit; the card above stays put and covers what scrolls under it.
     const bottom = ly + 24 + pool.length * ROW + 10;
     const minY = Math.min(0, H - bottom);
-    this.dragged = false;
-    let startY = 0;
-    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      this.dragged = false;
-      startY = ptr.y;
-    });
+    // Drag (with a flick) or the mouse wheel; a drag isn't a tap.
+    this.scroller = new Scroller(this, { get: () => list.y, set: (v) => list.setY(v), min: () => minY, max: () => 0 });
     if (minY < 0) {
-      this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
-        if (!ptr.isDown) return;
-        if (Math.abs(ptr.y - startY) > 8) this.dragged = true;
-        list.y = Phaser.Math.Clamp(list.y + (ptr.y - ptr.prevPosition.y) / this.cameras.main.zoom, minY, 0);
-      });
       text(this, LANDSCAPE ? 156 : LX + LW / 2, H - 4, 'Drag to see more', 11, COLORS.textDim).setOrigin(0.5, 1).setDepth(6);
     }
   }
 
-  /** Set while the current touch is a scroll drag, so it doesn't also tap a row. */
-  private dragged = false;
+  /** The list scroller; its `moved` is set while a touch is a scroll drag, so it doesn't also tap a row. */
+  private scroller: Scroller | null = null;
 
   /** Loadouts saved from runs: apply one (form + moves), or delete it. */
   private openLoadouts(picks: ArenaPick[]) {
