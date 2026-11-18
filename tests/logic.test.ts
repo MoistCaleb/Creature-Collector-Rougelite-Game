@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2198,5 +2198,21 @@ describe('stat moves never promise past the cap', () => {
     const roar = Object.values(MOVES).find((m) => m.name === 'Roar of Kings')!;
     expect(describeEffects(roar, 3)).toBe('Self +4 ATK');
     for (const m of Object.values(MOVES)) for (const t of [1, 2, 3]) for (const e of effectsAtTier(m, t)) expect(Math.abs(e.stages)).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('heal moves with a boost', () => {
+  it('Fortress-style signatures raise the user’s DEF, not the foe’s', () => {
+    const fort = Object.values(MOVES).find((m) => m.kind === 'heal' && m.effects.length)!;
+    const p = createCreature('emberkit', 20);
+    p.moves = [{ id: fort.id, tier: 1 }];
+    p.hp = 10;
+    const e = createCreature('pebblin', 1);
+    e.moves = [{ id: 'Earth:buff', tier: 1 }];
+    const b = new Battle([p], [e], new Rng(5));
+    b.takeTurn({ kind: 'move', index: 0 });
+    expect(b.p.defStage).toBe(2);
+    expect(b.e.defStage).toBeLessThanOrEqual(0 + (MOVES['Earth:buff'].effects.find((x) => x.stat === 'def')?.stages ?? 0));
+    expect(b.p.c.hp).toBeGreaterThan(10);
   });
 });

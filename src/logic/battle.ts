@@ -717,7 +717,7 @@ export class Battle {
       return 45 + 8 * team.filter((x) => isAlive(x.c)).length;
     }
     if (hpFrac < 0.4) return 0;
-    const holder = d.kind === 'buff' ? user : foe;
+    const holder = d.kind === 'debuff' ? foe : user;
     const room = effectsAtTier(d, m.tier).some((e) => {
       const cur = holder[stageKey(e.stat)];
       return e.stages > 0 ? cur < 2 : cur > -2;
@@ -731,8 +731,10 @@ export class Battle {
     const def = moveDef(slot);
     const user = side === 'player' ? this.p : this.e;
     const target = side === 'player' ? this.e : this.p;
-    const holder = def.kind === 'buff' ? user : target;
-    const holderSide: Side = def.kind === 'buff' ? side : side === 'player' ? 'enemy' : 'player';
+    // Debuffs hit the foe; buffs and heal moves' boosts (Fortress: heal + DEF) go on the user.
+    const self = def.kind !== 'debuff';
+    const holder = self ? user : target;
+    const holderSide: Side = self ? side : side === 'player' ? 'enemy' : 'player';
     const name = this.nameOf(holderSide, holder.c);
     for (const e of effectsAtTier(def, slot.tier)) {
       const key = stageKey(e.stat);
