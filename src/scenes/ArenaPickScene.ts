@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { Scroller } from '../ui/scroll';
 import { SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, ELEMENTS, elementTextColor, type Element } from '../data/types';
 import { activeTeamIndex, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, loadoutsFor, savedTeams, validArenaTeam, ownsShiny } from '../logic/arena';
@@ -35,7 +36,7 @@ export class ArenaPickScene extends Phaser.Scene {
   private countText!: Phaser.GameObjects.Text;
   private chips!: Phaser.GameObjects.Container;
   private input$: HTMLInputElement | null = null;
-  private dragged = false;
+  private scroller: Scroller | null = null;
 
   constructor() {
     super('ArenaPick');
@@ -81,17 +82,13 @@ export class ArenaPickScene extends Phaser.Scene {
     clipList(this, this.grid, LANDSCAPE ? 0 : g.top - 6);
     this.drawGrid();
 
-    // Drag to scroll; a drag isn't a tap.
-    let startY = 0;
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.dragged = false;
-      startY = p.y;
-    });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!p.isDown || (LANDSCAPE ? p.x < this.toScreen(g.x) : p.y < this.toScreen(g.top))) return;
-      if (Math.abs(p.y - startY) > 8) this.dragged = true;
-      const minY = Math.min(0, H - this.gridBottom);
-      this.grid.y = Phaser.Math.Clamp(this.grid.y + (p.y - p.prevPosition.y) / this.cameras.main.zoom, minY, 0);
+    // Drag (or the mouse wheel) to scroll the grid; a drag isn't a tap.
+    this.scroller = new Scroller(this, {
+      get: () => this.grid.y,
+      set: (v) => this.grid.setY(v),
+      min: () => Math.min(0, H - this.gridBottom),
+      max: () => 0,
+      area: (p) => (LANDSCAPE ? p.x >= this.toScreen(g.x) : p.y >= this.toScreen(g.top)),
     });
     this.events.once('shutdown', () => {
       lastQuery = this.query;
@@ -187,7 +184,7 @@ export class ArenaPickScene extends Phaser.Scene {
         return;
       }
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-        if (!this.dragged) this.choose(id, stage);
+        if (!this.scroller?.moved) this.choose(id, stage);
       });
     });
     this.gridBottom = G().top + Math.ceil(list.length / G().cols) * CELL_H + 10;

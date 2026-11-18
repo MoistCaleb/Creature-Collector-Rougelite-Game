@@ -37,13 +37,15 @@ export class Scroller {
       max: () => number;
       /** It scrolls inside a popup, so it keeps working while popups are open. */
       popup?: boolean;
+      /** Only drags that start here scroll (pointer in screen pixels); anywhere when absent. */
+      area?: (p: Phaser.Input.Pointer) => boolean;
     },
   ) {
     const input = scene.input;
     // Behind a popup, a screen's own scroller ignores drags and the wheel.
     const blocked = () => popups > 0 && !opts.popup;
     const down = (p: Phaser.Input.Pointer) => {
-      if (blocked()) {
+      if (blocked() || (opts.area && !opts.area(p))) {
         this.down = false;
         this.stop();
         return;

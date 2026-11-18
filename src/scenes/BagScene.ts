@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { Scroller } from '../ui/scroll';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { canEvolve, creatureName, creatureTypes, evolveLevel, readyToEvolve } from '../logic/creature';
 import { ELEMENT_COLORS } from '../data/types';
@@ -94,11 +95,9 @@ export class BagScene extends Phaser.Scene {
     const room = H - TOP - 10;
     const minY = TOP - Math.max(0, y - room);
     if (minY < TOP) {
-      this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-        if (!p.isDown) return;
-        list.y = Phaser.Math.Clamp(list.y + (p.y - p.prevPosition.y) / this.cameras.main.zoom, minY, TOP);
-      });
-      text(this, LX + LW / 2, H - 16, 'Drag to scroll', 11, COLORS.textDim).setOrigin(0.5).setDepth(5);
+      // Drag (with a flick) or the mouse wheel.
+      new Scroller(this, { get: () => list.y, set: (v) => list.setY(v), min: () => minY, max: () => TOP });
+      text(this, LX + LW / 2, H - 16, 'Drag or scroll for more', 11, COLORS.textDim).setOrigin(0.5).setDepth(5);
     }
 
     // Header: title, back to the map, potions and stones.
