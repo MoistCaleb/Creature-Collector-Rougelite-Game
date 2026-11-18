@@ -295,11 +295,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(6, 18, raised ? 18 : 21, 18, 0x8a3ad8); // glowing mantle edge
     if (back) {
       // One sweep down the back, flaring at the hem, with folds and stars.
-      round(6, 17, 21, 29, VOID, 1);
+      round(6, 18, 21, 29, VOID, 1);
       round(4, 28, 23, 32, VOID, 1);
       for (const x of [9, 13, 18]) rect(x, 23, x, 31, 0x2a1a48);
       for (const [x, y] of [[10, 20], [16, 22], [12, 26], [19, 28], [7, 30], [15, 31], [11, 19]]) put(x, y, (x + y) % 2 ? 0xffffff : 0xc8a8f0);
-      rect(6, 17, 21, 17, 0x8a3ad8);
+      rect(6, 18, 21, 18, 0x8a3ad8);
       rect(5, 32, 22, 32, 0x8a3ad8);
     }
     if (raised) raisedArm();
@@ -364,12 +364,6 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   round(X0, Y0, X1, Y1, skin, 2);
   if (back) {
     backHair();
-    if (top === 15) {
-      // The cloak's hood over the back of the head.
-      round(X0, Y0 - 1, X1, Y1, VOID, 2);
-      rect(X0, Y1 - 1, X1, Y1, 0x2a1a48);
-      for (const [x, y] of [[9, 8], [16, 11], [12, 14], [18, 6]]) put(x, y, (x + y) % 2 ? 0xffffff : 0xc8a8f0);
-    }
     // From behind, the back item is nearest you: it covers the back, both arms, the neck and the
     // back of the head wherever its shape reaches (the hat still sits on top).
     backItem();
