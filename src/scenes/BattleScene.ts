@@ -977,12 +977,22 @@ export class BattleScene extends Phaser.Scene {
     );
   }
 
-  /** With auto-battle on, pick the best-rated move after a short beat. */
+  /** With auto-battle on, after a short beat: switch, drink a potion or use the best-rated move. */
   private maybeAuto() {
     if (!prefs.autoBattle || this.busy || this.autoTimer || this.battle.outcome() !== 'ongoing') return;
     this.autoTimer = this.time.delayedCall(450, () => {
       this.autoTimer = null;
       if (!prefs.autoBattle || this.busy || this.battle.outcome() !== 'ongoing') return;
+      // Switch out of a bad matchup or drink a potion when it matters (potions only in runs).
+      const run = state.run;
+      const potions = !this.match && run ? (run.potions ?? 0) : 0;
+      const plan = this.battle.autoPlan(potions);
+      if (plan?.kind === 'potion' && run) {
+        run.potions = Math.max(0, (run.potions ?? 0) - 1);
+        notePotion(run);
+        return this.act({ kind: 'potion', index: this.battle.pActive, heal: potionHeal(run) });
+      }
+      if (plan?.kind === 'swap') return this.act({ kind: 'swap', index: plan.index });
       this.act({ kind: 'move', index: this.battle.bestMove('player') });
     });
   }
@@ -1017,6 +1027,21 @@ export class BattleScene extends Phaser.Scene {
   private openSwitch(forced: boolean) {
     this.cancelAuto();
     const list = this.battle.player;
+    const pick = (i: number) => {
+      if (forced && this.match?.duel) {
+        this.showWaiting(`Waiting for ${this.match.opponent}.`);
+        this.match.duel.submitSwitch(i);
+      } else if (forced) this.play(this.battle.forcedSwitch(i));
+      else this.act({ kind: 'swap', index: i });
+    };
+    // Auto-battle sends in the best matchup itself after a fainting.
+    if (forced && prefs.autoBattle) {
+      const best = this.battle.bestPlayerAnswer();
+      if (best >= 0) {
+        this.time.delayedCall(450, () => (prefs.autoBattle ? pick(best) : this.openSwitch(true)));
+        return;
+      }
+    }
     openPicker(this, {
       title: forced ? 'Choose your next Hexling' : 'Switch Hexling',
       subtitle: forced ? undefined : 'Switching uses your turn.',
@@ -1025,13 +1050,7 @@ export class BattleScene extends Phaser.Scene {
         disabled: i === this.battle.pActive || !isAlive(x.c),
         note: i === this.battle.pActive ? 'In battle' : !isAlive(x.c) ? 'Fallen' : undefined,
       })),
-      onPick: (i) => {
-        if (forced && this.match?.duel) {
-          this.showWaiting(`Waiting for ${this.match.opponent}.`);
-          this.match.duel.submitSwitch(i);
-        } else if (forced) this.play(this.battle.forcedSwitch(i));
-        else this.act({ kind: 'swap', index: i });
-      },
+      onPick: pick,
       onCancel: forced ? undefined : () => this.maybeAuto(),
     });
   }

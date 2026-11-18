@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.3';
+export const APP_VERSION = '1.4';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.4',
+    title: 'Smarter auto-battle',
+    items: [
+      'Auto-battle switches out of bad matchups to a teammate that does much better.',
+      'It drinks a Potion when your Hexling is low or stuck asleep, frozen or badly hurt by a burn or poison (not when the foe is about to go down).',
+      'When a Hexling faints, it sends in your best answer itself.',
+      'Your trainer turns to face you while celebrating a win.',
+    ],
+  },
   {
     version: '1.3',
     title: 'Polish',
