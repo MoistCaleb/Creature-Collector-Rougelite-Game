@@ -37,17 +37,22 @@ export class MapSelectScene extends Phaser.Scene {
         .setOrigin(0)
         .setStrokeStyle(2, selected && open ? COLORS.accent : COLORS.stroke);
       const cleared = meta.clearedMaps.includes(m.id);
-      text(this, x0 + 14, y + 10, m.name + (cleared ? '  ✓' : ''), 18, open ? COLORS.text : '#5d5578', { fontStyle: 'bold' });
+      const nameT = text(this, x0 + 14, y + 10, m.name + (cleared ? '  ✓' : ''), 18, open ? COLORS.text : '#5d5578', { fontStyle: 'bold' });
       text(this, x0 + 14, y + 36, open ? m.desc : `Locked: win ${m.winsToUnlock} run${m.winsToUnlock === 1 ? '' : 's'} (${meta.wins}/${m.winsToUnlock})`, 12, open ? COLORS.textDim : '#5d5578', {
         wordWrap: { width: cardW - 48 },
       });
       // Heat tokens: one per Heat level won on this map (8 on a map beaten at every Heat).
       const won = meta.mapHeats?.[m.id] ?? [];
-      if (open && (unlocked > 0 || won.length)) {
+      // Sideways cards are narrow: smaller tokens, and the name shrinks to stay clear of them.
+      const step = LANDSCAPE ? 11 : 15;
+      const tokens = open && (unlocked > 0 || won.length);
+      const nameRoom = cardW - 28 - (tokens ? (MAX_HEAT - 1) * step + 18 : 0);
+      if (nameT.width > nameRoom) nameT.setScale(nameRoom / nameT.width);
+      if (tokens) {
         for (let h = 1; h <= MAX_HEAT; h++) {
-          const x = x0 + cardW - 14 - (MAX_HEAT - h) * 15;
+          const x = x0 + cardW - 14 - (MAX_HEAT - h) * step;
           const lit = won.includes(h);
-          pixelIcon(this, x, y + 20, 'flame', 14).setAlpha(lit ? 1 : 0.18);
+          pixelIcon(this, x, y + 20, 'flame', LANDSCAPE ? 11 : 14).setAlpha(lit ? 1 : 0.18);
         }
         if (won.length) text(this, x0 + cardW - 14, y + 30, `${won.length}/${MAX_HEAT}`, 11, '#ff8a3a', { fontStyle: 'bold' }).setOrigin(1, 0);
       }

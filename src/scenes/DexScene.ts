@@ -421,9 +421,15 @@ export class DexScene extends Phaser.Scene {
         if (s === 2) {
           const sig = MOVES[sp.signature];
           const seenSig = dex.moves.includes(sig.id);
-          row.add(
-            text(this, 22, y + 102, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 11, seenSig ? '#ffc94d' : '#4a4068'),
-          );
+          // Sideways: in the free space right of the forms. Upright: under them, inside the row.
+          const sigT = LANDSCAPE
+            ? text(this, 480, y + 44, seenSig ? `Signature: ${sig.name}\n${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 12, seenSig ? '#ffc94d' : '#4a4068', {
+                wordWrap: { width: W - 520 },
+                lineSpacing: 3,
+              })
+            : text(this, 22, y + 99, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 11, seenSig ? '#ffc94d' : '#4a4068');
+          if (!LANDSCAPE && sigT.width > W - 50) sigT.setScale((W - 50) / sigT.width);
+          row.add(sigT);
         }
         if (s < 2) row.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
       }

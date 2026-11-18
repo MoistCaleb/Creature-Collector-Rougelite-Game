@@ -41,7 +41,10 @@ export class TeamsScene extends Phaser.Scene {
         .setOrigin(0)
         .setStrokeStyle(2, i === active ? COLORS.accent : COLORS.stroke);
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.edit(i));
-      text(this, cx + 12, y + 8, t.name, 17, COLORS.text, { fontStyle: 'bold' });
+      // The name stays clear of the ••• button.
+      const nameT = text(this, cx + 12, y + 8, t.name, 17, COLORS.text, { fontStyle: 'bold' });
+      const nameRoom = cw - 12 - (LANDSCAPE ? 56 : 72) - 24;
+      if (nameT.width > nameRoom) nameT.setScale(nameRoom / nameT.width);
       if (i === active) text(this, cx + 12, y + 30, LANDSCAPE ? 'ACTIVE · Arena ladder' : 'ACTIVE · used by the Arena ladder', 11, '#ffc94d', { fontStyle: 'bold' });
       else text(this, cx + 12, y + 30, `${picks.length}/${ARENA_TEAM} Hexlings`, 11, COLORS.textDim);
       picks.forEach((p, k) => {
