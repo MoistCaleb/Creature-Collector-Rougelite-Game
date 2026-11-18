@@ -13,7 +13,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.5',
     title: 'Battle info',
     items: [
-      'Tap a Hexling\u2019s panel in battle to see its stats, stat changes (up to ±2 steps), condition, held item and moves (a foe\u2019s once you\u2019ve seen them).',
+      'Tap a Hexling\u2019s panel in battle to see its stats, stat changes (up to ±4 steps), condition, held item and moves (a foe\u2019s once you\u2019ve seen them).',
       'Multi-hit moves roll their condition on every hit (Static Burst, Spore Burst, Hailstones).',
       'The Prestige Altar explains how it works, and warns you before you step on one with nothing to sacrifice.',
       'Mac, PC and sideways screens: two-column choices, and fixes for overlapping text on several screens.',

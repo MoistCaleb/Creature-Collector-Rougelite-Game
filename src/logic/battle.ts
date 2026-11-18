@@ -65,7 +65,7 @@ export type BattleEvent =
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
-/** How much a stat stage changes a stat: +1 is x1.25, +2 x1.5; -1 is x0.8, -2 about x0.67 (stages cap at +-2). */
+/** How much a stat stage changes a stat: +1 is x1.25, up to +4 x2; -1 is x0.8, down to -4 x0.5 (stages cap at MAX_STAGE). */
 export const stageMult = (s: number) => (s >= 0 ? 1 + 0.25 * s : 1 / (1 + 0.25 * -s));
 
 export class Battle {
