@@ -29,13 +29,15 @@ export const STATUS: Record<StatusId, StatusDef> = {
 };
 
 /** Which status a move inflicts, judged from its name, and how often. */
+// Attack chances: only a few attacks per element carry a condition (see STATUS_ATTACKS in moves),
+// so the ones that do land it fairly often.
 const NAME_STATUS: [RegExp, StatusId, number][] = [
-  [/Ember|Scorch|Inferno|Flame|Blaze|Sear|Flare|Kindle|Fire/, 'burn', 0.15],
-  [/Acid|Venom|Sludge|Plague|Noxious|Caustic|Toxic|Spore Burst/, 'poison', 0.2],
-  [/Spark|Thunder|Static|Zap|Numbing|Shock/, 'para', 0.2],
-  [/Ice|Frost|Blizzard|Hail|Chill/, 'freeze', 0.1],
-  [/Spore Cloud|Wisp|Haunt|Phantom|Lull|Dream/, 'sleep', 0.15],
-  [/Dread|Night|Umbral|Eclipse|Fear|Terrify|Blinding|Prism|Spook|Shade/, 'confuse', 0.15],
+  [/Ember|Scorch|Inferno|Flame|Blaze|Sear|Flare|Kindle|Fire/, 'burn', 0.25],
+  [/Acid|Venom|Sludge|Plague|Noxious|Caustic|Toxic|Spore Burst/, 'poison', 0.3],
+  [/Spark|Thunder|Static|Zap|Numbing|Shock/, 'para', 0.25],
+  [/Ice|Frost|Blizzard|Hail|Chill/, 'freeze', 0.15],
+  [/Spore Cloud|Wisp|Haunt|Phantom|Lull|Dream/, 'sleep', 0.2],
+  [/Dread|Night|Umbral|Eclipse|Fear|Terrify|Blinding|Prism|Spook|Shade/, 'confuse', 0.25],
 ];
 
 /** Status-type moves (buffs, debuffs, heals) inflict their status more reliably than attacks do. */

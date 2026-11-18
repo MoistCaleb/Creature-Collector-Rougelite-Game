@@ -1902,7 +1902,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2100,7 +2100,7 @@ describe('multi-hit moves and conditions', () => {
       n++;
       if (b.e.status === 'para') para++;
     }
-    // One roll at 20% would land ~20%; three rolls land 1 - 0.8^3 ≈ 49% (less a few misses).
+    // One 15% roll would land ~15%; three rolls land 1 - 0.85^3 ≈ 39% (less a few misses).
     expect(para / n).toBeGreaterThan(0.35);
     expect(para / n).toBeLessThan(0.6);
   });
