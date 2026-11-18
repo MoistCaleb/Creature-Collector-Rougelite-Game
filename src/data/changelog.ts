@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.10';
+export const APP_VERSION = '1.11';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.11',
+    title: 'Scrolling and battle info',
+    items: [
+      'A foe\u2019s stats panel shows only the moves it has used in this battle.',
+      'Mouse wheel and trackpad scrolling in the Bag and team builder; screens no longer scroll behind popups.',
+      'Dragging a list and letting go over a button no longer presses it.',
+    ],
+  },
   {
     version: '1.10',
     title: 'Fortress fix',
