@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { holdScroll } from './scroll';
 import { button, COLORS, fullRect, H, text, W } from './widgets';
 
 export interface Panel {
@@ -27,6 +28,7 @@ export function openPanel(
   const x = (W - w) / 2;
   const y = (H - h) / 2;
   const root = scene.add.container(0, 0).setDepth(opts.depth ?? 1000);
+  holdScroll(root);
   root.add(fullRect(scene, 0x000000, 0.78).setInteractive());
   root.add(scene.add.rectangle(x, y, w, h, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
   root.add(text(scene, W / 2, y + 14, title, 22, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0));

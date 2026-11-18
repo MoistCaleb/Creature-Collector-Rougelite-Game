@@ -6,6 +6,15 @@ import { ZOOM } from './widgets';
  * Drag to scroll; let go mid-swipe and it keeps gliding, slowing down, and stops at the ends.
  * `moved` is true once a press has turned into a drag, so taps on list items can ignore it.
  */
+/** Popups (panels, pickers, tips) open right now. While any is up, scrolling behind it is frozen. */
+let popups = 0;
+
+/** Count `root` as an open popup until it's destroyed. */
+export function holdScroll(root: Phaser.GameObjects.GameObject) {
+  popups += 1;
+  root.once('destroy', () => (popups = Math.max(0, popups - 1)));
+}
+
 export class Scroller {
   /** True while (or right after) the current press is a drag rather than a tap. */
   moved = false;
@@ -26,13 +35,25 @@ export class Scroller {
       min: () => number;
       /** Highest allowed position (content at the top). */
       max: () => number;
+      /** It scrolls inside a popup, so it keeps working while popups are open. */
+      popup?: boolean;
     },
   ) {
     const input = scene.input;
-    const down = (p: Phaser.Input.Pointer) => this.onDown(p);
+    // Behind a popup, a screen's own scroller ignores drags and the wheel.
+    const blocked = () => popups > 0 && !opts.popup;
+    const down = (p: Phaser.Input.Pointer) => {
+      if (blocked()) {
+        this.down = false;
+        this.stop();
+        return;
+      }
+      this.onDown(p);
+    };
     const move = (p: Phaser.Input.Pointer) => this.onMove(p);
     const up = () => this.onUp();
     const wheel = (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+      if (blocked()) return;
       this.stop();
       this.setY(this.opts.get() - dy);
     };

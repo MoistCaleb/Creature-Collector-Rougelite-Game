@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { holdScroll } from './scroll';
 import type { Creature } from '../logic/creature';
 import { button, COLORS, creatureRow, creatureSprite, fullRect, H, LANDSCAPE, OX, OY, text, W } from './widgets';
 
@@ -47,6 +48,7 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
   // Sideways, a creature's info row stays compact.
   const big = (r: PickRow) => !!r.big && !LANDSCAPE;
   const root = scene.add.container((W - PW) / 2, 0).setDepth(1000);
+  holdScroll(root);
   const dim = fullRect(scene, 0x000000, 0.78).setPosition(-(W - PW) / 2 - OX, -OY).setInteractive();
   root.add(dim);
 

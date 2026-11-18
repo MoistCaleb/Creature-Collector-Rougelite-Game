@@ -80,6 +80,7 @@ export function openWhatsNew(scene: Phaser.Scene, entries: ChangelogEntry[], onC
       },
       min: () => -overflow - 4,
       max: () => 0,
+      popup: true,
     });
   }
   return p;
