@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
-import { APP_VERSION, changesSince, CHANGELOG, type ChangelogEntry } from '../data/changelog';
+import { APP_VERSION, changesSince, CHANGELOG, versionNewer, type ChangelogEntry } from '../data/changelog';
+import { Scroller } from './scroll';
 import { openPanel } from './panel';
 import { prefs } from './prefs';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
@@ -27,33 +28,59 @@ export function openCredits(scene: Phaser.Scene, onClose: () => void = () => {})
     y += LANDSCAPE ? 40 : 48;
   }
   p.root.add(text(scene, cx, y + 2, 'Thanks for playing!', 14, '#8fe08a', { fontStyle: 'italic' }).setOrigin(0.5, 0));
-  p.root.add(button(scene, cx, p.y + p.h - 80, 200, 40, 'What’s new', () => openWhatsNew(scene, CHANGELOG), { fontSize: 15, color: 0x2f4a6b, glyph: 'book' }));
+  p.root.add(button(scene, cx, p.y + p.h - 80, 200, 40, 'What’s new', () => openWhatsNew(scene, CHANGELOG.filter((e) => !versionNewer('1.0', e.version))), { fontSize: 15, color: 0x2f4a6b, glyph: 'book' }));
   return p;
 }
 
-/** The changelog, newest first. */
+/** The changelog, newest first. Drag (or use the mouse wheel) to scroll when it doesn't all fit. */
 export function openWhatsNew(scene: Phaser.Scene, entries: ChangelogEntry[], onClose: () => void = () => {}) {
   // Tall enough for what's listed (about two lines an item), up to most of the screen.
   const est = 110 + entries.reduce((t, e) => t + 34 + e.items.length * (LANDSCAPE ? 22 : 38), 0);
-  const p = openPanel(scene, 'What’s new', { w: LANDSCAPE ? 700 : 430, h: Math.min(LANDSCAPE ? 430 : 700, est), onClose, closeLabel: 'Got it', depth: 1100 });
+  let scroller: Scroller | null = null;
+  const p = openPanel(scene, 'What\u2019s new', {
+    w: LANDSCAPE ? 700 : 430,
+    h: Math.min(LANDSCAPE ? 430 : 700, est),
+    onClose: () => {
+      scroller?.dispose();
+      onClose();
+    },
+    closeLabel: 'Got it',
+    depth: 1100,
+  });
   const x0 = p.x + 20;
   const ww = p.w - 40;
+  const top = p.top;
   const bottom = p.y + p.h - 60;
-  let y = p.top;
+  const list = scene.add.container(0, 0);
+  p.root.add(list);
+  let y = top;
   for (const e of entries) {
-    if (y > bottom - 40) break;
-    p.root.add(text(scene, x0, y, `${e.title}  ·  v${e.version}`, 16, '#ffc94d', { fontStyle: 'bold' }));
+    list.add(text(scene, x0, y, `${e.title}  \u00b7  v${e.version}`, 16, '#ffc94d', { fontStyle: 'bold' }));
     y += 24;
     for (const item of e.items) {
       const t = text(scene, x0 + 16, y, item, 13, COLORS.text, { wordWrap: { width: ww - 16 }, lineSpacing: 2 });
-      if (y + t.height > bottom) {
-        t.destroy();
-        break;
-      }
-      p.root.add([text(scene, x0, y, '✦', 13, '#ffc94d'), t]);
+      list.add([text(scene, x0, y, '\u2726', 13, '#ffc94d'), t]);
       y += t.height + 6;
     }
     y += 10;
+  }
+  const overflow = y - bottom;
+  if (overflow > 0) {
+    // Only the list area shows; the rest scrolls under the panel's edges.
+    const shape = scene.make.graphics({}, false).fillRect(p.x, top - 4, p.w, bottom - top + 4);
+    list.setMask(shape.createGeometryMask());
+    list.once('destroy', () => shape.destroy());
+    const hint = text(scene, p.x + p.w - 14, p.y + 18, 'Drag to see more', 11, COLORS.textDim).setOrigin(1, 0);
+    p.root.add(hint);
+    scroller = new Scroller(scene, {
+      get: () => list.y,
+      set: (v) => {
+        list.setY(v);
+        hint.setVisible(v > -overflow + 4);
+      },
+      min: () => -overflow - 4,
+      max: () => 0,
+    });
   }
   return p;
 }

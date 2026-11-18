@@ -13,6 +13,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.10',
     title: 'Fortress fix',
     items: [
+      'What\u2019s new (Settings \u203a Credits) now scrolls through every update back to 1.0.',
       'Heal-and-guard signature moves (Molten Core, Iron Will, Lotus Bloom, Mirror Shell, Frost Bloom, Ash Bloom) now raise your own Defense. They were raising the foe\u2019s by mistake.',
     ],
   },

@@ -29,19 +29,35 @@ export class Scroller {
     },
   ) {
     const input = scene.input;
-    input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onDown(p));
-    input.on('pointermove', (p: Phaser.Input.Pointer) => this.onMove(p));
-    input.on('pointerup', () => this.onUp());
-    input.on('pointerupoutside', () => this.onUp());
-    input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+    const down = (p: Phaser.Input.Pointer) => this.onDown(p);
+    const move = (p: Phaser.Input.Pointer) => this.onMove(p);
+    const up = () => this.onUp();
+    const wheel = (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       this.stop();
       this.setY(this.opts.get() - dy);
-    });
+    };
+    input.on('pointerdown', down);
+    input.on('pointermove', move);
+    input.on('pointerup', up);
+    input.on('pointerupoutside', up);
+    input.on('wheel', wheel);
     // Scene event listeners outlive a scene restart, so remove this one when the scene shuts down.
     const onUpdate = (_t: number, delta: number) => this.tick(delta);
     scene.events.on('update', onUpdate);
+    this.dispose = () => {
+      input.off('pointerdown', down);
+      input.off('pointermove', move);
+      input.off('pointerup', up);
+      input.off('pointerupoutside', up);
+      input.off('wheel', wheel);
+      scene.events.off('update', onUpdate);
+      this.stop();
+    };
     scene.events.once('shutdown', () => scene.events.off('update', onUpdate));
   }
+
+  /** Stop listening (for a scroller inside a popup that closes before its scene does). */
+  dispose: () => void;
 
   private setY(y: number) {
     this.opts.set(Phaser.Math.Clamp(y, this.opts.min(), this.opts.max()));
