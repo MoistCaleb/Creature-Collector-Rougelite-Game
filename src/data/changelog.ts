@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.2';
+export const APP_VERSION = '1.3';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,18 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.3',
+    title: 'Polish',
+    items: [
+      'NEW tags on gear and titles you haven’t looked at yet.',
+      'Putting on gear sparkles on your trainer, and “Shuffle + gear” mixes in what you’ve unlocked.',
+      'Win a battle and your trainer celebrates with a flare of their aura’s color (lose online and your opponent does).',
+      'The online lobby shows your opponent’s trainer, gear and effects included.',
+      'Cut-ins show a slash of the trainer’s aura color behind their name.',
+      'Gear from behind now covers your back the way it should; the cloak, mech suit, dragon armor and dragon helm cover more.',
+    ],
+  },
   {
     version: '1.2',
     title: 'Legendary gear',

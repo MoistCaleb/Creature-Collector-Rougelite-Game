@@ -11,7 +11,8 @@ import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
-import { trainerFx } from '../ui/trainerFx';
+import { trainerFlare, trainerFx } from '../ui/trainerFx';
+import { calm } from '../ui/motion';
 import { accText, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, guardianRules, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
@@ -425,7 +426,7 @@ export class BattleScene extends Phaser.Scene {
     // Wide gear (wings, a jetpack, a greatsword) reaches the sprite's edges: step in so it stays on screen.
     const left = Math.min(trainerSpan(this, rest)[0], trainerSpan(this, act)[0]);
     const px = Math.max(L.playerTrainer.x, 4 - OX + (TRAINER_W / 2 - left) * 3.1);
-    this.trainers.player = { img: place(px, L.playerTrainer.y, rest, 3.1, 0), rest, act };
+    this.trainers.player = { img: place(px, L.playerTrainer.y, rest, 3.1, 0), rest, act, look: mine };
     trainerFx(this, this.trainers.player.img, mine, { back: true });
     if (enemy) {
       const eRest = ensureTrainerTexture(this, enemy, 'stand');
@@ -435,13 +436,26 @@ export class BattleScene extends Phaser.Scene {
       const rightEdge = LANDSCAPE ? L.field.w - 6 : W + OX - 4;
       const ex = Math.min(L.enemyTrainer.x, rightEdge - (TRAINER_W / 2 - eLeft) * 2.8);
       const them = place(ex, L.enemyTrainer.y, eRest, 2.8, 450).setFlipX(true);
-      this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command') };
+      this.trainers.enemy = { img: them, rest: eRest, act: ensureTrainerTexture(this, enemy, 'command'), look: enemy };
       trainerFx(this, them, enemy);
     }
   }
 
   /** The opposing trainer's (or guardian's / opponent's) name, to tell which side a message is about. */
   private foeName: string | null = null;
+
+  /** The winner celebrates: arm up, a few hops and a flare of their aura's color. */
+  private cheer(side: 'player' | 'enemy') {
+    const t = this.trainers[side];
+    if (!t || !t.img.active) return;
+    t.timer?.remove();
+    t.img.setTexture(t.act);
+    trainerFlare(this, t.img, t.look);
+    if (calm()) return;
+    this.tweens.killTweensOf(t.img);
+    t.hopping = true;
+    this.tweens.add({ targets: t.img, y: -14, duration: 150, yoyo: true, repeat: 2, ease: 'Quad.easeOut', onComplete: () => (t.img.y = 0) });
+  }
 
   /** A little hop: this trainer is the one the message is about. */
   private hop(side: 'player' | 'enemy') {
@@ -503,7 +517,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
-  private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; timer?: Phaser.Time.TimerEvent; hopping?: boolean }>> = {};
+  private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; look: TrainerLook; timer?: Phaser.Time.TimerEvent; hopping?: boolean }>> = {};
 
   /** A trainer gives an order (a move or sending a creature out): raise the arm, then lower it. */
   private order(side: 'player' | 'enemy') {
@@ -1261,6 +1275,7 @@ export class BattleScene extends Phaser.Scene {
     playMusic(null);
     if (won) sfx.victory();
     else sfx.defeat();
+    this.cheer(won ? 'player' : 'enemy');
     if (this.match!.duel) return this.endDuel(won);
     this.match!.onEnd(won);
   }
@@ -1339,6 +1354,7 @@ export class BattleScene extends Phaser.Scene {
     const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult);
     const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult;
     sfx.victory();
+    this.cheer('player');
     playMusic(null);
     // Bookkeeping happens once, even if the page reloads before the reward choice.
     if (!ab.settled) {

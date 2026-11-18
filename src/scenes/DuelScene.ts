@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { myTitle } from '../logic/titles';
 import { titleBadge } from '../ui/titleBadge';
-import { myLook, myName } from '../data/trainerLook';
+import { lookForName, myLook, myName } from '../data/trainerLook';
+import { ensureTrainerTexture } from '../ui/trainerSprite';
+import { trainerFx } from '../ui/trainerFx';
 import { SPECIES_BY_ID } from '../data/species';
 import { activeTeamIndex, savedTeams, validArenaTeam } from '../logic/arena';
 import { SETTING_CHOICES, type DuelSettings } from '../net/duel';
@@ -144,6 +146,11 @@ export class DuelScene extends Phaser.Scene {
     text(this, lx, opp.title ? 129 : 132, `Connected to ${opp.name}`, opp.title ? 16 : 18, '#8fe08a', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     // Their title, in its tier's color and effect.
     if (opp.title) titleBadge(this, lx, 155, opp.title, 12, { maxW: lw });
+    // Their trainer, gear and effects included, at the right of the line.
+    const look = opp.look ?? lookForName(opp.name);
+    const them = this.add.image(lx + lw / 2 - 22, 152, ensureTrainerTexture(this, look, 'stand')).setScale(1.25);
+    trainerFx(this, them, look);
+    this.tweens.add({ targets: them, y: 149, yoyo: true, repeat: -1, duration: 800, ease: 'Sine.easeInOut' });
 
     // Session settings: tap to cycle (host only).
     text(this, 20, opp.title ? 167 : 160, host ? 'Session settings · tap to change' : `Session settings · set by ${opp.name}`, 13, COLORS.textDim);

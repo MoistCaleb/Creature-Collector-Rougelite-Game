@@ -1,7 +1,7 @@
 import { AURAS, BACKS, HATS, LOOK_PARTS, SHOES, TOPS, type TrainerLook } from '../data/trainerLook';
 import { lockedBy as gildedLock, gildedCount } from './gilded';
 import type { Meta } from './run';
-import { hasTitle, TITLE_BY_NAME, type TitleDef } from './titles';
+import { earnedTitles, hasTitle, TITLE_BY_NAME, type TitleDef } from './titles';
 
 /**
  * Cosmetics that trainer titles unlock: earn the title, wear the item. (Gilded milestone outfits
@@ -109,4 +109,30 @@ export function titleNews(ts: TitleDef[]): string {
   if (!ts.length) return '';
   const u = unlocksOf(ts);
   return `\n\nNew title${ts.length > 1 ? 's' : ''}: ${ts.map((t) => t.name).join(', ')}!${u ? `\nUnlocked: ${u}` : ''}`;
+}
+
+// ---------------------------------------------------------------- what's new to you
+
+export const itemId = (key: keyof TrainerLook, value: number) => `${key}:${value}`;
+
+/** Every reward option (past the free ones) you can wear now. */
+export function unlockedExtras(meta: Meta): { key: keyof TrainerLook; value: number }[] {
+  const out: { key: keyof TrainerLook; value: number }[] = [];
+  for (const p of LOOK_PARTS) for (let v = p.free ?? p.names.length; v < p.names.length; v++) if (!lockOf(meta, p.key, v)) out.push({ key: p.key, value: v });
+  return out;
+}
+
+/** Unlocked gear you haven't looked at yet in the editor. */
+export const newItems = (meta: Meta) => unlockedExtras(meta).filter((i) => !(meta.seenItems ?? []).includes(itemId(i.key, i.value)));
+
+/** Earned titles you haven't looked at yet on the Titles screen. */
+export const newTitles = (meta: Meta) => earnedTitles(meta).filter((t) => !(meta.seenTitles ?? []).includes(t));
+
+/** Mark gear (by itemId) or titles as seen. Returns true if anything changed (caller saves). */
+export function markSeen(meta: Meta, kind: 'seenItems' | 'seenTitles', ids: string[]): boolean {
+  const seen = new Set(meta[kind] ?? []);
+  const fresh = ids.filter((id) => !seen.has(id));
+  if (!fresh.length) return false;
+  meta[kind] = [...seen, ...fresh];
+  return true;
 }

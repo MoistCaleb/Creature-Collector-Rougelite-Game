@@ -1902,7 +1902,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -1999,5 +1999,23 @@ describe('title cosmetics', () => {
     expect(cleanLook({ back: 3 }).back).toBe(3);
     expect(cleanLook({ back: 99 }).back).toBe(0);
     expect(cleanLook({}).back).toBe(0);
+  });
+});
+
+import { itemId, markSeen, newItems, newTitles, unlockedExtras } from '../src/logic/cosmetics';
+
+describe('NEW tags', () => {
+  it('flags unlocked gear and titles until seen', () => {
+    const meta = blankMeta();
+    meta.mapHeats = { wildlands: [4] }; // Heatseeker: Flame crown + Inferno aura
+    expect(newTitles(meta)).toEqual(['Heatseeker']);
+    expect(newItems(meta).map((i) => itemId(i.key, i.value)).sort()).toEqual(unlockedExtras(meta).map((i) => itemId(i.key, i.value)).sort());
+    expect(newItems(meta)).toHaveLength(2);
+    const hat = newItems(meta).find((i) => i.key === 'hat')!;
+    expect(markSeen(meta, 'seenItems', [itemId('hat', hat.value)])).toBe(true);
+    expect(markSeen(meta, 'seenItems', [itemId('hat', hat.value)])).toBe(false);
+    expect(newItems(meta).map((i) => i.key)).toEqual(['aura']);
+    markSeen(meta, 'seenTitles', ['Heatseeker']);
+    expect(newTitles(meta)).toEqual([]);
   });
 });

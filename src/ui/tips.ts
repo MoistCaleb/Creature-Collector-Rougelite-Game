@@ -32,6 +32,10 @@ export const TIPS = {
     title: 'Prestige ★',
     body: 'Prestige gives a Hexling a big stat boost and raises its level cap. It costs a bench Hexling that shares one of its elements.',
   },
+  titles: {
+    title: 'Trainer titles',
+    body: 'You’ve earned a trainer title! Titles show under your name, to your opponent online too, and many unlock gear with special effects.\n\nSee them all in Edit trainer (top-left) › your name › Titles.',
+  },
   bench: {
     title: 'The bench',
     body: 'Up to 4 Hexlings fight and up to 3 wait on the bench. Bench Hexlings still earn XP, and if your whole team falls, the bench steps in as your second life.',

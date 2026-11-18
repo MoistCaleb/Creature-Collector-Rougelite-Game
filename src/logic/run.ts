@@ -32,6 +32,7 @@ import {
   cureStatus,
 } from './creature';
 import { earnedTitles } from './titles';
+import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
@@ -163,6 +164,9 @@ export interface Meta {
   titlesAnnounced?: string[];
   /** Online duels (series) and stage battles won. */
   onlineWins?: number;
+  /** Reward gear (look part:option) and titles already looked at, for the NEW tags. */
+  seenItems?: string[];
+  seenTitles?: string[];
   /** Highest Gilded milestone (species count) already announced. */
   gildedAnnounced?: number;
 }
@@ -304,6 +308,9 @@ export function loadMeta(): Meta {
     checkAchievements(meta);
     // Saves from before titles had their own list: titles you already have aren't news.
     if (!saved.titlesAnnounced) meta.titlesAnnounced = earnedTitles(meta);
+    // Saves from before NEW tags: what you already have isn't new.
+    if (!saved.seenItems) meta.seenItems = unlockedExtras(meta).map((i) => itemId(i.key, i.value));
+    if (!saved.seenTitles) meta.seenTitles = earnedTitles(meta);
     return meta;
   } catch {
     return fallback;
