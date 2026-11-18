@@ -949,6 +949,9 @@ export class BattleScene extends Phaser.Scene {
           sub: `${moveSummary(d, m.tier)}  ·  ${'✦'.repeat(m.tier)}`,
           fontSize: 17,
           enabled: hasUses(m),
+          // Long names stay on one line (shrinking), clear of the accuracy and uses in the corners.
+          oneLine: true,
+          contentDy: LANDSCAPE ? 6 : 2,
         }),
       );
       // Hit chance in the top-left corner; limited moves show their uses left in the top-right.
