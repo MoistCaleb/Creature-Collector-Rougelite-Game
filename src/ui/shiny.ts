@@ -177,7 +177,10 @@ export function shinyAura(scene: Phaser.Scene, sprite: Phaser.GameObjects.Image)
       tint: RAINBOW,
       blendMode: 'ADD',
     })
-    .setDepth(sprite.depth + 1);
+    .setDepth(sprite.depth);
+  // Just above its Hexling in the draw order, not above everything at a higher depth: a trainer
+  // standing in front of it, and the panels and messages, stay on top.
+  if (!sprite.parentContainer) scene.children.moveAbove(glitter as unknown as Phaser.GameObjects.GameObject, sprite);
   // A gold glow around the sprite where the renderer supports it (WebGL).
   sprite.preFX?.setPadding(6);
   const fx = sprite.preFX?.addGlow(SHINY_GOLD, 2, 0, false, 0.1, 6) ?? null;
