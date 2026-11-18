@@ -1,3 +1,4 @@
+import { holdScroll } from './scroll';
 import type Phaser from 'phaser';
 import { prefs } from './prefs';
 import { button, COLORS, fullRect, H, LANDSCAPE, text, W } from './widgets';
@@ -59,6 +60,7 @@ export function tip(scene: Phaser.Scene, id: TipId, onDone: () => void = () => {
   prefs.tipsSeen = [...prefs.tipsSeen, id];
   const t = TIPS[id];
   const root = scene.add.container(0, 0).setDepth(2000);
+  holdScroll(root);
   root.add(fullRect(scene, 0x000000, 0.55).setInteractive());
   const w = LANDSCAPE ? 460 : W - 40;
   const body = text(scene, W / 2, 0, t.body, 15, COLORS.text, { wordWrap: { width: w - 40 }, lineSpacing: 4, align: 'left' }).setOrigin(0.5, 0);

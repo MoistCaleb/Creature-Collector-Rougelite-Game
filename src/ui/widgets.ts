@@ -222,10 +222,18 @@ export function button(
   if (!enabled) c.setAlpha(0.45);
   else {
     bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerdown', () => bg.setFillStyle(Phaser.Display.Color.ValueToColor(color).lighten(15).color));
+    // A tap counts only when the press started on this button: a drag (scrolling a list) that
+    // happens to end on a button doesn't press it.
+    let pressedAt = -1;
+    bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      pressedAt = p.downTime;
+      bg.setFillStyle(Phaser.Display.Color.ValueToColor(color).lighten(15).color);
+    });
     bg.on('pointerout', () => bg.setFillStyle(color));
-    bg.on('pointerup', () => {
+    bg.on('pointerup', (p: Phaser.Input.Pointer) => {
       bg.setFillStyle(color);
+      if (p.downTime !== pressedAt) return;
+      pressedAt = -1;
       sfx.click();
       onClick();
     });
