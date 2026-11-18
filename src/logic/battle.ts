@@ -51,7 +51,7 @@ export type BattleEvent =
   | { kind: 'text'; text: string }
   /** hp: the newcomer's HP at the moment it enters (later events in the turn may change it). */
   | { kind: 'swap'; side: Side; index: number; hp: number }
-  | { kind: 'attack'; side: Side; move: string; moveId: string }
+  | { kind: 'attack'; side: Side; move: string; moveId: string; /** Team slot of the Hexling using it. */ slot?: number }
   | { kind: 'stat'; side: Side; up: boolean }
   /** `mult` is the type multiplier for attack hits; absent for recoil, poison and field damage. */
   | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number; mult?: number; element?: Element }
@@ -837,7 +837,7 @@ export class Battle {
     const targetSide: Side = side === 'player' ? 'enemy' : 'player';
     const def = moveDef(slot);
     const who = this.nameOf(side, user.c);
-    ev.push({ kind: 'attack', side, move: def.name, moveId: def.id });
+    ev.push({ kind: 'attack', side, move: def.name, moveId: def.id, slot: side === 'player' ? this.pActive : this.eActive });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
 
     const targetSideOf: Side = side === 'player' ? 'enemy' : 'player';

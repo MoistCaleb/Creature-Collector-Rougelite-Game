@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2214,5 +2214,19 @@ describe('heal moves with a boost', () => {
     expect(b.p.defStage).toBe(2);
     expect(b.e.defStage).toBeLessThanOrEqual(0 + (MOVES['Earth:buff'].effects.find((x) => x.stat === 'def')?.stages ?? 0));
     expect(b.p.c.hp).toBeGreaterThan(10);
+  });
+});
+
+describe('foe moves on the stats panel', () => {
+  it('attack events say which team slot used the move', () => {
+    const p = createCreature('emberkit', 20);
+    const e1 = createCreature('pebblin', 20);
+    const e2 = createCreature('pebblin', 20);
+    const b = new Battle([p], [e1, e2], new Rng(4));
+    const ev = b.takeTurn({ kind: 'move', index: 0 });
+    const foe = ev.find((x) => x.kind === 'attack' && x.side === 'enemy') as { slot?: number } | undefined;
+    if (foe) expect(foe.slot).toBe(0);
+    const mine = ev.find((x) => x.kind === 'attack' && x.side === 'player') as { slot?: number };
+    expect(mine.slot).toBe(0);
   });
 });

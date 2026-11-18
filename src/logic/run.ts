@@ -417,6 +417,8 @@ export interface ActiveBattle {
   stage?: number;
   /** Stat stages, who's out, the foe's potions left...: so a reload resumes the fight exactly. */
   state?: import('./battle').BattleState;
+  /** Foe moves you've seen used in this fight ("team slot:moveId"), shown on its stats panel. */
+  seenMoves?: string[];
 }
 
 /** Three starter choices: the favorite (if unlocked) plus random others from the unlocked pool. */

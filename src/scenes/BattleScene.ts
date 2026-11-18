@@ -230,6 +230,8 @@ export class BattleScene extends Phaser.Scene {
 
   create(data: { kind: EncounterKind; match?: BattleMatch }) {
     this.statsOpen = false;
+    // Only this fight counts (kept with a run's saved battle, so a reload remembers them).
+    this.foeSeen = new Set(state.run?.activeBattle?.seenMoves ?? []);
     this.panelPress = null;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
@@ -834,13 +836,15 @@ export class BattleScene extends Phaser.Scene {
 
   /** Open while a Hexling's stats are showing (one at a time). */
   private statsOpen = false;
+  /** Foe moves seen used in this battle, as "team slot:moveId". */
+  private foeSeen = new Set<string>();
   /** Which panel the current press started on. */
   private panelPress: 'player' | 'enemy' | null = null;
 
   /**
    * A Hexling's stats right now: each stat with its change (stages go up to ±MAX_STAGE: ±4, x2 / x0.5) and
    * what it comes to with synergy, a Swift Scarf and paralysis; its condition, held item and moves
-   * (a foe's moves only once you've seen them).
+   * (a foe's moves only once it has used them in this battle).
    */
   private showCombatant(side: 'player' | 'enemy') {
     if (this.statsOpen || !this.battle) return;
@@ -903,18 +907,17 @@ export class BattleScene extends Phaser.Scene {
     r.add(text(this, x0, y, c.held ? `Held: ${HELD[c.held].name} · ${HELD[c.held].desc}` : 'Held: nothing', 13, c.held ? COLORS.text : COLORS.textDim, { wordWrap: { width: w } }));
     y += 24;
 
-    // Moves (a foe's only once seen).
-    const seen = state.meta.dex.moves;
+    // Moves (a foe's only once it has used them in this battle).
     const cols = LANDSCAPE ? 2 : 1;
     const mw = (w - (cols - 1) * 10) / cols;
     c.moves.forEach((m, i) => {
       const d = moveDef(m);
       const mx = x0 + (i % cols) * (mw + 10);
       const my = y + Math.floor(i / cols) * 40;
-      const known = side === 'player' || seen.includes(m.id);
+      const known = side === 'player' || this.foeSeen.has(`${this.battle.enemy.findIndex((x) => x.c === c)}:${m.id}`);
       r.add(this.add.rectangle(mx - 6, my - 3, mw + 12, 36, known ? Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(55).color : COLORS.panelLight, 0.9).setOrigin(0));
       if (!known) {
-        r.add(text(this, mx, my + 8, '??? · not seen yet', 13, '#6d6888'));
+        r.add(text(this, mx, my + 8, '??? · not used yet', 13, '#6d6888'));
         return;
       }
       const left = usesLeft(m);
@@ -1269,6 +1272,11 @@ export class BattleScene extends Phaser.Scene {
         case 'attack': {
           this.order(ev.side);
           dex.move(ev.moveId);
+          if (ev.side === 'enemy' && ev.slot !== undefined && !this.foeSeen.has(`${ev.slot}:${ev.moveId}`)) {
+            this.foeSeen.add(`${ev.slot}:${ev.moveId}`);
+            const ab = state.run?.activeBattle;
+            if (ab) ab.seenMoves = [...this.foeSeen];
+          }
           const def = MOVES[ev.moveId];
           lastEl = def?.element ?? lastEl;
           const s = this.spriteOf(ev.side);
