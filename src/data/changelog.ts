@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.6';
+export const APP_VERSION = '1.7';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.7',
+    title: 'Land moves',
+    items: [
+      'Now and then, a Hexling learns a move from the land you’re on (a Water move in the Water lands...) in place of its usual next move. That usual move isn’t offered.',
+      'Land moves come with your saved loadouts: in the team builder they’re only available through a loadout that has them.',
+      'Guardian reward: Prestige two (choose two Hexlings to gain a star) replaces Team prestige.',
+      'A claimed guardian keeps its prestige stars.',
+    ],
+  },
   {
     version: '1.6',
     title: 'Fewer, stronger conditions',

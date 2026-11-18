@@ -37,6 +37,10 @@ export interface Creature {
   teamOffered?: boolean;
   /** A rare color variant (about 1 wild Hexling in 200). Cosmetic; kept when caught and evolved. */
   shiny?: boolean;
+  /** Moves it learned from the land it was on (instead of a move from its own learnset). */
+  landMoves?: string[];
+  /** Land moves learned since they were last announced. */
+  landNews?: string[];
 }
 
 export type Stats = BaseStats;
@@ -168,6 +172,41 @@ export function teamElement(sp: Species): Element {
   return a === b || hashString(sp.id + ':team') % 2 === 0 ? a : b;
 }
 
+/**
+ * The land your run is on (set with the floor). Now and then, a Hexling learns a move of the land's
+ * element in place of the one its learnset has next; that standard move is then never offered.
+ */
+let land: { el: Element; seed: number } | null = null;
+export function setLand(el: Element | null, seed = 0) {
+  land = el ? { el, seed } : null;
+}
+export const getLand = () => land?.el ?? null;
+
+/** Chance each learnset move (after the starting two, signatures excepted) comes from the land instead. */
+export const LAND_MOVE_CHANCE = 0.12;
+
+/**
+ * The land move this learnset entry becomes for this creature, or null for the usual move. Same kind
+ * of move as the entry (an attack of the same rank, a buff, a special...), of the land's element.
+ * Never for a land that shares an element with it. Seeded, so reloading a save gives the same roll.
+ */
+export function landMoveFor(c: Creature, entry: LearnEntry, index: number): string | null {
+  if (!land || index < 2) return null;
+  const def = MOVES[entry.id];
+  if (def.signature) return null;
+  const el = land.el;
+  if (creatureTypes(c).includes(el)) return null;
+  const roll = hashString(`${land.seed}:${c.uid}:${index}:${el}:land`) % 1000;
+  if (roll >= LAND_MOVE_CHANCE * 1000) return null;
+  let id: string | null;
+  if (def.kind === 'attack' && def.rank >= 0) id = unknownAttack(c, el, def.rank + c.stage);
+  else {
+    const m = /:(buff|debuff|extra|sp\d)$/.exec(entry.id);
+    id = m ? `${el}:${m[1]}` : null;
+  }
+  return id && MOVES[id] && !knows(c, id) && !c.pendingMoves.includes(id) ? id : null;
+}
+
 export function learnMoves(c: Creature, auto = false): string[] {
   const learned: string[] = [];
   const set = learnset(species(c));
@@ -185,12 +224,16 @@ export function learnMoves(c: Creature, auto = false): string[] {
   };
   while (c.learnIndex < set.length && set[c.learnIndex].level <= c.level) {
     if (set[c.learnIndex].level > TEAM_MOVE_LEVEL) offerTeam();
-    const id = resolveLearn(c, set[c.learnIndex].id);
+    // Your Hexlings (not enemies) sometimes pick up a move from the land instead.
+    const fromLand = auto ? null : landMoveFor(c, set[c.learnIndex], c.learnIndex);
+    const id = fromLand ?? resolveLearn(c, set[c.learnIndex].id);
     c.learnIndex++;
     if (!id) continue;
+    if (fromLand) c.landMoves = [...(c.landMoves ?? []), id];
     if (c.moves.length < MAX_MOVES) {
       c.moves.push({ id, tier: 1 });
       learned.push(MOVES[id].name);
+      if (fromLand) c.landNews = [...(c.landNews ?? []), id];
     } else if (auto) {
       const nd = MOVES[id];
       if (nd.kind !== 'attack') continue;

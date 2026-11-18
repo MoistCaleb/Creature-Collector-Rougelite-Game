@@ -219,7 +219,8 @@ function play(opts: { seed: number; starter: string; heat?: number; hunt?: boole
           run.bossPending = false;
           const evo = allCreatures(run).filter(readyToEvolve).sort((a, b) => b.level - a.level)[0];
           if (evo) evolve(evo);
-          else run.team.forEach((c) => canPrestige(c) && prestige(c));
+          // Otherwise the two-Hexling prestige boon, on the two highest-level teammates.
+          else run.team.filter(canPrestige).sort((a, b) => b.level - a.level).slice(0, 2).forEach((c) => prestige(c));
           if (clearFloor(run)) {
             if (!opts.hunt) return done({ won: true, floor: 3 });
             startHunt(run);

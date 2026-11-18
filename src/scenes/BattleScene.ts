@@ -68,6 +68,7 @@ import {
   claimGuardian,
   GUARDIAN_BONUS_LEVELS,
   guardianLevel,
+  guardianStars,
   rollHeld,
   stash,
   potionHeal,
@@ -1738,13 +1739,19 @@ export class BattleScene extends Phaser.Scene {
   private bossReward() {
     const run = state.run!;
     const evolvable = allCreatures(run).filter(readyToEvolve);
+    const starable = allCreatures(run).filter(canPrestige);
     const full = rosterFull(run);
     openPicker(this, {
       title: 'Choose a boon',
       subtitle: 'The guardian\u2019s power is yours to claim.',
       options: [
         { label: 'Full heal', sub: 'Heal your team and bench to full', color: 0x16614f },
-        { label: 'Team prestige', sub: 'Every Hexling on your main team gains ★', color: 0x7a2a5a },
+        {
+          label: 'Prestige two',
+          sub: starable.length ? `Choose ${Math.min(2, starable.length) === 2 ? 'two Hexlings' : 'a Hexling'} to gain ★ (+15% stats, +5 level cap)` : 'Every Hexling is already at 5★',
+          color: 0x7a2a5a,
+          disabled: starable.length === 0,
+        },
         { label: 'Evolve one', sub: evolvable.length ? 'Evolve a Hexling that has reached its evolution level' : 'No Hexling has reached its evolution level (Lv 30 / 65)', color: 0x4a2f7a, disabled: evolvable.length === 0 },
         {
           label: 'Claim a guardian',
@@ -1759,12 +1766,7 @@ export class BattleScene extends Phaser.Scene {
           for (const c of allCreatures(run)) healFraction(c, 1);
           this.finishFloor('Your Hexlings are fully healed.');
         } else if (i === 1) {
-          let notes = '';
-          run.team.forEach((c) => {
-            const lv = c.level;
-            if (canPrestige(c) && prestigeTracked(run, c) && c.level > lv) notes += `\n${creatureName(c)}: stored XP +${c.level - lv} lv`;
-          });
-          this.finishFloor(`Your team glows with prestige!${notes}`);
+          this.prestigeTwo([]);
         } else if (i === 2) {
           openPicker(this, {
             title: 'Evolve which Hexling?',
@@ -1789,13 +1791,13 @@ export class BattleScene extends Phaser.Scene {
           const top = Math.max(...this.enemies.map((e) => e.stage));
           const guardians = this.enemies.filter((e) => e.stage === top);
           const previews = guardians.map((e) => {
-            const p = { ...e, level: guardianLevel(run, e), stars: 0, held: undefined, status: undefined, hp: 1 };
+            const p = { ...e, level: guardianLevel(run, e), stars: guardianStars(e), held: undefined, status: undefined, hp: 1 };
             p.hp = stats(p).hp;
             return p;
           });
           openPicker(this, {
             title: 'Claim a guardian',
-            subtitle: `It joins ${GUARDIAN_BONUS_LEVELS} levels above its own level, in its evolved form, at full health.`,
+            subtitle: `It joins ${GUARDIAN_BONUS_LEVELS} levels above its own level, in its evolved form with its prestige stars, at full health.`,
             options: previews.map((p) => ({ creature: p })),
             onPick: (k) => {
               const claim = (release?: Creature) => {
@@ -1811,6 +1813,39 @@ export class BattleScene extends Phaser.Scene {
           });
         }
       },
+    });
+  }
+
+  /** Boss boon: pick two different Hexlings (team or bench), each gains a star. Back out to choose another boon. */
+  private prestigeTwo(chosen: Creature[]) {
+    const run = state.run!;
+    const all = allCreatures(run);
+    const left = all.filter((c) => canPrestige(c) && !chosen.includes(c));
+    const finish = (picked: Creature[]) => {
+      const lines = picked.map((c) => {
+        const lv = c.level;
+        prestigeTracked(run, c);
+        return `${creatureName(c)} is now ${'★'.repeat(c.stars)}.${releaseNote(c, lv)}`;
+      });
+      this.finishFloor(lines.join('\n'));
+    };
+    if (chosen.length && !left.length) return finish(chosen);
+    openPicker(this, {
+      title: chosen.length ? 'Prestige: second Hexling' : 'Prestige: first Hexling',
+      subtitle: chosen.length
+        ? `${creatureName(chosen[0])} will gain ★. Choose one more Hexling to gain ★.`
+        : 'Choose two Hexlings: each gains ★ (+15% to every stat, +5 level cap).',
+      options: all.map((c) => ({
+        creature: c,
+        disabled: !left.includes(c),
+        note: chosen.includes(c) ? 'Chosen ★' : !canPrestige(c) ? 'Already 5★' : `${'★'.repeat(c.stars) || 'No stars'} → ${'★'.repeat(c.stars + 1)}`,
+      })),
+      onPick: (k) => {
+        const next = [...chosen, all[k]];
+        if (next.length >= 2) finish(next);
+        else this.prestigeTwo(next);
+      },
+      onCancel: () => (chosen.length ? this.prestigeTwo([]) : this.bossReward()),
     });
   }
 

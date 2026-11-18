@@ -254,15 +254,30 @@ export class MapScene extends Phaser.Scene {
   /** Creatures that leveled into a new move with a full move list ask what to forget. */
   private promptPendingMoves() {
     const run = state.run!;
+    // Moves picked up from the land (learned straight into a free slot) get a moment of their own.
+    const landC = allCreatures(run).find((x) => x.landNews?.length);
+    if (landC) {
+      const ids = landC.landNews!;
+      landC.landNews = [];
+      persist();
+      const lines = ids.map((id) => `${MOVES[id].name}: ${MOVES[id].element} · ${moveSummary(MOVES[id], 1)}`).join('\n');
+      return showMessage(
+        this,
+        'Learned from the land!',
+        `${creatureName(landC)} picked up ${ids.length > 1 ? 'moves' : 'a move'} from the ${MOVES[ids[0]].element} lands instead of its usual one.\n\n${lines}`,
+        () => this.promptPendingMoves(),
+      );
+    }
     const c = allCreatures(run).find((x) => x.pendingMoves.length > 0);
     if (!c) return;
     const id = c.pendingMoves[0];
     const nm = MOVES[id];
     const rec = recommendForget(c, id);
     const tag = 'RECOMMENDED';
+    const fromLand = c.landMoves?.includes(id) ? `\nLearned from the ${nm.element} lands, in place of its usual move.` : '';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
-      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}${fromLand}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...c.moves.map((m, i) => {

@@ -61,6 +61,7 @@ export const HOW_TO_PLAY: Page[] = [
       'Evolve: at Lv 30 (and again at 65), use an Evolution Stone to evolve a Hexling into a bigger form.',
       'Prestige ★: a big stat boost and a higher level cap. At a ★ node it costs a bench Hexling that shares an element.',
       'Skills: Skill nodes upgrade a move. Held items give one Hexling a passive bonus.',
+      'Land moves: now and then a Hexling learns a move of the land\u2019s element instead of its usual next move.',
     ],
   },
   {

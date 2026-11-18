@@ -6,7 +6,8 @@ import {
   activeTeamIndex,
   ARENA_LEVEL,
   arenaForms,
-  arenaMovePool,
+  legalArenaMoves,
+  loadoutOnlyMoves,
   defaultArenaMoves,
   savedTeams,
   validArenaTeam,
@@ -134,7 +135,7 @@ export class ArenaEditScene extends Phaser.Scene {
         seen ? sp.names[st] : '???',
         () => {
           if (on || !seen) return;
-          const pool = arenaMovePool(p.speciesId, st);
+          const pool = legalArenaMoves(state.meta, p.speciesId, st);
           const kept = p.moves.filter((id) => pool.includes(id));
           picks[this.slot] = { ...p, stage: st, moves: kept.length ? kept : defaultArenaMoves(p.speciesId, st) };
           this.save(picks);
@@ -164,6 +165,7 @@ export class ArenaEditScene extends Phaser.Scene {
 
     // The four move slots.
     const sel = this.sel;
+    const fromLoadouts = loadoutOnlyMoves(state.meta, p.speciesId, p.stage);
     addTo(text(this, LX + 16, top, `Moves (${p.moves.length}/${MAX_MOVES})`, 15, COLORS.text, { fontStyle: 'bold' }));
     addTo(text(this, LX + LW - 16, top + 2, sel !== null ? 'Tap a move below to swap it in · tap again to remove' : 'Tap a slot to swap or remove it', 11, sel !== null ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
     for (let k = 0; k < MAX_MOVES; k++) {
@@ -186,19 +188,21 @@ export class ArenaEditScene extends Phaser.Scene {
         }
         this.scene.restart({ slot: this.slot, sel: k });
       });
-      if (id) this.moveRow(list, y, id, isSel ? 'TAP AGAIN TO REMOVE' : '');
+      if (id) this.moveRow(list, y, id, isSel ? 'TAP AGAIN TO REMOVE' : fromLoadouts.includes(id) ? 'FROM A LOADOUT' : '');
       else addTo(text(this, LX + 28, y + 11, 'Empty: tap a move below to add it', 13, COLORS.textDim));
     }
 
     // Everything else it can learn.
-    const pool = arenaMovePool(p.speciesId, p.stage).filter((id) => !p.moves.includes(id));
+    // Its learnset, then moves only your saved loadouts have (picked up from the land on a run).
+    const pool = legalArenaMoves(state.meta, p.speciesId, p.stage).filter((id) => !p.moves.includes(id));
     const ly = top + 24 + MAX_MOVES * ROW + 10;
     addTo(text(this, LX + 16, ly, `Can learn (${pool.length})`, 15, COLORS.text, { fontStyle: 'bold' }));
     pool.forEach((id, k) => {
       const y = ly + 24 + k * ROW;
       const bg = addTo(this.add.rectangle(LX + 12, y, LW - 24, ROW - 4, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       tap(bg, () => this.addMove(picks, p, id));
-      this.moveRow(list, y, id, sel !== null ? 'SWAP IN' : p.moves.length < MAX_MOVES ? 'ADD' : 'REPLACE…');
+      const act = sel !== null ? 'SWAP IN' : p.moves.length < MAX_MOVES ? 'ADD' : 'REPLACE…';
+      this.moveRow(list, y, id, fromLoadouts.includes(id) ? `LOADOUT · ${act}` : act);
     });
     if (!pool.length) addTo(text(this, LX + 16, ly + 26, 'It knows everything it can learn.', 13, COLORS.textDim));
 
