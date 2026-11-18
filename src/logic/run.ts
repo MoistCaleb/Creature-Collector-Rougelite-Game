@@ -25,6 +25,7 @@ import {
   releaseBanked,
   restoreUses,
   setFloorCeiling,
+  setLand,
   stageCap,
   stats,
   MAX_MOVES,
@@ -713,6 +714,8 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
 export function applyFloorCap(run: Run) {
   // Shiny Hunting lifts the floor ceiling: your Hexlings can reach their own caps (up to 125).
   setFloorCeiling(run.hunt ? Infinity : (BALANCE.floorLevelCap[run.floor] ?? Infinity));
+  // The land this floor is on: sometimes teaches your Hexlings one of its moves.
+  setLand(run.biomes?.[run.floor] ?? run.map?.biome ?? null, (run.seed ?? 0) + run.floor);
   for (const c of allCreatures(run)) releaseBanked(c);
 }
 
@@ -1249,13 +1252,18 @@ export const GUARDIAN_BONUS_LEVELS = 5;
  */
 export function guardianLevel(run: Run, boss: Creature): number {
   const ceiling = BALANCE.floorLevelCap[run.floor + 1] ?? Infinity;
-  return Math.max(1, Math.min(stageCap({ stage: boss.stage, stars: 0 }), ceiling, boss.level + GUARDIAN_BONUS_LEVELS));
+  return Math.max(1, Math.min(stageCap({ stage: boss.stage, stars: guardianStars(boss) }), ceiling, boss.level + GUARDIAN_BONUS_LEVELS));
 }
 
-/** Boss boon: one of the guardian's creatures joins at its level +5, keeping its evolved form. */
+/** Prestige stars a claimed guardian keeps: the ones it had in battle. */
+export const guardianStars = (boss: Creature) => Math.min(MAX_STARS, boss.stars ?? 0);
+
+/** Boss boon: one of the guardian's creatures joins at its level +5, keeping its evolved form and its stars. */
 export function claimGuardian(run: Run, boss: Creature, release?: Creature): Creature | null {
   if (!canMakeRoom(run, release)) return null;
   const c = createCreature(boss.speciesId, guardianLevel(run, boss), boss.stage);
+  c.stars = guardianStars(boss);
+  c.hp = stats(c).hp;
   // A shiny guardian Hexling (Shiny Hunting) keeps its colours.
   if (boss.shiny) {
     c.shiny = true;

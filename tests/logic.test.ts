@@ -385,14 +385,15 @@ describe('acquiring creatures', () => {
     const next = startRun(meta, 'emberkit', 9);
     expect(next.claimedTypes).toEqual([]); // resets each run
   });
-  it('claimed guardians join at their level +5 in their evolved form', () => {
+  it('claimed guardians join at their level +5 in their evolved form, keeping their stars', () => {
     const run = startRun(mkMeta(), 'emberkit', 6);
     const boss = createCreature('cragice', 27, 1);
     boss.stars = 2;
     const c = claimGuardian(run, boss)!;
     expect(c.level).toBe(32);
     expect(c.stage).toBe(1);
-    expect(c.stars).toBe(0);
+    expect(c.stars).toBe(2);
+    expect(c.hp).toBe(stats(c).hp);
     // Never past its stage cap or the next floor's ceiling.
     const big = createCreature('cragice', 98, 2);
     expect(claimGuardian(run, big)!.level).toBe(Math.min(100, BALANCE.floorLevelCap[1]));
@@ -1902,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2114,5 +2115,75 @@ describe('stat stages', () => {
     expect(STAT_STAGE_CAP).toBe(4);
     expect(stageMult(STAT_STAGE_CAP)).toBe(2);
     expect(stageMult(-STAT_STAGE_CAP)).toBe(0.5);
+  });
+});
+
+import { landMoveFor, LAND_MOVE_CHANCE, setLand } from '../src/logic/creature';
+import { legalArenaMoves, loadoutOnlyMoves, saveLoadout, applyLoadout, arenaMovePool } from '../src/logic/arena';
+
+describe('land moves', () => {
+  it('your Hexlings now and then learn a land move in place of their usual one', () => {
+    setLand('Water', 123);
+    let landed = 0;
+    let checked = 0;
+    for (let i = 0; i < 400; i++) {
+      const c = createCreature('emberkit', 1); // Fire: Water is a foreign land
+      const set = learnset(SPECIES_BY_ID['emberkit']);
+      for (let k = 0; k < set.length; k++) {
+        const id = landMoveFor(c, set[k], k);
+        if (k < 2 || MOVES[set[k].id].signature) expect(id).toBe(null);
+        else {
+          checked++;
+          if (id) {
+            landed++;
+            expect(MOVES[id].element).toBe('Water');
+          }
+        }
+      }
+    }
+    const rate = landed / checked;
+    expect(rate).toBeGreaterThan(LAND_MOVE_CHANCE * 0.6);
+    expect(rate).toBeLessThan(LAND_MOVE_CHANCE * 1.5);
+    // Never on a land of its own element, and never for enemies (auto learning).
+    setLand('Fire', 123);
+    const c = createCreature('emberkit', 1);
+    learnset(SPECIES_BY_ID['emberkit']).forEach((e, k) => expect(landMoveFor(c, e, k)).toBe(null));
+    setLand(null);
+  });
+  it('a land move takes the standard move’s place, and the standard one is never offered', () => {
+    setLand('Water', 7);
+    setFloorCeiling(Infinity);
+    // Find a creature whose Lv 6 move comes from the land.
+    let c = createCreature('emberkit', 1);
+    for (let i = 0; i < 300 && !landMoveFor(c, learnset(SPECIES_BY_ID['emberkit'])[2], 2); i++) c = createCreature('emberkit', 1);
+    const entry = learnset(SPECIES_BY_ID['emberkit'])[2];
+    const land = landMoveFor(c, entry, 2)!;
+    expect(land).toBeTruthy();
+    addLevels(c, 10);
+    const ids = c.moves.map((m) => m.id).concat(c.pendingMoves);
+    expect(ids).toContain(land);
+    expect(ids).not.toContain(entry.id);
+    expect(c.landMoves).toContain(land);
+    setLand(null);
+  });
+  it('the team builder allows land moves only through saved loadouts', () => {
+    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] };
+    meta.dex.caught.push('emberkit');
+    const land = 'Water:buff';
+    expect(arenaMovePool('emberkit', 0)).not.toContain(land);
+    expect(legalArenaMoves(meta, 'emberkit', 0)).not.toContain(land);
+    const pick = { speciesId: 'emberkit', stage: 0, moves: [land, attackId('Fire', 0)] };
+    expect(validTeam(meta, [pick])[0].moves).toEqual([attackId('Fire', 0)]);
+    // Saved from a run where it picked up the move:
+    const c = createCreature('emberkit', 20);
+    c.moves[0] = { id: land, tier: 1 };
+    const l = saveLoadout(meta, c, 'Win');
+    expect(loadoutOnlyMoves(meta, 'emberkit', 0)).toEqual([land]);
+    expect(applyLoadout(meta, l).moves).toContain(land);
+    expect(validTeam(meta, [pick])[0].moves).toEqual([land, attackId('Fire', 0)]);
+    expect(mkArena(validTeam(meta, [pick])[0]).moves.map((m) => m.id)).toContain(land);
+    // Delete the loadout and the move goes with it.
+    meta.loadouts = [];
+    expect(validTeam(meta, [pick])[0].moves).toEqual([attackId('Fire', 0)]);
   });
 });

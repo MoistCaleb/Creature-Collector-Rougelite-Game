@@ -1,4 +1,5 @@
-import { attackId, MOVES, teamMoveId } from '../data/moves';
+import { attackId, elementPool, MOVES, teamMoveId } from '../data/moves';
+import { ELEMENTS } from '../data/types';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { TRAINER_CLASSES, TRAINER_NAMES } from '../data/trainers';
 import { createCreature, learnset, MAX_MOVES, teamElement, type Creature } from './creature';
@@ -66,6 +67,27 @@ export function arenaMovePool(speciesId: string, stage: number): string[] {
   return out;
 }
 
+/** Moves any Hexling could pick up from a land during a run (an element's shared moves, team moves aside). */
+const LAND_LEARNABLE = new Set(ELEMENTS.flatMap((el) => elementPool(el).filter((id) => !MOVES[id].team)));
+export const landLearnable = (id: string) => LAND_LEARNABLE.has(id);
+
+/**
+ * Moves a species can only bring through your saved loadouts: ones it picked up on a run (from the
+ * land) that its own learnset doesn't have. They're never offered otherwise.
+ */
+export function loadoutOnlyMoves(meta: Meta, speciesId: string, stage: number): string[] {
+  const pool = arenaMovePool(speciesId, stage);
+  const out: string[] = [];
+  for (const l of loadoutsFor(meta, speciesId)) for (const id of l.moves) if (landLearnable(id) && !pool.includes(id) && !out.includes(id)) out.push(id);
+  return out;
+}
+
+/** Everything this form can bring in the team builder: its learnset, plus moves from your saved loadouts. */
+export const legalArenaMoves = (meta: Meta, speciesId: string, stage: number): string[] => [
+  ...arenaMovePool(speciesId, stage),
+  ...loadoutOnlyMoves(meta, speciesId, stage),
+];
+
 /** The moves this form would naturally know at Lv 50 (a sensible default pick). */
 export function defaultArenaMoves(speciesId: string, stage: number): string[] {
   const pool = arenaMovePool(speciesId, stage);
@@ -79,7 +101,9 @@ export function makeArenaCreature(p: ArenaPick, opts: { level?: number } = {}): 
   const level = typeof opts === 'object' && opts.level ? opts.level : ARENA_LEVEL;
   const c = createCreature(p.speciesId, level, p.stage);
   const pool = arenaMovePool(p.speciesId, p.stage);
-  const moves = p.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
+  // Picks are checked against your loadouts when built (validArenaTeam); land moves pass here so an
+  // online opponent's loadout moves come through too.
+  const moves = p.moves.filter((id) => pool.includes(id) || landLearnable(id)).slice(0, MAX_MOVES);
   c.moves = (moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage)).map((id) => ({ id, tier: 1 }));
   c.pendingMoves = [];
   c.learnIndex = learnset(SPECIES_BY_ID[p.speciesId]).length;
@@ -93,7 +117,8 @@ export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): Aren
   return (picks ?? [])
     .filter((p) => p && roster.includes(p.speciesId) && arenaForms(meta, p.speciesId).includes(p.stage))
     .map((p) => {
-      const moves = (p.moves ?? []).filter((id) => arenaMovePool(p.speciesId, p.stage).includes(id)).slice(0, MAX_MOVES);
+      const legal = legalArenaMoves(meta, p.speciesId, p.stage);
+      const moves = (p.moves ?? []).filter((id) => legal.includes(id)).slice(0, MAX_MOVES);
       // No legal moves left: fall back to the ones it would naturally know.
       const shiny = p.shiny && ownsShiny(meta, p.speciesId) ? true : undefined;
       return { speciesId: p.speciesId, stage: p.stage, moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage), ...(shiny ? { shiny } : {}) };
@@ -209,7 +234,7 @@ export function loadoutsFor(meta: Meta, speciesId: string): SavedLoadout[] {
 export function applyLoadout(meta: Meta, l: SavedLoadout): ArenaPick {
   const forms = arenaForms(meta, l.speciesId);
   const stage = forms.includes(l.stage) ? l.stage : Math.max(...forms.filter((f) => f <= l.stage), 0);
-  const pool = arenaMovePool(l.speciesId, stage);
+  const pool = legalArenaMoves(meta, l.speciesId, stage);
   const moves = l.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
   const shiny = l.shiny && ownsShiny(meta, l.speciesId);
   return { speciesId: l.speciesId, stage, moves: moves.length ? moves : defaultArenaMoves(l.speciesId, stage), ...(shiny ? { shiny: true } : {}) };
