@@ -835,24 +835,36 @@ export class BattleScene extends Phaser.Scene {
 
   private setStatus(p: SidePanel, id: StatusId | null) {
     p.status.removeAll(true);
-    if (!id) return;
-    const def = STATUS[id];
-    p.status.add(this.add.rectangle(0, 0, 40, 18, def.color).setOrigin(1, 0));
-    p.status.add(text(this, -20, 9, def.tag, 11, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
+    if (id) {
+      const def = STATUS[id];
+      p.status.add(this.add.rectangle(0, 0, 40, 18, def.color).setOrigin(1, 0));
+      p.status.add(text(this, -20, 9, def.tag, 11, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
+    }
+    // A status can arrive (or clear) mid-battle: re-fit the name line around it.
+    this.fitName(p);
+  }
+
+  /**
+   * The name line: long names with many stars shrink so the name, the held item after it and the
+   * status tag in the corner never overlap.
+   */
+  private fitName(p: SidePanel) {
+    p.name.setScale(1);
+    const room = 258 - 12 - (p.status.length ? 46 : 0) - (p.held.visible ? 26 : 0);
+    if (p.name.width > room) p.name.setScale(room / p.name.width);
+    p.held.setX(12 + p.name.displayWidth + 13);
   }
 
   private fillPanel(p: SidePanel, c: Creature, hp = c.hp) {
+    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`);
+    p.held.setVisible(!!c.held);
+    if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon));
+    // Also fits the name line (see fitName).
     this.setStatus(p, c.status?.id ?? null);
-    p.name.setText(`${creatureName(c)} Lv${c.level} ${stars(c.stars)}`).setScale(1);
-    // Long names with 5+ stars shrink to fit, leaving room for the held item and the status tag.
-    const room = 258 - 12 - (c.status ? 46 : 0) - (c.held ? 24 : 0);
-    if (p.name.width > room) p.name.setScale(room / p.name.width);
     // A shiny's panel is gold, with a SHINY tab.
     p.name.setColor(c.shiny ? '#ffd86b' : COLORS.text);
     p.frame.setStrokeStyle(c.shiny ? 3 : 2, c.shiny ? 0xffd86b : COLORS.stroke);
     p.shiny.setVisible(!!c.shiny);
-    p.held.setVisible(!!c.held);
-    if (c.held) p.held.setTexture(ensureIcon(this, HELD[c.held].icon)).setX(12 + p.name.displayWidth + 12);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
