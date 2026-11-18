@@ -1902,7 +1902,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2017,5 +2017,38 @@ describe('NEW tags', () => {
     expect(newItems(meta).map((i) => i.key)).toEqual(['aura']);
     markSeen(meta, 'seenTitles', ['Heatseeker']);
     expect(newTitles(meta)).toEqual([]);
+  });
+});
+
+describe('auto-battle', () => {
+  const mono = (el: string) => SPECIES.find((s) => s.types[0] === el && (s.types[1] === el || !s.types[1]))!.id;
+  it('switches out of a bad matchup to a teammate that does far better', () => {
+    const fire = createCreature(mono('Fire'), 20);
+    const grass = createCreature(mono('Nature'), 20);
+    const water = createCreature(mono('Water'), 20);
+    const b = new Battle([fire, grass], [water], new Rng(1));
+    expect(b.autoPlan(0)).toEqual({ kind: 'swap', index: 1 });
+    // Not straight back again.
+    expect(b.autoPlan(0)).toBeNull();
+  });
+  it('drinks a potion when low, but not when the foe is nearly down or there are none', () => {
+    const a = createCreature(mono('Fire'), 20);
+    const e = createCreature(mono('Fire'), 20);
+    const b = new Battle([a], [e], new Rng(1));
+    a.hp = Math.floor(stats(a).hp * 0.2);
+    expect(b.autoPlan(2)).toEqual({ kind: 'potion' });
+    expect(b.autoPlan(0)).toBeNull();
+    e.hp = Math.floor(stats(e).hp * 0.2);
+    expect(b.autoPlan(2)).toBeNull();
+  });
+  it('sends in the best answer after a faint', () => {
+    const fire = createCreature(mono('Fire'), 20);
+    const grass = createCreature(mono('Nature'), 20);
+    const storm = createCreature(mono('Storm'), 20);
+    const water = createCreature(mono('Water'), 20);
+    const b = new Battle([fire, grass, storm], [water], new Rng(1));
+    fire.hp = 0;
+    expect([1, 2]).toContain(b.bestPlayerAnswer());
+    expect(b.bestPlayerAnswer()).not.toBe(0);
   });
 });

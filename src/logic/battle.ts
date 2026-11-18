@@ -87,6 +87,8 @@ export class Battle {
   tactics: { potions: number; name?: string } | null;
   /** Turn the enemy last switched voluntarily (no two switches in a row). */
   private lastEnemySwitch = -10;
+  /** When auto-battle last switched your Hexling (so it doesn't switch back and forth). */
+  private lastAutoSwitch = -10;
   private turnNo = 0;
   /** Set for duels between two people (see the constructor option). */
   readonly duel: { player: string; enemy: string } | null;
@@ -535,6 +537,66 @@ export class Battle {
       }
     });
     return best;
+  }
+
+  // ------------------------------------------------------------ auto-battle (your side)
+
+  /** How well one of your Hexlings matches up against the foe: its best hit over the foe's best hit on it, by HP. */
+  private autoMatchup(x: Combatant): number {
+    const best = (from: Combatant, to: Combatant) => {
+      let v = 0;
+      for (const m of from.c.moves) {
+        const d = moveDef(m);
+        if (d.kind !== 'attack' || !hasUses(m)) continue;
+        const el = attackElement(d, from, to);
+        v = Math.max(v, attackValue(d, m.tier) * typeMultiplier(el, creatureTypes(to.c)) * stabMultiplier(el, creatureTypes(from.c)));
+      }
+      return v || 1;
+    };
+    const off = best(x, this.e) * stats(x.c).atk;
+    const def = best(this.e, x) * stats(this.e.c).atk;
+    return (off / def) * (0.3 + x.c.hp / stats(x.c).hp);
+  }
+
+  /** Auto-battle: the living Hexling of yours with the best matchup against the foe (-1: none). */
+  bestPlayerAnswer(exclude = -1): number {
+    let best = -1;
+    let score = -Infinity;
+    this.player.forEach((x, i) => {
+      if (i === exclude || !isAlive(x.c)) return;
+      const s = this.autoMatchup(x);
+      if (s > score) {
+        score = s;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  /**
+   * Auto-battle: instead of attacking this turn, switch to a teammate that matches up far better,
+   * or drink a potion when your Hexling is low (or badly statused) and still worth keeping in.
+   * `potions`: how many you carry (0 outside runs). Null = attack.
+   */
+  autoPlan(potions: number): { kind: 'potion' } | { kind: 'swap'; index: number } | null {
+    if (this.spared || !isAlive(this.p.c) || !isAlive(this.e.c)) return null;
+    const p = this.p;
+    const frac = p.c.hp / stats(p.c).hp;
+    const foeFrac = this.e.c.hp / stats(this.e.c).hp;
+    const mine = this.autoMatchup(p);
+    // Switch out of a bad matchup when a healthy teammate does at least twice as well (not twice in a row).
+    if (this.turnNo - this.lastAutoSwitch > 2 && foeFrac > 0.2) {
+      const i = this.bestPlayerAnswer(this.pActive);
+      const alt = i >= 0 ? this.player[i] : null;
+      if (alt && alt.c.hp / stats(alt.c).hp > 0.4 && this.autoMatchup(alt) > mine * 2) {
+        this.lastAutoSwitch = this.turnNo;
+        return { kind: 'swap', index: i };
+      }
+    }
+    // Drink a potion when low or stuck with a bad status, unless the foe is about to go down anyway.
+    const badStatus = p.status === 'sleep' || p.status === 'freeze' || ((p.status === 'burn' || p.status === 'poison') && frac < 0.5);
+    if (potions > 0 && foeFrac > 0.25 && (frac < 0.3 || (badStatus && frac < 0.7))) return { kind: 'potion' };
+    return null;
   }
 
   /** Trainers: drink a potion when in trouble, or switch out of a bad matchup. Null = just attack. */
