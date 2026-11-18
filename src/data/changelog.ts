@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.9';
+export const APP_VERSION = '1.10';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,13 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.10',
+    title: 'Fortress fix',
+    items: [
+      'Heal-and-guard signature moves (Molten Core, Iron Will, Lotus Bloom, Mirror Shell, Frost Bloom, Ash Bloom) now raise your own Defense. They were raising the foe\u2019s by mistake.',
+    ],
+  },
   {
     version: '1.9',
     title: 'Upgrade fix',
