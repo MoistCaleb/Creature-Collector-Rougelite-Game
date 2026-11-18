@@ -2080,3 +2080,28 @@ describe('Prestige Altar options', () => {
     expect(altarUsable(run)).toBe(false);
   });
 });
+
+describe('multi-hit moves and conditions', () => {
+  it('roll their condition on every hit', () => {
+    const id = Object.keys(MOVES).find((k) => MOVES[k].name === 'Static Burst')!;
+    expect(MOVES[id].hits).toBe(3);
+    const bulky = SPECIES.find((s) => !s.types.includes('Storm'))!.id;
+    let para = 0;
+    let n = 0;
+    for (let seed = 1; seed <= 600; seed++) {
+      const user = createCreature(SPECIES[0].id, 5);
+      user.moves = [{ id, tier: 1 }];
+      const target = createCreature(bulky, 60);
+      target.moves = target.moves.filter((m) => MOVES[m.id].kind !== 'attack').slice(0, 1);
+      if (!target.moves.length) target.moves = [{ id, tier: 1 }];
+      const b = new Battle([user], [target], new Rng(seed));
+      b.takeTurn({ kind: 'move', index: 0 });
+      if (target.hp <= 0) continue;
+      n++;
+      if (b.e.status === 'para') para++;
+    }
+    // One roll at 20% would land ~20%; three rolls land 1 - 0.8^3 ≈ 49% (less a few misses).
+    expect(para / n).toBeGreaterThan(0.35);
+    expect(para / n).toBeLessThan(0.6);
+  });
+});

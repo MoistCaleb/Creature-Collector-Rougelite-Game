@@ -886,6 +886,10 @@ export class Battle {
       landed++;
       ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el });
       this.sashNote(target, ev);
+      // Moves named for a condition can inflict it: every hit rolls (a 3-hit move gets three chances).
+      if (def.status && isAlive(target.c) && !target.status && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
+        this.inflict(target, targetSide, def.status.id, ev);
+      }
       if (h === 0) {
         const label = effectivenessLabel(r.mult);
         if (label) ev.push({ kind: 'text', text: label });
@@ -935,12 +939,9 @@ export class Battle {
     if (def.selfAfter && isAlive(user.c)) for (const e of def.selfAfter) this.bump(user, side, e.stat, e.stages, ev);
 
     if (slot.tier >= 3) this.applyTier3(def, user, target, side, total, ev);
-    // A Fire hit thaws a frozen target; moves named for a condition can inflict it.
+    // A Fire hit thaws a frozen target (statuses from the move itself rolled on each hit, above).
     if (landed > 0 && isAlive(target.c)) {
-      if (target.status === 'freeze' && el === 'Fire') this.cure(target, targetSide, ev);
-      if (def.status && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
-        this.inflict(target, targetSide, def.status.id, ev);
-      }
+      if (target.status === 'freeze' && el === 'Fire' && def.status?.id !== 'freeze') this.cure(target, targetSide, ev);
       // Venom coat: the side's hits may poison.
       if (this.hasFx(side, 'venom') && !target.status && this.rng.chance(0.3)) this.inflict(target, targetSide, 'poison', ev);
     }
