@@ -359,6 +359,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(11, 22, 16, 22, STEEL_DARK);
     rect(13, 22, 14, 22, GOLD);
   }
+  if (!back && look.back === 4) {
+    // The greatsword's strap across the chest, from the hilt's shoulder down to the other hip.
+    line(9, 19, 18, 26, 0x6a4a2a);
+    rect(13, 22, 14, 23, GOLD); // buckle
+  }
 
   // ---- head and face
   round(X0, Y0, X1, Y1, skin, 2);
@@ -591,12 +596,14 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           line(23, 11, 26, 8, 0x6a4a2a, 2); // grip
           rect(27, 6, 28, 7, GOLD);
         } else {
-          line(27, 0, 7, 20, 0xe8eef6, 2);
-          line(28, 1, 8, 21, 0x9aa4b8);
-          line(4, 18, 10, 24, GOLD, 1); // crossguard
-          line(5, 18, 11, 24, GOLD, 1);
-          line(6, 22, 3, 25, 0x6a4a2a, 2); // grip
-          rect(1, 26, 2, 27, GOLD);
+          // The same sword seen from the front (the back view mirrored): the hilt over your right
+          // shoulder, the blade behind you, its tip showing past your left hip.
+          line(7, 13, 21, 29, 0xe8eef6, 2);
+          line(6, 15, 20, 31, 0x9aa4b8);
+          line(8, 10, 3, 15, GOLD); // crossguard
+          line(7, 10, 2, 15, GOLD);
+          line(4, 11, 1, 8, 0x6a4a2a, 2); // grip
+          rect(0, 6, 1, 7, GOLD);
         }
         break;
       case 5: { // dragon tail, curling up with a spade tip
