@@ -279,6 +279,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
+    this.trainerInFront();
 
     this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
     this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
@@ -444,6 +445,15 @@ export class BattleScene extends Phaser.Scene {
   /** The opposing trainer's (or guardian's / opponent's) name, to tell which side a message is about. */
   private foeName: string | null = null;
 
+  /**
+   * Your trainer stands in front of your Hexling (lower on the field, nearer you), so draw them over
+   * it, effects and all, but still under the panels and messages that come after.
+   */
+  private trainerInFront() {
+    const holder = this.trainers.player?.img.parentContainer;
+    if (holder && this.playerSprite) this.children.moveAbove(holder as unknown as Phaser.GameObjects.GameObject, this.playerSprite);
+  }
+
   /** The winner celebrates facing forward: arm out, a few hops and a flare of their aura's color. */
   private cheer(side: 'player' | 'enemy') {
     const t = this.trainers[side];
@@ -578,6 +588,7 @@ export class BattleScene extends Phaser.Scene {
     this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
+    this.trainerInFront();
     this.enemyPanel = this.makePanel(L.enemyPanel.x, L.enemyPanel.y);
     this.playerPanel = this.makePanel(L.playerPanel.x, L.playerPanel.y);
     this.pips = onField(text(this, L.titleRight, L.pipsY, '', 16, '#ffc94d').setOrigin(1, 0));
