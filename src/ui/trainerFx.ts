@@ -214,3 +214,28 @@ export function trainerFx(scene: Phaser.Scene, img: Phaser.GameObjects.Image, lo
   img.once('destroy', stop);
   scene.events.once('shutdown', stop);
 }
+
+/** Each aura's color (for the victory flare and the cut-in); 0 (none) is white. */
+export const AURA_COLORS = [0xffffff, 0xf0c838, 0xff7a2a, 0x8ae0ff, 0xfff27a, 0x8a4ad0, 0x7aff5a, 0xc8d4ff, 0xff7ad9, 0xa04ae8];
+
+/** A burst of light in the trainer's aura color: a ring flying out and sparks rising (victory). */
+export function trainerFlare(scene: Phaser.Scene, img: Phaser.GameObjects.Image, look: TrainerLook) {
+  if (calm() || !img.active) return;
+  const m = img.getWorldTransformMatrix();
+  const x = m.tx;
+  const y = m.ty;
+  const s = Math.abs(img.scaleX);
+  const depth = (img.parentContainer?.depth ?? img.depth) + 1;
+  const n = 18;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const c = look.aura === 8 ? hue(i / n) : AURA_COLORS[look.aura] ?? 0xffffff;
+    const p = scene.add.rectangle(x, y, s * 1.4, s * 1.4, c).setDepth(depth);
+    scene.tweens.add({ targets: p, x: x + Math.cos(a) * s * 20, y: y + Math.sin(a) * s * 14, alpha: 0, angle: 180, duration: 650, ease: 'Cubic.easeOut', onComplete: () => p.destroy() });
+  }
+  for (let i = 0; i < 10; i++) {
+    const c = look.aura === 8 ? hue(Math.random()) : AURA_COLORS[look.aura] ?? 0xffffff;
+    const p = scene.add.rectangle(x + rand(-12, 12) * s, y + rand(-4, 14) * s, s, s, c).setDepth(depth);
+    scene.tweens.add({ targets: p, y: p.y - rand(14, 24) * s, alpha: 0, delay: rand(0, 300), duration: 800, ease: 'Sine.easeOut', onComplete: () => p.destroy() });
+  }
+}

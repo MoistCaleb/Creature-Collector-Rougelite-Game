@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { titleBadge } from './titleBadge';
+import { AURA_COLORS } from './trainerFx';
 import { calm } from './motion';
 import { EYE_COLORS, SKIN_TONES, type TrainerLook } from '../data/trainerLook';
 import type { Creature } from '../logic/creature';
@@ -298,6 +299,20 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
     });
     // A brush slash of the floor's color behind the name.
     const slash = scene.add.rectangle(tx, ty, LANDSCAPE ? 210 : 360, LANDSCAPE ? 60 : 64, o.accent, 0.85).setAngle(-5).setScale(0, 1);
+    // A second slash in the trainer's aura color peeks out behind it (rainbow cycles its hue).
+    const auraSlash = o.look.aura
+      ? scene.add.rectangle(tx + 10, ty + 9, LANDSCAPE ? 210 : 360, LANDSCAPE ? 60 : 64, AURA_COLORS[o.look.aura] ?? 0xffffff, 0.9).setAngle(-5).setScale(0, 1)
+      : null;
+    if (auraSlash && o.look.aura === 8 && !calm()) {
+      const tw = scene.tweens.addCounter({
+        from: 0,
+        to: 1,
+        duration: 1800,
+        repeat: -1,
+        onUpdate: (t) => auraSlash.active && auraSlash.setFillStyle((Phaser.Display.Color.HSVToRGB(t.getValue() ?? 0, 0.6, 1) as Phaser.Types.Display.ColorObject).color, 0.9),
+      });
+      auraSlash.once('destroy', () => tw.remove());
+    }
     const name = scene.add.text(tx, ty, o.name.toUpperCase(), style(LANDSCAPE ? 30 : 38)).setOrigin(0.5).setAngle(-5).setAlpha(0).setScale(1.8);
     const sub = scene.add
       .text(tx, ty + (LANDSCAPE ? 34 : 40), o.sub ?? '', style(LANDSCAPE ? 14 : 16, '#3a3530'))
@@ -318,10 +333,11 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
           .setAlpha(0)
       : null;
     appr.setY(badge ? badge.y + badgeSize * 0.7 + 8 : sub.y + sub.height + 6);
+    if (auraSlash) over.add(auraSlash);
     over.add([slash, name, sub, appr]);
     if (badge) over.add(badge);
     const tLand = STRIP_T0 + n * STRIP_GAP + 160;
-    scene.tweens.add({ targets: slash, scaleX: 1, delay: tLand, duration: 160, ease: 'Cubic.easeOut' });
+    scene.tweens.add({ targets: auraSlash ? [slash, auraSlash] : slash, scaleX: 1, delay: tLand, duration: 160, ease: 'Cubic.easeOut' });
     scene.tweens.add({
       targets: name,
       alpha: 1,

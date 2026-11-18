@@ -2,7 +2,8 @@ import type Phaser from 'phaser';
 import { saveMeta, type Meta } from '../logic/run';
 import { earnedTitles, hasTitle, myTitle, TIER_INFO, TIERS, TITLES, type TitleTier } from '../logic/titles';
 import { openPanel } from './panel';
-import { rewardText } from '../logic/cosmetics';
+import { markSeen, newTitles, rewardText } from '../logic/cosmetics';
+import { newTag } from './newTag';
 import { sfx } from './sound';
 import { titleBadge } from './titleBadge';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
@@ -34,6 +35,11 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
 
   const body = scene.add.container(0, 0);
   p.root.add(body);
+  // New titles when the screen opened (tags stay for this visit).
+  const fresh = newTitles(meta);
+  // Open on a tier with something new in it.
+  const firstNew = TITLES.find((t) => fresh.includes(t.name));
+  if (firstNew) shownTier = firstNew.tier;
   const draw = () => {
     body.removeAll(true);
     // Tier tabs, each in its tier's color, with how many you have.
@@ -58,6 +64,7 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
         { fontSize: LANDSCAPE ? 14 : 12, sub: `${have}/${all.length}`, color: on ? 0x3a3360 : 0x24203a, textColor: info.color },
       );
       if (on) b.add(scene.add.rectangle(0, 0, tabW, 40).setStrokeStyle(2, hexNum(info.color)));
+      if (!on && all.some((t) => fresh.includes(t.name))) b.add(scene.add.circle(tabW / 2 - 6, -14, 4, 0xffc94d).setStrokeStyle(1, 0x1a1426));
       body.add(b);
     });
 
@@ -95,6 +102,7 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
         if (r.width > cw - 20) r.setScale((cw - 20) / r.width);
         body.add(r);
       }
+      if (fresh.includes(t.name)) body.add(newTag(scene, cx + cw - 10, cy + 30));
       const right = worn ? 'Wearing' : got ? 'Tap to wear' : `${Math.min(have, need)}/${need}`;
       body.add(text(scene, cx + cw - 10, cy + 15, right, LANDSCAPE ? 11 : 12, worn ? '#8fe08a' : got ? '#ffc94d' : COLORS.textDim, { fontStyle: 'bold' }).setOrigin(1, 0.5));
       if (!got) {
@@ -114,6 +122,9 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
         });
       }
     });
+
+    // Looking at a tier counts as seeing its new titles (their NEW tags stay up until you leave it).
+    if (markSeen(meta, 'seenTitles', list.filter((t) => fresh.includes(t.name)).map((t) => t.name))) saveMeta(meta);
 
     // Take your title off.
     if (cur) {

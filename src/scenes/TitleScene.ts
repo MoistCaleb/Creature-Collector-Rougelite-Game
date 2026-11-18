@@ -8,7 +8,10 @@ import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { trainerFx } from '../ui/trainerFx';
 import { myLook, myName } from '../data/trainerLook';
-import { myTitle } from '../logic/titles';
+import { earnedTitles, myTitle } from '../logic/titles';
+import { newItems, newTitles } from '../logic/cosmetics';
+import { newTag } from '../ui/newTag';
+import { tip } from '../ui/tips';
 import { titleBadge } from '../ui/titleBadge';
 import { playMusic } from '../ui/sound';
 import { openSettings } from '../ui/settings';
@@ -50,6 +53,8 @@ export class TitleScene extends Phaser.Scene {
     if (nm.width > 76) nm.setScale(76 / nm.width);
     const ttl = myTitle(meta);
     tb.add(nm);
+    // Something new to look at in the trainer editor (gear or titles).
+    if (newItems(meta).length || newTitles(meta).length) tb.add(newTag(this, 60, -27, 9));
     if (ttl) tb.add(titleBadge(this, 12, 10, ttl, 10, { maxW: 78 }));
     else {
       const sub = text(this, 12, 10, 'Edit trainer', 10, COLORS.textDim).setOrigin(0.5);
@@ -148,8 +153,8 @@ export class TitleScene extends Phaser.Scene {
     const off = onInstallChange(drawInstall);
     this.events.once('shutdown', off);
 
-    // After an update: what changed (once).
-    maybeShowWhatsNew(this, meta.runs > 0);
+    // After an update: what changed (once). Otherwise, once you have a title: where to find titles.
+    if (!maybeShowWhatsNew(this, meta.runs > 0) && earnedTitles(meta).length) tip(this, 'titles');
 
     // How to play and Records (sideways: under the title, on the left).
     const hx = LANDSCAPE ? lx : cx;

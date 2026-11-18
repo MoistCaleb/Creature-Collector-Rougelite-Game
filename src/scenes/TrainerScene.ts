@@ -14,7 +14,9 @@ import {
 } from '../data/trainerLook';
 import { Rng } from '../logic/rng';
 import { gildedCount, nextMilestone } from '../logic/gilded';
-import { lockOf } from '../logic/cosmetics';
+import { itemId, lockOf, markSeen, newItems, newTitles, unlockedExtras } from '../logic/cosmetics';
+import { newTag } from '../ui/newTag';
+import { shinyBurst } from '../ui/shiny';
 import { earnedTitles, myTitle, TIER_INFO, TITLES } from '../logic/titles';
 import { openTitles } from '../ui/titlesUi';
 import { titleInButton, titleSub } from '../ui/titleBadge';
@@ -40,6 +42,8 @@ const tiles = () =>
 
 /** Which preview pose is showing (kept while you edit). */
 let previewPose: TrainerPose = 'stand';
+/** Set when you put something on: the preview greets it with a burst of sparkles. */
+let tryOn = false;
 
 /** The swatch color for a part, when the part is a color. */
 function swatch(key: keyof TrainerLook, v: number): number | null {
@@ -88,6 +92,10 @@ export class TrainerScene extends Phaser.Scene {
     const pose: TrainerPose = previewPose === 'stand' ? 'stand' : 'backCommand';
     const img = this.add.image(pose === 'backCommand' ? 105 : 96, 164 + py, ensureTrainerTexture(this, look, pose)).setScale(5);
     trainerFx(this, img, look, { back: pose === 'backCommand' });
+    if (tryOn) {
+      tryOn = false;
+      shinyBurst(this, img.x, img.y, 80, 10, 12);
+    }
     this.tweens.add({ targets: img, y: 160 + py, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
     text(this, 96, 266 + py, pose === 'backCommand' ? 'In battle (from behind) · tap' : 'Tap to see it in battle', 10, COLORS.textDim).setOrigin(0.5, 1);
     panel.setInteractive({ useHandCursor: true }).on('pointerup', () => {
@@ -103,12 +111,31 @@ export class TrainerScene extends Phaser.Scene {
       fontSize: 20,
       sub: title ? titleSub(title) : LANDSCAPE ? 'Name and title' : 'Your name and title · tap to change',
       color: 0x2f4a6b,
+      badge: newTitles(meta).length ? 'NEW' : undefined,
     });
     if (title) titleInButton(this, nb, title, 13);
-    button(this, nx, LANDSCAPE ? 364 : 158, nw, 44, 'Shuffle look', () => {
+    // Shuffle: everyday clothes only, or mixing in the gear you've unlocked.
+    const hw = (nw - 6) / 2;
+    button(this, nx - hw / 2 - 3, LANDSCAPE ? 364 : 158, hw, 44, 'Shuffle', () => {
       sfx.coin();
       this.set(randomLook(new Rng((Math.random() * 2 ** 31) | 0)));
-    }, { fontSize: 16 });
+    }, { fontSize: LANDSCAPE ? 14 : 16 });
+    const extras = unlockedExtras(meta);
+    button(this, nx + hw / 2 + 3, LANDSCAPE ? 364 : 158, hw, 44, LANDSCAPE ? '+ gear' : 'Shuffle + gear', () => {
+      const rng = new Rng((Math.random() * 2 ** 31) | 0);
+      const next = randomLook(rng);
+      // Each part with unlocked gear wears some of it about half the time (always one piece at least).
+      const keys = [...new Set(extras.map((e) => e.key))];
+      keys.forEach((k, i) => {
+        if (rng.next() < 0.5 || i === keys.length - 1) {
+          const pool = extras.filter((e) => e.key === k);
+          (next as unknown as Record<string, number>)[k] = pool[rng.int(0, pool.length - 1)].value;
+        }
+      });
+      sfx.coin();
+      tryOn = true;
+      this.set(next);
+    }, { fontSize: LANDSCAPE ? 14 : 15, enabled: extras.length > 0, color: 0x4a3a1c });
     text(
       this,
       LANDSCAPE ? 196 : 180,
@@ -122,6 +149,7 @@ export class TrainerScene extends Phaser.Scene {
     // One tile per part, two columns; tap to choose from a grid of previews.
     const t = tiles();
     const TILE_W = t.w;
+    const fresh = newItems(meta);
     LOOK_PARTS.forEach((part, i) => {
       const x = t.x0 + (i % t.cols) * (TILE_W + 6);
       const y = t.top + Math.floor(i / t.cols) * (TILE_H + TILE_GAP);
@@ -132,6 +160,7 @@ export class TrainerScene extends Phaser.Scene {
       if (sw !== null) this.add.rectangle(x + 10, y + 26, 16, 16, sw).setOrigin(0).setStrokeStyle(2, 0xffffff, 0.5);
       text(this, x + (sw !== null ? 32 : 10), y + 24, part.names[v], 15, COLORS.text, { fontStyle: 'bold' });
       text(this, x + TILE_W - 12, y + TILE_H / 2, '▾', 16, COLORS.textDim).setOrigin(1, 0.5);
+      if (fresh.some((f) => f.key === part.key)) newTag(this, x + TILE_W - 4, y + 4);
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.openPart(part, look));
     });
   }
@@ -152,6 +181,9 @@ export class TrainerScene extends Phaser.Scene {
     // Colors of a hat you aren't wearing would show nothing: preview them on a cap.
     const base: TrainerLook = part.key === 'hatColor' && look.hat === 0 ? { ...look, hat: 1 } : look;
     const close = () => layer.destroy();
+    // Unlocked gear you haven't seen yet gets a NEW tag, once: opening the grid counts as seeing it.
+    const unseen = new Set(newItems(state.meta).filter((i) => i.key === part.key).map((i) => i.value));
+    if (unseen.size && markSeen(state.meta, 'seenItems', [...unseen].map((v) => itemId(part.key, v)))) saveMeta(state.meta);
     part.names.forEach((name, v) => {
       const x = 18 + (v % cols) * cellW;
       const y = top + Math.floor(v / cols) * cellH;
@@ -178,7 +210,8 @@ export class TrainerScene extends Phaser.Scene {
         }).setOrigin(0.5, 0);
         if (need.width > cellW - 8) need.setScale((cellW - 8) / need.width);
         layer.add(need);
-      } else if (v >= (part.free ?? part.names.length)) layer.add(text(this, x + cellW - 8, y + 6, '✦', 13, '#ffd86b').setOrigin(1, 0));
+      } else if (unseen.has(v)) layer.add(newTag(this, x + cellW - 4, y + 4));
+      else if (v >= (part.free ?? part.names.length)) layer.add(text(this, x + cellW - 8, y + 6, '✦', 13, '#ffd86b').setOrigin(1, 0));
       const sw = swatch(part.key, v);
       if (sw !== null) layer.add(this.add.rectangle(x + 8, y + 6, 12, 12, sw).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.6));
       const label = text(this, x + cellW / 2, y + cellH - 18, name, 11, current ? '#ffc94d' : COLORS.text, { fontStyle: current ? 'bold' : 'normal' }).setOrigin(0.5);
@@ -188,6 +221,7 @@ export class TrainerScene extends Phaser.Scene {
         if (current) return close();
         if (lock) return showMessage(this, `✦ ${name}`, lock.long);
         sfx.coin();
+        tryOn = true;
         this.set({ ...look, [part.key]: v });
       });
     });
@@ -204,7 +238,12 @@ export class TrainerScene extends Phaser.Scene {
       subtitle: myTitle(meta) ? titleSub(myTitle(meta)!) : undefined,
       options: [
         { label: 'Change name', glyph: 'book' },
-        { label: 'Titles', glyph: 'crown', sub: `${titles.length}/${TITLES.length} earned · shown to your opponent online` },
+        {
+          label: 'Titles',
+          glyph: 'crown',
+          sub: `${titles.length}/${TITLES.length} earned${newTitles(meta).length ? ` · ${newTitles(meta).length} new!` : ' · shown to your opponent online'}`,
+          badge: newTitles(meta).length ? 'NEW' : undefined,
+        },
         { label: 'Gilded milestones', glyph: 'sparkle', sub: next ? `Next: ${next.count} Gilded species (you have ${gildedCount(meta)})` : 'All reached!' },
       ],
       onPick: (i) => (i === 0 ? this.rename() : i === 1 ? openTitles(this, meta, () => this.scene.restart({ from: this.from })) : openGildedMilestones(this, meta)),
