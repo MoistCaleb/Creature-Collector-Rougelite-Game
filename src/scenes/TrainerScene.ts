@@ -136,15 +136,17 @@ export class TrainerScene extends Phaser.Scene {
       tryOn = true;
       this.set(next);
     }, { fontSize: LANDSCAPE ? 14 : 15, enabled: extras.length > 0, color: 0x4a3a1c });
-    text(
-      this,
-      LANDSCAPE ? 196 : 180,
-      LANDSCAPE ? 352 : 192,
-      'Your trainer stands beside your team in every battle. Online, your opponent sees your trainer and name, and you see theirs.',
-      12,
-      COLORS.textDim,
-      { wordWrap: { width: LANDSCAPE ? W - 212 : 256 }, lineSpacing: 3 },
-    );
+    // Upright only: sideways, the part tiles fill that space.
+    if (!LANDSCAPE)
+      text(
+        this,
+        180,
+        192,
+        'Your trainer stands beside your team in every battle. Online, your opponent sees your trainer and name, and you see theirs.',
+        12,
+        COLORS.textDim,
+        { wordWrap: { width: 256 }, lineSpacing: 3 },
+      );
 
     // One tile per part, two columns; tap to choose from a grid of previews.
     const t = tiles();

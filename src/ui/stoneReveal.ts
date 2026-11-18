@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { HELD, type HeldId } from '../data/held';
 import { ensureIcon, type IconId } from './icons';
 import { sfx } from './sound';
-import { button, COLORS, fullRect, text, W } from './widgets';
+import { button, COLORS, fullRect, H, LANDSCAPE, text, W } from './widgets';
 
 interface RevealOpts {
   /** One icon per thing gained (up to 3 are shown). */
@@ -18,14 +18,18 @@ interface RevealOpts {
 
 /**
  * Full-screen "you got something" moment: the reward pops in with a glow, light rays and sparkles,
- * a chime plays, and a short line says what it's for. Tap Continue to move on.
+ * a chime plays, and a short line says what it's for. Continue (or a tap anywhere, Enter, Space or
+ * Escape, once it has appeared) moves on. Laid out for the board's height, so it fits sideways too
+ * (phones turned over, and Mac and PC windows).
  */
 function rewardReveal(scene: Phaser.Scene, o: RevealOpts, onDone: () => void) {
   const root = scene.add.container(0, 0).setDepth(1100);
   const dim = fullRect(scene, 0x0a0614, 0.86).setInteractive();
   root.add(dim);
   const cx = W / 2;
-  const cy = 300;
+  // Upright: the reward high, words and button below. Sideways (450 tall): everything closer together.
+  const cy = LANDSCAPE ? 130 : 300;
+  const iconScale = LANDSCAPE ? 0.75 : 1;
 
   // Slowly turning light rays behind the reward.
   const rays = scene.add.graphics({ x: cx, y: cy });
@@ -50,7 +54,7 @@ function rewardReveal(scene: Phaser.Scene, o: RevealOpts, onDone: () => void) {
     const x = cx + (i - (shown.length - 1) / 2) * 96;
     const img = scene.add.image(x, cy - 160, ensureIcon(scene, id)).setScale(0).setAngle(-30);
     root.add(img);
-    scene.tweens.add({ targets: img, y: cy, scale: shown.length > 1 ? 6 : 8, angle: 0, duration: 520, delay: 120 + i * 140, ease: 'Back.easeOut' });
+    scene.tweens.add({ targets: img, y: cy, scale: (shown.length > 1 ? 6 : 8) * iconScale, angle: 0, duration: 520, delay: 120 + i * 140, ease: 'Back.easeOut' });
     scene.tweens.add({ targets: img, y: cy - 8, yoyo: true, repeat: -1, duration: 1100, delay: 700 + i * 140, ease: 'Sine.easeInOut' });
   });
 
@@ -66,8 +70,11 @@ function rewardReveal(scene: Phaser.Scene, o: RevealOpts, onDone: () => void) {
     },
   });
 
-  const t = text(scene, cx, 430, o.title, 30, o.titleColor, { fontStyle: 'bold', align: 'center', wordWrap: { width: W - 40 } }).setOrigin(0.5).setAlpha(0);
-  const sub = text(scene, cx, 480, o.sub, 15, COLORS.text, { align: 'center', wordWrap: { width: W - 70 }, lineSpacing: 4 })
+  const textW = LANDSCAPE ? 560 : W - 40;
+  const t = text(scene, cx, LANDSCAPE ? 248 : 430, o.title, LANDSCAPE ? 26 : 30, o.titleColor, { fontStyle: 'bold', align: 'center', wordWrap: { width: textW } })
+    .setOrigin(0.5)
+    .setAlpha(0);
+  const sub = text(scene, cx, LANDSCAPE ? 274 : 480, o.sub, LANDSCAPE ? 14 : 15, COLORS.text, { align: 'center', wordWrap: { width: textW - 30 }, lineSpacing: 4 })
     .setOrigin(0.5, 0)
     .setAlpha(0);
   root.add([t, sub]);
@@ -75,15 +82,31 @@ function rewardReveal(scene: Phaser.Scene, o: RevealOpts, onDone: () => void) {
   scene.time.delayedCall(150, () => sfx.stone());
 
   let closed = false;
-  const btn = button(scene, cx, 680, W - 80, 60, 'Continue', () => {
+  let ready = false;
+  const keys = scene.input.keyboard;
+  const close = () => {
     if (closed) return;
     closed = true;
+    keys?.off('keydown', onKey);
     root.destroy();
     onDone();
-  }, { color: o.buttonColor, fontSize: 20 });
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (ready && (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape')) close();
+  };
+  keys?.on('keydown', onKey);
+  root.once('destroy', () => keys?.off('keydown', onKey));
+  // Always on screen: under the words (they shrink if they'd run into it), never past the bottom edge.
+  const bh = LANDSCAPE ? 50 : 60;
+  const by = Math.min(H - bh / 2 - 10, Math.max(LANDSCAPE ? 400 : 680, sub.y + sub.height + 14 + bh / 2));
+  const room = by - bh / 2 - 12 - sub.y;
+  if (sub.height > room) sub.setScale(room / sub.height);
+  const btn = button(scene, cx, by, LANDSCAPE ? 300 : W - 80, bh, 'Continue', close, { color: o.buttonColor, fontSize: 20 });
   btn.setAlpha(0);
   root.add(btn);
-  scene.tweens.add({ targets: btn, alpha: 1, duration: 300, delay: 700 });
+  scene.tweens.add({ targets: btn, alpha: 1, duration: 300, delay: 700, onComplete: () => (ready = true) });
+  // A tap anywhere also continues, once the button has appeared.
+  dim.on('pointerup', () => ready && close());
   return root;
 }
 
