@@ -454,7 +454,21 @@ export class BattleScene extends Phaser.Scene {
     if (holder && this.playerSprite) this.children.moveAbove(holder as unknown as Phaser.GameObjects.GameObject, this.playerSprite);
   }
 
-  /** The winner celebrates facing forward: arm out, a few hops and a flare of their aura's color. */
+  /**
+   * After a spotlight lifted a Hexling above everything: back under the panels (and, for yours,
+   * behind your trainer standing in front of it).
+   */
+  private restoreOrder(side: 'player' | 'enemy') {
+    const sprite = this.spriteOf(side);
+    const panel = (side === 'player' ? this.playerPanel : this.enemyPanel)?.root;
+    const list = this.children;
+    const below = [this.playerPanel?.root, this.enemyPanel?.root].filter((x): x is Phaser.GameObjects.Container => !!x?.active);
+    const first = below.sort((a, b) => list.getIndex(a) - list.getIndex(b))[0] ?? panel;
+    if (first) list.moveBelow(sprite as unknown as Phaser.GameObjects.GameObject, first);
+    if (side === 'player') this.trainerInFront();
+  }
+
+    /** The winner celebrates facing forward: arm out, a few hops and a flare of their aura's color. */
   private cheer(side: 'player' | 'enemy') {
     const t = this.trainers[side];
     if (!t || !t.img.active) return;
@@ -794,8 +808,8 @@ export class BattleScene extends Phaser.Scene {
       this.revealed.add(c.uid);
       noteShiny(state.meta, c.speciesId);
       if (first) this.msg.setText(`Whoa! It's a GILDED ${creatureName(c)}!`);
-      await shinyReveal(this, sprite, first);
-    } else await shinyReveal(this, sprite, false);
+      await shinyReveal(this, sprite, first, () => this.restoreOrder(side));
+    } else await shinyReveal(this, sprite, false, () => this.restoreOrder(side));
     this.startAura(side);
   }
   private revealed = new Set<number>();
