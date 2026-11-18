@@ -315,29 +315,41 @@ export function creatureRow(
   if (c.shiny) cont.add(iconImage(scene, 56, 12, 'sparkle', 14));
   const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16);
   cont.add(nameText);
-  let tagX = 66 + nameText.width + 8;
+  const cap = levelCap(c);
+  const lvText = text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0);
+  cont.add(lvText);
+  // The held item and status tag follow the name; on a narrow row (sideways lists) where they'd
+  // run into the level, they move to the free space on the bottom line instead.
+  const extras = (c.held ? 24 : 0) + (c.status ? 38 : 0);
+  const fitsTop = 66 + nameText.width + 8 + extras <= w - 8 - lvText.width - 6;
+  let tagX = fitsTop ? 66 + nameText.width + 8 : 66;
+  const tagY = fitsTop ? 8 : 46;
   if (c.held) {
-    cont.add(iconImage(scene, tagX + 4, 16, HELD[c.held].icon, 18));
+    cont.add(iconImage(scene, tagX + 4, tagY + 8, HELD[c.held].icon, 18));
     tagX += 24;
   }
   if (c.status) {
     const def = STATUS[c.status.id];
-    cont.add(scene.add.rectangle(tagX, 8, 34, 15, def.color).setOrigin(0));
-    cont.add(text(scene, tagX + 17, 15.5, def.tag, 10, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
+    cont.add(scene.add.rectangle(tagX, tagY, 34, 15, def.color).setOrigin(0));
+    cont.add(text(scene, tagX + 17, tagY + 7.5, def.tag, 10, '#1a1426', { fontStyle: 'bold' }).setOrigin(0.5));
   }
-  const cap = levelCap(c);
-  cont.add(text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
+  // Very long names still shrink rather than reach the level.
+  const nameRoom = w - 8 - lvText.width - 6 - 66 - (fitsTop ? extras + 8 : 0);
+  if (nameText.width > nameRoom) nameText.setScale(nameRoom / nameText.width);
   const chips = scene.add.container(66, 34);
   const t = creatureTypes(c);
   const unique = t[0] === t[1] ? [t[0]] : t;
   unique.forEach((el, i) => chips.add(typeChip(scene, i * 52, 0, el, true)));
   cont.add(chips);
   const max = stats(c).hp;
-  const bar = new HpBar(scene, w - 128, 38, 118, 8, false);
+  // The bar sits right of the element tags; on a narrow row (sideways lists) it gets shorter
+  // rather than covering them.
+  const barX = Math.max(w - 128, 66 + unique.length * 52 + 4);
+  const bar = new HpBar(scene, barX, 38, Math.max(40, w - 10 - barX), 8, false);
   bar.set(c.hp, max);
   cont.add(bar.objects());
   cont.add(text(scene, w - 8, 46, `${c.hp}/${max}`, 11, COLORS.textDim).setOrigin(1, 0));
-  if (opts.note) cont.add(text(scene, 66, 48, opts.note, 11, '#ffc94d'));
+  if (opts.note) cont.add(text(scene, fitsTop ? 66 : tagX + 6, 48, opts.note, 11, '#ffc94d'));
   if (opts.dim) cont.setAlpha(0.4);
   if (opts.onClick) {
     bg.setInteractive({ useHandCursor: true });
