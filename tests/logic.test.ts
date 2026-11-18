@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2185,5 +2185,18 @@ describe('land moves', () => {
     // Delete the loadout and the move goes with it.
     meta.loadouts = [];
     expect(validTeam(meta, [pick])[0].moves).toEqual([attackId('Fire', 0)]);
+  });
+});
+
+import { effectsAtTier, describeEffects } from '../src/data/moves';
+describe('stat moves never promise past the cap', () => {
+  it('a tier past +4 drops the drawback instead', () => {
+    const skin = Object.values(MOVES).find((m) => m.name === 'Stone Skin')!;
+    expect(describeEffects(skin, 1)).toBe('Self +3 DEF, -1 SPD');
+    expect(describeEffects(skin, 2)).toBe('Self +4 DEF, -1 SPD');
+    expect(describeEffects(skin, 3)).toBe('Self +4 DEF');
+    const roar = Object.values(MOVES).find((m) => m.name === 'Roar of Kings')!;
+    expect(describeEffects(roar, 3)).toBe('Self +4 ATK');
+    for (const m of Object.values(MOVES)) for (const t of [1, 2, 3]) for (const e of effectsAtTier(m, t)) expect(Math.abs(e.stages)).toBeLessThanOrEqual(4);
   });
 });
