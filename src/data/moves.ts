@@ -390,7 +390,8 @@ export function moveSummary(m: MoveDef, tier: number): string {
     const h = `Heal ${Math.round(healAtTier(m, tier) * 100)}%`;
     return m.effects.length ? `${h}, ${fmtFx(effectsAtTier(m, tier))}` : h;
   }
-  const st = m.status ? `${Math.round(m.status.chance * 100)}% ${STATUS[m.status.id].tag}` : '';
+  // Multi-hit moves roll their condition on every hit.
+  const st = m.status ? `${Math.round(m.status.chance * 100)}% ${STATUS[m.status.id].tag}${m.hits ? '/hit' : ''}` : '';
   if (m.kind !== 'attack') return describeEffects(m, tier) + (st ? `, ${st}` : '');
   const pow = Math.round(m.power * TIER_POWER[tier]);
   const parts = [m.hits ? `Pow ${pow}×${m.hits}` : `Pow ${pow}`];
