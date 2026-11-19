@@ -21,10 +21,13 @@ const STEEL = 0x9aa4b8;
 const STEEL_DARK = 0x5a6274;
 const GLOW_CYAN = 0x5af0ff;
 const VOID = 0x1c1030;
+/** Royal mantle and Monarch crown: crimson velvet with ermine trim. */
+const ROYAL = 0x8a1a2a;
+const ERMINE = 0xf4f0e8;
 const FLAME = [0xffe060, 0xff9a2a, 0xff5a1a];
 
 /** The outline color for each aura (0: the usual ink). */
-export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8];
+export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820];
 
 const shade = (c: number, k: number) => {
   const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k)));
@@ -160,7 +163,7 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
   }
 
   // ---- body
-  round(9, 19, 18, 26, top === 9 ? acc : top === 15 ? VOID : top === 16 ? STEEL : topC, 1);
+  round(9, 19, 18, 26, top === 9 ? acc : top === 15 ? VOID : top === 16 ? STEEL : top === 17 ? ROYAL : topC, 1);
   if (top === 0) rect(9, 22, 18, 22, acc); // tee stripe
   if (top === 1 && !back) rect(13, 19, 14, 26, acc); // open jacket
   if (top === 2 && !back) {
@@ -198,6 +201,21 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       rect(12, 21, 15, 21, acc);
       rect(13, 22, 14, 23, GOLD);
     } else for (let y = 19; y <= 25; y += 2) rect(13, y, 14, y, acc); // spine ridge
+  }
+  if (top === 17) {
+    // Royal mantle: crimson velvet to the ankles, a gold clasp, ermine down the front edges.
+    round(8, 19, 19, 31, ROYAL, 1);
+    rect(8, 31, 19, 31, ERMINE);
+    for (const x of [9, 12, 15, 18]) put(x, 31, INK);
+    if (!back) {
+      rect(12, 22, 12, 30, ERMINE);
+      rect(15, 22, 15, 30, ERMINE);
+      for (const y of [24, 27, 30]) {
+        put(12, y, INK);
+        put(15, y, INK);
+      }
+      rect(13, 20, 14, 21, GOLD); // the clasp
+    }
   }
   if (top === 15) {
     // Void cloak: a starry robe down to the ankles with a glowing collar.
@@ -258,11 +276,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       rect(13, 22, 14, 23, 0xd8443a);
     }
   }
-  if (![3, 7, 8, 11, 13, 15, 16].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
+  if (![3, 7, 8, 11, 13, 15, 16, 17].includes(top)) rect(9, 26, 18, 26, top === 1 ? shade(botC, 0.7) : acc); // belt
 
   // ---- arms
   const bare = top === 5;
-  const sleeve = top === 9 ? acc : top === 15 ? VOID : top === 16 ? 0x8a94a8 : topC;
+  const sleeve = top === 9 ? acc : top === 15 ? VOID : top === 16 ? 0x8a94a8 : top === 17 ? ROYAL : topC;
   const sleeveEnd = bare ? 18 : top === 0 || top === 12 ? 20 : 22;
   const armDown = (x: number) => {
     rect(x, 19, x + 1, sleeveEnd, sleeve);
@@ -302,6 +320,21 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       rect(6, 18, 21, 18, 0x8a3ad8);
       rect(5, 32, 22, 32, 0x8a3ad8);
     }
+    if (raised) raisedArm();
+  }
+  if (top === 17) {
+    // Royal mantle: an ermine collar over the shoulders; from behind, a long train to the ground.
+    if (back) {
+      round(7, 18, 20, 30, ROYAL, 1);
+      round(5, 28, 22, 32, ROYAL, 1);
+      for (const x of [10, 14, 17]) rect(x, 22, x, 31, shade(ROYAL, 0.75));
+      rect(5, 32, 22, 32, ERMINE);
+      for (const x of [6, 10, 14, 18, 21]) put(x, 32, INK);
+      round(11, 21, 16, 24, GOLD, 1); // a crest
+      rect(13, 22, 14, 23, ROYAL);
+    }
+    rect(6, 18, raised ? 18 : 21, 19, ERMINE);
+    for (const x of [7, 10, 13, 16, 19]) if (!raised || x < 19) put(x, 19, INK);
     if (raised) raisedArm();
   }
   if (top === 14) {
@@ -606,6 +639,25 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           rect(0, 6, 1, 7, GOLD);
         }
         break;
+      case 9: { // victory banner: a gold swallowtail flag on a pole strapped to the back
+        const POLE = 0x6a4a2a;
+        const RED = 0xd8443a;
+        if (back) {
+          rect(6, 0, 6, 27, POLE);
+          line(7, 19, 19, 25, POLE); // strap
+          rect(0, 1, 5, 5, GOLD);
+          rect(0, 3, 5, 3, RED);
+          put(0, 3, null);
+          put(6, 0, GOLD_LIGHT);
+        } else {
+          rect(21, 0, 21, 22, POLE);
+          rect(22, 1, 27, 5, GOLD);
+          rect(22, 3, 27, 3, RED);
+          put(27, 3, null);
+          put(21, 0, GOLD_LIGHT);
+        }
+        break;
+      }
       case 5: { // dragon tail, curling up with a spade tip
         const path = back
           ? [[14, 27], [15, 28], [17, 28], [19, 28], [21, 27], [23, 26], [24, 25], [25, 24], [26, 22], [26, 21], [27, 20]]
@@ -876,6 +928,23 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         put(X1, 2, 0x9af0ff);
         for (const x of [X0 + 2, 11, 16, X1 - 2]) put(x, 0, 0xffffff);
         rect(13, 0, 14, 0, 0xffffff);
+        break;
+      case 27: // monarch crown: gold band and arches over crimson velvet, a cross on top, jewels
+        round(X0 + 2, 2, X1 - 2, Y0, ROYAL, 1);
+        rect(X0 + 1, Y0, X1 - 1, Y0 + 1, GOLD);
+        rect(X0 + 1, Y0 + 1, X1 - 1, Y0 + 1, shade(GOLD, 0.8));
+        for (const x of [X0 + 1, X1 - 1]) {
+          rect(x, 2, x, Y0, GOLD);
+          put(x, 1, GOLD_LIGHT);
+        }
+        rect(X0 + 3, 1, X1 - 3, 1, GOLD); // the arch
+        rect(13, 1, 14, 3, GOLD);
+        rect(12, 0, 15, 0, GOLD_LIGHT); // the cross
+        if (!back) {
+          put(X0 + 3, Y0, 0xd8443a);
+          rect(13, Y0, 14, Y0, 0x3a6ad8);
+          put(X1 - 3, Y0, 0x5ab84a);
+        }
         break;
       case 17: // propeller cap
         round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);

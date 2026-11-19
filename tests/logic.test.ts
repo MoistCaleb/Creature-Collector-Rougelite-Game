@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2387,5 +2387,24 @@ describe('Bulwark, Time Warp and speed attacks', () => {
     c.pendingMoves = [];
     addLevels(c, 1);
     expect([...c.moves.map((m) => m.id), ...c.pendingMoves]).toContain(WARP_ID);
+  });
+});
+
+import { addRoyaleWin } from '../src/logic/titles';
+describe('battle royale titles', () => {
+  it('4, 6 and 8-player wins earn their titles and gear', () => {
+    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] };
+    expect(addRoyaleWin(meta, 3).map((t) => t.name)).not.toContain('Royale Victor');
+    expect(addRoyaleWin(meta, 5).map((t) => t.name)).toContain('Royale Victor');
+    expect(addRoyaleWin(meta, 6).map((t) => t.name)).toContain('Royale Champion');
+    expect(earnedTitles(meta)).not.toContain('Battle Monarch');
+    expect(addRoyaleWin(meta, 8).map((t) => t.name)).toContain('Battle Monarch');
+    // A smaller win later doesn't take anything away.
+    addRoyaleWin(meta, 3);
+    expect(meta.royaleBest).toBe(8);
+    for (const [name, gear] of [['Royale Victor', 'Back: Victory banner'], ['Royale Champion', 'Aura: Regal'], ['Battle Monarch', 'Hat: Monarch crown']]) {
+      expect(TITLE_REWARDS[name].map((c) => c.name)).toContain(gear);
+    }
+    expect(meta.onlineWins).toBe(5);
   });
 });

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { knockedOut, roundName, type Bracket } from '../logic/bracket';
-import { addOnlineWin } from '../logic/titles';
+import { addRoyaleWin } from '../logic/titles';
 import { saveMeta } from '../logic/run';
 import { titleNews } from '../logic/cosmetics';
 import { lookForName } from '../data/trainerLook';
@@ -70,7 +70,7 @@ export class BracketScene extends Phaser.Scene {
       let news = '';
       if (!royale.winCounted) {
         royale.winCounted = true;
-        news = titleNews(addOnlineWin(state.meta)).replace(/^\n+/, ' ');
+        news = titleNews(addRoyaleWin(state.meta, royale.players.length)).replace(/^\n+/, ' ');
         saveMeta(state.meta);
         sfx.victory();
       }

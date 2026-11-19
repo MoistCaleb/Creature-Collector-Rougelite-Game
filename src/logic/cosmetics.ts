@@ -45,15 +45,18 @@ export const TITLE_REWARDS: Record<string, Cosmetic[]> = {
   Cartographer: [shoes('Rocket boots')],
   'Deep Diver': [aura('Frost')],
   'Weekly Victor': [back('Fairy wings'), aura('Toxic')],
+  'Royale Victor': [back('Victory banner')],
   Rival: [back('Demon wings'), aura('Shadow')],
   // Legendary
   'Inferno Walker': [back('Phoenix wings')],
   'Living Legend': [top('Dragon armor'), hat('Dragon helm')],
   'Hexlidex Master': [hat('Third eye'), aura('Starfall')],
   'Grand Duelist': [back('Mech arms')],
+  'Royale Champion': [aura('Regal')],
   // Mythic
   Unstoppable: [aura('Rainbow'), hat('Astral halo')],
   Hexbound: [top('Void cloak'), aura('Void')],
+  'Battle Monarch': [hat('Monarch crown'), top('Royal mantle')],
 };
 
 /** The title that unlocks this look option, if a title does. */

@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.16';
+export const APP_VERSION = '1.17';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.17',
+    title: 'Royal rewards',
+    items: [
+      'New battle royale titles: Royale Victor (win with 4+ players, Epic), Royale Champion (6+, Legendary) and Battle Monarch (8 players, Mythic).',
+      'They unlock a Victory banner (Back), the Regal aura, and the Monarch crown with a Royal mantle, each with its own sparkle.',
+    ],
+  },
   {
     version: '1.16',
     title: 'Neutral moves and speed attacks',

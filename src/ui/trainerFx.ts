@@ -93,6 +93,11 @@ const AURA_FX: Record<number, [number, Spawn][]> = {
   7: [[260, (fx) => drift(fx, fx.px(rand(0, 31), rand(-2, 10), pick([0xffffff, 0xc8d4ff, 0xfff0a0])), rand(-2, 2), rand(14, 22), 1200)]],
   // Rainbow: sparkles in every color (plus the ring in ORBITS)
   8: [[80, (fx) => drift(fx, fx.px(rand(0, 31), rand(2, 32), fx.tint(hue(Math.random()))), rand(-2, 2), -rand(3, 8), 700)]],
+  // Regal: gold and royal-purple motes rising like a coronation, and the odd gold glint
+  10: [
+    [110, (fx) => drift(fx, fx.px(rand(1, 30), rand(14, 33), pick([0xffd060, 0xfff0a0, 0x9a5ae0])), rand(-1, 1), -rand(10, 16), rand(800, 1100))],
+    [520, (fx) => sparkle(fx, rand(2, 29), rand(0, 20), 0xffd060)],
+  ],
   // Void: light pulled into the trainer
   9: [
     [
@@ -118,6 +123,11 @@ function gearFx(look: TrainerLook, back: boolean): [number, Spawn][] {
   if (look.back === 8) out.push([90, (fx) => drift(fx, fx.px(pick([rand(0, 5), rand(23, 29)]), rand(8, 26), pick(FLAME)), rand(-2, 2), -rand(5, 10), 650)]);
   if (look.back === 1) out.push([700, (fx) => drift(fx, fx.px(pick([rand(0, 5), rand(23, 28)]), rand(14, 26), 0xffffff, 2, 1), rand(-3, 3), rand(6, 10), 1300, { angle: 180 })]);
   if (look.back === 6) out.push([300, (fx) => sparkle(fx, pick([rand(1, 6), rand(22, 27)]), rand(10, 26), pick([0xa8f0ff, 0xf8b8e8]))]);
+  // Victory banner: the flag catches the light.
+  if (look.back === 9) out.push([480, (fx) => sparkle(fx, back ? rand(0, 5) : rand(22, 27), rand(1, 5), 0xfff0a0)]);
+  // Monarch crown jewels; the royal mantle's ermine shimmer.
+  if (look.hat === 27) out.push([700, (fx) => sparkle(fx, pick([9, 13.5, 18]), 5, pick([0xff6a5a, 0x6aa0ff, 0x7aff7a]))]);
+  if (look.top === 17) out.push([900, (fx) => sparkle(fx, rand(7, 20), 18, 0xffffff)]);
   // Rocket boots.
   if (look.shoes === 4) out.push([50, (fx) => drift(fx, fx.px(pick([10, 17]) + rand(-1, 1), 33.5, pick(FLAME)), rand(-1, 1), rand(2, 4), 200)]);
   // Flame crown.
@@ -216,7 +226,7 @@ export function trainerFx(scene: Phaser.Scene, img: Phaser.GameObjects.Image, lo
 }
 
 /** Each aura's color (for the victory flare and the cut-in); 0 (none) is white. */
-export const AURA_COLORS = [0xffffff, 0xf0c838, 0xff7a2a, 0x8ae0ff, 0xfff27a, 0x8a4ad0, 0x7aff5a, 0xc8d4ff, 0xff7ad9, 0xa04ae8];
+export const AURA_COLORS = [0xffffff, 0xf0c838, 0xff7a2a, 0x8ae0ff, 0xfff27a, 0x8a4ad0, 0x7aff5a, 0xc8d4ff, 0xff7ad9, 0xa04ae8, 0xffd060];
 
 /** A burst of light in the trainer's aura color: a ring flying out and sparks rising (victory). */
 export function trainerFlare(scene: Phaser.Scene, img: Phaser.GameObjects.Image, look: TrainerLook) {

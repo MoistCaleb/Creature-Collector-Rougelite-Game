@@ -167,6 +167,8 @@ export interface Meta {
   titlesAnnounced?: string[];
   /** Online duels (series) and stage battles won. */
   onlineWins?: number;
+  /** Most players in a battle royale you won (for the battle royale titles). */
+  royaleBest?: number;
   /** Reward gear (look part:option) and titles already looked at, for the NEW tags. */
   seenItems?: string[];
   seenTitles?: string[];
