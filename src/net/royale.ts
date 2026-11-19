@@ -6,7 +6,7 @@ import { state } from '../state';
 import { SPECIES } from '../data/species';
 import { applySnap, duelBattle, DuelController, type DuelMsg, type Next, type Snap, type RaceInfo, type RaceProgress, type RosterEntry, type Standing, type StartInfo } from './duel';
 import { myPid, session } from './session';
-import { beginDuel, cleanCreatures, cleanRoster, duel, goTo, nameOf, pidOf } from './runtime';
+import { beginDuel, cleanCreatures, cleanLead, cleanNodeId, cleanRoster, duel, goTo, nameOf, pidOf } from './runtime';
 
 /**
  * Battle royale: 3 to 8 players race the same stage, then everyone with a team left meets in a
@@ -148,7 +148,15 @@ export function royaleProgress(p: RaceProgress) {
 function onProgress(pid: string | undefined, p: RaceProgress) {
   const r = pid ? royale.racers.get(pid) : undefined;
   if (!r || r.gone || r.progress?.finished) return;
-  r.progress = { floor: Number(p.floor) || 0, finished: !!p.finished, won: !!p.won, steps: typeof p.steps === 'number' ? p.steps : undefined };
+  r.progress = {
+    floor: Number(p.floor) || 0,
+    finished: !!p.finished,
+    won: !!p.won,
+    steps: typeof p.steps === 'number' ? p.steps : undefined,
+    // Where they are on the map, and who leads their team (for everyone's map).
+    at: cleanNodeId(p.at) ?? r.progress?.at,
+    lead: cleanLead(p.lead) ?? r.progress?.lead,
+  };
   if (p.finished) {
     r.team = pid === myPid ? (p.team ?? []) : cleanCreatures(p.team);
     // Battle royale: the potions you finished the stage with. Tournament: a set supply.
@@ -172,6 +180,8 @@ function shareStandings() {
       finished,
       alive: !r?.gone && (!r?.progress?.finished || !!r?.team?.length),
       ...(r?.gone ? { gone: true } : {}),
+      ...(r?.progress?.at ? { at: r.progress.at } : {}),
+      ...(r?.progress?.lead ? { lead: r.progress.lead } : {}),
     };
   });
   session.send({ t: 'standings', list: royale.standings });
@@ -477,7 +487,11 @@ function onMessage(msg: DuelMsg, from: string) {
         const ids = new Set(royale.players.map((p) => p.pid));
         royale.standings = msg.list
           .filter((x) => x && ids.has(x.pid))
-          .map((x) => ({ pid: x.pid, name: nameIn(x.pid), floor: Number(x.floor) || 0, steps: typeof x.steps === 'number' ? x.steps : undefined, finished: !!x.finished, alive: !!x.alive, ...(x.gone ? { gone: true } : {}) }));
+          .map((x) => {
+            const at = cleanNodeId(x.at);
+            const lead = cleanLead(x.lead);
+            return { pid: x.pid, name: nameIn(x.pid), floor: Number(x.floor) || 0, steps: typeof x.steps === 'number' ? x.steps : undefined, finished: !!x.finished, alive: !!x.alive, ...(x.gone ? { gone: true } : {}), ...(at ? { at } : {}), ...(lead ? { lead } : {}) };
+          });
         changed();
       }
       return;

@@ -18,6 +18,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Play online: the host now chooses the game (Arena duel, Stage battle, Battle royale or Tournament) before getting a code, and the session sticks to it. Everyone who joins sees which game it is and waits for the host to start.',
       'Arena duels and stage battles take 2 players; battle royales and tournaments 3 to 8 (the host’s code stays on screen until you start).',
       'The Battle Arena no longer has its own "Play with a friend" button: use Play online on the title screen.',
+      'Battle royale map: every other racer now shows on your map (grayed out, with their name and lead Hexling), hopping along as they move, so you can see where everyone is. They leave the map when they reach the boss or wipe out.',
     ],
   },
   {
