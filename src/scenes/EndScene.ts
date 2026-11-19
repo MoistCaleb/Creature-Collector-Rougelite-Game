@@ -38,7 +38,7 @@ export class EndScene extends Phaser.Scene {
     if (data.won) sfx.victory();
     else sfx.defeat();
     const run = state.run!;
-    clearSavedRun();
+    clearSavedRun(run);
     // History, streaks and most-used Hexlings: once per run (the screen re-lays out when the phone turns).
     // A Shiny Hunt was already recorded as a won run when it began; just keep the hunt's bests.
     const hunt = run.hunt;

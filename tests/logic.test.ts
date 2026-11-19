@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2267,5 +2267,22 @@ describe('battle royale bracket', () => {
   it('names the rounds', () => {
     const b = makeBracket(ids(8), new Rng(1));
     expect([0, 1, 2].map((r) => roundName(b, r))).toEqual(['Quarterfinal', 'Semifinal', 'Final']);
+  });
+});
+
+describe('online runs never touch your saved run', () => {
+  it('a stage battle run is not saved, and ending it keeps your own run', () => {
+    const meta: Meta = { unlockedStarters: [...DEFAULT_STARTERS], unlockedPassives: ['mentor'], equippedPassive: null, runs: 0, wins: 0, dex: emptyDex(), coinsSpent: 0, bossesDefeated: 0, clearedMaps: [], lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [] };
+    const mine = startRun(meta, 'emberkit', 11);
+    mine.floor = 2;
+    saveRun(mine);
+    const online = startRun(meta, 'emberkit', 12, 'wildlands', undefined, true);
+    online.race = { opponent: 'Tyler', role: 'guest' };
+    saveRun(online);
+    clearSavedRun(online);
+    expect(hasSavedRun()).toBe(true);
+    expect(loadRun(meta)!.floor).toBe(2);
+    clearSavedRun(mine);
+    expect(hasSavedRun()).toBe(false);
   });
 });
