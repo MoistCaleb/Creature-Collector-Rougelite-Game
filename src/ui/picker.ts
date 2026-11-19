@@ -54,13 +54,20 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
 
   const close = () => root.destroy();
 
-  const rowHeight = (r: PickRow) => (big(r) ? 84 : 48);
-  const infoH = (cfg.rows ?? []).reduce((h, r) => h + rowHeight(r), 0) + (cfg.rows?.length ? 10 : 0);
+  // Small info rows shrink (down to 34) when they'd push a short list of choices off the panel.
+  let smallH = 48;
+  const rowHeight = (r: PickRow) => (big(r) ? 84 : smallH);
   const title = text(scene, PW / 2, 0, cfg.title, 22, '#ffc94d', { fontStyle: 'bold', align: 'center', wordWrap: { width: PW - 60 } }).setOrigin(0.5, 0);
   const sub = cfg.subtitle
     ? text(scene, PW / 2, 0, cfg.subtitle, 15, COLORS.text, { align: 'center', wordWrap: { width: PW - 70 }, lineSpacing: 4 }).setOrigin(0.5, 0)
     : null;
   const headerH = 18 + title.height + 12 + (sub ? sub.height + 18 : 0);
+  const rows = cfg.rows ?? [];
+  if (rows.length && !rows.some(big) && cfg.options.length <= cols) {
+    const spare = H - 40 - headerH - (cfg.rowHeight ?? 76) - (cfg.onCancel ? 70 : 10) - 20 - 10;
+    if (rows.length * smallH > spare) smallH = Math.max(34, Math.floor(spare / rows.length));
+  }
+  const infoH = rows.reduce((h, r) => h + rowHeight(r), 0) + (rows.length ? 10 : 0);
 
   // Long lists: shrink rows a little, then split into pages.
   const n = cfg.options.length;
@@ -90,7 +97,8 @@ export function openPicker(scene: Phaser.Scene, cfg: PickConfig): Phaser.GameObj
     const h = rowHeight(r) - 6;
     const b = big(r);
     root.add(scene.add.rectangle(30, y, PW - 60, h, COLORS.panelLight).setOrigin(0));
-    root.add(creatureSprite(scene, b ? 76 : 58, y + h / 2 - (b ? 12 : 7), r.creature, b ? 2.6 : 1.3));
+    const tight = !b && smallH < 48;
+    root.add(creatureSprite(scene, b ? 76 : 58, y + h / 2 - (b ? 12 : tight ? 4 : 7), r.creature, b ? 2.6 : tight ? 0.95 : 1.3));
     root.add(text(scene, b ? 124 : 88, y + h / 2, r.text, b ? 18 : 15, COLORS.text, { wordWrap: { width: PW - (b ? 170 : 130) } }).setOrigin(0, 0.5));
     y += rowHeight(r);
   }

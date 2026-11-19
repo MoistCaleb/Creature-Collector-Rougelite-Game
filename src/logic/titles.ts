@@ -46,6 +46,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Guardian Breaker', tier: 'rare', desc: 'Defeat 25 guardians.', progress: (m) => [m.bossesDefeated, 25] },
   { name: 'Field Researcher', tier: 'rare', desc: 'Catch 50 different species.', progress: (m) => [m.dex.caught.length, 50] },
   { name: 'Arena Ace', tier: 'rare', desc: 'Win all 5 Battle Arena rounds.', progress: (m) => [m.arenaBest ?? 0, 5] },
+  { name: 'Bracket Buster', tier: 'rare', desc: 'Win an Arena tournament.', progress: (m) => [m.tourneyWins ?? 0, 1] },
   { name: 'Duelist', tier: 'rare', desc: 'Win an online duel or stage battle.', progress: (m) => [m.onlineWins ?? 0, 1] },
   { name: 'Gilded Seeker', tier: 'rare', desc: 'Own 5 Gilded species.', progress: (m) => [gilded(m), 5], gilded: true },
   // Epic
@@ -55,6 +56,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Deep Diver', tier: 'epic', desc: 'Reach floor 5 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 5] },
   { name: 'Weekly Victor', tier: 'epic', desc: 'Win 3 weekly challenges.', progress: (m) => [weeklyWins(m), 3] },
   { name: 'Rival', tier: 'epic', desc: 'Win 10 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 10] },
+  { name: 'Grand Champion', tier: 'epic', desc: 'Win 5 Arena tournaments.', progress: (m) => [m.tourneyWins ?? 0, 5] },
   { name: 'Royale Victor', tier: 'epic', desc: 'Win a battle royale with 4 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 4 ? 1 : 0, 1] },
   { name: 'Gilded Collector', tier: 'epic', desc: 'Own 30 Gilded species.', progress: (m) => [gilded(m), 30], gilded: true },
   // Legendary

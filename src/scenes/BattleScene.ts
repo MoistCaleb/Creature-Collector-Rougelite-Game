@@ -123,6 +123,8 @@ export interface BattleMatch {
   seed: number;
   /** Shown top-right, e.g. "ARENA". */
   title: string;
+  /** Shown under the opponent's name in the intro cut-in (instead of "Battle Arena · ..."). */
+  sub?: string;
   /** Opponent's name, shown under the title and in the intro. */
   opponent: string;
   /** Chance the opponent picks a random move (lower = smarter). */
@@ -640,7 +642,7 @@ export class BattleScene extends Phaser.Scene {
       {
         await trainerCutIn(this, {
           name: m.opponent,
-          sub: m.duel ? 'Online duel' : `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
+          sub: m.duel ? 'Online duel' : m.sub ?? `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
           badge: m.duel ? m.opponentTitle : undefined,
           look: m.opponentLook ?? lookForName(m.opponent),
           team: this.enemies,

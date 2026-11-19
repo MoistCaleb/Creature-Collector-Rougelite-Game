@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { knockedOut, roundName, type Bracket } from '../logic/bracket';
+import { knockedOut, roundName } from '../logic/bracket';
+import { drawBracket, drawChampion } from '../ui/bracketView';
 import { addRoyaleWin } from '../logic/titles';
 import { saveMeta } from '../logic/run';
 import { titleNews } from '../logic/cosmetics';
@@ -10,8 +11,6 @@ import { myPid, session } from '../net/session';
 import { state } from '../state';
 import { showMessage } from '../ui/picker';
 import { playMusic, sfx } from '../ui/sound';
-import { trainerFx } from '../ui/trainerFx';
-import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { background, button, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 /**
@@ -46,8 +45,11 @@ export class BracketScene extends Phaser.Scene {
     // Room for the champion: a column on the right (sideways) or a strip under the bracket (upright).
     const bottom = H - (LANDSCAPE ? 56 : 70) - (champ && !LANDSCAPE && b ? 120 : 0);
     const width = champ && LANDSCAPE ? W - 160 : W;
-    if (b) this.drawBracket(b, top, bottom, width);
-    if (champ) this.drawChampion(champ, b ? bottom + 70 : (top + bottom) / 2);
+    if (b) drawBracket(this, b, { top, bottom, width }, { nameOf: (id) => this.nameOf(id), me: myPid });
+    if (champ) {
+      const p = royale.players.find((x) => x.pid === champ);
+      drawChampion(this, p?.name ?? 'Champion', p?.look ?? lookForName(p?.name ?? 'Champion'), b ? bottom + 70 : (top + bottom) / 2);
+    }
 
     const done = !!royale.champion || !!royale.ended || !session.connected;
     button(this, W / 2, H - (LANDSCAPE ? 28 : 36), 260, LANDSCAPE ? 42 : 48, done ? 'Back to the lobby' : 'Leave the battle royale', () => this.leave(done), {
@@ -93,73 +95,6 @@ export class BracketScene extends Phaser.Scene {
       return `You’re through to the ${roundName(b, r)}! Waiting for ${who} to finish.`;
     }
     return 'Waiting…';
-  }
-
-  /** The bracket: a column per round, matches spread evenly, lines to the next round. */
-  private drawBracket(b: Bracket, top: number, bottom: number, width: number) {
-    const R = b.rounds.length;
-    const colW = (width - 24) / R;
-    const boxW = Math.min(colW - 18, 220);
-    const boxH = 40;
-    // Drawn first, so the match boxes sit over the line ends.
-    const lines = this.add.graphics().lineStyle(2, 0x5a5480, 1);
-    const head = 18;
-    const centers: { x: number; y: number }[][] = [];
-    b.rounds.forEach((round, r) => {
-      const cx = 12 + colW * r + colW / 2;
-      text(this, cx, top - head, roundName(b, r), 12, COLORS.textDim, { fontStyle: 'bold' }).setOrigin(0.5, 0);
-      const slot = (bottom - top) / round.length;
-      centers.push(
-        round.map((m, i) => {
-          const cy = top + slot * i + slot / 2;
-          this.drawMatch(cx, cy, boxW, boxH, m.a, m.b, m.winner, !!m.bye, r === 0);
-          return { x: cx, y: cy };
-        }),
-      );
-    });
-    // Connectors from each pair of matches to the one they feed.
-    for (let r = 0; r + 1 < R; r++) {
-      centers[r].forEach((c, i) => {
-        const to = centers[r + 1][Math.floor(i / 2)];
-        const x0 = c.x + boxW / 2;
-        const xm = (x0 + to.x - boxW / 2) / 2;
-        lines.lineBetween(x0, c.y, xm, c.y);
-        lines.lineBetween(xm, c.y, xm, to.y);
-        lines.lineBetween(xm, to.y, to.x - boxW / 2, to.y);
-      });
-    }
-  }
-
-  private drawMatch(cx: number, cy: number, w: number, h: number, a: string | null, b: string | null, winner: string | undefined, bye: boolean, firstRound: boolean) {
-    const mine = a === myPid || b === myPid;
-    const live = !!a && !!b && !winner;
-    this.add.rectangle(cx, cy, w, h, live ? 0x2a2a48 : COLORS.panel).setStrokeStyle(2, mine ? COLORS.accent : live ? 0x8fd0ff : COLORS.stroke);
-    const row = (pid: string | null, dy: number) => {
-      const won = !!winner && pid === winner;
-      const lost = !!winner && !!pid && pid !== winner;
-      const label = pid ? this.nameOf(pid) : bye && firstRound ? 'bye' : '?';
-      const t = text(this, cx - w / 2 + 8, cy + dy, label, 12, won ? '#ffc94d' : pid === myPid ? '#8fe08a' : pid ? COLORS.text : COLORS.textDim, {
-        fontStyle: won ? 'bold' : 'normal',
-      }).setOrigin(0, 0.5);
-      if (lost) t.setAlpha(0.4);
-      if (t.width > w - 26) t.setScale((w - 26) / t.width);
-      if (won) text(this, cx + w / 2 - 6, cy + dy, '✓', 12, '#ffc94d').setOrigin(1, 0.5);
-    };
-    row(a, -h / 4);
-    row(b, h / 4);
-    this.add.rectangle(cx, cy, w - 8, 1, COLORS.stroke);
-  }
-
-  /** The champion's trainer, effects and all, with their name. */
-  private drawChampion(pid: string, y: number) {
-    const p = royale.players.find((x) => x.pid === pid);
-    const look = p?.look ?? lookForName(p?.name ?? 'Champion');
-    const x = LANDSCAPE ? W - 80 : W / 2;
-    const cy = LANDSCAPE ? H / 2 - 10 : y - 30;
-    const img = this.add.image(x, cy, ensureTrainerTexture(this, look, 'command')).setScale(2.4).setDepth(5);
-    trainerFx(this, img, look);
-    text(this, x, cy + 48, `${p?.name ?? 'Champion'} · CHAMPION`, 14, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0).setDepth(5);
-    this.tweens.add({ targets: img, y: cy - 4, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
   }
 
   private leave(done: boolean) {
