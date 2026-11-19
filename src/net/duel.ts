@@ -130,6 +130,9 @@ export interface Standing {
   alive: boolean;
   /** Lost the connection for good. */
   gone?: boolean;
+  /** Map hex they're on, and their lead Hexling (drawn grayed out on everyone's map). */
+  at?: string;
+  lead?: { speciesId: string; stage: number; shiny?: boolean };
 }
 
 export type DuelMsg =

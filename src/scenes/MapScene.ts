@@ -85,10 +85,25 @@ interface Walker {
   at: string;
   /** The other player in a stage race (grayed out). */
   ghost: boolean;
+  /** Rivals: which spot around the hex they stand on (so several don't stack up). */
+  slot?: number;
 }
 
 /** Stage race: the side the rival's Hexling last stood on (kept between map visits). */
 let rivalSide = -1;
+/** Battle royale: the same, for each rival. */
+const royaleSides = new Map<string, number>();
+
+/** Where rivals stand around a hex, by slot: up and to the right first, then around. */
+const RIVAL_SPOTS = [
+  { x: 16, y: -12 },
+  { x: -18, y: -12 },
+  { x: 24, y: 4 },
+  { x: -26, y: 4 },
+  { x: 0, y: -20 },
+  { x: 12, y: 12 },
+  { x: -12, y: 12 },
+];
 
 /** Where your lead Hexling stands relative to your trainer (behind and to the side). */
 const FOLLOW = { x: 22, y: 9 };
@@ -109,6 +124,7 @@ export class MapScene extends Phaser.Scene {
     this.me = null;
     this.wonByDefault = false;
     this.rival = null;
+    this.rivals = new Map();
     this.hopping = false;
     this.underToken = [];
     if (run.activeBattle) {
@@ -323,7 +339,7 @@ export class MapScene extends Phaser.Scene {
     if (run.race) this.drawRaceStatus();
     if (LANDSCAPE) return this.drawSideInfo();
     this.add.rectangle(-OX, -OY, FW, TOP_BAR + OY, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 10, run.race ? 'Stage battle' : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 10, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     // Heat and daily markers after the land name.
     let mx = 14 + biome.width + 12;
@@ -361,7 +377,7 @@ export class MapScene extends Phaser.Scene {
   private drawSideInfo() {
     const run = state.run!;
     this.add.rectangle(-OX, -OY, SIDE_L + OX, FH, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 12, run.race ? 'Stage battle' : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 12, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 40, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     let mx = 14 + biome.width + 12;
     if (run.heat) {
@@ -482,6 +498,8 @@ export class MapScene extends Phaser.Scene {
   private me: Walker | null = null;
   /** Stage race: the other player, grayed out, moving as they move. */
   private rival: Walker | null = null;
+  /** Battle royale: every other racer still on the stage, by player id. */
+  private rivals = new Map<string, Walker>();
   private hopping = false;
   private underToken: Phaser.GameObjects.GameObject[] = [];
 
@@ -496,9 +514,9 @@ export class MapScene extends Phaser.Scene {
    * A trainer token with their lead Hexling following (drawn in front of the trainer). A rival
    * (`ghostName` set) is grayed out, stands a little up and to the side, and has a name tag.
    */
-  private makeWalker(nodeId: string, look: TrainerLook, lead: Lead | null, side: number, ghostName: string | null): Walker {
+  private makeWalker(nodeId: string, look: TrainerLook, lead: Lead | null, side: number, ghostName: string | null, slot = 0): Walker {
     const ghost = ghostName !== null;
-    const at = this.offsetPos(nodeId, ghost);
+    const at = this.offsetPos(nodeId, ghost, slot);
     const c = this.add.container(at.x, at.y);
     const ringColor = ghost ? 0x8fd0ff : 0xffc94d;
     const ring = this.add.ellipse(0, 0, 40, 14, ringColor, ghost ? 0.18 : 0.35).setStrokeStyle(2, ringColor, ghost ? 0.6 : 0.9);
@@ -515,7 +533,7 @@ export class MapScene extends Phaser.Scene {
     trainerFx(this, body, look, { gray: ghost });
     this.tweens.add({ targets: ring, scaleX: 1.25, scaleY: 1.25, alpha: ghost ? 0.1 : 0.4, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: body, y: -3, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
-    const w: Walker = { c, body, f: null, fBody: null, side, at: nodeId, ghost };
+    const w: Walker = { c, body, f: null, fBody: null, side, at: nodeId, ghost, slot };
     if (lead) this.setLead(w, lead);
     return w;
   }
@@ -542,9 +560,10 @@ export class MapScene extends Phaser.Scene {
   }
 
   /** Where a walker stands on a node: a rival stands a little up and to the side. */
-  private offsetPos(id: string, ghost: boolean) {
+  private offsetPos(id: string, ghost: boolean, slot = 0) {
     const p = this.posOf(id);
-    return ghost ? { x: p.x + 16, y: p.y - 12 } : p;
+    const o = RIVAL_SPOTS[slot % RIVAL_SPOTS.length];
+    return ghost ? { x: p.x + o.x, y: p.y + o.y } : p;
   }
 
   /** Hop your token to a node, then `done`. */
@@ -574,7 +593,7 @@ export class MapScene extends Phaser.Scene {
    */
   private hopWalker(w: Walker, id: string, done: () => void = () => {}) {
     const { c, body } = w;
-    const to = this.offsetPos(id, w.ghost);
+    const to = this.offsetPos(id, w.ghost, w.slot);
     const from = { x: c.x, y: c.y };
     w.at = id;
     this.tweens.killTweensOf(body);
@@ -694,6 +713,7 @@ export class MapScene extends Phaser.Scene {
   /** Stage race: show (or move) the other player's grayed-out token where they are. */
   private updateRival() {
     const run = state.run!;
+    if (run.race?.royale) return this.updateRoyaleRivals();
     const them = duel.race?.theirs;
     if (!run.race || !them?.at || !run.map.nodes[them.at] || !this.layer?.active) return;
     const lead = them.lead ?? null;
@@ -709,6 +729,45 @@ export class MapScene extends Phaser.Scene {
       const r = this.rival;
       if (lead && (!r.lead || r.lead.speciesId !== lead.speciesId || r.lead.stage !== lead.stage)) this.setLead(r, lead);
       if (r.at !== them.at) this.hopWalker(r, them.at, () => (rivalSide = r.side));
+    }
+  }
+
+  /**
+   * Battle royale: a grayed-out token for every other racer still on the stage, hopping along as
+   * they move. Racers who finish (or drop out) leave the map.
+   */
+  private updateRoyaleRivals() {
+    const run = state.run!;
+    if (!this.layer?.active) return;
+    const others = royale.standings.filter((x) => x.pid !== myPid);
+    const here = new Set<string>();
+    others.forEach((st) => {
+      const on = !!st.at && !!run.map.nodes[st.at] && !st.finished && !st.gone;
+      if (!on) return;
+      here.add(st.pid);
+      const player = royale.players.find((p) => p.pid === st.pid);
+      const slot = Math.max(0, royale.players.filter((p) => p.pid !== myPid).findIndex((p) => p.pid === st.pid));
+      const lead = st.lead ?? null;
+      let w = this.rivals.get(st.pid);
+      if (!w) {
+        w = this.makeWalker(st.at!, player?.look ?? lookForName(st.name), lead, royaleSides.get(st.pid) ?? -1, st.name, slot);
+        // Behind your own token (their Hexling still in front of them).
+        if (this.me) {
+          this.layer.moveBelow(w.c, this.me.c);
+          if (w.f) this.layer.moveAbove(w.f, w.c);
+        }
+        this.rivals.set(st.pid, w);
+      } else {
+        if (lead && (!w.lead || w.lead.speciesId !== lead.speciesId || w.lead.stage !== lead.stage)) this.setLead(w, lead);
+        const ww = w;
+        if (w.at !== st.at) this.hopWalker(w, st.at!, () => royaleSides.set(st.pid, ww.side));
+      }
+    });
+    // Off the stage now (at the boss, wiped out or gone): take them off the map.
+    for (const [pid, w] of this.rivals) {
+      if (here.has(pid)) continue;
+      this.tweens.add({ targets: [w.c, w.f].filter(Boolean), alpha: 0, duration: 400, onComplete: () => (w.c.destroy(), w.f?.destroy()) });
+      this.rivals.delete(pid);
     }
   }
 
