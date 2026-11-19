@@ -13,6 +13,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.17',
     title: 'Royal rewards',
     items: [
+      'Fixed: pressing one map hex and letting go over another (the map still gliding from a trackpad scroll) no longer moves you to the other hex. Every tap now needs to start and end on the same thing.',
       'New battle royale titles: Royale Victor (win with 4+ players, Epic), Royale Champion (6+, Legendary) and Battle Monarch (8 players, Mythic).',
       'They unlock a Victory banner (Back), the Regal aura, and the Monarch crown with a Royal mantle, each with its own sparkle.',
       'Royal mantle: a cleaner look, a crimson robe open over a gold-trimmed tunic with a gold chain and hem.',
