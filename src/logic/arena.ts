@@ -15,6 +15,8 @@ import type { Meta } from './run';
 export const ARENA_LEVEL = 50;
 export const ARENA_ROUNDS = 5;
 export const ARENA_TEAM = 4;
+/** Potions you get for a whole ladder or tournament (each heals 50%). */
+export const ARENA_POTIONS = 5;
 
 export interface ArenaPick {
   speciesId: string;

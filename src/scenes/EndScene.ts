@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { takeNewMilestones } from '../logic/gilded';
 import { addOnlineWin, addRoyaleWin, takeNewTitles} from '../logic/titles';
 import { titleNews, unlocksOf } from '../logic/cosmetics';
-import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
+import { potionHeal, recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
 import { persist, state } from '../state';
@@ -274,7 +274,7 @@ export class EndScene extends Phaser.Scene {
   /** Battle royale: hand in the finished team, wait for everyone, then on to the bracket. */
   private royaleFinish(run: NonNullable<typeof state.run>, won: boolean) {
     const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
-    sendProgress({ floor: run.floor, finished: true, won, team });
+    sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run) });
     const bx = LANDSCAPE ? 32 + (W - 48) / 2 : 16;
     const bw = LANDSCAPE ? (W - 48) / 2 : W - 32;
     const by = LANDSCAPE ? 300 : 640;
@@ -338,7 +338,7 @@ export class EndScene extends Phaser.Scene {
   /** Stage race: hand in the finished team and wait for the other racer; the final duel starts itself. */
   private raceFinish(run: NonNullable<typeof state.run>, won: boolean) {
     const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
-    sendProgress({ floor: run.floor, finished: true, won, team });
+    sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run) });
     const opp = run.race!.opponent;
     // Upright: under the summary. Sideways: at the bottom of the right column.
     const bx = LANDSCAPE ? 32 + (W - 48) / 2 : 16;

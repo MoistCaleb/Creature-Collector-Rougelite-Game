@@ -6,7 +6,7 @@ import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { trainerFx } from '../ui/trainerFx';
 import { SPECIES_BY_ID } from '../data/species';
 import { activeTeamIndex, savedTeams, validArenaTeam } from '../logic/arena';
-import { SETTING_CHOICES, type DuelSettings } from '../net/duel';
+import { GAME_MODES, SETTING_CHOICES, type DuelSettings, type GameMode } from '../net/duel';
 import { duel, hostSetSettings, hostStartRace, hostStartSeries, leaveDuel, sendHello, submitPick } from '../net/runtime';
 import { MAPS, mapUnlocked } from '../data/maps';
 import { CODE_LENGTH, myPid, session } from '../net/session';
@@ -78,15 +78,22 @@ export class DuelScene extends Phaser.Scene {
 
     button(this, 40, 28, 64, 36, '', () => this.leave(), { fontSize: 15, glyph: 'back' });
     const { lx, lw } = cols();
-    text(this, lx + 20, 18, 'Play with a friend', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, lx + 20, 18, 'Play online', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     // The host's code stays up so more players can join (up to 8, for a battle royale).
-    const codeLine = session.role === 'host' && session.connected && session.code ? `Code ${session.code} · up to 8 players can join` : 'Live battles, phone to phone';
+    const mode = GAME_MODES[duel.mode];
+    const codeLine =
+      session.role === 'host' && session.connected && session.code
+        ? `Code ${session.code} · ${mode.name}${mode.max > 2 ? ` · up to ${mode.max} players` : ''}`
+        : session.connected
+          ? mode.name
+          : 'Live battles, phone to phone';
     text(this, lx + 20, 54, codeLine, 13, session.role === 'host' && session.connected ? '#ffc94d' : COLORS.textDim).setOrigin(0.5, 0);
     if (this.picking && duel.series) return this.drawPick();
 
     // Your name and team.
     button(this, lx, 104, lw, 44, `Your trainer: ${duel.me.name}`, () => this.scene.start('Trainer', { from: 'Duel' }), { fontSize: 15, sub: 'Tap to change your name and look' });
-    if (session.connected && duel.roster.length > 2 && !this.busyText && this.typed === null) return this.drawRoyaleLobby();
+    const group = duel.mode === 'royale' || duel.mode === 'tourney';
+    if (session.connected && group && !this.busyText && this.typed === null && (session.role === 'host' || duel.roster.length)) return this.drawRoyaleLobby();
     if (session.connected && duel.opponent && !this.busyText && this.typed === null) return this.drawConnected();
     text(this, 20, 136, 'Your team (active team from the Battle Arena):', 13, COLORS.textDim);
     this.drawTeam(160, team.map((p) => [p.speciesId, p.stage] as [string, number]));
@@ -104,18 +111,21 @@ export class DuelScene extends Phaser.Scene {
     if (this.busyText) {
       text(this, rx, y + 20, this.busyText, 16, '#ffc94d', { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
     } else if (session.role === 'host') {
-      text(this, rx, y, 'Your duel code', 16, COLORS.textDim).setOrigin(0.5, 0);
-      text(this, rx, y + 28, session.code.split('').join(' '), 54, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
-      const wait = text(this, rx, y + 110, 'Waiting for your friend to join…', 16, COLORS.text).setOrigin(0.5, 0);
+      const hy = y + (LANDSCAPE ? 6 : 0);
+      text(this, rx, hy - 22 + (LANDSCAPE ? 22 : 0), GAME_MODES[duel.mode].name, 15, '#8fe08a', { fontStyle: 'bold' }).setOrigin(0.5, LANDSCAPE ? 1 : 0);
+      text(this, rx, hy, 'Your code', 16, COLORS.textDim).setOrigin(0.5, 0);
+      text(this, rx, hy + 28, session.code.split('').join(' '), 54, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+      const group = GAME_MODES[duel.mode].max > 2;
+      const wait = text(this, rx, hy + 110, group ? 'Waiting for players to join…' : 'Waiting for your friend to join…', 16, COLORS.text).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
-      text(this, rx, y + 144, 'On their phone or computer: Battle Arena → Duel a friend → Join, then enter this code.\nKeep the game open on both.', 13, COLORS.textDim, {
+      text(this, rx, y + 144, 'On their phone or computer: Play online → Join with a code, then enter this code.\nKeep the game open on both.', 13, COLORS.textDim, {
         align: 'center',
         wordWrap: { width: rw },
       }).setOrigin(0.5, 0);
       button(this, rx, y + 250, 200, 44, 'Cancel', () => this.leave(true), { fontSize: 15 });
     } else {
       if (s === 'error' && session.error) text(this, rx, y - 6, session.error, 13, '#ff8a7a', { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 1);
-      button(this, rx, y + 40, rw, LANDSCAPE ? 64 : 70, 'Host a game', () => this.host(), { color: 0x3b6d4a, fontSize: 20, sub: 'Get a code to share with a friend' });
+      button(this, rx, y + 40, rw, LANDSCAPE ? 64 : 70, 'Host a game', () => this.pickMode(), { color: 0x3b6d4a, fontSize: 20, sub: 'Choose what to play, then get a code to share' });
       button(this, rx, LANDSCAPE ? y + 112 : y + 126, rw, LANDSCAPE ? 64 : 70, 'Join with a code', () => this.scene.restart({ typed: '' }), { color: 0x2f4a6b, fontSize: 20, sub: 'Enter the code from your friend’s screen' });
       text(this, rx, LANDSCAPE ? y + 152 : y + 190, 'Works best on the same Wi-Fi. On mobile data some networks may not connect.', 12, COLORS.textDim, {
         align: 'center',
@@ -126,14 +136,18 @@ export class DuelScene extends Phaser.Scene {
       const px = rx - rw / 2 - 14;
       const panel = this.add.rectangle(px, py, rw + 28, 200, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
       text(this, px + 14, py + 12, 'Ways to play together', 15, '#ffc94d', { fontStyle: 'bold' });
-      text(this, px + 14, py + 40, 'Arena duel', 14, COLORS.text, { fontStyle: 'bold' });
-      text(this, px + 14, py + 60, 'Your saved Lv 50 teams battle live. Best of 1, 3 or 5.', 12, COLORS.textDim, { wordWrap: { width: rw } });
-      text(this, px + 14, py + 94, 'Stage battle', 14, COLORS.text, { fontStyle: 'bold' });
-      const stage = text(this, px + 14, py + 114, 'Both of you play the same stage with double rewards. The boss at the end is the other player: whoever\u2019s run team wins takes it.', 12, COLORS.textDim, { wordWrap: { width: rw } });
-      const ry = stage.y + stage.height + 12;
-      text(this, px + 14, ry, 'Battle royale & tournament (3 to 8 players)', 14, COLORS.text, { fontStyle: 'bold' });
-      const roy = text(this, px + 14, ry + 20, 'Everyone races the same stage; the survivors meet in a bracket. Or a Tournament: Lv 50 Arena teams straight into the bracket.', 12, COLORS.textDim, { wordWrap: { width: rw } });
-      panel.setSize(rw + 28, roy.y + roy.height + 12 - py);
+      let my = py + 40;
+      for (const m of Object.values(GAME_MODES)) {
+        text(this, px + 14, my, `${m.name} (${m.min === m.max ? `${m.min} players` : `${m.min} to ${m.max} players`})`, 14, COLORS.text, { fontStyle: 'bold' });
+        // Sideways there's only room for the names (the details are in the Host a game list).
+        if (LANDSCAPE) {
+          my += 24;
+          continue;
+        }
+        const d = text(this, px + 14, my + 19, m.desc, 12, COLORS.textDim, { wordWrap: { width: rw } });
+        my = d.y + d.height + 10;
+      }
+      panel.setSize(rw + 28, my + 2 - py);
     }
   }
 
@@ -159,6 +173,8 @@ export class DuelScene extends Phaser.Scene {
     const them = this.add.image(lx + lw / 2 - 22, 152, ensureTrainerTexture(this, look, 'stand')).setScale(1.25);
     trainerFx(this, them, look);
     this.tweens.add({ targets: them, y: 149, yoyo: true, repeat: -1, duration: 800, ease: 'Sine.easeInOut' });
+
+    if (duel.mode === 'stage') return this.drawStageLobby(opp.name);
 
     // Session settings: tap to cycle (host only).
     text(this, 20, opp.title ? 167 : 160, host ? 'Session settings · tap to change' : `Session settings · set by ${opp.name}`, 13, COLORS.textDim);
@@ -227,19 +243,35 @@ export class DuelScene extends Phaser.Scene {
         enabled: ready,
         sub: ready ? `Lv ${s.level} · ${s.teamSize} per side` : `Waiting for both players to bring ${s.teamsPerPlayer} team${s.teamsPerPlayer > 1 ? 's' : ''} with Hexlings`,
       });
-      button(this, rx, by + 66, rw, 58, 'Stage battle', () => this.pickRaceMap(), {
-        color: 0x2f4a6b,
-        fontSize: 20,
-        sub: 'Both play one stage · double rewards · you are each other\u2019s boss',
-      });
+      text(this, rx, by + 36, 'Each player gets 3 potions per battle.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
     } else {
-      const wait = text(this, rx, by - 10, `Waiting for ${opp.name} to start an Arena duel or a Stage battle…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+      const wait = text(this, rx, by - 10, `Waiting for ${opp.name} to start the Arena duel…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
     button(this, rx, by + 132, 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
   }
 
-  /** Three or more players: everyone who's here, and (host) start a battle royale. */
+  /** Stage battle lobby: who you're playing, and (host) pick the map to start. */
+  private drawStageLobby(opp: string) {
+    const host = session.role === 'host';
+    const { rx, rw } = cols();
+    const by = LANDSCAPE ? 200 : 300;
+    text(this, rx, by - 110, GAME_MODES.stage.desc, 13, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+    if (host) {
+      button(this, rx, by, rw, 64, 'Start the stage battle', () => this.pickRaceMap(), {
+        color: 0x8a2c2c,
+        fontSize: 20,
+        glyph: 'swords',
+        sub: 'Choose the map · double rewards',
+      });
+    } else {
+      const wait = text(this, rx, by - 16, `Waiting for ${opp} to choose the map and start…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+      this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
+    }
+    button(this, rx, by + 90, 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+  }
+
+  /** Battle royale and tournament lobby: everyone who's here, and (host) start once there are enough. */
   private drawRoyaleLobby() {
     const host = session.role === 'host';
     const players = duel.roster;
@@ -256,34 +288,39 @@ export class DuelScene extends Phaser.Scene {
       text(this, x0 + 46, y + (p.title ? 2 : (rowH - 4) / 2 - 9), `${p.name}${p.host ? '  (host)' : ''}${p.pid === myPid ? '  · you' : ''}`, 14, COLORS.text, { fontStyle: 'bold' });
       if (p.title) titleBadge(this, x0 + 46, y + rowH - 14, p.title, 11, { maxW: lw - 60, originX: 0 });
     });
-    const by = LANDSCAPE ? 150 : 170 + players.length * rowH + 30;
+    const mode = GAME_MODES[duel.mode];
+    const tourney = duel.mode === 'tourney';
+    const enough = players.length >= mode.min;
+    // Upright: the list, your code (host), then the button. Sideways: code and button in the right column.
+    const listEnd = 170 + players.length * rowH;
+    const showCode = host && !!session.code;
+    const by = LANDSCAPE ? 150 : listEnd + (showCode ? 110 : 40);
     if (host) {
-      const hw = (rw - 10) / 2;
-      button(this, rx - hw / 2 - 5, by, hw, 64, 'Battle royale', () => this.pickRoyaleMap(), {
-        color: 0x8a2c2c,
-        fontSize: 18,
+      // Your code, big, so more players can join.
+      if (showCode) {
+        text(this, rx, LANDSCAPE ? 36 : listEnd + 8, 'Your code', 13, COLORS.textDim).setOrigin(0.5, 0);
+        text(this, rx, LANDSCAPE ? 54 : listEnd + 26, session.code.split('').join(' '), 34, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+      }
+      button(this, rx, by, rw, 64, tourney ? 'Start the tournament' : 'Start the battle royale', () => (tourney ? this.confirmTourney() : this.pickRoyaleMap()), {
+        color: tourney ? 0x6b4a1f : 0x8a2c2c,
+        fontSize: 20,
         glyph: 'swords',
-        sub: 'Race a stage · then a bracket',
+        enabled: enough,
+        sub: enough ? `${players.length} players` : `Needs at least ${mode.min} players (${players.length} here)`,
       });
-      button(this, rx + hw / 2 + 5, by, hw, 64, 'Tournament', () => this.confirmTourney(), {
-        color: 0x6b4a1f,
-        fontSize: 18,
-        sub: 'Lv 50 Arena teams · bracket',
-      });
-      text(this, rx, by + 42, 'Arena duels and two-player stage battles need exactly two players.', 11, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
     } else {
-      const wait = text(this, rx, by - 16, `Waiting for ${players.find((p) => p.host)?.name ?? 'the host'} to start a battle royale or tournament…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+      const wait = text(this, rx, by - 16, `Waiting for ${players.find((p) => p.host)?.name ?? 'the host'} to start the ${tourney ? 'tournament' : 'battle royale'}…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
-    text(this, rx, by + (LANDSCAPE ? 84 : 90), 'Battle royale: everyone plays the same stage, and whoever still has a team at the boss goes into a bracket. Tournament: everyone’s active Lv 50 Arena team goes straight into the bracket.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
-    button(this, rx, by + (LANDSCAPE ? 170 : 170), 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+    text(this, rx, by + 42, mode.desc, 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+    button(this, rx, by + (LANDSCAPE ? 130 : 116), 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
   }
 
-  /** Host: start an online tournament with everyone's active Arena team. */
+  /** Host: start the online tournament with everyone's active Arena team. */
   private confirmTourney() {
     openPicker(this, {
       title: 'Online tournament',
-      subtitle: `All ${duel.roster.length} of you go straight into a knockout bracket with your active Lv 50 Arena team (the one picked in the Battle Arena). Everyone is fully healed before each match.`,
+      subtitle: `All ${duel.roster.length} of you go straight into a knockout bracket with your active Lv 50 Arena team (the one picked in the Battle Arena). Everyone is fully healed before each match, with 5 potions for the whole tournament.`,
       options: [{ label: 'Start the tournament', color: 0x6b4a1f }],
       onPick: () => hostStartTourney(),
       onCancel: () => {},
@@ -374,7 +411,20 @@ export class DuelScene extends Phaser.Scene {
     button(this, LANDSCAPE ? cols().lx : W / 2, LANDSCAPE ? 260 : 700, 200, 44, 'Back', () => this.scene.restart({ typed: null }), { fontSize: 15 });
   }
 
-  private async host() {
+  /** Host: choose what to play first; the code is for that mode only. */
+  private pickMode() {
+    const modes = Object.entries(GAME_MODES) as [GameMode, (typeof GAME_MODES)[GameMode]][];
+    openPicker(this, {
+      title: 'What do you want to play?',
+      subtitle: 'Everyone who joins your code plays this.',
+      options: modes.map(([, m]) => ({ label: `${m.name} · ${m.min === m.max ? `${m.min} players` : `${m.min}-${m.max} players`}`, sub: m.desc })),
+      onPick: (i) => void this.host(modes[i][0]),
+      onCancel: () => {},
+    });
+  }
+
+  private async host(mode: GameMode) {
+    duel.mode = mode;
     this.scene.restart({ busy: 'Getting a code…' });
     await session.host();
   }

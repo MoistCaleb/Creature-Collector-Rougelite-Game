@@ -137,6 +137,8 @@ export interface BattleMatch {
   initialNext?: Next;
   /** Computer opponents that switch and use potions (see Battle's enemyTactics). */
   tactics?: { potions: number };
+  /** Your potions for this battle (Arena ladder and tournament): left is counted down as you use them. */
+  potions?: { left: number; heal: number; onUse?: () => void };
   /** How the opponent's trainer looks (online: theirs; otherwise made from their name). */
   opponentLook?: TrainerLook;
   /** Their trainer title (online), shown in the cut-in. */
@@ -1120,9 +1122,9 @@ export class BattleScene extends Phaser.Scene {
     });
     const canSwap = this.battle.player.some((x, i) => i !== this.battle.pActive && isAlive(x.c));
     this.actions.add(button(this, L.switchBtn.x, L.switchBtn.y, L.switchBtn.w, 44, '⇄ Switch', () => this.openSwitch(false), { enabled: canSwap, fontSize: 15 }));
-    // No potions outside a run.
-    if (this.match) return;
-    const potions = state.run!.potions ?? 0;
+    const pouch = this.pouch();
+    if (!pouch) return;
+    const potions = pouch.left;
     const hurt = this.battle.player.some((x) => needsPotion(x.c));
     this.actions.add(
       button(this, L.potionBtn.x, L.potionBtn.y, L.potionBtn.w, 44, `Potion ${potions}`, () => this.openPotion(), {
@@ -1166,13 +1168,11 @@ export class BattleScene extends Phaser.Scene {
       this.autoTimer = null;
       if (!prefs.autoBattle || this.busy || this.battle.outcome() !== 'ongoing') return;
       // Switch out of a bad matchup or drink a potion when it matters (potions only in runs).
-      const run = state.run;
-      const potions = !this.match && run ? (run.potions ?? 0) : 0;
-      const plan = this.battle.autoPlan(potions);
-      if (plan?.kind === 'potion' && run) {
-        run.potions = Math.max(0, (run.potions ?? 0) - 1);
-        notePotion(run);
-        return this.act({ kind: 'potion', index: this.battle.pActive, heal: potionHeal(run) });
+      const pouch = this.pouch();
+      const plan = this.battle.autoPlan(pouch?.left ?? 0);
+      if (plan?.kind === 'potion' && pouch) {
+        pouch.use();
+        return this.act({ kind: 'potion', index: this.battle.pActive, heal: pouch.heal });
       }
       if (plan?.kind === 'swap') return this.act({ kind: 'swap', index: plan.index });
       this.act({ kind: 'move', index: this.battle.bestMove('player') });
@@ -1184,23 +1184,55 @@ export class BattleScene extends Phaser.Scene {
     this.autoTimer = null;
   }
 
+  /**
+   * Potions you can use in this battle: carried on a run, a match's own supply (Arena), or what an
+   * online battle allows (the host's phone keeps that count). Null: none here.
+   */
+  private pouch(): { left: number; heal: number; use: () => void } | null {
+    const m = this.match;
+    if (!m) {
+      const run = state.run!;
+      return {
+        left: run.potions ?? 0,
+        heal: potionHeal(run),
+        use: () => {
+          run.potions = Math.max(0, (run.potions ?? 0) - 1);
+          notePotion(run);
+        },
+      };
+    }
+    if (m.spectate) return null;
+    // Online: the count drops once the turn comes back from the host's phone.
+    if (m.duel) return m.duel.potionsAllowed ? { left: m.duel.myPotions(), heal: m.duel.myHeal(), use: () => {} } : null;
+    const p = m.potions;
+    if (!p) return null;
+    return {
+      left: p.left,
+      heal: p.heal,
+      use: () => {
+        p.left = Math.max(0, p.left - 1);
+        p.onUse?.();
+      },
+    };
+  }
+
   /** Use a carried potion on any party member (uses your turn). */
   private openPotion() {
     this.cancelAuto();
-    const run = state.run!;
+    const pouch = this.pouch();
+    if (!pouch) return;
     const list = this.battle.player;
     openPicker(this, {
-      title: `Use a Potion (${run.potions ?? 0} left)`,
-      subtitle: `Heals ${Math.round(potionHeal(run) * 100)}% of max HP and cures status conditions. Uses your turn.`,
+      title: `Use a Potion (${pouch.left} left)`,
+      subtitle: `Heals ${Math.round(pouch.heal * 100)}% of max HP and cures status conditions. Uses your turn.`,
       options: list.map((x) => ({
         creature: x.c,
         disabled: !needsPotion(x.c),
         note: !isAlive(x.c) ? 'Fallen' : !needsPotion(x.c) ? 'Healthy' : undefined,
       })),
       onPick: (i) => {
-        run.potions = Math.max(0, (run.potions ?? 0) - 1);
-        notePotion(run);
-        this.act({ kind: 'potion', index: i, heal: potionHeal(run) });
+        pouch.use();
+        this.act({ kind: 'potion', index: i, heal: pouch.heal });
       },
       onCancel: () => this.maybeAuto(),
     });

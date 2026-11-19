@@ -5,7 +5,7 @@ import type { ArenaPick } from '../logic/arena';
 import { SPECIES_BY_ID } from '../data/species';
 import { MOVES } from '../data/moves';
 import type { BattleMatch } from '../scenes/BattleScene';
-import { applySnap, cleanSettings, DEFAULT_SETTINGS, DUEL_VERSION, DuelController, type DuelSettings, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type RosterEntry, type StartInfo } from './duel';
+import { applySnap, cleanSettings, DEFAULT_SETTINGS, DUEL_VERSION, DuelController, type DuelSettings, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type RosterEntry, type StartInfo, type GameMode, GAME_MODES, cleanMode } from './duel';
 import { SPECIES } from '../data/species';
 import { HELD } from '../data/held';
 import { stats } from '../logic/creature';
@@ -63,6 +63,8 @@ export const duel = {
   race: null as { info: RaceInfo; mine: RaceProgress | null; theirs: RaceProgress | null; duelStarted: boolean } | null,
   /** Redraw hook for screens showing race progress (map, end screen). */
   onRaceChange: null as (() => void) | null,
+  /** The session's game mode (the host picks it before making the code; guests are told). */
+  mode: 'duel' as GameMode,
   /** Everyone in the session, the host first (the host keeps it; guests get copies). */
   roster: [] as RosterEntry[],
   /** Host: each guest's current link (peer id), by player id. */
@@ -76,6 +78,9 @@ export const pidOf = (peer: string): string | undefined => [...duel.peers.entrie
 
 /** A player's name from the roster. */
 export const nameOf = (pid: string): string => duel.roster.find((r) => r.pid === pid)?.name ?? 'Player';
+
+/** Potions each player gets per Arena duel battle. */
+export const DUEL_POTIONS = 3;
 
 /** Something is being played (no one new may join until it's over). */
 const underway = () => !!(duel.race || duel.series || duel.controller || royale.active);
@@ -181,6 +186,8 @@ function checkRaceEnd() {
     guestTeam: [],
     hostCreatures: r.mine.team,
     guestCreatures: r.theirs.team,
+    // Whatever potions each of you finished the stage with.
+    potions: { host: r.mine.potions ?? 0, guest: r.theirs.potions ?? 0, hostHeal: r.mine.heal, guestHeal: r.theirs.heal },
   };
   session.send({ t: 'start', info });
   // Let the screen that reported the finish (often the end screen, mid-setup) settle first.
@@ -230,7 +237,7 @@ export function sendHello() {
 /** Host: change a session setting and tell the guest. */
 export function hostSetSettings(s: DuelSettings) {
   duel.settings = s;
-  session.send({ t: 'settings', s });
+  session.send({ t: 'settings', s, mode: duel.mode });
   duel.onChange?.();
 }
 
@@ -277,6 +284,7 @@ function tryStartGame() {
     guestName: duel.opponent.name,
     hostTeam: (duel.me.teams[sr.myPick]?.picks ?? []).slice(0, size),
     guestTeam: (duel.opponent.teams[sr.theirPick]?.picks ?? []).slice(0, size),
+    potions: { host: DUEL_POTIONS, guest: DUEL_POTIONS },
   };
   session.send({ t: 'start', info });
   setTimeout(() => beginDuel(new DuelController('host', info, session)), 60);
@@ -356,8 +364,8 @@ session.onMessage((msg: DuelMsg, from: string) => {
         // Someone new: only between games, and only up to 8 players.
         const why = underway()
           ? 'A game is already under way there. Try again when it ends.'
-          : duel.guests.size >= MAX_GUESTS
-            ? 'That game is full (8 players).'
+          : duel.guests.size >= Math.min(MAX_GUESTS, GAME_MODES[duel.mode].max - 1)
+            ? `That game is full (${GAME_MODES[duel.mode].name}, ${GAME_MODES[duel.mode].max} players).`
             : '';
         if (why) {
           session.sendTo(from, { t: 'refuse', why });
@@ -376,7 +384,7 @@ session.onMessage((msg: DuelMsg, from: string) => {
       duel.guests.set(pid, who);
       // Answer with our own hello and the settings, then tell everyone who's here.
       if (duel.me && !msg.reply) session.sendTo(from, { t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, title: duel.me.title, teams: duel.me.teams, reply: true });
-      session.sendTo(from, { t: 'settings', s: duel.settings });
+      session.sendTo(from, { t: 'settings', s: duel.settings, mode: duel.mode });
       shareRoster();
       return;
     }
@@ -395,6 +403,7 @@ session.onMessage((msg: DuelMsg, from: string) => {
     case 'settings':
       if (session.role === 'guest') {
         duel.settings = cleanSettings(msg.s);
+        duel.mode = cleanMode(msg.mode);
         duel.onChange?.();
       }
       return;
@@ -430,6 +439,7 @@ session.onMessage((msg: DuelMsg, from: string) => {
       if (session.role === 'guest') {
         const c = new DuelController('guest', msg.info, session);
         applySnap(c.battle, msg.snap);
+        c.syncPots(msg.snap);
         beginDuel(c, msg.next);
       }
       return;
@@ -476,6 +486,7 @@ export function leaveDuel() {
   duel.race = null;
   duel.series = null;
   duel.settings = { ...DEFAULT_SETTINGS };
+  duel.mode = 'duel';
   session.close();
 }
 

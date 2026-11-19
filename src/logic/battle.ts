@@ -462,8 +462,8 @@ export class Battle {
   }
 
   /**
-   * A duel turn: both sides are people. Switches happen first, then moves in priority / speed
-   * order, then end-of-turn effects. Potions aren't allowed.
+   * A duel turn: both sides are people. Switches happen first, then potions, then moves in
+   * priority / speed order, then end-of-turn effects.
    */
   takeDuelTurn(pAct: PlayerAction, eAct: PlayerAction): BattleEvent[] {
     const ev: BattleEvent[] = [];
@@ -481,6 +481,28 @@ export class Battle {
       ev.push({ kind: 'text', text: `${names.enemy} calls back ${creatureName(this.e.c)}.` });
       this.sendEnemy(eAct.index, ev);
     }
+    // Potions next (the caller has checked each side still has one).
+    const potion = (side: Side, act: PlayerAction) => {
+      if (act.kind !== 'potion') return;
+      const x = (side === 'player' ? this.player : this.enemy)[act.index];
+      if (!x || !isAlive(x.c)) return;
+      const active = side === 'player' ? this.p : this.e;
+      const max = stats(x.c).hp;
+      const hurt = x.c.hp < max;
+      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * Math.max(0, Math.min(1, act.heal))));
+      ev.push({ kind: 'text', text: `${names[side]} uses a Potion on ${creatureName(x.c)}.` });
+      if (x === active && hurt) ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
+      if (hurt) ev.push({ kind: 'text', text: `${creatureName(x.c)} recovered health!` });
+      if (x.status) {
+        if (x === active) this.cure(x, side, ev);
+        else {
+          x.status = null;
+          ev.push({ kind: 'text', text: `${creatureName(x.c)} is cured!` });
+        }
+      }
+    };
+    potion('player', pAct);
+    potion('enemy', eAct);
     const slotFor = (act: PlayerAction, c: Creature): MoveSlot | null => {
       if (act.kind !== 'move') return null;
       const m = c.moves[act.index];

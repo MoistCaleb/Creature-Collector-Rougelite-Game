@@ -15,6 +15,18 @@ import type { StatusId } from '../data/status';
 
 export const DUEL_VERSION = 1;
 
+/** What a session is for, chosen by the host before the code is made. */
+export type GameMode = 'duel' | 'stage' | 'royale' | 'tourney';
+
+export const GAME_MODES: Record<GameMode, { name: string; min: number; max: number; desc: string }> = {
+  duel: { name: 'Arena duel', min: 2, max: 2, desc: 'Your saved Lv 50 teams battle live. Best of 1, 3 or 5. 3 potions per battle.' },
+  stage: { name: 'Stage battle', min: 2, max: 2, desc: 'Both play the same stage; the boss at the end is the other player. Bring the potions you have left.' },
+  royale: { name: 'Battle royale', min: 3, max: 8, desc: 'Everyone races the same stage; the survivors meet in a bracket. Bring the potions you have left.' },
+  tourney: { name: 'Tournament', min: 3, max: 8, desc: 'Everyone’s Lv 50 Arena team goes straight into a knockout bracket. 5 potions for the whole tournament.' },
+};
+
+export const cleanMode = (x: unknown): GameMode => (typeof x === 'string' && x in GAME_MODES ? (x as GameMode) : 'duel');
+
 /** What the player has to do next. */
 export type Next =
   | { phase: 'choose' }
@@ -63,6 +75,8 @@ export interface StartInfo {
   guestName: string;
   hostTeam: ArenaPick[];
   guestTeam: ArenaPick[];
+  /** Potions each side may use in this battle, and how much one heals (fraction of max HP). None if absent. */
+  potions?: { host: number; guest: number; hostHeal?: number; guestHeal?: number };
   /** Stage race finale: the teams as they finished their runs (levels, stars, items), fully healed. */
   hostCreatures?: Creature[];
   guestCreatures?: Creature[];
@@ -85,6 +99,9 @@ export interface RaceProgress {
   won: boolean;
   /** Steps left to the boss node (map layouts with rows). */
   steps?: number;
+  /** Finished: potions left from the run, and how much one heals. */
+  potions?: number;
+  heal?: number;
   /** Team to bring to the final duel (empty if wiped out). */
   team?: Creature[];
   /** Map node they're on, and their lead Hexling (shown grayed out on the other player's map). */
@@ -129,14 +146,15 @@ export type DuelMsg =
   /** Host: your bracket match starts (you run it as 'host', or follow as 'guest'). */
   | { t: 'mstart'; match: string; info: StartInfo; role: 'host' | 'guest'; opp: string }
   /** A match result, from a player to the host. */
-  | { t: 'mresult'; match: string; won: boolean }
+  | { t: 'mresult'; match: string; won: boolean; left?: number; oppLeft?: number }
   /** A message between two guests in a match, passed along by the host. */
   | { t: 'relay'; to?: string; from?: string; m: DuelMsg }
   /** Guest: leaving the battle royale. */
   | { t: 'quit' }
   /** Host: the battle royale is over early (host left, everyone gone). */
   | { t: 'royaleEnd'; why: string }
-  | { t: 'settings'; s: DuelSettings }
+  /** Host: the session's settings and its game mode (fixed when the host made the code). */
+  | { t: 'settings'; s: DuelSettings; mode?: GameMode }
   /** Host: start a series with these settings (both go pick a team for battle 1). */
   | { t: 'series'; s: DuelSettings }
   /** Guest: the team it picked for the next battle. */
@@ -179,6 +197,8 @@ export interface Snap {
   fx?: { player: Battle['teamFx']['player']; enemy: Battle['teamFx']['enemy'] };
   /** Time Warp turns left. */
   warp?: number;
+  /** Potions left on each side. */
+  pots?: { player: number; enemy: number };
 }
 
 export function snapshot(b: Battle): Snap {
@@ -195,9 +215,12 @@ export function snapshot(b: Battle): Snap {
   return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } }, warp: b.warp };
 }
 
+/** A snapshot with each side's potions left (from the runner's side). */
+const withPots = (snap: Snap, pots: { host: number; guest: number }): Snap => ({ ...snap, pots: { player: pots.host, enemy: pots.guest } });
+
 /** The same state seen from the other side of the field. */
 export function flipSnap(s: Snap): Snap {
-  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp };
+  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp, pots: s.pots ? { player: s.pots.enemy, enemy: s.pots.player } : undefined };
 }
 
 export function applySnap(b: Battle, s: Snap) {
@@ -292,6 +315,8 @@ export class DuelController {
   private phase: 'choose' | 'switch' | 'end' = 'choose';
   /** Last state sent to the guest (host only), so a reconnecting guest can pick up from here. */
   lastGuestNext: Next = { phase: 'choose' };
+  /** Potions left on each side (the runner keeps count; the guest copies it from each turn). */
+  pots: { host: number; guest: number };
 
   constructor(
     readonly role: 'host' | 'guest',
@@ -300,6 +325,30 @@ export class DuelController {
     battle?: Battle,
   ) {
     this.battle = battle ?? duelBattle(info, role);
+    const n = (v: unknown) => Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
+    this.pots = { host: n(info.potions?.host), guest: n(info.potions?.guest) };
+  }
+
+  /** Potions this battle allows at all. */
+  get potionsAllowed() {
+    return !!this.info.potions;
+  }
+
+  /** Your potions left. */
+  myPotions() {
+    return this.role === 'host' ? this.pots.host : this.pots.guest;
+  }
+
+  /** How much one of your potions heals. */
+  myHeal() {
+    return potionHealOf(this.info, this.role);
+  }
+
+  /** Copy the potion counts from a turn the host sent (from your side of the field). */
+  syncPots(snap: Snap | undefined) {
+    if (!snap?.pots || this.role !== 'guest') return;
+    const n = (v: unknown) => Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
+    this.pots = { guest: n(snap.pots.player), host: n(snap.pots.enemy) };
   }
 
   get opponentName() {
@@ -345,6 +394,7 @@ export class DuelController {
     if (this.role === 'guest') {
       if (msg.t === 'step') {
         applySnap(this.battle, msg.snap);
+        this.syncPots(msg.snap);
         this.view?.step(msg.events, msg.next);
       }
       return;
@@ -360,14 +410,14 @@ export class DuelController {
 
   /** Host: what the guest needs to rejoin after a dropped connection. */
   resumeMsg(): DuelMsg {
-    return { t: 'resume', info: this.info, snap: flipSnap(snapshot(this.battle)), next: this.lastGuestNext };
+    return { t: 'resume', info: this.info, snap: flipSnap(withPots(snapshot(this.battle), this.pots)), next: this.lastGuestNext };
   }
 
   private tryResolve() {
     const b = this.battle;
     if (this.phase === 'choose') {
       if (!this.myAct || !this.theirAct) return;
-      const events = b.takeDuelTurn(this.myAct, this.theirAct);
+      const events = b.takeDuelTurn(this.potionCheck(this.myAct, 'host'), this.potionCheck(this.theirAct, 'guest'));
       this.myAct = this.theirAct = null;
       this.publish(events);
     } else if (this.phase === 'switch') {
@@ -380,6 +430,14 @@ export class DuelController {
       this.mySwitch = this.theirSwitch = null;
       this.publish(events);
     }
+  }
+
+  /** A potion only goes through if that side has one left (it heals the battle's set amount). */
+  private potionCheck(a: PlayerAction, side: 'host' | 'guest'): PlayerAction {
+    if (a.kind !== 'potion') return a;
+    if (this.pots[side] <= 0) return { kind: 'move', index: -1 };
+    this.pots[side]--;
+    return { ...a, heal: potionHealOf(this.info, side) };
   }
 
   /** After resolving: work out what each side does next, then tell both screens. */
@@ -403,8 +461,15 @@ export class DuelController {
       mine = theirs = { phase: 'choose' };
     }
     this.lastGuestNext = theirs;
-    this.link.send({ t: 'step', events: flipEvents(events), snap: flipSnap(snapshot(b)), next: theirs });
-    this.link.watch?.(events, snapshot(b), mine);
+    const snap = withPots(snapshot(b), this.pots);
+    this.link.send({ t: 'step', events: flipEvents(events), snap: flipSnap(snap), next: theirs });
+    this.link.watch?.(events, snap, mine);
     this.view?.step(events, mine);
   }
+}
+
+/** How much a potion heals for one side of a battle (50% unless the battle says otherwise). */
+export function potionHealOf(info: StartInfo, side: 'host' | 'guest'): number {
+  const v = Number(side === 'host' ? info.potions?.hostHeal : info.potions?.guestHeal);
+  return Number.isFinite(v) && v > 0 ? Math.min(1, v) : 0.5;
 }

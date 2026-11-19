@@ -6,6 +6,7 @@ import {
   ARENA_LEVEL,
   ARENA_ROUNDS,
   ARENA_TEAM,
+  ARENA_POTIONS,
   arenaOpponent,
   makeArenaCreature,
   activeTeam,
@@ -27,7 +28,10 @@ import { startTournament } from './TournamentScene';
 interface Ladder {
   round: number;
   seed: number;
+  /** Potions left for the rest of the ladder. */
+  potions?: number;
 }
+
 
 const SLOT_H = 112;
 const SLOT_Y = 104;
@@ -58,16 +62,16 @@ export class ArenaScene extends Phaser.Scene {
 
     for (let i = 0; i < ARENA_TEAM; i++) this.drawSlot(i);
 
-    // Upright: slots stacked, buttons below. Sideways: a 2x2 grid of slots, three buttons side by side under it.
+    // Upright: slots stacked, buttons below. Sideways: a 2x2 grid of slots, the buttons side by side under it.
     const y = LANDSCAPE ? SLOT_Y + 2 * SLOT_H - 2 : SLOT_Y + ARENA_TEAM * SLOT_H + 14;
-    const bw = LANDSCAPE ? (W - 48) / 3 : W - 40;
-    const at = (i: number) => (LANDSCAPE ? { x: 12 + bw / 2 + i * (bw + 12), y: y + 30, h: 60 } : { x: W / 2, y: y + 28 + i * 60, h: i ? 52 : 56 });
+    const bw = LANDSCAPE ? (W - 36) / 2 : W - 40;
+    const at = (i: number) => (LANDSCAPE ? { x: 12 + bw / 2 + i * (bw + 12), y: y + 30, h: 60 } : { x: W / 2, y: y + 30 + i * 70, h: 60 });
     const ladder = at(0);
     button(this, ladder.x, ladder.y, bw, ladder.h, `Start ladder (${ARENA_ROUNDS} rounds)`, () => this.startLadder({ round: 0, seed: Date.now() % 1e9 }), {
       color: 0x3b6d4a,
       fontSize: LANDSCAPE ? 17 : 20,
       enabled: this.team.length > 0,
-      sub: this.team.length ? 'Full heal before every round' : 'Add at least one Hexling',
+      sub: this.team.length ? `Full heal every round · ${ARENA_POTIONS} potions in all` : 'Add at least one Hexling',
       glyph: 'swords',
     });
 
@@ -80,14 +84,7 @@ export class ArenaScene extends Phaser.Scene {
       color: 0x6b4a1f,
       fontSize: LANDSCAPE ? 17 : 19,
       enabled: going || this.team.length > 0,
-      sub: going ? 'Your bracket is waiting' : '8-trainer bracket · knockout',
-    });
-
-    const duel = at(2);
-    button(this, duel.x, duel.y, bw, duel.h, 'Play with a friend', () => this.scene.start('Duel', {}), {
-      color: 0x2f4a6b,
-      fontSize: LANDSCAPE ? 17 : 19,
-      sub: 'Live, phone to phone, with a 5-digit code',
+      sub: going ? 'Your bracket is waiting' : `8-trainer knockout · ${ARENA_POTIONS} potions in all`,
     });
 
     if (data.ladder) this.time.delayedCall(50, () => this.startLadder(data.ladder!));
@@ -143,10 +140,11 @@ export class ArenaScene extends Phaser.Scene {
     const opp = arenaOpponent(l.round, l.seed);
     openPicker(this, {
       title: `Round ${l.round + 1} of ${ARENA_ROUNDS}`,
-      subtitle: `${opp.name} sends out ${opp.team.length} Hexlings. Your team is fully healed.`,
+      subtitle: `${opp.name} sends out ${opp.team.length} Hexlings. Your team is fully healed. Potions left: ${l.potions ?? ARENA_POTIONS}.`,
       rows: opp.team.map((c) => ({ creature: c, text: `${creatureName(c)} · Lv ${c.level}` })),
       options: [{ label: 'Fight!', color: 0x8a2c2c }],
       onPick: () => {
+        const pouch = { left: l.potions ?? ARENA_POTIONS, heal: 0.5 };
         const match: BattleMatch = {
           team: this.team.map((p) => makeArenaCreature(p)),
           enemies: opp.team,
@@ -157,7 +155,8 @@ export class ArenaScene extends Phaser.Scene {
           // From round 3, ladder trainers switch out of bad matchups and carry potions.
           tactics: l.round >= 2 ? { potions: l.round >= 4 ? 2 : 1 } : undefined,
           background: 0x1a1430,
-          onEnd: (won) => this.roundOver(l, won),
+          potions: pouch,
+          onEnd: (won) => this.roundOver({ ...l, potions: pouch.left }, won),
         };
         this.scene.start('Battle', { kind: 'elite', match });
       },
@@ -184,7 +183,7 @@ export class ArenaScene extends Phaser.Scene {
     }
     if (won) {
       return showMessage(battle, `Round ${l.round + 1} won!`, `On to round ${l.round + 2}.${best}`, () =>
-        battle.scene.start('Arena', { ladder: { round: l.round + 1, seed: l.seed } }),
+        battle.scene.start('Arena', { ladder: { round: l.round + 1, seed: l.seed, potions: l.potions } }),
       );
     }
     showMessage(battle, 'Defeated', `You won ${wins} of ${ARENA_ROUNDS} rounds.${best}`, () => battle.scene.start('Arena', {}));

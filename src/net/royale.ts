@@ -1,7 +1,7 @@
 import { champion, cleanBracket, makeBracket, readyMatches, setWinner, type Bracket } from '../logic/bracket';
 import type { Creature } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { activeTeam, makeArenaCreature } from '../logic/arena';
+import { activeTeam, ARENA_POTIONS, makeArenaCreature } from '../logic/arena';
 import { state } from '../state';
 import { SPECIES } from '../data/species';
 import { applySnap, duelBattle, DuelController, type DuelMsg, type Next, type Snap, type RaceInfo, type RaceProgress, type RosterEntry, type Standing, type StartInfo } from './duel';
@@ -23,6 +23,9 @@ interface HostRacer {
   /** Their finished team (empty: wiped out). */
   team: Creature[] | null;
   gone: boolean;
+  /** Potions left for the bracket, and how much one heals. */
+  potions: number;
+  heal: number;
   timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -100,7 +103,7 @@ export function hostStartRoyale(mapId: string) {
   const players = duel.roster;
   session.send({ t: 'royale', race, players });
   enterRoyale(race, players);
-  for (const p of players) royale.racers.set(p.pid, { progress: null, team: null, gone: false });
+  for (const p of players) royale.racers.set(p.pid, { progress: null, team: null, gone: false, potions: 0, heal: 0.5 });
   shareStandings();
 }
 
@@ -111,7 +114,7 @@ export function hostStartTourney() {
   const players = duel.roster;
   session.send({ t: 'royale', race, players });
   enterRoyale(race, players);
-  for (const p of players) royale.racers.set(p.pid, { progress: null, team: null, gone: false });
+  for (const p of players) royale.racers.set(p.pid, { progress: null, team: null, gone: false, potions: 0, heal: 0.5 });
   shareStandings();
   submitArenaTeam();
 }
@@ -119,7 +122,7 @@ export function hostStartTourney() {
 /** Tournament: hand in your active Arena team (Lv 50, full health). */
 function submitArenaTeam() {
   const team = activeTeam(state.meta).map((p) => makeArenaCreature(p));
-  royaleProgress({ floor: 0, finished: true, won: true, team: JSON.parse(JSON.stringify(team)) });
+  royaleProgress({ floor: 0, finished: true, won: true, team: JSON.parse(JSON.stringify(team)), potions: ARENA_POTIONS, heal: 0.5 });
 }
 
 /** "battle royale" or "tournament", for messages. */
@@ -146,7 +149,13 @@ function onProgress(pid: string | undefined, p: RaceProgress) {
   const r = pid ? royale.racers.get(pid) : undefined;
   if (!r || r.gone || r.progress?.finished) return;
   r.progress = { floor: Number(p.floor) || 0, finished: !!p.finished, won: !!p.won, steps: typeof p.steps === 'number' ? p.steps : undefined };
-  if (p.finished) r.team = pid === myPid ? (p.team ?? []) : cleanCreatures(p.team);
+  if (p.finished) {
+    r.team = pid === myPid ? (p.team ?? []) : cleanCreatures(p.team);
+    // Battle royale: the potions you finished the stage with. Tournament: a set supply.
+    r.potions = royale.tourney ? ARENA_POTIONS : Math.max(0, Math.min(99, Math.round(Number(p.potions) || 0)));
+    const heal = Number(p.heal);
+    r.heal = royale.tourney || !Number.isFinite(heal) ? 0.5 : Math.max(0.1, Math.min(1, heal));
+  }
   shareStandings();
   hostCheck();
 }
@@ -214,6 +223,7 @@ function schedule() {
         guestTeam: [],
         hostCreatures: ra.team ?? [],
         guestCreatures: rb.team ?? [],
+        potions: { host: ra.potions, guest: rb.potions, hostHeal: ra.heal, guestHeal: rb.heal },
       };
       royale.infos.set(id, info);
       deliver(m.a!, { t: 'mstart', match: id, info, role: 'host', opp: m.b! });
@@ -280,12 +290,26 @@ export function reportMatch(won: boolean) {
   if (!m) return;
   royale.match = null;
   duel.controller = null;
-  if (session.role === 'host') onResult(myPid, m.id, won);
-  else session.send({ t: 'mresult', match: m.id, won });
+  // Potions you have left carry into your next match.
+  // (Both phones know both counts, so whichever result arrives first carries them.)
+  const left = m.controller.myPotions();
+  const oppLeft = m.controller.role === 'host' ? m.controller.pots.guest : m.controller.pots.host;
+  if (session.role === 'host') onResult(myPid, m.id, won, left, oppLeft);
+  else session.send({ t: 'mresult', match: m.id, won, left, oppLeft });
 }
 
-function onResult(pid: string | undefined, id: string, won: boolean) {
+function onResult(pid: string | undefined, id: string, won: boolean, left?: number, oppLeft?: number) {
   const b = royale.bracket;
+  const [rd, ix] = id.split('-').map(Number);
+  const mm = b?.rounds[rd]?.[ix];
+  const spend = (who: string | null | undefined, n: number | undefined) => {
+    const r = who ? royale.racers.get(who) : undefined;
+    if (r && typeof n === 'number' && Number.isFinite(n)) r.potions = Math.max(0, Math.min(r.potions, Math.round(n)));
+  };
+  if (pid && mm && !mm.winner && (mm.a === pid || mm.b === pid)) {
+    spend(pid, left);
+    spend(mm.a === pid ? mm.b : mm.a, oppLeft);
+  }
   royale.watchers.delete(id);
   royale.lastStep.delete(id);
   const [round, index] = id.split('-').map(Number);
@@ -491,7 +515,7 @@ function onMessage(msg: DuelMsg, from: string) {
       else onWatchedStep(msg);
       return;
     case 'mresult':
-      if (host && royale.active) onResult(pidOf(from), String(msg.match), !!msg.won);
+      if (host && royale.active) onResult(pidOf(from), String(msg.match), !!msg.won, Number(msg.left), Number(msg.oppLeft));
       return;
     case 'relay':
       if (host) {
