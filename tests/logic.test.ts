@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2311,3 +2311,81 @@ describe('Move Relearn', () => {
   });
 });
 import { ITEMS as ITEMS_SHOP } from '../src/logic/shop';
+
+import { BULWARK_ID, WARP_ID, fastId, slowId, speedPower } from '../src/data/moves';
+import { extraMoves } from '../src/logic/creature';
+describe('Bulwark, Time Warp and speed attacks', () => {
+  const pair = (pMoves: string[], eMoves: string[], seed = 3, pId = 'pebblin', eId = 'emberkit') => {
+    const p = createCreature(pId, 30);
+    p.moves = pMoves.map((id) => ({ id, tier: 1 }));
+    const e = createCreature(eId, 30);
+    e.moves = eMoves.map((id) => ({ id, tier: 1 }));
+    return new Battle([p], [e], new Rng(seed));
+  };
+  it('Bulwark goes first and blocks the attack, but rarely holds twice in a row', () => {
+    const b = pair([BULWARK_ID], ['Fire:2']);
+    const hp = b.p.c.hp;
+    const ev = b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+    expect(b.p.c.hp).toBe(hp);
+    expect((ev.find((x) => x.kind === 'attack') as { side: string }).side).toBe('player');
+    expect(ev.some((x) => x.kind === 'text' && /blocked/.test(x.text))).toBe(true);
+    // Used again and again: it holds about a quarter of the time after a success.
+    let held = 0;
+    let tries = 0;
+    for (let seed = 1; seed < 400; seed++) {
+      const b2 = pair([BULWARK_ID], ['Fire:0'], seed);
+      b2.p.c.moves[0].used = -10;
+      b2.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      const before = b2.p.c.hp;
+      b2.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      tries++;
+      if (b2.p.c.hp === before) held++;
+    }
+    expect(held / tries).toBeGreaterThan(0.15);
+    expect(held / tries).toBeLessThan(0.35);
+    expect(maxUses(MOVES[BULWARK_ID])).toBe(4);
+  });
+  it('Time Warp lets the slower Hexling move first for a few turns, and using it again ends it', () => {
+    const b = pair([WARP_ID, 'Earth:0'], ['Fire:0'], 5, 'pebblin', 'zapkit' in SPECIES_BY_ID ? 'zapkit' : 'emberkit');
+    b.p.c.level = 30;
+    const slower = b.speedOf(b.p) < b.speedOf(b.e);
+    b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+    expect(b.warp).toBeGreaterThan(0);
+    const ev = b.takeDuelTurn({ kind: 'move', index: 1 }, { kind: 'move', index: 0 });
+    const first = (ev.find((x) => x.kind === 'attack') as { side: string }).side;
+    expect(first).toBe(slower ? 'player' : 'enemy');
+    b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+    expect(b.warp).toBe(0);
+  });
+  it('speed attacks hit harder the bigger the speed gap their way', () => {
+    expect(speedPower(2)).toBeGreaterThan(speedPower(1.2));
+    expect(speedPower(0.5)).toBe(40);
+    const b = pair([fastId('Earth'), slowId('Earth')], ['Fire:0']);
+    const fast = b.speedFactor(MOVES[fastId('Earth')], b.p, b.e);
+    const slow = b.speedFactor(MOVES[slowId('Earth')], b.p, b.e);
+    if (b.speedOf(b.p) < b.speedOf(b.e)) expect(slow).toBeGreaterThan(fast);
+    else expect(fast).toBeGreaterThanOrEqual(slow);
+  });
+  it('only fitting lines learn them, and existing Hexlings pick them up on their next level', () => {
+    const all = SPECIES.map((s) => ({ s, x: extraMoves(s).map((e) => e.id) }));
+    const warp = all.filter((a) => a.x.includes(WARP_ID));
+    const bulwark = all.filter((a) => a.x.includes(BULWARK_ID));
+    expect(warp.length).toBeGreaterThan(4);
+    expect(warp.length).toBeLessThan(20);
+    expect(bulwark.length).toBeGreaterThan(10);
+    expect(bulwark.length).toBeLessThan(40);
+    for (const a of warp) expect(a.s.types.some((t) => ['Spirit', 'Shadow', 'Light', 'Metal'].includes(t))).toBe(true);
+    // Names are unique.
+    const names = Object.values(MOVES).map((m) => m.name);
+    expect(new Set(names).size).toBe(names.length);
+    // A saved Lv 40 Hexling from before: offered on its next level-up.
+    const sp = warp[0].s;
+    setFloorCeiling(Infinity);
+    const c = createCreature(sp.id, 40, 1); // evolved, so Lv 40 is within its cap
+    c.extraOffered = undefined;
+    c.moves = c.moves.filter((m) => m.id !== WARP_ID);
+    c.pendingMoves = [];
+    addLevels(c, 1);
+    expect([...c.moves.map((m) => m.id), ...c.pendingMoves]).toContain(WARP_ID);
+  });
+});

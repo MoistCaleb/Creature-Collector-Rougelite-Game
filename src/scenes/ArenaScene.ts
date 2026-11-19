@@ -1,8 +1,7 @@
 import { takeNewTitles} from '../logic/titles';
 import { titleNews } from '../logic/cosmetics';
 import Phaser from 'phaser';
-import { MOVES } from '../data/moves';
-import { ELEMENT_COLORS } from '../data/types';
+import { MOVES, moveColor } from '../data/moves';
 import {
   ARENA_LEVEL,
   ARENA_ROUNDS,
@@ -106,7 +105,7 @@ export class ArenaScene extends Phaser.Scene {
       const d = MOVES[id];
       const mx = x + 88 + (k % 2) * 140;
       const my = y + 58 + Math.floor(k / 2) * 18;
-      this.add.rectangle(mx, my + 7, 7, 7, ELEMENT_COLORS[d.element]).setOrigin(0, 0.5);
+      this.add.rectangle(mx, my + 7, 7, 7, moveColor(d.element)).setOrigin(0, 0.5);
       text(this, mx + 11, my, d.name, 12, COLORS.text);
     });
     text(this, x + sw - 14, y + 8, 'Edit ›', 13, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);

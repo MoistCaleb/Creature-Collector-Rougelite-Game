@@ -169,6 +169,8 @@ export interface Snap {
   eActive: number;
   /** Team effects up on each side, with turns left. */
   fx?: { player: Battle['teamFx']['player']; enemy: Battle['teamFx']['enemy'] };
+  /** Time Warp turns left. */
+  warp?: number;
 }
 
 export function snapshot(b: Battle): Snap {
@@ -182,12 +184,12 @@ export function snapshot(b: Battle): Snap {
       spd: x.spdStage,
       sash: x.sash ?? null,
     }));
-  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } } };
+  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } }, warp: b.warp };
 }
 
 /** The same state seen from the other side of the field. */
 export function flipSnap(s: Snap): Snap {
-  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined };
+  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp };
 }
 
 export function applySnap(b: Battle, s: Snap) {
@@ -208,6 +210,7 @@ export function applySnap(b: Battle, s: Snap) {
   b.pActive = s.pActive;
   b.eActive = s.eActive;
   b.teamFx = { player: { ...(s.fx?.player ?? {}) }, enemy: { ...(s.fx?.enemy ?? {}) } };
+  b.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
 }
 
 /** Battle events seen from the other side of the field. */

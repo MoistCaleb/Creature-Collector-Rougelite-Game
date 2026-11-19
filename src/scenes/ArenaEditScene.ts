@@ -1,8 +1,7 @@
 import Phaser from 'phaser';
 import { Scroller } from '../ui/scroll';
-import { accText, maxUses, MOVES, moveSummary } from '../data/moves';
+import { accText, maxUses, MOVES, moveSummary, moveColor } from '../data/moves';
 import { SPECIES_BY_ID } from '../data/species';
-import { ELEMENT_COLORS } from '../data/types';
 import {
   activeTeamIndex,
   ARENA_LEVEL,
@@ -271,7 +270,7 @@ export class ArenaEditScene extends Phaser.Scene {
     const d = MOVES[id];
     const x = this.lx;
     const right = this.lx + this.lw - 22;
-    list.add(this.add.rectangle(x + 24, y + 19, 10, 10, ELEMENT_COLORS[d.element]));
+    list.add(this.add.rectangle(x + 24, y + 19, 10, 10, moveColor(d.element)));
     list.add(text(this, x + 36, y + 4, d.name, 14, COLORS.text, { fontStyle: 'bold' }));
     list.add(text(this, x + 36, y + 21, `${d.team ? 'Team' : KIND_LABEL[d.kind] ?? ''} · ${moveSummary(d, 1)} · ${accText(d)}`, 11, COLORS.textDim));
     const max = maxUses(d);

@@ -13,7 +13,8 @@ import { sfx } from './sound';
 
 // ------------------------------------------------------------ palette
 
-const PAL: Record<Element, { main: number; light: number; dark: number; tex: string }> = {
+const PAL: Record<Element | 'Neutral', { main: number; light: number; dark: number; tex: string }> = {
+  Neutral: { main: 0xd8d4e8, light: 0xffffff, dark: 0x6a6680, tex: 'fx-spark' },
   Fire: { main: 0xff6a1a, light: 0xffd04d, dark: 0xb32a0a, tex: 'fx-dot' },
   Frost: { main: 0x9fe0ff, light: 0xffffff, dark: 0x4a9ad0, tex: 'fx-shard' },
   Nature: { main: 0x5fc95a, light: 0xc4f08a, dark: 0x2f7a2c, tex: 'fx-leaf' },
@@ -603,7 +604,7 @@ export async function playMove(s: Phaser.Scene, def: MoveDef, actor: Img, target
     case 'swirl': await swirlSelf(s, actor, c); break;
     case 'fade': await fade(s, actor, c); break;
     case 'mend': await mend(s, actor, c); break;
-    default: await attackTravel(s, def.element, from, to);
+    default: await attackTravel(s, def.element === 'Neutral' ? 'Spirit' : def.element, from, to);
   }
   return style;
 }

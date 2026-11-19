@@ -1,3 +1,4 @@
+import { attackEl } from '../src/data/moves';
 /**
  * Headless balance simulator: plays many full runs with a simple greedy policy.
  * Usage: npx vite-node scripts/simulate.ts [runs]
@@ -29,7 +30,7 @@ function bestMove(b: Battle): number {
   b.p.c.moves.forEach((m, i) => {
     if (!hasUses(m)) return;
     const d = moveDef(m);
-    const eff = typeMultiplier(d.element, creatureTypes(b.e.c));
+    const eff = d.kind === 'attack' ? typeMultiplier(attackEl(d), creatureTypes(b.e.c)) : 1;
     let s = d.power * TIER_POWER[m.tier] * eff * stabMultiplier(d.element, creatureTypes(b.p.c));
     // Save limited moves unless they hit hard or can finish the foe.
     if (Number.isFinite(usesLeft(m)) && eff <= 1 && b.e.c.hp / stats(b.e.c).hp >= 0.35) s *= 0.75;
@@ -40,8 +41,8 @@ function bestMove(b: Battle): number {
 
 /** How good is creature c (attacking) vs enemy e: best move score / incoming threat. */
 function matchup(c: import('../src/logic/creature').Creature, e: import('../src/logic/creature').Creature): number {
-  const off = Math.max(...c.moves.map((m) => { const d = moveDef(m); return d.power * typeMultiplier(d.element, creatureTypes(e)) * stabMultiplier(d.element, creatureTypes(c)); }));
-  const def = Math.max(...e.moves.map((m) => { const d = moveDef(m); return d.power * typeMultiplier(d.element, creatureTypes(c)) * stabMultiplier(d.element, creatureTypes(e)); }));
+  const off = Math.max(...c.moves.map((m) => { const d = moveDef(m); return d.kind !== 'attack' ? 0 : d.power * typeMultiplier(attackEl(d), creatureTypes(e)) * stabMultiplier(attackEl(d), creatureTypes(c)); }));
+  const def = Math.max(...e.moves.map((m) => { const d = moveDef(m); return d.kind !== 'attack' ? 0 : d.power * typeMultiplier(attackEl(d), creatureTypes(c)) * stabMultiplier(attackEl(d), creatureTypes(e)); }));
   return (off * stats(c).atk * (c.hp / stats(c).hp + 0.3)) / (def * stats(e).atk);
 }
 

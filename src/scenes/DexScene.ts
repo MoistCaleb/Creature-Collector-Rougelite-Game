@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { openGildedMilestones } from '../ui/gildedUi';
-import { accText, allMoveIds, elementPool, MOVES, moveSummary } from '../data/moves';
+import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
 import { SPECIES } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
@@ -444,24 +444,34 @@ export class DexScene extends Phaser.Scene {
     const KIND: Record<string, string> = { attack: 'Attack', buff: 'Boost', debuff: 'Hinder', heal: 'Heal' };
     const kindOf = (id: string) => KIND[MOVES[id].kind] ?? 'Move';
     // A filter or a search only shows moves you've seen (unseen ones have nothing to match).
-    const shows = (id: string, el: Element) => {
+    const shows = (id: string, el: Element | 'Neutral') => {
       const seen = dex.moves.includes(id);
       if (!q && moveFilter === 'all') return true;
       if (!seen) return false;
       if (moveFilter === 'attack' && MOVES[id].kind !== 'attack') return false;
       if (moveFilter === 'status' && MOVES[id].kind === 'attack') return false;
       if (!q) return true;
-      return MOVES[id].name.toLowerCase().includes(q) || kindOf(id).toLowerCase().includes(q) || (dex.elements.includes(el) && el.toLowerCase().includes(q));
+      return MOVES[id].name.toLowerCase().includes(q) || kindOf(id).toLowerCase().includes(q) || ((el === 'Neutral' || dex.elements.includes(el)) && el.toLowerCase().includes(q));
     };
     let y = 8;
-    for (const el of ELEMENTS) {
-      const elSeen = dex.elements.includes(el);
-      const ids = elementPool(el).filter((id) => shows(id, el));
+    // Each element's moves (with its Blitz and Crush), then the Neutral ones.
+    const groups: [Element | 'Neutral', string[]][] = [
+      ...ELEMENTS.map((el): [Element, string[]] => [el, [...elementPool(el), fastId(el), slowId(el)]]),
+      ['Neutral', [BULWARK_ID, WARP_ID]],
+    ];
+    for (const [el, pool] of groups) {
+      const neutral = el === 'Neutral';
+      const elSeen = neutral || dex.elements.includes(el);
+      const ids = pool.filter((id) => shows(id, el));
       if (!ids.length) continue;
       const hy = y;
-      this.anchor(el, hy);
+      if (!neutral) this.anchor(el, hy);
       this.addRow(hy, 30, (row) => {
-        if (elSeen) row.add(typeChip(this, 16, hy + 12, el));
+        if (neutral) {
+          const t = text(this, 22, hy + 4, 'NEUTRAL', 12, '#1a1426', { fontStyle: 'bold' });
+          row.add(this.add.rectangle(16, hy + 2, t.width + 12, 20, NEUTRAL_COLOR).setOrigin(0));
+          row.add(t);
+        } else if (elSeen) row.add(typeChip(this, 16, hy + 12, el));
         else row.add(text(this, 16, hy + 2, '??? element', 14, '#4a4068'));
       });
       y += 30;
@@ -473,7 +483,7 @@ export class DexScene extends Phaser.Scene {
           row.add(this.add.rectangle(12, my, W - 24, 34, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
           if (seen) {
             const kind = kindOf(id);
-            row.add(this.add.rectangle(22, my + 17, 8, 8, ELEMENT_COLORS[el]));
+            row.add(this.add.rectangle(22, my + 17, 8, 8, moveColor(el)));
             row.add(text(this, 34, my + 9, m.name, 14, COLORS.text));
             row.add(text(this, 170, my + 10, kind, 12, COLORS.textDim));
             row.add(text(this, W - 22, my + 10, `${moveSummary(m, 1)} · ${accText(m)}`, 12, COLORS.textDim).setOrigin(1, 0));
