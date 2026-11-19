@@ -637,23 +637,28 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           rect(0, 6, 1, 7, GOLD);
         }
         break;
-      case 9: { // victory banner: a gold swallowtail flag on a pole strapped to the back
+      case 9: { // victory banner: a tall crimson standard with a gold border and star, on a pole
         const POLE = 0x6a4a2a;
-        const RED = 0xd8443a;
-        if (back) {
-          rect(6, 0, 6, 27, POLE);
-          line(7, 19, 19, 25, POLE); // strap
-          rect(0, 1, 5, 5, GOLD);
-          rect(0, 3, 5, 3, RED);
-          put(0, 3, null);
-          put(6, 0, GOLD_LIGHT);
-        } else {
-          rect(21, 0, 21, 22, POLE);
-          rect(22, 1, 27, 5, GOLD);
-          rect(22, 3, 27, 3, RED);
-          put(27, 3, null);
-          put(21, 0, GOLD_LIGHT);
-        }
+        // Front: the pole rises behind your right shoulder (screen left from behind), the banner
+        // hanging beside your head from a crossbar.
+        const px = back ? 5 : 22; // pole
+        const bx = back ? 0 : 23; // banner's left column (5 wide)
+        rect(px, 0, px, back ? 27 : 22, POLE);
+        put(px, 0, GOLD_LIGHT);
+        rect(bx, 2, bx + 4, 2, POLE); // crossbar
+        rect(bx, 3, bx + 4, 12, ROYAL);
+        rect(bx + 1, 13, bx + 3, 13, ROYAL); // the pointed tail
+        put(bx + 2, 14, ROYAL);
+        // Gold border and a star in the middle.
+        rect(bx, 3, bx, 12, GOLD);
+        rect(bx + 4, 3, bx + 4, 12, GOLD);
+        put(bx + 1, 13, GOLD);
+        put(bx + 3, 13, GOLD);
+        put(bx + 2, 14, GOLD);
+        rect(bx + 2, 5, bx + 2, 9, GOLD_LIGHT);
+        rect(bx + 1, 7, bx + 3, 7, GOLD_LIGHT);
+        put(bx + 2, 7, 0xffffff);
+        if (back && top !== 15 && top !== 17) line(6, 19, 19, 25, POLE); // the strap across your back (cloaks cover it)
         break;
       }
       case 5: { // dragon tail, curling up with a spade tip

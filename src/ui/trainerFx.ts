@@ -124,7 +124,7 @@ function gearFx(look: TrainerLook, back: boolean): [number, Spawn][] {
   if (look.back === 1) out.push([700, (fx) => drift(fx, fx.px(pick([rand(0, 5), rand(23, 28)]), rand(14, 26), 0xffffff, 2, 1), rand(-3, 3), rand(6, 10), 1300, { angle: 180 })]);
   if (look.back === 6) out.push([300, (fx) => sparkle(fx, pick([rand(1, 6), rand(22, 27)]), rand(10, 26), pick([0xa8f0ff, 0xf8b8e8]))]);
   // Victory banner: the flag catches the light.
-  if (look.back === 9) out.push([480, (fx) => sparkle(fx, back ? rand(0, 5) : rand(22, 27), rand(1, 5), 0xfff0a0)]);
+  if (look.back === 9) out.push([520, (fx) => sparkle(fx, back ? 2 : 25, 7, 0xfff0a0)]);
   // Monarch crown jewels; the royal mantle's ermine shimmer.
   if (look.hat === 27) out.push([700, (fx) => sparkle(fx, pick([9, 13.5, 18]), 5, pick([0xff6a5a, 0x6aa0ff, 0x7aff7a]))]);
   if (look.top === 17) out.push([900, (fx) => sparkle(fx, rand(7, 20), 18, 0xffffff)]);

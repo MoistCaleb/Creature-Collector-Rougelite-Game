@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'New battle royale titles: Royale Victor (win with 4+ players, Epic), Royale Champion (6+, Legendary) and Battle Monarch (8 players, Mythic).',
       'They unlock a Victory banner (Back), the Regal aura, and the Monarch crown with a Royal mantle, each with its own sparkle.',
       'Royal mantle: a cleaner look, a crimson robe open over a gold-trimmed tunic with a gold chain and hem.',
+      'Victory banner: now a tall crimson standard with a gold border and star, hanging beside your head.',
     ],
   },
   {
