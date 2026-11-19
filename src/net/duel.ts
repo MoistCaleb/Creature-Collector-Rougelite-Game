@@ -90,8 +90,50 @@ export interface RaceProgress {
   lead?: { speciesId: string; stage: number; shiny?: boolean };
 }
 
+/** Someone in the session, as the host lists them for everyone. */
+export interface RosterEntry {
+  pid: string;
+  name: string;
+  look?: TrainerLook;
+  title?: string;
+  /** The host. */
+  host?: boolean;
+}
+
+/** A battle royale racer's place, as the host shares it. */
+export interface Standing {
+  pid: string;
+  name: string;
+  floor: number;
+  steps?: number;
+  finished: boolean;
+  /** Has a team for the bracket (or is still racing). */
+  alive: boolean;
+  /** Lost the connection for good. */
+  gone?: boolean;
+}
+
 export type DuelMsg =
-  | { t: 'hello'; v: number; name: string; look?: TrainerLook; title?: string; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean }
+  | { t: 'hello'; v: number; name: string; look?: TrainerLook; title?: string; teams: { name: string; picks: ArenaPick[] }[]; reply?: boolean; pid?: string }
+  /** Host: everyone in the session. */
+  | { t: 'roster'; players: RosterEntry[] }
+  /** Host: you can't join right now (full, or a game is under way). */
+  | { t: 'refuse'; why: string }
+  /** Host: a battle royale starts on this map with these players. */
+  | { t: 'royale'; race: RaceInfo; players: RosterEntry[] }
+  | { t: 'standings'; list: Standing[] }
+  /** Host: the tournament bracket (and the champion, once decided). */
+  | { t: 'bracket'; b?: import('../logic/bracket').Bracket; champion?: string }
+  /** Host: your bracket match starts (you run it as 'host', or follow as 'guest'). */
+  | { t: 'mstart'; match: string; info: StartInfo; role: 'host' | 'guest'; opp: string }
+  /** A match result, from a player to the host. */
+  | { t: 'mresult'; match: string; won: boolean }
+  /** A message between two guests in a match, passed along by the host. */
+  | { t: 'relay'; to?: string; from?: string; m: DuelMsg }
+  /** Guest: leaving the battle royale. */
+  | { t: 'quit' }
+  /** Host: the battle royale is over early (host left, everyone gone). */
+  | { t: 'royaleEnd'; why: string }
   | { t: 'settings'; s: DuelSettings }
   /** Host: start a series with these settings (both go pick a team for battle 1). */
   | { t: 'series'; s: DuelSettings }

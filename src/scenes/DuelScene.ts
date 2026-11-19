@@ -9,7 +9,8 @@ import { activeTeamIndex, savedTeams, validArenaTeam } from '../logic/arena';
 import { SETTING_CHOICES, type DuelSettings } from '../net/duel';
 import { duel, hostSetSettings, hostStartRace, hostStartSeries, leaveDuel, sendHello, submitPick } from '../net/runtime';
 import { MAPS, mapUnlocked } from '../data/maps';
-import { CODE_LENGTH, session } from '../net/session';
+import { CODE_LENGTH, myPid, session } from '../net/session';
+import { hostStartRoyale } from '../net/royale';
 import { state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { playMusic } from '../ui/sound';
@@ -78,11 +79,14 @@ export class DuelScene extends Phaser.Scene {
     button(this, 40, 28, 64, 36, '', () => this.leave(), { fontSize: 15, glyph: 'back' });
     const { lx, lw } = cols();
     text(this, lx + 20, 18, 'Play with a friend', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
-    text(this, lx + 20, 54, 'Live battles, phone to phone', 13, COLORS.textDim).setOrigin(0.5, 0);
+    // The host's code stays up so more players can join (up to 8, for a battle royale).
+    const codeLine = session.role === 'host' && session.connected && session.code ? `Code ${session.code} · up to 8 players can join` : 'Live battles, phone to phone';
+    text(this, lx + 20, 54, codeLine, 13, session.role === 'host' && session.connected ? '#ffc94d' : COLORS.textDim).setOrigin(0.5, 0);
     if (this.picking && duel.series) return this.drawPick();
 
     // Your name and team.
     button(this, lx, 104, lw, 44, `Your trainer: ${duel.me.name}`, () => this.scene.start('Trainer', { from: 'Duel' }), { fontSize: 15, sub: 'Tap to change your name and look' });
+    if (session.connected && duel.roster.length > 2 && !this.busyText && this.typed === null) return this.drawRoyaleLobby();
     if (session.connected && duel.opponent && !this.busyText && this.typed === null) return this.drawConnected();
     text(this, 20, 136, 'Your team (active team from the Battle Arena):', 13, COLORS.textDim);
     this.drawTeam(160, team.map((p) => [p.speciesId, p.stage] as [string, number]));
@@ -120,12 +124,16 @@ export class DuelScene extends Phaser.Scene {
       // What you can play once connected (the host chooses).
       const py = LANDSCAPE ? y + 196 : y + 236;
       const px = rx - rw / 2 - 14;
-      this.add.rectangle(px, py, rw + 28, LANDSCAPE ? 214 : 188, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-      text(this, px + 14, py + 12, 'Two ways to play together', 15, '#ffc94d', { fontStyle: 'bold' });
+      const panel = this.add.rectangle(px, py, rw + 28, 200, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+      text(this, px + 14, py + 12, 'Ways to play together', 15, '#ffc94d', { fontStyle: 'bold' });
       text(this, px + 14, py + 40, 'Arena duel', 14, COLORS.text, { fontStyle: 'bold' });
       text(this, px + 14, py + 60, 'Your saved Lv 50 teams battle live. Best of 1, 3 or 5.', 12, COLORS.textDim, { wordWrap: { width: rw } });
       text(this, px + 14, py + 94, 'Stage battle', 14, COLORS.text, { fontStyle: 'bold' });
-      text(this, px + 14, py + 114, 'Both of you play the same stage with double rewards. The boss at the end is the other player: whoever\u2019s run team wins takes it.', 12, COLORS.textDim, { wordWrap: { width: rw } });
+      const stage = text(this, px + 14, py + 114, 'Both of you play the same stage with double rewards. The boss at the end is the other player: whoever\u2019s run team wins takes it.', 12, COLORS.textDim, { wordWrap: { width: rw } });
+      const ry = stage.y + stage.height + 12;
+      text(this, px + 14, ry, 'Battle royale (3 to 8 players)', 14, COLORS.text, { fontStyle: 'bold' });
+      const roy = text(this, px + 14, ry + 20, 'Everyone races the same stage; the survivors meet in a tournament bracket.', 12, COLORS.textDim, { wordWrap: { width: rw } });
+      panel.setSize(rw + 28, roy.y + roy.height + 12 - py);
     }
   }
 
@@ -229,6 +237,52 @@ export class DuelScene extends Phaser.Scene {
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
     button(this, rx, by + 132, 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+  }
+
+  /** Three or more players: everyone who's here, and (host) start a battle royale. */
+  private drawRoyaleLobby() {
+    const host = session.role === 'host';
+    const players = duel.roster;
+    const { lx, lw, rx, rw } = cols();
+    text(this, lx, 136, `Players here: ${players.length} / 8`, 15, '#8fe08a', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    const rowH = LANDSCAPE ? 34 : 44;
+    players.forEach((p, i) => {
+      const y = 170 + i * rowH;
+      const x0 = lx - lw / 2;
+      this.add.rectangle(x0, y, lw, rowH - 4, p.pid === myPid ? 0x2a3a2a : COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke);
+      const look = p.look ?? lookForName(p.name);
+      const img = this.add.image(x0 + 22, y + (rowH - 4) / 2, ensureTrainerTexture(this, look, 'stand')).setScale(LANDSCAPE ? 0.85 : 1.05);
+      trainerFx(this, img, look);
+      text(this, x0 + 46, y + (p.title ? 2 : (rowH - 4) / 2 - 9), `${p.name}${p.host ? '  (host)' : ''}${p.pid === myPid ? '  · you' : ''}`, 14, COLORS.text, { fontStyle: 'bold' });
+      if (p.title) titleBadge(this, x0 + 46, y + rowH - 14, p.title, 11, { maxW: lw - 60, originX: 0 });
+    });
+    const by = LANDSCAPE ? 150 : 170 + players.length * rowH + 30;
+    if (host) {
+      button(this, rx, by, rw, 64, 'Battle royale', () => this.pickRoyaleMap(), {
+        color: 0x8a2c2c,
+        fontSize: 22,
+        glyph: 'swords',
+        sub: 'Everyone races one stage · then a tournament bracket',
+      });
+      text(this, rx, by + 42, 'Arena duels and two-player stage battles need exactly two players.', 11, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+    } else {
+      const wait = text(this, rx, by - 16, `Waiting for ${players.find((p) => p.host)?.name ?? 'the host'} to start a battle royale…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+      this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
+    }
+    text(this, rx, by + (LANDSCAPE ? 84 : 90), 'Everyone plays the same stage from the same start. Whoever still has a team at the boss goes into a bracket; the winner of the final is champion.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+    button(this, rx, by + (LANDSCAPE ? 170 : 170), 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+  }
+
+  /** Host: choose the map for a battle royale. */
+  private pickRoyaleMap() {
+    const open = MAPS.filter((m) => mapUnlocked(m, state.meta.wins));
+    openPicker(this, {
+      title: 'Battle royale',
+      subtitle: `All ${duel.roster.length} of you play the first stage of this map from the same start, with double battle rewards (no passives or Heat). Everyone with a team left at the boss goes into a tournament bracket.`,
+      options: open.map((m) => ({ label: m.name, sub: m.desc })),
+      onPick: (i) => hostStartRoyale(open[i].id),
+      onCancel: () => {},
+    });
   }
 
   /** Before each battle of a series: choose which of your teams fights. */

@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2228,5 +2228,44 @@ describe('foe moves on the stats panel', () => {
     if (foe) expect(foe.slot).toBe(0);
     const mine = ev.find((x) => x.kind === 'attack' && x.side === 'player') as { slot?: number };
     expect(mine.slot).toBe(0);
+  });
+});
+
+import { champion, knockedOut, makeBracket, readyMatches, roundName, setWinner } from '../src/logic/bracket';
+describe('battle royale bracket', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
+  it('fits 2 to 8 players, with byes only in round 1 and never two byes in a match', () => {
+    for (let n = 2; n <= 8; n++) {
+      const b = makeBracket(ids(n), new Rng(n));
+      const size = b.rounds[0].length * 2;
+      expect(size).toBeGreaterThanOrEqual(n);
+      expect(size / 2).toBeLessThan(n);
+      const placed = b.rounds[0].flatMap((m) => [m.a, m.b]).filter(Boolean);
+      expect(new Set(placed).size).toBe(n);
+      expect(b.rounds[0].filter((m) => m.bye).length).toBe(size - n);
+      expect(b.rounds[0].every((m) => m.a || m.b)).toBe(true);
+      expect(b.rounds[b.rounds.length - 1].length).toBe(1);
+    }
+  });
+  it('plays through to one champion', () => {
+    for (let n = 2; n <= 8; n++) {
+      const b = makeBracket(ids(n), new Rng(40 + n));
+      let games = 0;
+      for (let guard = 0; guard < 20 && !champion(b); guard++) {
+        for (const r of readyMatches(b)) {
+          setWinner(b, r.round, r.index, r.m.a!);
+          games++;
+        }
+      }
+      const c = champion(b)!;
+      expect(c).toBeTruthy();
+      expect(games).toBe(n - 1);
+      expect(knockedOut(b, c)).toBe(false);
+      expect(ids(n).filter((p) => p !== c).every((p) => knockedOut(b, p))).toBe(true);
+    }
+  });
+  it('names the rounds', () => {
+    const b = makeBracket(ids(8), new Rng(1));
+    expect([0, 1, 2].map((r) => roundName(b, r))).toEqual(['Quarterfinal', 'Semifinal', 'Final']);
   });
 });

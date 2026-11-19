@@ -388,7 +388,7 @@ export interface Run {
   /** Ascendant: the floor its free (no-sacrifice) prestige was used on. */
   ascendFloor?: number;
   /** Stage race against a friend: same map and seed, double battle rewards, a live duel at the end. */
-  race?: { opponent: string; role: 'host' | 'guest' };
+  race?: { opponent: string; role: 'host' | 'guest'; /** A battle royale (3-8 players, bracket at the end). */ royale?: boolean };
   /** Potions carried (usable any time, including mid-battle). */
   potions?: number;
   /** Held items not on any creature. */

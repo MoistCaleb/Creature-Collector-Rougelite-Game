@@ -5,13 +5,14 @@ import type { ArenaPick } from '../logic/arena';
 import { SPECIES_BY_ID } from '../data/species';
 import { MOVES } from '../data/moves';
 import type { BattleMatch } from '../scenes/BattleScene';
-import { applySnap, cleanSettings, DEFAULT_SETTINGS, DUEL_VERSION, DuelController, type DuelSettings, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type StartInfo } from './duel';
+import { applySnap, cleanSettings, DEFAULT_SETTINGS, DUEL_VERSION, DuelController, type DuelSettings, type DuelMsg, type Next, type RaceInfo, type RaceProgress, type RosterEntry, type StartInfo } from './duel';
 import { SPECIES } from '../data/species';
 import { HELD } from '../data/held';
 import { stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import type { Creature } from '../logic/creature';
-import { session } from './session';
+import { MAX_GUESTS, myPid, session } from './session';
+import { hostAbandonRoyale, royale, royaleBack, royaleLost, royaleProgress } from './royale';
 
 /**
  * Glue between the connection and the screens: who we're connected to, the duel in progress,
@@ -62,9 +63,42 @@ export const duel = {
   race: null as { info: RaceInfo; mine: RaceProgress | null; theirs: RaceProgress | null; duelStarted: boolean } | null,
   /** Redraw hook for screens showing race progress (map, end screen). */
   onRaceChange: null as (() => void) | null,
+  /** Everyone in the session, the host first (the host keeps it; guests get copies). */
+  roster: [] as RosterEntry[],
+  /** Host: each guest's current link (peer id), by player id. */
+  peers: new Map<string, string>(),
+  /** Host: each guest's hello (name, look, teams), by player id. */
+  guests: new Map<string, Opponent>(),
 };
 
-/** Drop anything malformed from creatures the other phone sent for the race finale. */
+/** Host: the player id behind a guest's link. */
+export const pidOf = (peer: string): string | undefined => [...duel.peers.entries()].find(([, p]) => p === peer)?.[0];
+
+/** A player's name from the roster. */
+export const nameOf = (pid: string): string => duel.roster.find((r) => r.pid === pid)?.name ?? 'Player';
+
+/** Something is being played (no one new may join until it's over). */
+const underway = () => !!(duel.race || duel.series || duel.controller || royale.active);
+
+/** Host: rebuild the roster (yourself first) and send it to everyone. */
+export function shareRoster() {
+  if (session.role !== 'host' || !duel.me) return;
+  const me: RosterEntry = { pid: myPid, name: duel.me.name, look: duel.me.look, title: duel.me.title, host: true };
+  duel.roster = [me, ...[...duel.guests.entries()].map(([pid, g]) => ({ pid, name: g.name, look: g.look, title: g.title }))];
+  // One-on-one modes (Arena duels, 2-player stage battles) need exactly one other player.
+  duel.opponent = duel.guests.size === 1 ? [...duel.guests.values()][0] : null;
+  session.send({ t: 'roster', players: duel.roster });
+  duel.onChange?.();
+}
+
+export function cleanRoster(x: unknown): RosterEntry[] {
+  if (!Array.isArray(x)) return [];
+  return x
+    .filter((r) => r && typeof r.pid === 'string')
+    .slice(0, MAX_GUESTS + 1)
+    .map((r) => ({ pid: String(r.pid).slice(0, 16), name: String(r.name || 'Player').slice(0, 16), look: cleanLook(r.look), title: cleanTitle(r.title), ...(r.host ? { host: true } : {}) }));
+}
+
 /** A map node id from the other player (shown only if it's on our map too). */
 const cleanNodeId = (x: unknown): string | undefined => (typeof x === 'string' && x.length <= 40 ? x : undefined);
 
@@ -75,7 +109,8 @@ function cleanLead(x: unknown): { speciesId: string; stage: number; shiny?: bool
   return { speciesId: l.speciesId, stage: l.stage as number, ...(l.shiny === true ? { shiny: true } : {}) };
 }
 
-function cleanCreatures(list: unknown): Creature[] {
+/** Drop anything malformed from creatures another phone sent (race finale, bracket matches). */
+export function cleanCreatures(list: unknown): Creature[] {
   if (!Array.isArray(list)) return [];
   return list
     .filter((c): c is Creature => !!c && typeof c.speciesId === 'string' && !!SPECIES_BY_ID[c.speciesId])
@@ -121,6 +156,7 @@ function enterRace(race: RaceInfo) {
 
 /** Share where you are in the race (called from the map and the end screen). */
 export function sendProgress(p: RaceProgress) {
+  if (royale.active) return royaleProgress(p);
   if (!duel.race) return;
   duel.race.mine = p;
   session.send({ t: 'progress', p });
@@ -182,7 +218,13 @@ function cleanTeam(team: unknown): ArenaPick[] {
 
 /** Say hello: our name and the teams we're bringing. */
 export function sendHello() {
-  if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, title: duel.me.title, teams: duel.me.teams });
+  if (!duel.me) return;
+  // The host's details go to every guest (their one-on-one view), and the roster to everyone.
+  if (session.role === 'host') {
+    session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, title: duel.me.title, teams: duel.me.teams, reply: true });
+    return shareRoster();
+  }
+  session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, title: duel.me.title, teams: duel.me.teams, pid: myPid });
 }
 
 /** Host: change a session setting and tell the guest. */
@@ -265,7 +307,7 @@ export function afterSeriesGame(over: boolean) {
   } else toPick();
 }
 
-function beginDuel(controller: DuelController, initialNext?: Next) {
+export function beginDuel(controller: DuelController, initialNext?: Next, opp: { look?: TrainerLook; title?: string } | null = duel.opponent) {
   duel.controller = controller;
   const match: BattleMatch = {
     team: [],
@@ -273,8 +315,8 @@ function beginDuel(controller: DuelController, initialNext?: Next) {
     seed: controller.info.seed,
     title: 'DUEL',
     opponent: controller.opponentName,
-    opponentLook: duel.opponent?.look,
-    opponentTitle: duel.opponent?.title,
+    opponentLook: opp?.look,
+    opponentTitle: opp?.title,
     randomness: 0,
     background: 0x14223a,
     duel: controller,
@@ -285,7 +327,7 @@ function beginDuel(controller: DuelController, initialNext?: Next) {
 }
 
 /** Switch to a screen from outside it (stopping whatever is showing; restarting it if it's that one). */
-function goTo(key: string, data: object) {
+export function goTo(key: string, data: object) {
   const mgr = duel.game?.scene;
   if (!mgr) return;
   const active = mgr.getScenes(true);
@@ -295,21 +337,60 @@ function goTo(key: string, data: object) {
   else mgr.start(key, data);
 }
 
-session.onMessage((msg: DuelMsg) => {
+session.onMessage((msg: DuelMsg, from: string) => {
   switch (msg.t) {
-    case 'hello':
-      duel.opponent = {
+    case 'hello': {
+      const who: Opponent = {
         name: String(msg.name || 'Friend').slice(0, 16),
         look: cleanLook(msg.look),
         title: cleanTitle(msg.title),
         teams: (Array.isArray(msg.teams) ? msg.teams : []).slice(0, 3).map((t) => ({ name: String(t?.name ?? 'Team').slice(0, 18), picks: cleanTeam(t?.picks) })),
       };
-      // The host answers with its own hello (and the settings) so the guest sees the whole setup.
-      if (session.role === 'host' && !msg.reply) {
-        if (duel.me) session.send({ t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, title: duel.me.title, teams: duel.me.teams, reply: true });
-        session.send({ t: 'settings', s: duel.settings });
+      if (session.role !== 'host') {
+        duel.opponent = who;
+        duel.onChange?.();
+        return;
       }
-      duel.onChange?.();
+      const pid = typeof msg.pid === 'string' && msg.pid ? msg.pid.slice(0, 16) : from;
+      if (!duel.guests.has(pid)) {
+        // Someone new: only between games, and only up to 8 players.
+        const why = underway()
+          ? 'A game is already under way there. Try again when it ends.'
+          : duel.guests.size >= MAX_GUESTS
+            ? 'That game is full (8 players).'
+            : '';
+        if (why) {
+          session.sendTo(from, { t: 'refuse', why });
+          setTimeout(() => session.drop(from), 400);
+          return;
+        }
+      }
+      // A reconnecting player: their new link replaces the old one.
+      const old = duel.peers.get(pid);
+      if (old && old !== from) session.drop(old);
+      duel.peers.set(pid, from);
+      if (royale.active) {
+        royaleBack(pid);
+        return;
+      }
+      duel.guests.set(pid, who);
+      // Answer with our own hello and the settings, then tell everyone who's here.
+      if (duel.me && !msg.reply) session.sendTo(from, { t: 'hello', v: DUEL_VERSION, name: duel.me.name, look: duel.me.look, title: duel.me.title, teams: duel.me.teams, reply: true });
+      session.sendTo(from, { t: 'settings', s: duel.settings });
+      shareRoster();
+      return;
+    }
+    case 'roster':
+      if (session.role === 'guest') {
+        duel.roster = cleanRoster(msg.players);
+        duel.onChange?.();
+      }
+      return;
+    case 'refuse':
+      if (session.role === 'guest') {
+        session.fail(String(msg.why || 'The host turned the connection down.').slice(0, 120));
+        duel.onChange?.();
+      }
       return;
     case 'settings':
       if (session.role === 'guest') {
@@ -363,13 +444,35 @@ session.onMessage((msg: DuelMsg) => {
 
 /** Host: a guest (re)connected. Mid-duel, hand it everything it needs to pick up again. */
 session.onGuestJoined = () => {
-  if (duel.controller && session.role === 'host') session.send(duel.controller.resumeMsg());
+  if (duel.controller && session.role === 'host' && !royale.active) session.send(duel.controller.resumeMsg());
 };
+
+/** Host: a guest's link closed. Between games they leave the lobby; in a battle royale they get a grace period. */
+session.onGuestLost = (peer) => {
+  const pid = pidOf(peer);
+  if (!pid) return;
+  if (royale.active) return royaleLost(pid);
+  if (underway()) return;
+  duel.peers.delete(pid);
+  duel.guests.delete(pid);
+  shareRoster();
+};
+
+/** Host: end the battle royale for everyone (the lobby stays connected). */
+export function leaveDuelRoyale() {
+  hostAbandonRoyale();
+  royale.reset();
+}
 
 /** Leave everything: connection, duel, race and opponent. */
 export function leaveDuel() {
+  hostAbandonRoyale();
   duel.controller = null;
   duel.opponent = null;
+  duel.roster = [];
+  duel.peers.clear();
+  duel.guests.clear();
+  royale.reset();
   duel.race = null;
   duel.series = null;
   duel.settings = { ...DEFAULT_SETTINGS };
@@ -380,7 +483,7 @@ export function leaveDuel() {
 // retrying the same code, and both sides re-share their progress once reconnected.
 let retry: ReturnType<typeof setInterval> | null = null;
 session.onStatus((s) => {
-  if (s === 'lost' && session.role === 'guest' && duel.race && !duel.controller && !retry) {
+  if (s === 'lost' && session.role === 'guest' && ((duel.race && !duel.controller) || royale.active) && !retry) {
     retry = setInterval(() => void session.connectGuest().then((ok) => ok && sendHello()), 3000);
   }
   if (s === 'connected') {

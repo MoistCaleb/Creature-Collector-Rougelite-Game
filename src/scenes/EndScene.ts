@@ -10,9 +10,10 @@ import { isAlive, type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
 import { MOVES } from '../data/moves';
 import { MAP_BY_ID } from '../data/maps';
-import { openPicker } from '../ui/picker';
-import { duel, endRace, raceVerdict, sendProgress } from '../net/runtime';
-import { session } from '../net/session';
+import { openPicker, showMessage } from '../ui/picker';
+import { duel, endRace, leaveDuelRoyale, raceVerdict, sendProgress } from '../net/runtime';
+import { royale, royaleQuit, royaleSummary } from '../net/royale';
+import { myPid, session } from '../net/session';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
@@ -30,7 +31,7 @@ export class EndScene extends Phaser.Scene {
   /** Title news from a stage battle won without the final duel (null: not counted yet). */
   private raceWin: string | null = null;
 
-  create(data: { won: boolean }) {
+  create(data: { won: boolean; byDefault?: boolean }) {
     this.raceWin = null;
     background(this);
     playMusic(data.won ? 'win' : 'lose');
@@ -58,7 +59,13 @@ export class EndScene extends Phaser.Scene {
       ? `Your team fell on Gilded Hunt floor ${hunt.depth}. ${hunt.shinies} gilded Hexling${hunt.shinies === 1 ? '' : 's'} caught on the hunt.`
       : race
       ? data.won
-        ? `You reached the boss. Your team now faces ${race.opponent}!`
+        ? data.byDefault
+          ? race.royale
+            ? 'Every other team was wiped out before the boss. You\u2019re the last trainer standing!'
+            : `${race.opponent}\u2019s team was wiped out before the boss. The stage is yours!`
+          : race.royale
+            ? 'You reached the boss. Next: the tournament bracket against the other survivors!'
+            : `You reached the boss. Your team now faces ${race.opponent}!`
         : `Your team fell in the ${run.map.biome} lands before reaching the boss.`
       : data.won
         ? `${run.map.biome} lands conquered. All three floors cleared.`
@@ -182,6 +189,7 @@ export class EndScene extends Phaser.Scene {
       text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
     }
 
+    if (run.race?.royale) return this.royaleFinish(run, data.won);
     if (run.race) return this.raceFinish(run, data.won);
     // Keep a good creature: save its form and moves for the team builder.
     const alive = allCreatures(run).filter((c) => c.hp > 0);
@@ -261,6 +269,70 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
     }
     return this.raceWin;
+  }
+
+  /** Battle royale: hand in the finished team, wait for everyone, then on to the bracket. */
+  private royaleFinish(run: NonNullable<typeof state.run>, won: boolean) {
+    const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
+    sendProgress({ floor: run.floor, finished: true, won, team });
+    const bx = LANDSCAPE ? 32 + (W - 48) / 2 : 16;
+    const bw = LANDSCAPE ? (W - 48) / 2 : W - 32;
+    const by = LANDSCAPE ? 300 : 640;
+    this.add.rectangle(bx, by, bw, 76, 0x14223a).setOrigin(0).setStrokeStyle(2, 0x8fd0ff, 0.8);
+    const status = text(this, bx + bw / 2, by + 10, '', 14, '#8fd0ff', { align: 'center', wordWrap: { width: bw - 28 } }).setOrigin(0.5, 0);
+    let btn: Phaser.GameObjects.Container | null = null;
+    let label = '';
+    const leave = () => {
+      royale.reset();
+      state.run = null;
+      this.scene.start(session.connected ? 'Duel' : 'Title', {});
+    };
+    const button_ = (l: string, confirm = false) => {
+      if (label === l) return;
+      label = l;
+      btn?.destroy();
+      btn = button(this, bx + bw / 2, LANDSCAPE ? 412 : 752, 280, 56, l, () => {
+        // The host is everyone's link: leaving early ends it for all.
+        if (confirm && session.role === 'host') return showMessage(this, 'End the battle royale?', 'You\u2019re the host, so leaving ends it for everyone.', () => (leaveDuelRoyale(), leave()));
+        if (confirm) royaleQuit();
+        leave();
+      }, { color: 0x3b6d4a, fontSize: 18 });
+    };
+    let toBracket = false;
+    const draw = () => {
+      if (!status.active) return;
+      if (royale.ended) {
+        status.setText(royale.ended);
+        button_('Back to the lobby');
+      } else if (royale.champion === myPid && !royale.bracket) {
+        status.setText(`You\u2019re the last trainer standing. You win the battle royale!${this.royaleWinNews()}`);
+        button_('Back to the lobby');
+      } else if (royale.bracket || royale.champion) {
+        status.setText('Everyone\u2019s done. The tournament bracket is set!');
+        btn?.destroy();
+        if (!toBracket) {
+          toBracket = true;
+          this.time.delayedCall(1400, () => this.scene.start('Bracket', {}));
+        }
+      } else {
+        status.setText(`${won ? 'Your team is ready for the bracket.' : 'Your team fell, but you can watch the bracket.'}\nWaiting for the others: ${royaleSummary()}`);
+        button_(won ? 'Give up the battle royale' : 'Leave', true);
+      }
+    };
+    draw();
+    royale.onChange = draw;
+    this.events.once('shutdown', () => {
+      if (royale.onChange === draw) royale.onChange = null;
+    });
+  }
+
+  /** Count the battle royale win (once) and announce any title it earned. */
+  private royaleWinNews(): string {
+    if (royale.winCounted) return '';
+    royale.winCounted = true;
+    const news = titleNews(addOnlineWin(state.meta)).replace(/^\n+/, '\n');
+    saveMeta(state.meta);
+    return news;
   }
 
   /** Stage race: hand in the finished team and wait for the other racer; the final duel starts itself. */
