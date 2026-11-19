@@ -22,7 +22,7 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
       { label: 'Settings', sub: 'Sound, speed, tips', glyph: 'gear' },
       { label: 'Element chart', sub: focus.length ? 'Your foe’s elements are highlighted' : 'What beats what', glyph: 'sparkle' },
       { label: 'How to play', glyph: 'book' },
-      { label: 'Exit to title', sub: 'Your run is saved', color: 0x2f4a6b, glyph: 'back' },
+      { label: 'Exit to title', sub: state.run?.race ? 'Leaves the online game (your own saved run is kept)' : 'Your run is saved', color: 0x2f4a6b, glyph: 'back' },
       { label: 'Abandon run', sub: 'End this run for good', color: 0x5a2a2a, glyph: 'skull' },
     ],
     onPick: (i) => {
@@ -40,7 +40,7 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
         subtitle: 'It ends here and can’t be continued. Starters you unlocked and Hexlidex entries are kept.',
         options: [{ label: 'Abandon run', color: 0x8a2c2c }],
         onPick: () => {
-          clearSavedRun();
+          clearSavedRun(state.run);
           state.run = null;
           scene.scene.start('Title', {});
         },

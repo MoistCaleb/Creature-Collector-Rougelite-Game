@@ -725,8 +725,13 @@ export function applyFloorCap(run: Run) {
 
 const RUN_KEY = 'ccr-run-v1';
 
-/** Persist the run so a reload resumes exactly here. */
+/**
+ * Persist the run so a reload resumes exactly here. Online runs (stage battles, battle royales)
+ * are never saved: they can't be resumed without the other players, and the one save slot belongs
+ * to your own run, which must survive playing online.
+ */
 export function saveRun(run: Run) {
+  if (run.race) return;
   try {
     const { meta: _m, rng, ...rest } = run;
     void _m;
@@ -764,7 +769,9 @@ export function loadRun(meta: Meta): Run | null {
   }
 }
 
-export function clearSavedRun() {
+/** Forget the saved run. Pass the run that's ending: an online run leaves your own saved run alone. */
+export function clearSavedRun(ending?: Run | null) {
+  if (ending?.race) return;
   try {
     storage.removeItem(RUN_KEY);
   } catch {

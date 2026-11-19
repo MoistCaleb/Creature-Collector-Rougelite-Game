@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.13';
+export const APP_VERSION = '1.14';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,13 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.14',
+    title: 'Your run is safe',
+    items: [
+      'Playing online (stage battles, battle royales) no longer erases the run you had saved. Online runs are never saved over it.',
+    ],
+  },
   {
     version: '1.13',
     title: 'Battle royale',
