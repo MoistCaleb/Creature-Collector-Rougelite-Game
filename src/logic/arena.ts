@@ -1,8 +1,8 @@
-import { attackId, elementPool, MOVES, teamMoveId } from '../data/moves';
+import { attackEl, attackId, elementPool, MOVES, teamMoveId } from '../data/moves';
 import { ELEMENTS } from '../data/types';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { TRAINER_CLASSES, TRAINER_NAMES } from '../data/trainers';
-import { createCreature, learnset, MAX_MOVES, teamElement, type Creature } from './creature';
+import { createCreature, extraMoves, learnset, MAX_MOVES, teamElement, type Creature } from './creature';
 import { hasSeenForm } from './dex';
 import { Rng } from './rng';
 import type { Meta } from './run';
@@ -49,18 +49,20 @@ export function arenaMovePool(speciesId: string, stage: number): string[] {
   for (const e of learnset(SPECIES_BY_ID[speciesId])) {
     if (e.level > ARENA_LEVEL) continue;
     const d = MOVES[e.id];
-    const id = d.kind === 'attack' && d.rank >= 0 ? attackId(d.element, Math.min(3, d.rank + stage)) : e.id;
+    const id = d.kind === 'attack' && d.rank >= 0 ? attackId(attackEl(d), Math.min(3, d.rank + stage)) : e.id;
     if (!out.includes(id)) out.push(id);
   }
   // Every line gets its team move by Lv 26.
   const team = teamMoveId(teamElement(SPECIES_BY_ID[speciesId]));
   if (!out.includes(team)) out.push(team);
+  // Blitz/Crush, Bulwark and Time Warp, for the lines that learn them.
+  for (const e of extraMoves(SPECIES_BY_ID[speciesId])) if (e.level <= ARENA_LEVEL && !out.includes(e.id)) out.push(e.id);
   // Evolved forms keep the lower ranks they grew out of, too.
   for (const e of learnset(SPECIES_BY_ID[speciesId])) {
     const d = MOVES[e.id];
     if (e.level > ARENA_LEVEL || d.kind !== 'attack' || d.rank < 0) continue;
     for (let r = d.rank; r < Math.min(3, d.rank + stage); r++) {
-      const id = attackId(d.element, r);
+      const id = attackId(attackEl(d), r);
       if (!out.includes(id)) out.push(id);
     }
   }

@@ -34,7 +34,8 @@ export function seeForm(dex: Dex, speciesId: string, stage: number): boolean {
 }
 
 export function seeMove(dex: Dex, id: string): boolean {
-  let changed = seeElement(dex, MOVES[id].element);
+  const el = MOVES[id].element;
+  let changed = el !== 'Neutral' && seeElement(dex, el);
   if (!dex.moves.includes(id)) {
     dex.moves.push(id);
     changed = true;

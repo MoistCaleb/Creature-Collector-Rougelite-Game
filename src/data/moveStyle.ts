@@ -57,7 +57,8 @@ const RULES: [RegExp, Style][] = [
 ];
 
 const STATUS_RULES: [RegExp, Style][] = [
-  [/\b(armor|skin|shell|coat|reinforce|will|veil|mirror|plate)\b/, 'shield'],
+  [/\b(armor|skin|shell|coat|reinforce|will|veil|mirror|plate|bulwark)\b/, 'shield'],
+  [/\b(warp)\b/, 'swirl'],
   [/\b(vanish|lurk|step)\b/, 'fade'],
   [/\b(dance|tailwind|turbine|gear)\b/, 'swirl'],
   [/\b(roar|howl)\b/, 'roar'],
@@ -66,6 +67,8 @@ const STATUS_RULES: [RegExp, Style][] = [
 
 export function moveStyle(def: MoveDef): Style {
   const name = def.name.toLowerCase();
+  // Speed attacks: a Blitz darts in, a Crush comes down heavy.
+  if (def.speedPower) return def.speedPower === 'fast' ? 'dash' : 'smash';
   if (def.kind === 'heal') {
     for (const [re, s] of STATUS_RULES) if (re.test(name) && s === 'shield') return 'shield';
     return 'mend';

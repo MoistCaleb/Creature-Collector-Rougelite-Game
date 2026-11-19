@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.15';
+export const APP_VERSION = '1.16';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.16',
+    title: 'Neutral moves and speed attacks',
+    items: [
+      'The first Neutral moves. Bulwark: goes first and blocks attacks for the turn, but only 1 time in 4 if used again right after it held (4 uses). The bulkiest lines learn it at Lv 30.',
+      'Time Warp: for 5 turns the slower Hexling moves first; use it again to end it early (5 uses). Slow Metal, Light, Shadow and Spirit lines (and bulky Spirit ones) learn it at Lv 34.',
+      'Speed attacks: the fastest lines learn a Blitz (stronger the faster they are than the foe) and the slowest a Crush (stronger the slower they are), at Lv 16. Pow 40 to 130.',
+      'Hexlings past those levels are offered them on their next level-up, and they show in the team builder for the lines that learn them.',
+    ],
+  },
   {
     version: '1.15',
     title: 'Move Relearn',

@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { attackValue, effectsAtTier, healAtTier, MAX_STAGE, mendHeal, STAT_LABEL, TEAM_FX, teamFxTurns, TIER_POWER, type MoveDef, type StatKey, type TeamFxId } from '../data/moves';
+import { attackEl, attackValue, bulwarkRepeat, effectsAtTier, speedPower, warpTurns, healAtTier, MAX_STAGE, mendHeal, STAT_LABEL, TEAM_FX, teamFxTurns, TIER_POWER, type MoveDef, type StatKey, type TeamFxId } from '../data/moves';
 import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
 import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
@@ -21,6 +21,10 @@ export interface Combatant {
   syn?: { atk: number; def: number; spd: number };
   /** Last Stand Sash: 'fired' right after it saved the holder, then 'spent'. */
   sash?: 'fired' | 'spent';
+  /** Bulwark is up this turn. */
+  guarded?: boolean;
+  /** Bulwarks that held in a row (each one after the first is much less likely to). */
+  guardStreak?: number;
 }
 
 /** Thornwall: your hits on their Hexlings cut you for this share of the damage. */
@@ -39,6 +43,8 @@ export interface BattleState {
   winded: number[];
   turnNo: number;
   lastEnemySwitch: number;
+  /** Time Warp turns left. */
+  warp?: number;
 }
 
 export type PlayerAction =
@@ -95,6 +101,8 @@ export class Battle {
   readonly duel: { player: string; enemy: string } | null;
   /** Team effects up on each side, with turns left (see TEAM_FX). */
   teamFx: Record<Side, Partial<Record<TeamFxId, number>>> = { player: {}, enemy: {} };
+  /** Time Warp: turns left in which the slower Hexling moves first (0: off). */
+  warp = 0;
 
   hasFx(side: Side, fx: TeamFxId): boolean {
     return (this.teamFx[side][fx] ?? 0) > 0;
@@ -238,6 +246,7 @@ export class Battle {
       winded: [...this.winded],
       turnNo: this.turnNo,
       lastEnemySwitch: this.lastEnemySwitch,
+      warp: this.warp,
     };
   }
 
@@ -260,6 +269,7 @@ export class Battle {
     this.winded = new Set(s.winded ?? []);
     this.turnNo = s.turnNo ?? this.turnNo;
     this.lastEnemySwitch = s.lastEnemySwitch ?? this.lastEnemySwitch;
+    this.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
   }
 
   /**
@@ -645,12 +655,18 @@ export class Battle {
     return x.c.held === 'claw' && this.rng.chance(0.25);
   }
 
+  /** A combatant's speed right now: stages, synergy, Swift Scarf, paralysis and Speed Boost. */
+  speedOf(x: Combatant): number {
+    const wind = this.hasFx(this.sideOf(x), 'tailwind') ? 1.5 : 1;
+    return stats(x.c).spd * (x.syn?.spd ?? 1) * stageMult(x.spdStage) * (x.c.held === 'scarf' ? 1.25 : 1) * (x.status === 'para' ? 0.5 : 1) * wind;
+  }
+
   private playerGoesFirst(): boolean {
-    const wind = (s: Side) => (this.hasFx(s, 'tailwind') ? 1.5 : 1);
-    const ps = stats(this.p.c).spd * (this.p.syn?.spd ?? 1) * stageMult(this.p.spdStage) * (this.p.c.held === 'scarf' ? 1.25 : 1) * (this.p.status === 'para' ? 0.5 : 1) * wind('player');
-    const es = stats(this.e.c).spd * (this.e.syn?.spd ?? 1) * stageMult(this.e.spdStage) * (this.e.c.held === 'scarf' ? 1.25 : 1) * (this.e.status === 'para' ? 0.5 : 1) * wind('enemy');
+    const ps = this.speedOf(this.p);
+    const es = this.speedOf(this.e);
     if (ps === es) return this.rng.chance(0.5);
-    return ps > es;
+    // Time Warp: the slower one goes first.
+    return this.warp > 0 ? ps < es : ps > es;
   }
 
   private chooseEnemyMove(): MoveSlot {
@@ -688,6 +704,39 @@ export class Battle {
     return best;
   }
 
+  /** Speed attacks: power for this matchup over the listed power. */
+  speedFactor(def: MoveDef, user: Combatant, target: Combatant): number {
+    const u = this.speedOf(user);
+    const t = Math.max(1, this.speedOf(target));
+    const ratio = def.speedPower === 'fast' ? u / t : t / Math.max(1, u);
+    return speedPower(ratio) / def.power;
+  }
+
+  private useBulwark(side: Side, user: Combatant, tier: number, ev: BattleEvent[]) {
+    const streak = user.guardStreak ?? 0;
+    const chance = streak === 0 ? 1 : Math.pow(bulwarkRepeat(tier), streak);
+    if (this.rng.next() < chance) {
+      user.guarded = true;
+      user.guardStreak = streak + 1;
+      ev.push({ kind: 'stat', side, up: true });
+      ev.push({ kind: 'text', text: `${this.nameOf(side, user.c)} braced behind a Bulwark!` });
+    } else {
+      user.guardStreak = 0;
+      ev.push({ kind: 'text', text: 'But the Bulwark crumbled! (It rarely holds twice in a row.)' });
+    }
+  }
+
+  private useWarp(tier: number, ev: BattleEvent[]) {
+    if (this.warp > 0) {
+      this.warp = 0;
+      ev.push({ kind: 'text', text: 'Time snapped back to normal!' });
+      return;
+    }
+    // Counting this turn, so it shapes the next turns' order.
+    this.warp = warpTurns(tier) + 1;
+    ev.push({ kind: 'text', text: `Time twisted! For ${warpTurns(tier)} turns, slower Hexlings move first.` });
+  }
+
   /** Expected damage-ish score for an attack, used by the AI. */
   private attackScore(user: Combatant, target: Combatant, m: MoveSlot): number {
     const d = moveDef(m);
@@ -696,6 +745,7 @@ export class Battle {
     const targetFrac = target.c.hp / stats(target.c).hp;
     if (d.execute && targetFrac < 0.5) v *= 2;
     if (d.priority && targetFrac < 0.25) v *= 1.5;
+    if (d.speedPower) v *= this.speedFactor(d, user, target);
     return v;
   }
 
@@ -703,6 +753,13 @@ export class Battle {
   private statusScore(m: MoveSlot, user: Combatant, foe: Combatant): number {
     const d = moveDef(m);
     const hpFrac = user.c.hp / stats(user.c).hp;
+    // Bulwark: now and then, mostly when hurt, never twice in a row.
+    if (d.protect) return (user.guardStreak ?? 0) > 0 ? 0 : hpFrac < 0.5 ? 45 : 12;
+    // Time Warp: set it up when slower, cancel the foe's when faster.
+    if (d.warp) {
+      const slower = this.speedOf(user) < this.speedOf(foe);
+      return this.warp > 0 ? (slower ? 0 : 55) : slower ? 60 : 0;
+    }
     if (d.kind === 'heal') return hpFrac < 0.5 ? 90 * (1 - hpFrac) : 0;
     if (d.team) {
       const side = this.sideOf(user);
@@ -839,6 +896,14 @@ export class Battle {
     const who = this.nameOf(side, user.c);
     ev.push({ kind: 'attack', side, move: def.name, moveId: def.id, slot: side === 'player' ? this.pActive : this.eActive });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
+    if (def.protect) return this.useBulwark(side, user, slot.tier, ev);
+    user.guardStreak = 0;
+    // The foe's Bulwark stops attacks and stat-lowering moves cold.
+    if (target.guarded && (def.kind === 'attack' || def.kind === 'debuff')) {
+      ev.push({ kind: 'text', text: `${this.nameOf(targetSide, target.c)} blocked it behind its Bulwark!` });
+      return;
+    }
+    if (def.warp) return this.useWarp(slot.tier, ev);
 
     const targetSideOf: Side = side === 'player' ? 'enemy' : 'player';
     const acc =
@@ -867,7 +932,9 @@ export class Battle {
     }
 
     const el = attackElement(def, user, target);
-    const powerMult = def.execute && target.c.hp < stats(target.c).hp / 2 ? 2 : 1;
+    let powerMult = def.execute && target.c.hp < stats(target.c).hp / 2 ? 2 : 1;
+    // Speed attacks: their power depends on who's faster.
+    if (def.speedPower) powerMult *= this.speedFactor(def, user, target);
     let hits = def.hits ?? 1;
     if (slot.tier >= 3 && def.element === 'Storm' && this.rng.chance(0.35)) hits += 1;
     let total = 0;
@@ -1077,6 +1144,9 @@ export class Battle {
   }
 
   private endOfTurn(ev: BattleEvent[]) {
+    // Bulwarks only last the turn.
+    for (const x of [...this.player, ...this.enemy]) x.guarded = false;
+    if (this.warp > 0 && --this.warp === 0) ev.push({ kind: 'text', text: 'Time returned to normal.' });
     if (this.spared) {
       ev.push({ kind: 'text', text: `The wild ${creatureName(this.e.c)} is too weak to fight on!` });
       return;
@@ -1211,11 +1281,13 @@ function resetStages(x: Combatant) {
   x.atkStage = 0;
   x.defStage = 0;
   x.spdStage = 0;
+  x.guardStreak = 0;
+  x.guarded = false;
 }
 
 /** The element an attack actually hits with (bestType moves pick the user's most effective type). */
 export function attackElement(def: MoveDef, user: Combatant, target: Combatant): Element {
-  if (!def.bestType) return def.element;
+  if (!def.bestType) return attackEl(def);
   const types = creatureTypes(user.c);
   const tt = creatureTypes(target.c);
   return typeMultiplier(types[1], tt) > typeMultiplier(types[0], tt) ? types[1] : types[0];
@@ -1227,7 +1299,7 @@ export function computeDamage(
   def: MoveDef,
   tier: number,
   rng: Rng,
-  element: Element = def.element,
+  element: Element = attackEl(def),
   powerMult = 1,
 ): { dmg: number; mult: number } {
   const us = stats(user.c);

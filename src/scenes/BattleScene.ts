@@ -13,7 +13,7 @@ import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
-import { accText, MAX_STAGE, maxUses, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
+import { accText, attackEl, MAX_STAGE, maxUses, moveColor, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
 import { BOSSES, guardianRules, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
@@ -916,7 +916,7 @@ export class BattleScene extends Phaser.Scene {
       const mx = x0 + (i % cols) * (mw + 10);
       const my = y + Math.floor(i / cols) * 40;
       const known = side === 'player' || this.foeSeen.has(`${this.battle.enemy.findIndex((x) => x.c === c)}:${m.id}`);
-      r.add(this.add.rectangle(mx - 6, my - 3, mw + 12, 36, known ? Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(55).color : COLORS.panelLight, 0.9).setOrigin(0));
+      r.add(this.add.rectangle(mx - 6, my - 3, mw + 12, 36, known ? Phaser.Display.Color.ValueToColor(moveColor(d.element)).darken(55).color : COLORS.panelLight, 0.9).setOrigin(0));
       if (!known) {
         r.add(text(this, mx, my + 8, '??? · not used yet', 13, '#6d6888'));
         return;
@@ -1057,7 +1057,7 @@ export class BattleScene extends Phaser.Scene {
     if (outOfMoves(p)) {
       // Every move is spent: only the basic attack is left until uses are restored.
       const fb = moveDef(fallbackMove(p));
-      const color = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[fb.element]).darken(45).color;
+      const color = Phaser.Display.Color.ValueToColor(moveColor(fb.element)).darken(45).color;
       this.actions.add(
         button(this, L.fallback.x, L.fallback.y, L.fallback.w, 64, `${fb.name} (basic attack)`, () => this.act({ kind: 'move', index: -1 }), {
           color,
@@ -1070,11 +1070,11 @@ export class BattleScene extends Phaser.Scene {
     p.moves.forEach((m, i) => {
       if (outOfMoves(p)) return;
       const d = moveDef(m);
-      const mult = typeMultiplier(d.element, creatureTypes(e));
+      const mult = d.kind === 'attack' ? typeMultiplier(attackEl(d), creatureTypes(e)) : 1;
       const hint = d.kind !== 'attack' ? '' : mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
       const x = x0 + bw / 2 + (i % 2) * (bw + gap);
       const y = y0 + Math.floor(i / 2) * rowH;
-      const color = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[d.element]).darken(45).color;
+      const color = Phaser.Display.Color.ValueToColor(moveColor(d.element)).darken(45).color;
       this.actions.add(
         button(this, x, y, bw, bh, d.name + hint, () => this.act({ kind: 'move', index: i }), {
           color,
@@ -1279,7 +1279,7 @@ export class BattleScene extends Phaser.Scene {
             if (ab) ab.seenMoves = [...this.foeSeen];
           }
           const def = MOVES[ev.moveId];
-          lastEl = def?.element ?? lastEl;
+          lastEl = def && def.element !== 'Neutral' ? def.element : lastEl;
           const s = this.spriteOf(ev.side);
           const target = this.spriteOf(ev.side === 'player' ? 'enemy' : 'player');
           const next = events[idx + 1];
@@ -1415,6 +1415,13 @@ export class BattleScene extends Phaser.Scene {
         this.fxChips.add(this.add.rectangle(x, y, w, 16, def.color).setOrigin(0));
         this.fxChips.add(t.setPosition(x + 5, y + 2));
         x += side === 'player' ? -4 : w + 4;
+      }
+      // Time Warp is on the whole field: one chip, with the enemy's.
+      if (side === 'enemy' && this.battle.warp > 0) {
+        const t = text(this, 0, 0, `TIME WARP · ${this.battle.warp}`, 11, '#1a1426', { fontStyle: 'bold' });
+        const w = t.width + 10;
+        this.fxChips.add(this.add.rectangle(x, y, w, 16, 0xb4b0c8).setOrigin(0));
+        this.fxChips.add(t.setPosition(x + 5, y + 2));
       }
     }
   }

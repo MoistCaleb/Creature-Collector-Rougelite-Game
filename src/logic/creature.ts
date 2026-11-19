@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { attackId, attackValue, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, teamMoveId, type MoveDef } from '../data/moves';
+import { attackEl, attackId, attackValue, BULWARK_ID, fastId, slowId, WARP_ID, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, teamMoveId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
 import { stabMultiplier, type Element, type TypePair } from '../data/types';
@@ -37,6 +37,8 @@ export interface Creature {
   teamOffered?: boolean;
   /** A rare color variant (about 1 wild Hexling in 200). Cosmetic; kept when caught and evolved. */
   shiny?: boolean;
+  /** Extra moves (see extraMoves) it has already been offered. */
+  extraOffered?: string[];
   /** Moves it learned from the land it was on (instead of a move from its own learnset). */
   landMoves?: string[];
   /** Land moves learned since they were last announced. */
@@ -154,7 +156,7 @@ function unknownAttack(c: Creature, el: Element, rank: number): string | null {
 /** Resolve a learnset entry to a concrete move id for this creature (no duplicates). */
 function resolveLearn(c: Creature, id: string): string | null {
   const def = MOVES[id];
-  if (def.kind === 'attack' && def.rank >= 0) return unknownAttack(c, def.element, def.rank + c.stage);
+  if (def.kind === 'attack' && def.rank >= 0) return unknownAttack(c, attackEl(def), def.rank + c.stage);
   return knows(c, id) ? null : id;
 }
 
@@ -207,6 +209,34 @@ export function landMoveFor(c: Creature, entry: LearnEntry, index: number): stri
   return id && MOVES[id] && !knows(c, id) && !c.pendingMoves.includes(id) ? id : null;
 }
 
+/**
+ * Moves only some lines learn, on top of their learnset, by what suits them: the fastest third
+ * get a Blitz (stronger the faster they are) and the slowest third a Crush (stronger the slower);
+ * slow Metal, Light, Shadow and Spirit lines (and bulky Spirit ones) learn Time Warp, and the
+ * bulkiest of the rest learn Bulwark.
+ */
+export function extraMoves(sp: Species): LearnEntry[] {
+  const cached = EXTRA_CACHE.get(sp.id);
+  if (cached) return cached;
+  const all = Object.values(SPECIES_BY_ID);
+  const at = (xs: number[], f: number) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length * f)];
+  const fast = at(all.map((x) => x.base.spd), 0.7);
+  const slow = at(all.map((x) => x.base.spd), 0.3);
+  const bulky = at(all.map((x) => x.base.def), 0.8);
+  const spiritTank = at(all.map((x) => x.base.def), 0.75);
+  const [a] = sp.types;
+  const out: LearnEntry[] = [];
+  if (sp.base.spd >= fast) out.push({ id: fastId(a), level: 16 });
+  else if (sp.base.spd <= slow) out.push({ id: slowId(a), level: 16 });
+  const warpTypes = ['Spirit', 'Shadow', 'Light', 'Metal'];
+  const warp = (sp.base.spd <= slow && sp.types.some((t) => warpTypes.includes(t))) || (sp.types.includes('Spirit') && sp.base.def >= spiritTank);
+  if (warp) out.push({ id: WARP_ID, level: 34 });
+  else if (sp.base.def >= bulky) out.push({ id: BULWARK_ID, level: 30 });
+  EXTRA_CACHE.set(sp.id, out);
+  return out;
+}
+const EXTRA_CACHE = new Map<string, LearnEntry[]>();
+
 export function learnMoves(c: Creature, auto = false): string[] {
   const learned: string[] = [];
   const set = learnset(species(c));
@@ -222,7 +252,26 @@ export function learnMoves(c: Creature, auto = false): string[] {
       learned.push(MOVES[id].name);
     } else if (!auto && !c.pendingMoves.includes(id)) c.pendingMoves.push(id);
   };
+  // Extra moves, in level order among the rest (offered once each).
+  const offerExtras = (below: number) => {
+    for (const e of extraMoves(species(c))) {
+      if (e.level > c.level || e.level >= below || c.extraOffered?.includes(e.id)) continue;
+      c.extraOffered = [...(c.extraOffered ?? []), e.id];
+      if (knows(c, e.id)) continue;
+      if (c.moves.length < MAX_MOVES) {
+        c.moves.push({ id: e.id, tier: 1 });
+        learned.push(MOVES[e.id].name);
+      } else if (auto) {
+        // Enemies with a full list: a utility move (Bulwark, Time Warp) takes a stat move's place.
+        // Blitz and Crush they only learn into a free slot, so they stay a tool more for you.
+        const d = MOVES[e.id];
+        const i = d.kind === 'attack' ? -1 : c.moves.findIndex((m) => MOVES[m.id].kind === 'buff' || MOVES[m.id].kind === 'debuff');
+        if (i >= 0) c.moves[i] = { id: e.id, tier: 1 };
+      } else if (!c.pendingMoves.includes(e.id)) c.pendingMoves.push(e.id);
+    }
+  };
   while (c.learnIndex < set.length && set[c.learnIndex].level <= c.level) {
+    offerExtras(set[c.learnIndex].level);
     if (set[c.learnIndex].level > TEAM_MOVE_LEVEL) offerTeam();
     // Your Hexlings (not enemies) sometimes pick up a move from the land instead.
     const fromLand = auto ? null : landMoveFor(c, set[c.learnIndex], c.learnIndex);
@@ -251,6 +300,7 @@ export function learnMoves(c: Creature, auto = false): string[] {
     }
   }
   offerTeam();
+  offerExtras(Infinity);
   return learned;
 }
 
@@ -267,10 +317,10 @@ function moveSetValue(c: Creature, moves: MoveSlot[]): number {
   for (const m of moves) {
     const d = MOVES[m.id];
     if (d.kind === 'attack') {
-      let v = attackValue(d, m.tier) * (d.bestType ? stabMultiplier(types[0], types) : stabMultiplier(d.element, types));
+      let v = attackValue(d, m.tier) * (d.bestType ? stabMultiplier(types[0], types) : stabMultiplier(attackEl(d), types));
       if (d.priority || d.drain || d.execute || d.selfAfter || d.targetAfter) v *= 1.1;
       if (d.signature) v *= 1.15;
-      attacks.push({ el: d.bestType ? types[0] : d.element, v });
+      attacks.push({ el: d.bestType ? types[0] : attackEl(d), v });
     } else {
       status.push((d.kind === 'heal' ? 60 : 50) * (1 + 0.15 * (m.tier - 1)));
     }
@@ -314,10 +364,11 @@ export function naturalMoves(c: Creature): string[] {
   for (const e of learnset(species(c))) {
     if (e.level > c.level) continue;
     const d = MOVES[e.id];
-    if (d.kind === 'attack' && d.rank >= 0) for (let r = d.rank; r <= Math.min(3, d.rank + c.stage); r++) add(attackId(d.element, r));
+    if (d.kind === 'attack' && d.rank >= 0) for (let r = d.rank; r <= Math.min(3, d.rank + c.stage); r++) add(attackId(attackEl(d), r));
     else add(e.id);
   }
   if (c.level >= TEAM_MOVE_LEVEL) add(teamMoveId(teamElement(species(c))));
+  for (const e of extraMoves(species(c))) if (e.level <= c.level) add(e.id);
   return out;
 }
 
@@ -517,7 +568,7 @@ export function evolve(c: Creature): boolean {
     .sort((a, b) => b.d.rank - a.d.rank);
   for (const { i, d } of order) {
     for (let r = d.rank + 1; r <= 3; r++) {
-      const id = attackId(d.element, r);
+      const id = attackId(attackEl(d), r);
       if (!knows(c, id)) {
         c.moves[i] = { ...c.moves[i], id, used: 0 };
         break;

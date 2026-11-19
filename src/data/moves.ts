@@ -1,5 +1,5 @@
 import { STATUS, statusFromName, type StatusId } from './status';
-import { ELEMENTS, type Element } from './types';
+import { ELEMENT_COLORS, ELEMENTS, type Element } from './types';
 
 export type MoveKind = 'attack' | 'buff' | 'debuff' | 'heal';
 export type StatKey = 'atk' | 'def' | 'spd';
@@ -9,10 +9,22 @@ export interface StatEffect {
   stages: number; // positive = raise, negative = lower
 }
 
+/**
+ * A move's element: one of the 12, or Neutral (a few utility moves, never attacks, that hit no
+ * element's weakness and get no same-type bonus).
+ */
+export type MoveElement = Element | 'Neutral';
+
+export const NEUTRAL_COLOR = 0xb4b0c8;
+/** The color a move shows in (Neutral: soft gray). */
+export const moveColor = (el: MoveElement): number => (el === 'Neutral' ? NEUTRAL_COLOR : ELEMENT_COLORS[el]);
+/** An attack's element (attacks always have one of the 12). */
+export const attackEl = (m: MoveDef): Element => m.element as Element;
+
 export interface MoveDef {
   id: string;
   name: string;
-  element: Element;
+  element: MoveElement;
   kind: MoveKind;
   /** Rank in the element's main attack line (0..3), upgraded on evolution; -1 for everything else. */
   rank: number;
@@ -37,6 +49,12 @@ export interface MoveDef {
   status?: { id: StatusId; chance: number };
   /** Team move: an effect on the user's whole side (see TEAM_FX). */
   team?: TeamFxId;
+  /** Bulwark: goes first and blocks the foe's attacks this turn (unreliable used twice in a row). */
+  protect?: boolean;
+  /** Time Warp: for a few turns the slower Hexling moves first (using it again ends it). */
+  warp?: boolean;
+  /** Speed attacks: power grows the faster ('fast') or the slower ('slow') the user is than the foe. */
+  speedPower?: 'fast' | 'slow';
 }
 
 // ---------------------------------------------------------------- team moves
@@ -285,6 +303,35 @@ for (const el of ELEMENTS) {
       : { id: extraId(el), name: ex.buff[0], element: el, kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: ex.buff[1] };
 }
 
+// ---------------------------------------------------------------- neutral and speed moves
+
+export const BULWARK_ID = 'Neutral:bulwark';
+export const WARP_ID = 'Neutral:warp';
+export const fastId = (el: Element) => `${el}:fast`;
+export const slowId = (el: Element) => `${el}:slow`;
+
+MOVES[BULWARK_ID] = { id: BULWARK_ID, name: 'Bulwark', element: 'Neutral', kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: [], priority: true, protect: true };
+MOVES[WARP_ID] = { id: WARP_ID, name: 'Time Warp', element: 'Neutral', kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: [], warp: true };
+
+/** Bulwark used again right after it worked: the chance it holds (better at higher skill tiers). */
+export const bulwarkRepeat = (tier: number) => [0, 0.25, 1 / 3, 0.5][tier] ?? 0.25;
+/** Turns Time Warp lasts (counting the turn it's used): 5, then +1 per skill tier. */
+export const warpTurns = (tier: number) => 5 + (tier - 1);
+
+/** Speed attacks: power by how much faster (or slower) the user is than its foe. */
+export function speedPower(ratio: number): number {
+  return ratio >= 2 ? 130 : ratio >= 1.5 ? 110 : ratio >= 1.2 ? 90 : ratio >= 1 ? 70 : ratio >= 0.75 ? 50 : 40;
+}
+
+const SPEED_WORD: Record<Element, string> = {
+  Fire: 'Blaze', Frost: 'Glacier', Nature: 'Bramble', Earth: 'Boulder', Storm: 'Volt', Water: 'Torrent',
+  Metal: 'Iron', Toxic: 'Mire', Shadow: 'Shade', Light: 'Radiant', Spirit: 'Phantom', Dragon: 'Drake',
+};
+for (const el of ELEMENTS) {
+  MOVES[fastId(el)] = { id: fastId(el), name: `${SPEED_WORD[el]} Blitz`, element: el, kind: 'attack', rank: -1, power: 80, accuracy: 100, effects: [], speedPower: 'fast' };
+  MOVES[slowId(el)] = { id: slowId(el), name: `${SPEED_WORD[el]} Crush`, element: el, kind: 'attack', rank: -1, power: 80, accuracy: 90, effects: [], speedPower: 'slow' };
+}
+
 /**
  * The shared attacks that can inflict a condition: one to three per element, so a condition is part
  * of an element's identity without riding on every hit. (Status-type moves still inflict theirs, and
@@ -412,6 +459,8 @@ export const accText = (m: MoveDef) => `${m.accuracy}% acc`;
 
 /** Short summary for UI. */
 export function moveSummary(m: MoveDef, tier: number): string {
+  if (m.protect) return `First · blocks hits · reuse ${Math.round(bulwarkRepeat(tier) * 100)}%`;
+  if (m.warp) return `${warpTurns(tier)} turns: slower goes first`;
   if (m.team === 'mend') return `Team: heal ${Math.round(mendHeal(tier) * 100)}% + cure`;
   if (m.team) return `Team ${teamFxTurns(tier)}t: ${TEAM_FX[m.team].short}`;
   if (m.kind === 'heal') {
@@ -422,7 +471,13 @@ export function moveSummary(m: MoveDef, tier: number): string {
   const st = m.status ? `${Math.round(m.status.chance * 100)}% ${STATUS[m.status.id].tag}${m.hits ? '/hit' : ''}` : '';
   if (m.kind !== 'attack') return describeEffects(m, tier) + (st ? `, ${st}` : '');
   const pow = Math.round(m.power * TIER_POWER[tier]);
-  const parts = [m.hits ? `Pow ${pow}×${m.hits}` : `Pow ${pow}`];
+  const parts = [
+    m.speedPower
+      ? `Pow ${Math.round(40 * TIER_POWER[tier])}–${Math.round(130 * TIER_POWER[tier])} · best if ${m.speedPower === 'fast' ? 'faster' : 'slower'}`
+      : m.hits
+        ? `Pow ${pow}×${m.hits}`
+        : `Pow ${pow}`,
+  ];
   if (m.priority) parts.push('first');
   if (m.drain) parts.push(`drain ${Math.round(m.drain * 100)}%`);
   if (m.recoil) parts.push('recoil');
@@ -436,7 +491,8 @@ export function moveSummary(m: MoveDef, tier: number): string {
 
 /** What a skill-tier upgrade does to this move. */
 export function tierUpgradeText(m: MoveDef, toTier: number): string {
-  if (m.kind === 'attack') return toTier === 3 ? `+50% power total, ${TIER3_EFFECT[m.element]}` : '+25% power';
+  if (m.protect || m.warp) return `Stronger: ${moveSummary(m, toTier)}`;
+  if (m.kind === 'attack') return toTier === 3 ? `+50% power total, ${TIER3_EFFECT[attackEl(m)]}` : '+25% power';
   if (m.kind === 'heal' || m.team) return `Stronger: ${moveSummary(m, toTier)}`;
   return `Stronger: ${describeEffects(m, toTier)}`;
 }
@@ -455,6 +511,8 @@ export function attackValue(m: MoveDef, tier = 1): number {
  * creature never runs dry; strong attacks, signatures and heals are limited.
  */
 export function maxUses(d: MoveDef): number | null {
+  if (d.protect) return 4;
+  if (d.warp) return 5;
   if (d.team) return 8;
   if (d.kind === 'heal') return 10;
   if (d.kind === 'buff' || d.kind === 'debuff') return 20;

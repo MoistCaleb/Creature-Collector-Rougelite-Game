@@ -1,3 +1,4 @@
+import { attackEl } from '../src/data/moves';
 /**
  * Balance report: a bot plays thousands of full runs headlessly and writes what it found to
  * docs/BALANCE_REPORT.md: win rates by Heat, every starter at Heat 0, which guardians and guardian
@@ -42,7 +43,7 @@ function moveScore(b: Battle, i: number): number {
   const m = b.p.c.moves[i];
   if (!hasUses(m)) return -1;
   const d = moveDef(m);
-  const eff = typeMultiplier(d.element, creatureTypes(b.e.c));
+  const eff = d.kind === 'attack' ? typeMultiplier(attackEl(d), creatureTypes(b.e.c)) : 1;
   let s = d.power * TIER_POWER[m.tier] * eff * stabMultiplier(d.element, creatureTypes(b.p.c));
   // Save limited moves unless they hit hard or the foe is low.
   if (Number.isFinite(usesLeft(m)) && eff <= 1 && b.e.c.hp / stats(b.e.c).hp >= 0.35) s *= 0.75;
@@ -61,8 +62,8 @@ function bestMove(b: Battle): number {
 
 /** How well c (attacking) does against e: its best hit over e's best hit back. */
 function matchup(c: Creature, e: Creature): number {
-  const off = Math.max(...c.moves.map((m) => { const d = moveDef(m); return d.power * typeMultiplier(d.element, creatureTypes(e)) * stabMultiplier(d.element, creatureTypes(c)); }));
-  const def = Math.max(...e.moves.map((m) => { const d = moveDef(m); return d.power * typeMultiplier(d.element, creatureTypes(c)) * stabMultiplier(d.element, creatureTypes(e)); }));
+  const off = Math.max(...c.moves.map((m) => { const d = moveDef(m); return d.kind !== 'attack' ? 0 : d.power * typeMultiplier(attackEl(d), creatureTypes(e)) * stabMultiplier(attackEl(d), creatureTypes(c)); }));
+  const def = Math.max(...e.moves.map((m) => { const d = moveDef(m); return d.kind !== 'attack' ? 0 : d.power * typeMultiplier(attackEl(d), creatureTypes(c)) * stabMultiplier(attackEl(d), creatureTypes(e)); }));
   return (off * stats(c).atk * (c.hp / stats(c).hp + 0.3)) / (def * stats(e).atk);
 }
 
