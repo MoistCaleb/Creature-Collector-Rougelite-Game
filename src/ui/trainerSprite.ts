@@ -203,19 +203,17 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     } else for (let y = 19; y <= 25; y += 2) rect(13, y, 14, y, acc); // spine ridge
   }
   if (top === 17) {
-    // Royal mantle: crimson velvet to the ankles, a gold clasp, ermine down the front edges.
+    // Royal mantle: a crimson robe to the ankles. From the front it hangs open over a gold-trimmed
+    // tunic, held by a gold chain; the hem is gold.
     round(8, 19, 19, 31, ROYAL, 1);
-    rect(8, 31, 19, 31, ERMINE);
-    for (const x of [9, 12, 15, 18]) put(x, 31, INK);
     if (!back) {
-      rect(12, 22, 12, 30, ERMINE);
-      rect(15, 22, 15, 30, ERMINE);
-      for (const y of [24, 27, 30]) {
-        put(12, y, INK);
-        put(15, y, INK);
-      }
-      rect(13, 20, 14, 21, GOLD); // the clasp
+      rect(12, 20, 15, 30, shade(ROYAL, 0.7)); // the tunic underneath
+      rect(11, 20, 11, 31, GOLD); // gold edges where the robe opens
+      rect(16, 20, 16, 31, GOLD);
+      rect(12, 21, 15, 21, GOLD_LIGHT); // the chain across the chest
+      rect(13, 24, 14, 25, GOLD); // a medallion
     }
+    rect(8, 31, 19, 31, GOLD);
   }
   if (top === 15) {
     // Void cloak: a starry robe down to the ankles with a glowing collar.
@@ -328,13 +326,13 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
       round(7, 18, 20, 30, ROYAL, 1);
       round(5, 28, 22, 32, ROYAL, 1);
       for (const x of [10, 14, 17]) rect(x, 22, x, 31, shade(ROYAL, 0.75));
-      rect(5, 32, 22, 32, ERMINE);
-      for (const x of [6, 10, 14, 18, 21]) put(x, 32, INK);
+      rect(5, 32, 22, 32, GOLD);
       round(11, 21, 16, 24, GOLD, 1); // a crest
       rect(13, 22, 14, 23, ROYAL);
     }
+    // A white fur collar over the shoulders, with a few dark flecks.
     rect(6, 18, raised ? 18 : 21, 19, ERMINE);
-    for (const x of [7, 10, 13, 16, 19]) if (!raised || x < 19) put(x, 19, INK);
+    for (const x of [8, 18]) if (!raised || x < 18) put(x, 19, INK);
     if (raised) raisedArm();
   }
   if (top === 14) {
