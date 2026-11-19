@@ -4,13 +4,34 @@ import type { DuelMsg } from './duel';
 /**
  * A phone-to-phone connection for duels. The host registers a short numeric code with the PeerJS
  * matchmaking service; the guest connects to that code. After the handshake, messages go directly
- * between the two phones (WebRTC), relayed through PeerJS's TURN servers only if a direct path
- * isn't possible.
+ * between the two devices (WebRTC), relayed through TURN servers only if a direct path isn't
+ * possible (see ICE_SERVERS).
  */
 
 const PREFIX = 'ccr-duel-';
 /** Codes are 5 digits: easy to read out and type on a keypad. */
 export const CODE_LENGTH = 5;
+
+/**
+ * Ways for two devices to find a path to each other. STUN servers let most home Wi-Fi and phone
+ * networks link directly; when they can't (strict office or school Wi-Fi, some phone carriers), the
+ * TURN relays pass the messages along. PeerJS's own relays are tried over UDP and over TCP, since
+ * many networks block UDP outright.
+ */
+export const ICE_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  {
+    urls: [
+      'turn:eu-0.turn.peerjs.com:3478',
+      'turn:us-0.turn.peerjs.com:3478',
+      'turn:eu-0.turn.peerjs.com:3478?transport=tcp',
+      'turn:us-0.turn.peerjs.com:3478?transport=tcp',
+    ],
+    username: 'peerjs',
+    credential: 'peerjsp',
+  },
+];
 
 /** Test hook: point at a local PeerJS server instead of the public one. */
 function peerOptions(): PeerOptions {
@@ -20,8 +41,14 @@ function peerOptions(): PeerOptions {
   } catch {
     /* default */
   }
-  return { debug: 0 };
+  return { debug: 0, config: { iceServers: ICE_SERVERS } };
 }
+
+/** How long a guest waits for the link before giving up (relayed links can take a while). */
+const JOIN_TIMEOUT = 25000;
+
+const LINK_FAILED =
+  'Found the duel, but the two devices couldn\u2019t link up. Their networks may be blocking it: try both on the same Wi-Fi, or turn off any VPN, then join again.';
 
 export type SessionStatus = 'idle' | 'hosting' | 'connecting' | 'connected' | 'lost' | 'error';
 
@@ -120,7 +147,9 @@ class Session {
         const conn = this.peer!.connect(PREFIX + this.code, { reliable: true });
         conn.on('open', () => finish(true));
         this.wire(conn);
-        setTimeout(() => finish(false, 'No answer from that code. Check it and try again.'), 15000);
+        // The code answered but no network path could be found: say so, instead of waiting it out.
+        watchLink(conn, () => finish(false, LINK_FAILED));
+        setTimeout(() => finish(false, linkStarted(conn) ? LINK_FAILED : 'No answer from that code. Check it and try again.'), JOIN_TIMEOUT);
       };
       if (this.peer && !this.peer.destroyed && this.peer.open) return start();
       this.peer?.destroy();
@@ -163,6 +192,26 @@ class Session {
   }
 }
 
+/** Calls `onFail` if the connection's network path fails (WebRTC ICE "failed"). */
+function watchLink(conn: DataConnection, onFail: () => void) {
+  const check = () => {
+    const pc = conn.peerConnection;
+    if (!pc) return void setTimeout(check, 250);
+    const on = () => {
+      if (pc.iceConnectionState === 'failed') onFail();
+    };
+    pc.addEventListener('iceconnectionstatechange', on);
+    on();
+  };
+  check();
+}
+
+/** The host answered (the devices started looking for a path), as opposed to silence. */
+function linkStarted(conn: DataConnection): boolean {
+  const st = conn.peerConnection?.iceConnectionState;
+  return !!st && st !== 'new';
+}
+
 function friendly(err: Error & { type?: string }): string {
   switch (err.type) {
     case 'network':
@@ -172,6 +221,9 @@ function friendly(err: Error & { type?: string }): string {
       return "Couldn't reach the duel service. Check your internet connection.";
     case 'browser-incompatible':
       return "This browser can't do live duels.";
+    case 'webrtc':
+    case 'negotiation-failed':
+      return LINK_FAILED;
     default:
       return err.message || 'Connection problem.';
   }

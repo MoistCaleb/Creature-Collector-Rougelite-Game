@@ -104,7 +104,7 @@ export class DuelScene extends Phaser.Scene {
       text(this, rx, y + 28, session.code.split('').join(' '), 54, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
       const wait = text(this, rx, y + 110, 'Waiting for your friend to join…', 16, COLORS.text).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
-      text(this, rx, y + 144, 'On their phone: Battle Arena → Duel a friend → Join, then enter this code.\nKeep the game open on both phones.', 13, COLORS.textDim, {
+      text(this, rx, y + 144, 'On their phone or computer: Battle Arena → Duel a friend → Join, then enter this code.\nKeep the game open on both.', 13, COLORS.textDim, {
         align: 'center',
         wordWrap: { width: rw },
       }).setOrigin(0.5, 0);
