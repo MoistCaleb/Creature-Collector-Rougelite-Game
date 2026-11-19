@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.12';
+export const APP_VERSION = '1.13';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.13',
+    title: 'Battle royale',
+    items: [
+      'Battle royale: 3 to 8 players join one host\u2019s code and race the same stage. Everyone with a team left at the boss goes into a tournament bracket, and the winner of the final is champion.',
+      'The bracket screen shows every match as it plays out; your own matches start by themselves.',
+      'Stage battles end right away when the other player\u2019s team is wiped out: the win is yours.',
+    ],
+  },
   {
     version: '1.12',
     title: 'Steadier online play',

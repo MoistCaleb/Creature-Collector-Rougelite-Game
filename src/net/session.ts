@@ -52,7 +52,14 @@ const LINK_FAILED =
 
 export type SessionStatus = 'idle' | 'hosting' | 'connecting' | 'connected' | 'lost' | 'error';
 
-type Listener = (msg: DuelMsg) => void;
+/** A message and the peer it came from (the host's peer id, for a guest). */
+type Listener = (msg: DuelMsg, from: string) => void;
+
+/** Most guests one host takes (8 players in all, for a battle royale). */
+export const MAX_GUESTS = 7;
+
+/** This device's player id for the session: lets the host recognize a guest that reconnects. */
+export const myPid = Math.random().toString(36).slice(2, 10);
 
 class Session {
   role: 'host' | 'guest' | null = null;
@@ -60,11 +67,16 @@ class Session {
   status: SessionStatus = 'idle';
   error = '';
   private peer: Peer | null = null;
+  /** Guest: the link to the host. */
   private conn: DataConnection | null = null;
+  /** Host: a link to each guest, by peer id. */
+  private conns = new Map<string, DataConnection>();
   private listeners = new Set<Listener>();
   private statusListeners = new Set<(s: SessionStatus) => void>();
   /** Host: called whenever a guest (re)connects. */
-  onGuestJoined: (() => void) | null = null;
+  onGuestJoined: ((peer: string) => void) | null = null;
+  /** Host: one guest's link closed (others may still be connected). */
+  onGuestLost: ((peer: string) => void) | null = null;
 
   private setStatus(s: SessionStatus, error = '') {
     this.status = s;
@@ -82,12 +94,32 @@ class Session {
     return () => this.listeners.delete(f);
   }
 
+  /** Guest: to the host. Host: to every guest. */
   send(msg: DuelMsg) {
-    if (this.conn?.open) this.conn.send(msg);
+    if (this.role === 'host') for (const c of this.conns.values()) c.open && c.send(msg);
+    else if (this.conn?.open) this.conn.send(msg);
+  }
+
+  /** Host: to one guest. */
+  sendTo(peer: string, msg: DuelMsg) {
+    const c = this.conns.get(peer);
+    if (c?.open) c.send(msg);
+  }
+
+  /** Host: drop one guest's link. */
+  drop(peer: string) {
+    const c = this.conns.get(peer);
+    this.conns.delete(peer);
+    c?.close();
+  }
+
+  /** Host: guests linked right now. */
+  guests(): string[] {
+    return [...this.conns.entries()].filter(([, c]) => c.open).map(([p]) => p);
   }
 
   get connected() {
-    return !!this.conn?.open;
+    return this.role === 'host' ? this.guests().length > 0 : !!this.conn?.open;
   }
 
   /** Start hosting: registers a fresh code and waits for a guest. */
@@ -104,11 +136,8 @@ class Session {
           this.setStatus('hosting');
           resolve(code);
         });
-        peer.on('connection', (conn) => {
-          // One guest at a time; a reconnecting guest replaces the old link.
-          this.conn?.close();
-          this.wire(conn);
-        });
+        // Every guest gets its own link (the runtime turns away extras and replaces reconnects).
+        peer.on('connection', (conn) => this.wire(conn));
         peer.on('error', (err: Error & { type?: string }) => {
           if (err.type === 'unavailable-id' && tries < 5) {
             peer.destroy();
@@ -163,15 +192,25 @@ class Session {
   }
 
   private wire(conn: DataConnection) {
-    this.conn = conn;
+    const host = this.role === 'host';
+    if (host) this.conns.set(conn.peer, conn);
+    else this.conn = conn;
     conn.on('open', () => {
       this.setStatus('connected');
-      if (this.role === 'host') this.onGuestJoined?.();
+      if (host) this.onGuestJoined?.(conn.peer);
     });
     conn.on('data', (data) => {
-      for (const f of this.listeners) f(data as DuelMsg);
+      for (const f of this.listeners) f(data as DuelMsg, conn.peer);
     });
     const lost = () => {
+      if (host) {
+        if (this.conns.get(conn.peer) !== conn) return;
+        this.conns.delete(conn.peer);
+        this.onGuestLost?.(conn.peer);
+        // The host only counts as cut off once no guest is left.
+        if (this.role && !this.guests().length) this.setStatus('lost');
+        return;
+      }
       if (this.conn !== conn) return;
       this.conn = null;
       if (this.role) this.setStatus('lost');
@@ -180,10 +219,19 @@ class Session {
     conn.on('error', lost);
   }
 
+  /** Leave, with a reason to show (e.g. the host turned us away). */
+  fail(why: string) {
+    this.close();
+    this.setStatus('error', why);
+  }
+
   /** Leave the duel and free the code. */
   close() {
     this.conn?.close();
     this.conn = null;
+    const all = [...this.conns.values()];
+    this.conns.clear();
+    for (const c of all) c.close();
     this.peer?.destroy();
     this.peer = null;
     this.role = null;

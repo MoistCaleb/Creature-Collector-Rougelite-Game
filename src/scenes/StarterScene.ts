@@ -9,6 +9,7 @@ import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
 import type { RaceInfo } from '../net/duel';
 import { duel, sendProgress } from '../net/runtime';
+import { royale } from '../net/royale';
 import { session } from '../net/session';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
@@ -37,7 +38,7 @@ export class StarterScene extends Phaser.Scene {
     background(this);
     playMusic('title');
     const opp = duel.opponent?.name ?? 'your friend';
-    const titleText = this.race ? `Stage battle vs ${opp}` : week ? `Weekly · ${TWISTS[week.twist].name}` : this.daily ? `Daily run · ${this.daily}` : 'Choose your starter';
+    const titleText = this.race ? (royale.active ? `Battle royale · ${royale.players.length} players` : `Stage battle vs ${opp}`) : week ? `Weekly · ${TWISTS[week.twist].name}` : this.daily ? `Daily run · ${this.daily}` : 'Choose your starter';
     const title = text(this, W / 2 + 20, 34, titleText, this.daily || this.race || week ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     if (this.daily || week) pixelIcon(this, title.x - title.width / 2 - 16, 34, week ? 'crown' : 'calendar', 22);
     text(
@@ -45,7 +46,7 @@ export class StarterScene extends Phaser.Scene {
       W / 2 + 20,
       64,
       this.race
-        ? `${MAP_BY_ID[this.mapId]?.name ?? 'Map'} · double battle rewards · same starters for both`
+        ? `${MAP_BY_ID[this.mapId]?.name ?? 'Map'} · double battle rewards · same starters for ${royale.active ? 'everyone' : 'both'}`
         : week
         ? twistShort(week)
         : this.daily
@@ -147,7 +148,9 @@ export class StarterScene extends Phaser.Scene {
     if (this.race) {
       // Same map and seed as the other racer; Heat 0 and no passive so it's even.
       const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true);
-      run.race = { opponent: duel.opponent?.name ?? 'Friend', role: session.role === 'host' ? 'host' : 'guest' };
+      run.race = royale.active
+        ? { opponent: `${royale.players.length - 1} rivals`, role: session.role === 'host' ? 'host' : 'guest', royale: true }
+        : { opponent: duel.opponent?.name ?? 'Friend', role: session.role === 'host' ? 'host' : 'guest' };
       state.run = run;
       sendProgress({ floor: 0, finished: false, won: false });
     } else {

@@ -3,7 +3,8 @@ import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
 import { openGameMenu } from '../ui/gameMenu';
 import { duel, sendProgress } from '../net/runtime';
-import { session } from '../net/session';
+import { royale, royaleSummary } from '../net/royale';
+import { myPid, session } from '../net/session';
 import { accText, MAX_TIER, maxUsesText, MOVES, moveSummary, tierUpgradeText } from '../data/moves';
 import { ELEMENT_COLORS } from '../data/types';
 import {
@@ -105,6 +106,7 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     // The scene object is reused between visits: start with no tokens from last time.
     this.me = null;
+    this.wonByDefault = false;
     this.rival = null;
     this.hopping = false;
     this.underToken = [];
@@ -404,16 +406,19 @@ export class MapScene extends Phaser.Scene {
             : them.steps !== undefined
               ? `${them.steps} steps to go`
               : 'on the way';
-      t.setText(`vs ${run.race!.opponent}: ${where}`);
+      t.setText(run.race!.royale ? `Battle royale: ${royaleSummary()}` : `vs ${run.race!.opponent}: ${where}`);
     };
     const update = () => {
       draw();
       this.updateRival();
+      this.checkRivalWiped();
     };
     update();
     duel.onRaceChange = update;
+    royale.onChange = update;
     this.events.once('shutdown', () => {
       if (duel.onRaceChange === update) duel.onRaceChange = null;
+      if (royale.onChange === update) royale.onChange = null;
     });
   }
 
@@ -629,6 +634,39 @@ export class MapScene extends Phaser.Scene {
         });
       },
     });
+  }
+
+  /** Set once the stage battle has been decided by the other racer's team falling. */
+  private wonByDefault = false;
+
+  /** Stage race: the other racer's whole team fell, so the stage battle is over and you win it. */
+  private checkRivalWiped() {
+    const run = state.run!;
+    if (run.race?.royale) return this.checkRoyaleOver();
+    const them = duel.race?.theirs;
+    if (!run.race || this.wonByDefault || !them?.finished || them.team?.length) return;
+    this.wonByDefault = true;
+    showMessage(this, 'Stage battle over!', `${run.race.opponent}\u2019s team was wiped out, so the stage battle is yours.`, () =>
+      this.scene.start('End', { won: true, byDefault: true }),
+    );
+  }
+
+  /** Battle royale, mid-stage: every other team fell (you win), or it ended early. */
+  private checkRoyaleOver() {
+    if (this.wonByDefault) return;
+    if (royale.ended) {
+      this.wonByDefault = true;
+      showMessage(this, 'Battle royale over', royale.ended, () => {
+        royale.reset();
+        state.run = null;
+        this.scene.start(session.connected ? 'Duel' : 'Title', {});
+      });
+    } else if (royale.champion === myPid) {
+      this.wonByDefault = true;
+      showMessage(this, 'Last trainer standing!', 'Every other team was wiped out, so the battle royale is yours.', () =>
+        this.scene.start('End', { won: true, byDefault: true }),
+      );
+    }
   }
 
   /** Stage race: show (or move) the other player's grayed-out token where they are. */
