@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.20';
+export const APP_VERSION = '1.21';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.21',
+    title: 'Potions everywhere, pick your mode',
+    items: [
+      'Potions in the Battle Arena: the ladder and the tournament each give you 5 potions for the whole run (50% heal, cures status).',
+      'Potions online: 3 per battle in Arena duels, 5 for a whole online tournament, and in stage battles and battle royales you bring the potions you finished the stage with (they carry through the bracket).',
+      'Play online: the host now chooses the game (Arena duel, Stage battle, Battle royale or Tournament) before getting a code, and the session sticks to it. Everyone who joins sees which game it is and waits for the host to start.',
+      'Arena duels and stage battles take 2 players; battle royales and tournaments 3 to 8 (the host’s code stays on screen until you start).',
+      'The Battle Arena no longer has its own "Play with a friend" button: use Play online on the title screen.',
+    ],
+  },
   {
     version: '1.20',
     title: 'Spectating',

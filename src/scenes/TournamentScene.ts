@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { champion, knockedOut, roundName } from '../logic/bracket';
-import { activeTeam } from '../logic/arena';
+import { activeTeam, ARENA_POTIONS } from '../logic/arena';
 import { creatureName, getFloorCeiling, setFloorCeiling } from '../logic/creature';
 import { saveMeta } from '../logic/run';
 import { takeNewTitles } from '../logic/titles';
@@ -131,7 +131,7 @@ export class TournamentScene extends Phaser.Scene {
     const name = roundName(t.bracket, round);
     openPicker(this, {
       title: `${name}: ${opp.name}`,
-      subtitle: `${opp.name} sends out ${enemies.length} Hexlings. Your team is fully healed.`,
+      subtitle: `${opp.name} sends out ${enemies.length} Hexlings. Your team is fully healed. Potions left: ${t.potions ?? ARENA_POTIONS}.`,
       rows: enemies.map((c) => ({ creature: c, text: `${creatureName(c)} · Lv ${c.level}` })),
       options: [{ label: 'Fight!', color: 0x8a2c2c }],
       onPick: () => {
@@ -144,6 +144,14 @@ export class TournamentScene extends Phaser.Scene {
           opponent: opp.name,
           randomness: opp.randomness,
           tactics: opp.potions ? { potions: opp.potions } : undefined,
+          potions: {
+            left: t.potions ?? ARENA_POTIONS,
+            heal: 0.5,
+            onUse: () => {
+              t.potions = Math.max(0, (t.potions ?? ARENA_POTIONS) - 1);
+              saveMeta(state.meta);
+            },
+          },
           background: 0x1a1430,
           onEnd: (won) => this.matchOver(won, name),
         };

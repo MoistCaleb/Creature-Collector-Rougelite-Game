@@ -29,6 +29,8 @@ export interface Tournament {
   picks: ArenaPick[];
   /** The win has been counted (titles and records). */
   counted?: boolean;
+  /** Your potions left for the whole tournament (absent: a full supply). */
+  potions?: number;
 }
 
 /** Ladder strength (0 easiest to 4 toughest) of each computer trainer: a mixed field. */
