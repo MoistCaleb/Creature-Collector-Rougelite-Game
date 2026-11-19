@@ -6,7 +6,7 @@ import { saveMeta } from '../logic/run';
 import { titleNews } from '../logic/cosmetics';
 import { lookForName } from '../data/trainerLook';
 import { leaveDuelRoyale } from '../net/runtime';
-import { royale, royaleLabel, royaleQuit } from '../net/royale';
+import { canWatch, royale, royaleLabel, royaleQuit, watchMatch } from '../net/royale';
 import { myPid, session } from '../net/session';
 import { state } from '../state';
 import { showMessage } from '../ui/picker';
@@ -37,7 +37,8 @@ export class BracketScene extends Phaser.Scene {
     });
 
     text(this, W / 2, LANDSCAPE ? 8 : 16, royale.tourney ? 'Online tournament' : 'Battle royale', LANDSCAPE ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
-    const status = text(this, W / 2, LANDSCAPE ? 36 : 52, this.statusText(), 13, COLORS.text, { align: 'center', wordWrap: { width: W - 40 } }).setOrigin(0.5, 0);
+    const live = royale.bracket?.rounds.some((r, ri) => r.some((_, i) => canWatch(ri, i))) && session.connected;
+    const status = text(this, W / 2, LANDSCAPE ? 36 : 52, this.statusText() + (live ? ' Tap a live match to watch it.' : ''), 13, COLORS.text, { align: 'center', wordWrap: { width: W - 40 } }).setOrigin(0.5, 0);
 
     const b = royale.bracket;
     const top = status.y + status.height + (LANDSCAPE ? 22 : 30);
@@ -45,7 +46,12 @@ export class BracketScene extends Phaser.Scene {
     // Room for the champion: a column on the right (sideways) or a strip under the bracket (upright).
     const bottom = H - (LANDSCAPE ? 56 : 70) - (champ && !LANDSCAPE && b ? 120 : 0);
     const width = champ && LANDSCAPE ? W - 160 : W;
-    if (b) drawBracket(this, b, { top, bottom, width }, { nameOf: (id) => this.nameOf(id), me: myPid });
+    if (b)
+      drawBracket(this, b, { top, bottom, width }, {
+        nameOf: (id) => this.nameOf(id),
+        me: myPid,
+        watch: (r, i) => (session.connected && canWatch(r, i) ? () => watchMatch(r, i) : null),
+      });
     if (champ) {
       const p = royale.players.find((x) => x.pid === champ);
       drawChampion(this, p?.name ?? 'Champion', p?.look ?? lookForName(p?.name ?? 'Champion'), b ? bottom + 70 : (top + bottom) / 2);

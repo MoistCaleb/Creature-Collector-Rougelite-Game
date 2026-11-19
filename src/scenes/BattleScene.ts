@@ -33,7 +33,7 @@ import { Rng } from '../logic/rng';
 import type { DuelController, Next } from '../net/duel';
 import { session } from '../net/session';
 import { afterSeriesGame, duel, endRace, leaveDuel, recordSeriesGame, sendHello } from '../net/runtime';
-import { reportMatch, royale, royaleLabel } from '../net/royale';
+import { reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
 import {
   canEvolve,
   getFloorCeiling,
@@ -141,6 +141,8 @@ export interface BattleMatch {
   opponentLook?: TrainerLook;
   /** Their trainer title (online), shown in the cut-in. */
   opponentTitle?: string;
+  /** Watching someone else's bracket match: the "near side" trainer, shown where you'd be. */
+  spectate?: { player: string; playerLook?: TrainerLook };
 }
 
 /** Where everything goes on the battle screen: upright (450x800) or wide (800x450). */
@@ -430,7 +432,7 @@ export class BattleScene extends Phaser.Scene {
       return img;
     };
     this.trainers = {};
-    const mine = myLook(state.meta);
+    const mine = this.match?.spectate ? (this.match.spectate.playerLook ?? lookForName(this.match.spectate.player)) : myLook(state.meta);
     const rest = ensureTrainerTexture(this, mine, 'back');
     const act = ensureTrainerTexture(this, mine, 'backCommand');
     // Wide gear (wings, a jetpack, a greatsword) reaches the sprite's edges: step in so it stays on screen.
@@ -520,7 +522,7 @@ export class BattleScene extends Phaser.Scene {
     if (/\bEnemy\b|\bwild\b|enemy's team/i.test(msg) || has(this.foeName)) return 'enemy';
     if (this.match?.duel) {
       if (has(`${this.match.opponent}'s`)) return 'enemy';
-      if (has(`${myName(state.meta)}'s`)) return 'player';
+      if (has(`${this.match.spectate?.player ?? myName(state.meta)}'s`)) return 'player';
     }
     if (/Your team|\byour\b/i.test(msg) || this.battle.player.some((x) => has(creatureName(x.c)))) return 'player';
     if (!this.match?.duel && enemyNames.some(has)) return 'enemy';
@@ -597,7 +599,16 @@ export class BattleScene extends Phaser.Scene {
           go();
         },
       });
-      this.watchConnection();
+      // Spectators: the bracket screen deals with connection trouble.
+      if (!m.spectate) this.watchConnection();
+      else {
+        // The match was decided without a last turn reaching us (a forfeit or a dropped player): wrap up.
+        royale.onWatchOver = () =>
+          this.time.delayedCall(4000, () => {
+            if (this.scene.isActive() && !this.watchEnded) this.endSpectate(null);
+          });
+        this.events.once('shutdown', () => (royale.onWatchOver = null));
+      }
     }
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -627,7 +638,7 @@ export class BattleScene extends Phaser.Scene {
     this.refreshEnemy();
     this.refreshPlayer();
     this.drawTeamFx();
-    const intro = m.duel ? `Duel against ${m.opponent}!` : `${m.opponent} wants to battle!`;
+    const intro = m.spectate ? `Watching ${m.spectate.player} vs ${m.opponent}.` : m.duel ? `Duel against ${m.opponent}!` : `${m.opponent} wants to battle!`;
     this.msg.setText(intro);
     this.showActions();
     ensureFxTextures(this);
@@ -642,7 +653,7 @@ export class BattleScene extends Phaser.Scene {
       {
         await trainerCutIn(this, {
           name: m.opponent,
-          sub: m.duel ? 'Online duel' : m.sub ?? `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
+          sub: m.spectate ? `Watching · ${m.spectate.player} vs ${m.opponent}` : m.duel ? 'Online duel' : m.sub ?? `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
           badge: m.duel ? m.opponentTitle : undefined,
           look: m.opponentLook ?? lookForName(m.opponent),
           team: this.enemies,
@@ -672,8 +683,8 @@ export class BattleScene extends Phaser.Scene {
     const m = this.match!;
     if (!m.duel && this.busy) return;
     this.cancelAuto();
-    const giveUp = m.duel ? 'Forfeit this battle' : 'Leave the ladder';
-    const sub = m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
+    const giveUp = m.spectate ? 'Stop watching' : m.duel ? 'Forfeit this battle' : 'Leave the ladder';
+    const sub = m.spectate ? 'Back to the bracket' : m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
     openPicker(this, {
       title: 'Menu',
       options: [
@@ -686,6 +697,10 @@ export class BattleScene extends Phaser.Scene {
         if (i === 0) return this.maybeAuto();
         if (i === 1) return void openSettings(this, () => this.afterMenu());
         if (i === 2) return void openElementChart(this, this.shownEnemy ? creatureTypes(this.shownEnemy) : [], () => this.maybeAuto());
+        if (m.spectate) {
+          stopWatching();
+          return void this.scene.start('Bracket', {});
+        }
         openPicker(this, {
           title: `${giveUp}?`,
           subtitle: sub + '.',
@@ -728,6 +743,11 @@ export class BattleScene extends Phaser.Scene {
 
   private duelProceed(next: Next) {
     const opp = this.match!.opponent;
+    if (this.match!.spectate) {
+      this.actions.setVisible(false);
+      if (next.phase === 'end') return this.endSpectate(next.won);
+      return this.showWaiting(next.phase === 'choose' ? 'Both trainers are choosing their moves.' : 'A trainer is choosing their next Hexling.');
+    }
     switch (next.phase) {
       case 'choose':
         this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
@@ -1118,7 +1138,8 @@ export class BattleScene extends Phaser.Scene {
   private drawControls() {
     this.controls.removeAll(true);
     const auto = prefs.autoBattle;
-    this.controls.add(
+    // (Spectators only get the speed button.)
+    if (!this.match?.spectate) this.controls.add(
       button(this, L.autoBtn.x, L.autoBtn.y, L.autoBtn.w, 44, auto ? 'Auto ON' : 'Auto', () => {
         prefs.autoBattle = !prefs.autoBattle;
         this.drawControls();
@@ -1139,6 +1160,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** With auto-battle on, after a short beat: switch, drink a potion or use the best-rated move. */
   private maybeAuto() {
+    if (this.match?.spectate) return;
     if (!prefs.autoBattle || this.busy || this.autoTimer || this.battle.outcome() !== 'ongoing') return;
     this.autoTimer = this.time.delayedCall(450, () => {
       this.autoTimer = null;
@@ -1470,6 +1492,26 @@ export class BattleScene extends Phaser.Scene {
     this.cheer(won ? 'player' : 'enemy');
     if (this.match!.duel) return this.endDuel(won);
     this.match!.onEnd(won);
+  }
+
+  /** Watching: the match is over (won: the near-side trainer won; null: decided off-screen). Back to the bracket. */
+  private watchEnded = false;
+  private endSpectate(won: boolean | null) {
+    if (this.watchEnded) return;
+    this.watchEnded = true;
+    const sp = this.match!.spectate!;
+    const id = royale.watching;
+    let winner = won === null ? null : won ? sp.player : this.match!.opponent;
+    if (winner === null && id) {
+      const [r, i] = id.split('-').map(Number);
+      const w = royale.bracket?.rounds[r]?.[i]?.winner;
+      winner = w ? (royale.players.find((p) => p.pid === w)?.name ?? null) : null;
+    }
+    this.hideWaiting();
+    this.actions.setVisible(false);
+    if (won !== null) this.cheer(won ? 'player' : 'enemy');
+    stopWatching();
+    showMessage(this, winner ? `${winner} wins!` : 'Match over', winner ? `${winner} goes through in the bracket.` : 'The match has ended.', () => this.scene.start('Bracket', {}));
   }
 
   private endDuel(won: boolean) {

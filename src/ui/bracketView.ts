@@ -13,7 +13,7 @@ export function drawBracket(
   scene: Phaser.Scene,
   b: Bracket,
   area: { top: number; bottom: number; width: number },
-  who: { nameOf: (id: string) => string; me: string },
+  who: { nameOf: (id: string) => string; me: string; watch?: (round: number, index: number) => (() => void) | null },
 ) {
   const { top, bottom, width } = area;
   const R = b.rounds.length;
@@ -31,7 +31,7 @@ export function drawBracket(
     centers.push(
       round.map((m, i) => {
         const cy = top + slot * i + slot / 2;
-        drawMatch(scene, cx, cy, boxW, boxH, m, r === 0, who);
+        drawMatch(scene, cx, cy, boxW, boxH, m, r === 0, who, who.watch?.(r, i) ?? null);
         return { x: cx, y: cy };
       }),
     );
@@ -58,11 +58,21 @@ function drawMatch(
   m: Bracket['rounds'][number][number],
   firstRound: boolean,
   who: { nameOf: (id: string) => string; me: string },
+  onWatch: (() => void) | null,
 ) {
   const { a, b, winner, bye } = m;
   const mine = a === who.me || b === who.me;
   const live = !!a && !!b && !winner;
-  scene.add.rectangle(cx, cy, w, h, live ? 0x2a2a48 : COLORS.panel).setStrokeStyle(2, mine ? COLORS.accent : live ? 0x8fd0ff : COLORS.stroke);
+  const box = scene.add.rectangle(cx, cy, w, h, live ? 0x2a2a48 : COLORS.panel).setStrokeStyle(2, mine ? COLORS.accent : live ? 0x8fd0ff : COLORS.stroke);
+  // A live match you can watch: tap it, with a pulsing "Watch" tag beside it.
+  if (onWatch) {
+    box.setInteractive({ useHandCursor: true }).on('pointerup', onWatch);
+    const tag = scene.add.container(cx + w / 2 - 4, cy - h / 2 - 1);
+    const label = text(scene, 0, 0, '▶ WATCH', 10, '#12101c', { fontStyle: 'bold' }).setOrigin(1, 0.5);
+    tag.add(scene.add.rectangle(4, 0, label.width + 10, 15, 0x8fd0ff).setOrigin(1, 0.5));
+    tag.add(label);
+    scene.tweens.add({ targets: tag, alpha: 0.55, yoyo: true, repeat: -1, duration: 700 });
+  }
   const row = (pid: string | null, dy: number) => {
     const won = !!winner && pid === winner;
     const lost = !!winner && !!pid && pid !== winner;
