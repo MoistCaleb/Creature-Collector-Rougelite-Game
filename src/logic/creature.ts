@@ -303,6 +303,32 @@ export function recommendForget(c: Creature, id: string): number | null {
   return best;
 }
 
+/**
+ * Every move this Hexling would naturally know by now that it doesn't know (for Move Relearn):
+ * its learnset up to its level, line attacks at each rank its form has reached, its signature and,
+ * from Lv 26, its team move.
+ */
+export function naturalMoves(c: Creature): string[] {
+  const out: string[] = [];
+  const add = (id: string) => !out.includes(id) && !knows(c, id) && out.push(id);
+  for (const e of learnset(species(c))) {
+    if (e.level > c.level) continue;
+    const d = MOVES[e.id];
+    if (d.kind === 'attack' && d.rank >= 0) for (let r = d.rank; r <= Math.min(3, d.rank + c.stage); r++) add(attackId(d.element, r));
+    else add(e.id);
+  }
+  if (c.level >= TEAM_MOVE_LEVEL) add(teamMoveId(teamElement(species(c))));
+  return out;
+}
+
+/** Swap the move in slot `index` for `id` (Move Relearn): a fresh move at tier 1. */
+export function relearnMove(c: Creature, index: number, id: string): boolean {
+  if (!c.moves[index] || knows(c, id) || !MOVES[id]) return false;
+  c.moves[index] = { id, tier: 1 };
+  c.pendingMoves = c.pendingMoves.filter((p) => p !== id);
+  return true;
+}
+
 /** Player decision on a pending move: replace slot `replaceIndex`, or null to skip it. */
 export function resolvePending(c: Creature, id: string, replaceIndex: number | null) {
   c.pendingMoves = c.pendingMoves.filter((p) => p !== id);

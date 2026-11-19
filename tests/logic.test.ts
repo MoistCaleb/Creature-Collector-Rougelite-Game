@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2286,3 +2286,28 @@ describe('online runs never touch your saved run', () => {
     expect(hasSavedRun()).toBe(false);
   });
 });
+
+import { naturalMoves, relearnMove } from '../src/logic/creature';
+describe('Move Relearn', () => {
+  it('offers only moves it would naturally know by its level, and swaps one in at tier 1', () => {
+    const c = createCreature('emberkit', 20);
+    const pool = naturalMoves(c);
+    const set = learnset(SPECIES_BY_ID['emberkit']);
+    // Nothing it already knows, nothing above its level.
+    for (const id of pool) expect(c.moves.some((m) => m.id === id)).toBe(false);
+    // Its Lv 32+ moves aren't offered yet (line attacks aside, which it may reach by rank).
+    for (const e of set.filter((x) => x.level > 20 && MOVES[x.id].rank < 0)) expect(pool).not.toContain(e.id);
+    expect(pool.length).toBeGreaterThan(0);
+    // Forget move 0 for a natural move, then it can relearn the old one.
+    const old = c.moves[0].id;
+    c.moves[0].tier = 3;
+    expect(relearnMove(c, 0, pool[0])).toBe(true);
+    expect(c.moves[0]).toEqual({ id: pool[0], tier: 1 });
+    expect(naturalMoves(c)).toContain(old);
+    expect(relearnMove(c, 1, c.moves[0].id)).toBe(false); // already known
+  });
+  it('is sold in shops', () => {
+    expect(ITEMS_SHOP.relearn.name).toBe('Move Relearn');
+  });
+});
+import { ITEMS as ITEMS_SHOP } from '../src/logic/shop';

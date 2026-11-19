@@ -1,7 +1,7 @@
 import { BALANCE } from '../data/balance';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { heatRules } from '../data/heat';
-import { MAX_TIER } from '../data/moves';
+import { MAX_TIER, MOVES } from '../data/moves';
 import { speciesWithElement } from '../data/species';
 import {
   addLevels,
@@ -9,6 +9,8 @@ import {
   createCreature,
   healFraction,
   levelCap,
+  naturalMoves,
+  relearnMove,
   restoreUses,
   stats,
   type Creature,
@@ -16,7 +18,7 @@ import {
 import { checkAchievements } from './achievements';
 import { allCreatures, maxPotions, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
-export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held';
+export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held' | 'relearn';
 
 /** What the buyer has to pick after paying. */
 export type Target = 'none' | 'creature' | 'move';
@@ -38,6 +40,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sigil: { name: 'Prestige Sigil', desc: 'Prestige a Hexling, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
   recruit: { name: 'Recruit', desc: 'A Hexling joins your party', basePrice: 80, weight: 6, target: 'none' },
   held: { name: 'Held item', desc: 'Give it to a Hexling from the Team screen', basePrice: 60, weight: 7, target: 'none' },
+  relearn: { name: 'Move Relearn', desc: 'Swap one of a Hexling\u2019s moves for any move it would naturally know', basePrice: 50, weight: 6, target: 'creature' },
 };
 
 /** Display name of a slot (held items show which item). */
@@ -48,7 +51,7 @@ export function slotName(slot: { item: ItemId; held?: HeldId }): string {
 /** Pixel icon for a slot, if it has one. */
 export function slotGlyph(slot: { item: ItemId; held?: HeldId }): import('../ui/icons').IconId | undefined {
   if (slot.item === 'held' && slot.held) return HELD[slot.held].icon;
-  const map: Partial<Record<ItemId, import('../ui/icons').IconId>> = { potion: 'potion', restore: 'cross', stone: 'gem', sigil: 'star', manual: 'arrowUp', scroll: 'sparkle' };
+  const map: Partial<Record<ItemId, import('../ui/icons').IconId>> = { potion: 'potion', restore: 'cross', stone: 'gem', sigil: 'star', manual: 'arrowUp', scroll: 'sparkle', relearn: 'book' };
   return map[slot.item];
 }
 
@@ -119,6 +122,8 @@ export function eligibleTargets(run: Run, item: ItemId): Creature[] {
       return all.filter((c) => c.moves.some((m) => m.tier < MAX_TIER));
     case 'sigil':
       return all.filter(canPrestige);
+    case 'relearn':
+      return all.filter((c) => naturalMoves(c).length > 0);
     default:
       return [];
   }
@@ -142,9 +147,17 @@ export function pay(run: Run, price: number) {
   saveMeta(run.meta);
 }
 
-/** Applies an item. `target` is the chosen creature; `moveIndex` the chosen move for scrolls. Returns a result line. */
-export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex?: number): string {
+/**
+ * Applies an item. `target` is the chosen creature; `moveIndex` the chosen move (for scrolls, and
+ * the move forgotten for Move Relearn, with `newMove` the one learned). Returns a result line.
+ */
+export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex?: number, newMove?: string): string {
   switch (slot.item) {
+    case 'relearn': {
+      const old = MOVES[target!.moves[moveIndex!].id].name;
+      relearnMove(target!, moveIndex!, newMove!);
+      return `Forgot ${old} and learned ${MOVES[newMove!].name}.`;
+    }
     case 'potion':
       run.potions = (run.potions ?? 0) + 1;
       return `Potion added to your pouch (${run.potions}/${maxPotions(run)}). Use it from the battle screen or the Team screen.`;

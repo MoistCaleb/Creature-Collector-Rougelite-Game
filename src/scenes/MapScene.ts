@@ -17,6 +17,7 @@ import {
   usesText,
   moveDef,
   recommendForget,
+  naturalMoves,
   resolvePending,
   stats,
   type Creature,
@@ -289,10 +290,31 @@ export class MapScene extends Phaser.Scene {
         { label: `Don't learn ${nm.name}`, color: 0x3a3450, badge: rec === null ? tag : undefined },
       ],
       onPick: (i) => {
-        resolvePending(c, id, i < c.moves.length ? i : null);
-        dex.move(id);
-        this.scene.restart({});
+        const done = (slot: number | null) => {
+          resolvePending(c, id, slot);
+          dex.move(id);
+          this.scene.restart({});
+        };
+        if (i >= c.moves.length) return done(null);
+        // Forgetting is for good: make sure it's the right one.
+        this.confirmForget(c, i, nm.name, () => done(i), () => this.promptPendingMoves());
       },
+    });
+  }
+
+  /** "Forget Ember for Water Pulse?" Forgetting a move can't be undone, so ask first. */
+  private confirmForget(c: Creature, index: number, learning: string, yes: () => void, no: () => void) {
+    const old = moveDef(c.moves[index]);
+    const tier = c.moves[index].tier > 1 ? ` Its skill tier (T${c.moves[index].tier}) is lost too.` : '';
+    openPicker(this, {
+      title: `Forget ${old.name}?`,
+      subtitle: `${creatureName(c)} forgets ${old.name} for good and learns ${learning}.${tier}`,
+      rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
+      options: [
+        { label: `Forget ${old.name}`, sub: `${old.element} · ${moveSummary(old, c.moves[index].tier)} · ${accText(old)}`, color: 0x8a2c2c },
+        { label: 'Choose again', color: 0x3a3450 },
+      ],
+      onPick: (k) => (k === 0 ? yes() : no()),
     });
   }
 
@@ -1079,11 +1101,12 @@ export class MapScene extends Phaser.Scene {
 
   private buy(slot: ShopSlot, back: () => void = () => this.openShop()) {
     const run = state.run!;
-    const finish = (target?: Creature, moveIndex?: number) => {
+    const finish = (target?: Creature, moveIndex?: number, newMove?: string) => {
       pay(run, slot.price);
       sfx.coin();
       slot.sold = true;
-      const result = applyItem(run, slot, target, moveIndex);
+      const result = applyItem(run, slot, target, moveIndex, newMove);
+      if (newMove) dex.move(newMove);
       if (slot.item === 'recruit') {
         dex.creature(slot.recruit!, true);
         registerJoin(run, slot.recruit!);
@@ -1100,6 +1123,7 @@ export class MapScene extends Phaser.Scene {
       options: allCreatures(run).map((c) => ({ creature: c, disabled: !eligible.includes(c) })),
       onPick: (k) => {
         const c = allCreatures(run)[k];
+        if (slot.item === 'relearn') return this.relearnFlow(c, (idx, id) => finish(c, idx, id), back);
         if (def.target !== 'move') return finish(c);
         const moves = c.moves.map((m, idx) => ({ m, idx })).filter(({ m }) => m.tier < MAX_TIER);
         openPicker(this, {
@@ -1117,6 +1141,38 @@ export class MapScene extends Phaser.Scene {
       onCancel: back,
       cancelLabel: 'Back',
     });
+  }
+
+  /** Move Relearn: pick a move it would naturally know, then the move it forgets (and confirm). */
+  private relearnFlow(c: Creature, done: (index: number, id: string) => void, back: () => void) {
+    const pool = naturalMoves(c);
+    const choose = () =>
+      openPicker(this, {
+        title: 'Relearn which move?',
+        subtitle: 'Any move it would naturally know by now. It replaces one of its current moves.',
+        rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
+        options: pool.map((id) => {
+          const d = MOVES[id];
+          return { label: d.name, sub: `${d.element} · ${moveSummary(d, 1)} · ${accText(d)} · ${maxUsesText(d)}` };
+        }),
+        onPick: (j) => replace(pool[j]),
+        onCancel: back,
+        cancelLabel: 'Back',
+      });
+    const replace = (id: string) =>
+      openPicker(this, {
+        title: `Learn ${MOVES[id].name}`,
+        subtitle: 'Which move does it forget?',
+        rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
+        options: c.moves.map((m) => {
+          const d = moveDef(m);
+          return { label: `Forget ${d.name}`, sub: `${d.element} · ${moveSummary(d, m.tier)} · ${accText(d)} · T${m.tier} · ${usesText(m)}` };
+        }),
+        onPick: (i) => this.confirmForget(c, i, MOVES[id].name, () => done(i, id), () => replace(id)),
+        onCancel: choose,
+        cancelLabel: 'Back',
+      });
+    choose();
   }
 
   private pickCreature(

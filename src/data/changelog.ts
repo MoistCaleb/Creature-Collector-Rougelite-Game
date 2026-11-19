@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.14';
+export const APP_VERSION = '1.15';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.15',
+    title: 'Move Relearn',
+    items: [
+      'New shop item, Move Relearn: swap one of a Hexling\u2019s moves for any move it would naturally know by now (including ones it forgot).',
+      'Forgetting a move now asks you to confirm first, so the wrong one can\u2019t slip away.',
+    ],
+  },
   {
     version: '1.14',
     title: 'Your run is safe',
