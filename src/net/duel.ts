@@ -148,6 +148,12 @@ export type DuelMsg =
   | { t: 'resume'; info: StartInfo; snap: Snap; next: Next }
   | { t: 'race'; race: RaceInfo }
   | { t: 'progress'; p: RaceProgress }
+  /** Spectator to host: watch this bracket match ('' to stop watching). */
+  | { t: 'watch'; match: string }
+  /** Host to spectator: the match you asked to watch, as it stands. */
+  | { t: 'wstart'; match: string; info: StartInfo; snap?: Snap; next?: Next }
+  /** A turn of a bracket match, from its runner's side (runner to host, host to spectators). */
+  | { t: 'wstep'; match: string; events: BattleEvent[]; snap: Snap; next: Next }
   /** The sender gives up this battle. */
   | { t: 'forfeit' }
   | { t: 'lobby' };
@@ -262,6 +268,8 @@ export function readyForDuel(c: Creature): Creature {
 /** What the duel needs from the connection. */
 export interface Link {
   send(msg: DuelMsg): void;
+  /** Runner only: every resolved turn as this phone sees it (for spectators). */
+  watch?(events: BattleEvent[], snap: Snap, next: Next): void;
 }
 
 /** What the duel needs from the battle screen. */
@@ -396,6 +404,7 @@ export class DuelController {
     }
     this.lastGuestNext = theirs;
     this.link.send({ t: 'step', events: flipEvents(events), snap: flipSnap(snapshot(b)), next: theirs });
+    this.link.watch?.(events, snapshot(b), mine);
     this.view?.step(events, mine);
   }
 }

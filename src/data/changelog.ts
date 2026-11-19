@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.19';
+export const APP_VERSION = '1.20';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.20',
+    title: 'Spectating',
+    items: [
+      'Online tournament and battle royale brackets: tap a live match (it has a pulsing WATCH tag) to watch it as it happens, move by move.',
+      'Anyone not in a match can watch: knocked out, waiting for the next round, or without a team. Use the menu to stop watching, or it takes you back to the bracket when the match ends.',
+      'If your own next match is ready while you watch, it starts straight away.',
+    ],
+  },
   {
     version: '1.19',
     title: 'Online tournament',

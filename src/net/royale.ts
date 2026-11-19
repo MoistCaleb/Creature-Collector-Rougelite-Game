@@ -4,7 +4,7 @@ import { Rng } from '../logic/rng';
 import { activeTeam, makeArenaCreature } from '../logic/arena';
 import { state } from '../state';
 import { SPECIES } from '../data/species';
-import { DuelController, type DuelMsg, type RaceInfo, type RaceProgress, type RosterEntry, type Standing, type StartInfo } from './duel';
+import { applySnap, duelBattle, DuelController, type DuelMsg, type Next, type Snap, type RaceInfo, type RaceProgress, type RosterEntry, type Standing, type StartInfo } from './duel';
 import { myPid, session } from './session';
 import { beginDuel, cleanCreatures, cleanRoster, duel, goTo, nameOf, pidOf } from './runtime';
 
@@ -44,6 +44,14 @@ export const royale = {
   racers: new Map<string, HostRacer>(),
   /** Host: matches already started. */
   started: new Set<string>(),
+  /** The match you're watching as a spectator (null: none). */
+  watching: null as string | null,
+  /** Host: each started match's teams, its latest turn, and who's watching it. */
+  infos: new Map<string, StartInfo>(),
+  lastStep: new Map<string, { snap: Snap; next: Next }>(),
+  watchers: new Map<string, Set<string>>(),
+  /** The match you're watching was decided (the battle screen winds down). */
+  onWatchOver: null as (() => void) | null,
   /** An online tournament (Arena teams, no stage race) rather than a battle royale. */
   tourney: false,
   /** Redraw hook for whichever screen shows the royale. */
@@ -62,6 +70,10 @@ export const royale = {
     this.winCounted = false;
     this.racers = new Map();
     this.started = new Set();
+    this.watching = null;
+    this.infos = new Map();
+    this.lastStep = new Map();
+    this.watchers = new Map();
   },
 };
 
@@ -203,6 +215,7 @@ function schedule() {
         hostCreatures: ra.team ?? [],
         guestCreatures: rb.team ?? [],
       };
+      royale.infos.set(id, info);
       deliver(m.a!, { t: 'mstart', match: id, info, role: 'host', opp: m.b! });
       deliver(m.b!, { t: 'mstart', match: id, info, role: 'guest', opp: m.a! });
     }
@@ -214,6 +227,7 @@ function schedule() {
 function publish() {
   session.send({ t: 'bracket', b: royale.bracket ?? undefined, champion: royale.champion ?? undefined });
   changed();
+  checkWatch();
 }
 
 function endRoyale(why: string) {
@@ -248,7 +262,13 @@ function onRelay(from: string | undefined, m: DuelMsg) {
 }
 
 function startMatch(id: string, info: StartInfo, role: 'host' | 'guest', opp: string) {
-  const c = new DuelController(role, info, { send: (m) => sendRelay(opp, m) });
+  // Your own match starts: stop watching anyone else's.
+  if (royale.watching) stopWatching();
+  const c = new DuelController(role, info, {
+    send: (m) => sendRelay(opp, m),
+    // The runner shares every turn with the host, for anyone watching.
+    watch: role === 'host' ? (events, snap, next) => sendWatchStep({ t: 'wstep', match: id, events, snap, next }) : undefined,
+  });
   royale.match = { id, opp, controller: c };
   const o = royale.players.find((p) => p.pid === opp);
   beginDuel(c, undefined, o ? { look: o.look, title: o.title } : null);
@@ -266,12 +286,115 @@ export function reportMatch(won: boolean) {
 
 function onResult(pid: string | undefined, id: string, won: boolean) {
   const b = royale.bracket;
+  royale.watchers.delete(id);
+  royale.lastStep.delete(id);
   const [round, index] = id.split('-').map(Number);
   const m = b?.rounds[round]?.[index];
   if (!b || !pid || !m || m.winner || (m.a !== pid && m.b !== pid)) return;
   const other = m.a === pid ? m.b! : m.a!;
   setWinner(b, round, index, won ? pid : other);
   schedule();
+}
+
+// ---------------------------------------------------------------- spectators
+
+/** Can you watch this match? Both players known, not decided, not yours, and you aren't mid-match. */
+export function canWatch(round: number, index: number): boolean {
+  const m = royale.bracket?.rounds[round]?.[index];
+  return !!m && !!m.a && !!m.b && !m.winner && m.a !== myPid && m.b !== myPid && !royale.match;
+}
+
+/** Ask to watch a bracket match live (the battle screen opens once the host answers). */
+export function watchMatch(round: number, index: number) {
+  if (!canWatch(round, index)) return;
+  const id = `${round}-${index}`;
+  royale.watching = id;
+  if (session.role === 'host') onWatch(myPid, id);
+  else session.send({ t: 'watch', match: id });
+}
+
+/** Stop watching (the caller goes back to the bracket). */
+export function stopWatching() {
+  if (!royale.watching) return;
+  royale.watching = null;
+  royale.onWatchOver = null;
+  if (session.role === 'host') onWatch(myPid, '');
+  else session.send({ t: 'watch', match: '' });
+}
+
+/** The runner's turn: to the host, who passes it on. */
+function sendWatchStep(msg: Extract<DuelMsg, { t: 'wstep' }>) {
+  if (session.role === 'host') onWatchStep(myPid, msg);
+  else session.send(msg);
+}
+
+/** Host: someone wants to watch a match (or stop: ''). */
+function onWatch(pid: string | undefined, id: string) {
+  if (!pid) return;
+  for (const set of royale.watchers.values()) set.delete(pid);
+  const info = royale.infos.get(id);
+  const [round, index] = id.split('-').map(Number);
+  const m = royale.bracket?.rounds[round]?.[index];
+  if (!info || !m || m.winner || m.a === pid || m.b === pid) return;
+  if (!royale.watchers.has(id)) royale.watchers.set(id, new Set());
+  royale.watchers.get(id)!.add(pid);
+  const last = royale.lastStep.get(id);
+  deliver(pid, { t: 'wstart', match: id, info, snap: last?.snap, next: last?.next });
+}
+
+/** Host: a match's runner played a turn; keep it and pass it to its watchers. */
+function onWatchStep(pid: string | undefined, msg: Extract<DuelMsg, { t: 'wstep' }>) {
+  const [round, index] = String(msg.match).split('-').map(Number);
+  const m = royale.bracket?.rounds[round]?.[index];
+  if (!pid || !m || m.a !== pid || !msg.snap || !Array.isArray(msg.events)) return;
+  royale.lastStep.set(msg.match, { snap: msg.snap, next: msg.next });
+  for (const w of royale.watchers.get(msg.match) ?? []) deliver(w, msg);
+}
+
+/** Spectator: the match you asked for, ready to show. */
+let watchCtl: DuelController | null = null;
+
+function onWatchStart(msg: Extract<DuelMsg, { t: 'wstart' }>) {
+  if (royale.watching !== msg.match || royale.match) return;
+  const info = { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures) };
+  // The runner's side is "yours" on screen; the other player is the opponent.
+  const battle = duelBattle(info, 'host');
+  if (msg.snap) applySnap(battle, msg.snap);
+  watchCtl = new DuelController('guest', info, { send: () => {} }, battle);
+  const [round, index] = msg.match.split('-').map(Number);
+  const m = royale.bracket?.rounds[round]?.[index];
+  const a = royale.players.find((p) => p.pid === m?.a);
+  const b = royale.players.find((p) => p.pid === m?.b);
+  goTo('Battle', {
+    kind: 'elite',
+    match: {
+      team: [],
+      enemies: [],
+      seed: info.seed,
+      title: 'WATCHING',
+      opponent: info.guestName,
+      opponentLook: b?.look,
+      opponentTitle: b?.title,
+      randomness: 0,
+      background: 0x14223a,
+      duel: watchCtl,
+      initialNext: msg.next?.phase === 'end' ? { phase: 'choose' } : msg.next,
+      spectate: { player: info.hostName, playerLook: a?.look },
+      onEnd: () => {},
+    },
+  });
+}
+
+function onWatchedStep(msg: Extract<DuelMsg, { t: 'wstep' }>) {
+  if (royale.watching === msg.match && watchCtl) watchCtl.receive({ t: 'step', events: msg.events, snap: msg.snap, next: msg.next });
+}
+
+/** The match you're watching has a winner in the bracket: let the battle screen wrap up. */
+function checkWatch() {
+  const id = royale.watching;
+  if (!id) return;
+  const [round, index] = id.split('-').map(Number);
+  if (royale.bracket?.rounds[round]?.[index]?.winner || royale.ended) royale.onWatchOver?.();
 }
 
 // ---------------------------------------------------------------- dropped links (host)
@@ -340,6 +463,7 @@ function onMessage(msg: DuelMsg, from: string) {
         royale.bracket = msg.b ? cleanBracket(msg.b, ids) : null;
         royale.champion = typeof msg.champion === 'string' && ids.has(msg.champion) ? msg.champion : null;
         changed();
+        checkWatch();
       }
       return;
     case 'progress':
@@ -353,6 +477,18 @@ function onMessage(msg: DuelMsg, from: string) {
         msg.role === 'host' ? 'host' : 'guest',
         String(msg.opp),
       );
+      return;
+    case 'watch':
+      if (host && royale.active) onWatch(pidOf(from), String(msg.match || ''));
+      return;
+    case 'wstart':
+      if (!royale.active || (host && from)) return;
+      onWatchStart(msg);
+      return;
+    case 'wstep':
+      if (!royale.active) return;
+      if (host && from) onWatchStep(pidOf(from), msg);
+      else onWatchedStep(msg);
       return;
     case 'mresult':
       if (host && royale.active) onResult(pidOf(from), String(msg.match), !!msg.won);
@@ -373,6 +509,7 @@ function onMessage(msg: DuelMsg, from: string) {
       if (!host && royale.active) {
         royale.ended = String(msg.why || `The ${royaleLabel()} ended.`).slice(0, 120);
         changed();
+        checkWatch();
       }
       return;
   }
