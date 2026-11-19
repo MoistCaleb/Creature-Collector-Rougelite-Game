@@ -1,6 +1,8 @@
 import { champion, cleanBracket, makeBracket, readyMatches, setWinner, type Bracket } from '../logic/bracket';
 import type { Creature } from '../logic/creature';
 import { Rng } from '../logic/rng';
+import { activeTeam, makeArenaCreature } from '../logic/arena';
+import { state } from '../state';
 import { SPECIES } from '../data/species';
 import { DuelController, type DuelMsg, type RaceInfo, type RaceProgress, type RosterEntry, type Standing, type StartInfo } from './duel';
 import { myPid, session } from './session';
@@ -42,11 +44,14 @@ export const royale = {
   racers: new Map<string, HostRacer>(),
   /** Host: matches already started. */
   started: new Set<string>(),
+  /** An online tournament (Arena teams, no stage race) rather than a battle royale. */
+  tourney: false,
   /** Redraw hook for whichever screen shows the royale. */
   onChange: null as (() => void) | null,
   reset() {
     for (const r of this.racers.values()) if (r.timer) clearTimeout(r.timer);
     this.active = false;
+    this.tourney = false;
     this.info = null;
     this.players = [];
     this.standings = [];
@@ -87,12 +92,34 @@ export function hostStartRoyale(mapId: string) {
   shareStandings();
 }
 
+/** Host: start an online tournament with everyone in the lobby, each bringing their active Arena team. */
+export function hostStartTourney() {
+  if (session.role !== 'host' || duel.roster.length < 3) return;
+  const race: RaceInfo = { seed: Math.floor(Math.random() * 1e9), mapId: '', starters: [], tourney: true };
+  const players = duel.roster;
+  session.send({ t: 'royale', race, players });
+  enterRoyale(race, players);
+  for (const p of players) royale.racers.set(p.pid, { progress: null, team: null, gone: false });
+  shareStandings();
+  submitArenaTeam();
+}
+
+/** Tournament: hand in your active Arena team (Lv 50, full health). */
+function submitArenaTeam() {
+  const team = activeTeam(state.meta).map((p) => makeArenaCreature(p));
+  royaleProgress({ floor: 0, finished: true, won: true, team: JSON.parse(JSON.stringify(team)) });
+}
+
+/** "battle royale" or "tournament", for messages. */
+export const royaleLabel = () => (royale.tourney ? 'tournament' : 'battle royale');
+
 function enterRoyale(race: RaceInfo, players: RosterEntry[]) {
   royale.reset();
   royale.active = true;
+  royale.tourney = !!race.tourney;
   royale.info = race;
   royale.players = players;
-  goTo('Starter', { race });
+  goTo(race.tourney ? 'Bracket' : 'Starter', { race });
 }
 
 // ---------------------------------------------------------------- the race (host keeps score)
@@ -135,7 +162,7 @@ function hostCheck() {
   if (royale.bracket || royale.champion || royale.ended) return schedule();
   const all = [...royale.racers.entries()];
   const contenders = all.filter(([, r]) => !r.gone && (!r.progress?.finished || r.team?.length));
-  if (contenders.length === 0) return endRoyale('Every team was wiped out. No one wins this time.');
+  if (contenders.length === 0) return endRoyale(royale.tourney ? 'No one brought an Arena team.' : 'Every team was wiped out. No one wins this time.');
   // Everyone else fell: the last one standing wins, even mid-stage.
   if (contenders.length === 1) {
     royale.champion = contenders[0][0];
@@ -293,7 +320,10 @@ function onMessage(msg: DuelMsg, from: string) {
   const host = session.role === 'host';
   switch (msg.t) {
     case 'royale':
-      if (!host) enterRoyale(msg.race, cleanRoster(msg.players));
+      if (!host) {
+        enterRoyale(msg.race, cleanRoster(msg.players));
+        if (royale.tourney) submitArenaTeam();
+      }
       return;
     case 'standings':
       if (!host && royale.active && Array.isArray(msg.list)) {
@@ -341,7 +371,7 @@ function onMessage(msg: DuelMsg, from: string) {
       return;
     case 'royaleEnd':
       if (!host && royale.active) {
-        royale.ended = String(msg.why || 'The battle royale ended.').slice(0, 120);
+        royale.ended = String(msg.why || `The ${royaleLabel()} ended.`).slice(0, 120);
         changed();
       }
       return;
@@ -359,5 +389,5 @@ export function royaleQuit() {
 
 /** Host leaving: tell everyone it's over. */
 export function hostAbandonRoyale() {
-  if (session.role === 'host' && royale.active && !royale.champion) session.send({ t: 'royaleEnd', why: 'The host left, so the battle royale is over.' });
+  if (session.role === 'host' && royale.active && !royale.champion) session.send({ t: 'royaleEnd', why: `The host left, so the ${royaleLabel()} is over.` });
 }

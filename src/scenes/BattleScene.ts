@@ -33,7 +33,7 @@ import { Rng } from '../logic/rng';
 import type { DuelController, Next } from '../net/duel';
 import { session } from '../net/session';
 import { afterSeriesGame, duel, endRace, leaveDuel, recordSeriesGame, sendHello } from '../net/runtime';
-import { reportMatch, royale } from '../net/royale';
+import { reportMatch, royale, royaleLabel } from '../net/royale';
 import {
   canEvolve,
   getFloorCeiling,
@@ -1479,12 +1479,12 @@ export class BattleScene extends Phaser.Scene {
       const [round] = royale.match.id.split('-').map(Number);
       const final = !!royale.bracket && round === royale.bracket.rounds.length - 1;
       reportMatch(won);
-      const title = won ? (final ? 'You won the battle royale!' : `You beat ${opp}!`) : `${opp} knocks you out`;
+      const title = won ? (final ? `You won the ${royaleLabel()}!` : `You beat ${opp}!`) : `${opp} knocks you out`;
       const body = won
         ? final
           ? 'Champion of the bracket!'
           : 'On to the next round. Your team is healed up for it.'
-        : 'Your battle royale is over. You can watch the rest of the bracket.';
+        : `Your ${royaleLabel()} is over. You can watch the rest of the bracket.`;
       return showMessage(this, title, body, () => this.scene.start('Bracket', {}));
     }
     const race = !!this.match!.duel!.info.hostCreatures;

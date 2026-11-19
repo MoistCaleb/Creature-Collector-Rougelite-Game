@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.18';
+export const APP_VERSION = '1.19';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.19',
+    title: 'Online tournament',
+    items: [
+      'Play with a friend now has an online Tournament for 3 to 8 players: everyone’s active Lv 50 Arena team goes straight into a knockout bracket, no stage race.',
+      'The host starts it from the lobby, next to Battle royale. Everyone is fully healed before each match, and you can watch the rest of the bracket once you’re out.',
+      'Winning one counts as a tournament win (Bracket Buster, Grand Champion) and an online win.',
+    ],
+  },
   {
     version: '1.18',
     title: 'Arena tournament',

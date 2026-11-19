@@ -10,7 +10,7 @@ import { SETTING_CHOICES, type DuelSettings } from '../net/duel';
 import { duel, hostSetSettings, hostStartRace, hostStartSeries, leaveDuel, sendHello, submitPick } from '../net/runtime';
 import { MAPS, mapUnlocked } from '../data/maps';
 import { CODE_LENGTH, myPid, session } from '../net/session';
-import { hostStartRoyale } from '../net/royale';
+import { hostStartRoyale, hostStartTourney } from '../net/royale';
 import { state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { playMusic } from '../ui/sound';
@@ -131,8 +131,8 @@ export class DuelScene extends Phaser.Scene {
       text(this, px + 14, py + 94, 'Stage battle', 14, COLORS.text, { fontStyle: 'bold' });
       const stage = text(this, px + 14, py + 114, 'Both of you play the same stage with double rewards. The boss at the end is the other player: whoever\u2019s run team wins takes it.', 12, COLORS.textDim, { wordWrap: { width: rw } });
       const ry = stage.y + stage.height + 12;
-      text(this, px + 14, ry, 'Battle royale (3 to 8 players)', 14, COLORS.text, { fontStyle: 'bold' });
-      const roy = text(this, px + 14, ry + 20, 'Everyone races the same stage; the survivors meet in a tournament bracket.', 12, COLORS.textDim, { wordWrap: { width: rw } });
+      text(this, px + 14, ry, 'Battle royale & tournament (3 to 8 players)', 14, COLORS.text, { fontStyle: 'bold' });
+      const roy = text(this, px + 14, ry + 20, 'Everyone races the same stage; the survivors meet in a bracket. Or a Tournament: Lv 50 Arena teams straight into the bracket.', 12, COLORS.textDim, { wordWrap: { width: rw } });
       panel.setSize(rw + 28, roy.y + roy.height + 12 - py);
     }
   }
@@ -258,19 +258,36 @@ export class DuelScene extends Phaser.Scene {
     });
     const by = LANDSCAPE ? 150 : 170 + players.length * rowH + 30;
     if (host) {
-      button(this, rx, by, rw, 64, 'Battle royale', () => this.pickRoyaleMap(), {
+      const hw = (rw - 10) / 2;
+      button(this, rx - hw / 2 - 5, by, hw, 64, 'Battle royale', () => this.pickRoyaleMap(), {
         color: 0x8a2c2c,
-        fontSize: 22,
+        fontSize: 18,
         glyph: 'swords',
-        sub: 'Everyone races one stage · then a tournament bracket',
+        sub: 'Race a stage · then a bracket',
+      });
+      button(this, rx + hw / 2 + 5, by, hw, 64, 'Tournament', () => this.confirmTourney(), {
+        color: 0x6b4a1f,
+        fontSize: 18,
+        sub: 'Lv 50 Arena teams · bracket',
       });
       text(this, rx, by + 42, 'Arena duels and two-player stage battles need exactly two players.', 11, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
     } else {
-      const wait = text(this, rx, by - 16, `Waiting for ${players.find((p) => p.host)?.name ?? 'the host'} to start a battle royale…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+      const wait = text(this, rx, by - 16, `Waiting for ${players.find((p) => p.host)?.name ?? 'the host'} to start a battle royale or tournament…`, 16, COLORS.text, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
-    text(this, rx, by + (LANDSCAPE ? 84 : 90), 'Everyone plays the same stage from the same start. Whoever still has a team at the boss goes into a bracket; the winner of the final is champion.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
+    text(this, rx, by + (LANDSCAPE ? 84 : 90), 'Battle royale: everyone plays the same stage, and whoever still has a team at the boss goes into a bracket. Tournament: everyone’s active Lv 50 Arena team goes straight into the bracket.', 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
     button(this, rx, by + (LANDSCAPE ? 170 : 170), 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+  }
+
+  /** Host: start an online tournament with everyone's active Arena team. */
+  private confirmTourney() {
+    openPicker(this, {
+      title: 'Online tournament',
+      subtitle: `All ${duel.roster.length} of you go straight into a knockout bracket with your active Lv 50 Arena team (the one picked in the Battle Arena). Everyone is fully healed before each match.`,
+      options: [{ label: 'Start the tournament', color: 0x6b4a1f }],
+      onPick: () => hostStartTourney(),
+      onCancel: () => {},
+    });
   }
 
   /** Host: choose the map for a battle royale. */
