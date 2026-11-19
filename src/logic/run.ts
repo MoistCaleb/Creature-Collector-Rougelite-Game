@@ -169,6 +169,9 @@ export interface Meta {
   onlineWins?: number;
   /** Most players in a battle royale you won (for the battle royale titles). */
   royaleBest?: number;
+  /** Arena tournament in progress (saved so it survives closing the app), and tournaments won. */
+  tourney?: import('./tournament').Tournament;
+  tourneyWins?: number;
   /** Reward gear (look part:option) and titles already looked at, for the NEW tags. */
   seenItems?: string[];
   seenTitles?: string[];

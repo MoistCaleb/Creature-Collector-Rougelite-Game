@@ -21,6 +21,7 @@ import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
 import type { BattleMatch } from './BattleScene';
+import { startTournament } from './TournamentScene';
 
 /** A ladder in progress: which round is next, and its seed. */
 interface Ladder {
@@ -57,20 +58,35 @@ export class ArenaScene extends Phaser.Scene {
 
     for (let i = 0; i < ARENA_TEAM; i++) this.drawSlot(i);
 
-    // Upright: slots stacked, buttons below. Sideways: a 2x2 grid of slots, the buttons side by side under it.
+    // Upright: slots stacked, buttons below. Sideways: a 2x2 grid of slots, three buttons side by side under it.
     const y = LANDSCAPE ? SLOT_Y + 2 * SLOT_H - 2 : SLOT_Y + ARENA_TEAM * SLOT_H + 14;
-    const bw = LANDSCAPE ? (W - 36) / 2 : W - 40;
-    button(this, LANDSCAPE ? 12 + bw / 2 : W / 2, y + 30, bw, 60, `Start ladder (${ARENA_ROUNDS} rounds)`, () => this.startLadder({ round: 0, seed: Date.now() % 1e9 }), {
+    const bw = LANDSCAPE ? (W - 48) / 3 : W - 40;
+    const at = (i: number) => (LANDSCAPE ? { x: 12 + bw / 2 + i * (bw + 12), y: y + 30, h: 60 } : { x: W / 2, y: y + 28 + i * 60, h: i ? 52 : 56 });
+    const ladder = at(0);
+    button(this, ladder.x, ladder.y, bw, ladder.h, `Start ladder (${ARENA_ROUNDS} rounds)`, () => this.startLadder({ round: 0, seed: Date.now() % 1e9 }), {
       color: 0x3b6d4a,
-      fontSize: 20,
+      fontSize: LANDSCAPE ? 17 : 20,
       enabled: this.team.length > 0,
       sub: this.team.length ? 'Full heal before every round' : 'Add at least one Hexling',
       glyph: 'swords',
     });
 
-    button(this, LANDSCAPE ? 24 + bw * 1.5 : W / 2, LANDSCAPE ? y + 30 : y + 106, bw, LANDSCAPE ? 60 : 56, 'Play with a friend', () => this.scene.start('Duel', {}), {
+    const cup = at(1);
+    const going = !!meta.tourney;
+    button(this, cup.x, cup.y, bw, cup.h, going ? 'Resume tournament' : 'Tournament', () => {
+      if (!going) startTournament();
+      this.scene.start('Tournament');
+    }, {
+      color: 0x6b4a1f,
+      fontSize: LANDSCAPE ? 17 : 19,
+      enabled: going || this.team.length > 0,
+      sub: going ? 'Your bracket is waiting' : '8-trainer bracket · knockout',
+    });
+
+    const duel = at(2);
+    button(this, duel.x, duel.y, bw, duel.h, 'Play with a friend', () => this.scene.start('Duel', {}), {
       color: 0x2f4a6b,
-      fontSize: 19,
+      fontSize: LANDSCAPE ? 17 : 19,
       sub: 'Live, phone to phone, with a 5-digit code',
     });
 

@@ -6,6 +6,7 @@ import { BagScene } from './scenes/BagScene';
 import { ArenaScene } from './scenes/ArenaScene';
 import { DuelScene } from './scenes/DuelScene';
 import { BracketScene } from './scenes/BracketScene';
+import { TournamentScene } from './scenes/TournamentScene';
 import { TeamsScene } from './scenes/TeamsScene';
 import { ArenaEditScene } from './scenes/ArenaEditScene';
 import { ArenaPickScene } from './scenes/ArenaPickScene';
@@ -34,7 +35,7 @@ export function startGame() {
   state.meta = loadMeta();
   installMotionGuard();
   // Screens with a landscape layout (the rest stay upright, centered, when the phone is sideways).
-  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel', 'Bracket', 'Records');
+  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel', 'Bracket', 'Tournament', 'Records');
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
@@ -54,6 +55,7 @@ export function startGame() {
       ArenaScene,
       DuelScene,
       BracketScene,
+      TournamentScene,
       TeamsScene,
       ArenaEditScene,
       ArenaPickScene,

@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2406,5 +2406,40 @@ describe('battle royale titles', () => {
       expect(TITLE_REWARDS[name].map((c) => c.name)).toContain(gear);
     }
     expect(meta.onlineWins).toBe(5);
+  });
+});
+
+import { myMatch, newTournament, nextCpuMatch, playCpuMatch, recordMine, teamFor, YOU } from '../src/logic/tournament';
+import { champion as champ2, knockedOut as ko2 } from '../src/logic/bracket';
+
+describe('Arena tournament', () => {
+  const picks = [{ speciesId: SPECIES[0].id, stage: 0, moves: [] as string[] }];
+  it('seeds you and 7 named computer trainers into an 8-player bracket', () => {
+    const t = newTournament(picks, 42);
+    expect(t.trainers).toHaveLength(8);
+    expect(new Set(t.trainers.map((x) => x.name.split(' ').pop())).size).toBe(8);
+    expect(t.bracket.rounds.map((r) => r.length)).toEqual([4, 2, 1]);
+    expect(myMatch(t)?.round).toBe(0);
+    // The rest of your round waits for you.
+    expect(nextCpuMatch(t)).toBeNull();
+  });
+  it('plays out to a champion whether you win or lose', () => {
+    for (const won of [true, false]) {
+      const t = newTournament(picks, 7);
+      for (let guard = 0; guard < 20 && !champ2(t.bracket); guard++) {
+        const cpu = nextCpuMatch(t);
+        if (cpu) playCpuMatch(t, cpu.round, cpu.index);
+        else recordMine(t, won);
+      }
+      expect(champ2(t.bracket)).toEqual(won ? YOU : expect.any(String));
+      if (!won) expect(ko2(t.bracket, YOU)).toBe(true);
+    }
+  });
+  it('gives every match full-health copies of the teams', () => {
+    const t = newTournament(picks, 3);
+    const a = teamFor(t, 'cpu1');
+    a[0].hp = 0;
+    expect(teamFor(t, 'cpu1')[0].hp).toBeGreaterThan(0);
+    expect(teamFor(t, YOU)).toHaveLength(1);
   });
 });

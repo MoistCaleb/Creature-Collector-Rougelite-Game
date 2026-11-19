@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.17';
+export const APP_VERSION = '1.18';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.18',
+    title: 'Arena tournament',
+    items: [
+      'New in the Battle Arena: Tournament. You and 7 computer trainers in a knockout bracket (Quarterfinal, Semifinal, Final), the same bracket as the battle royale.',
+      'Your team is fully healed before every match. The other trainers range from beginners to an Arena Champion, and their matches play out on the bracket while you watch (or skip ahead).',
+      'A tournament is saved as you go, so you can close the game and resume it from the Arena.',
+      'New titles: Bracket Buster (win a tournament, Rare) and Grand Champion (win 5, Epic). Tournaments won now shows in Records.',
+    ],
+  },
   {
     version: '1.17',
     title: 'Royal rewards',

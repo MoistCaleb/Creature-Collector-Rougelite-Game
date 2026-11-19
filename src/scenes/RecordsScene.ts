@@ -87,6 +87,7 @@ export class RecordsScene extends Phaser.Scene {
       ['Hexlidex forms', `${meta.dex.forms.length}/${forms}`],
       ['Gilded Hexlings', `${meta.shinyCaught ?? 0} caught`],
       ['Arena best', `${meta.arenaBest ?? 0}/5`],
+      ['Tournaments won', `${meta.tourneyWins ?? 0}`],
       ['Maps won', `${meta.clearedMaps.length}/${Object.keys(MAP_BY_ID).length}`],
       ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
