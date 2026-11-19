@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { installTapGuard } from './ui/tapGuard';
 import { BattleScene } from './scenes/BattleScene';
 import { DexScene } from './scenes/DexScene';
 import { BagScene } from './scenes/BagScene';
@@ -29,6 +30,7 @@ import { boardChanged, COLORS, FH, FW, landscapeReady, ZOOM } from './ui/widgets
 
 /** Start the game. Call once the save storage is ready. */
 export function startGame() {
+  installTapGuard();
   state.meta = loadMeta();
   installMotionGuard();
   // Screens with a landscape layout (the rest stay upright, centered, when the phone is sideways).
