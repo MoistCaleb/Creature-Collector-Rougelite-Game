@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { takeNewMilestones } from '../logic/gilded';
-import { addOnlineWin, takeNewTitles} from '../logic/titles';
+import { addOnlineWin, addRoyaleWin, takeNewTitles} from '../logic/titles';
 import { titleNews, unlocksOf } from '../logic/cosmetics';
 import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
@@ -330,7 +330,7 @@ export class EndScene extends Phaser.Scene {
   private royaleWinNews(): string {
     if (royale.winCounted) return '';
     royale.winCounted = true;
-    const news = titleNews(addOnlineWin(state.meta)).replace(/^\n+/, '\n');
+    const news = titleNews(addRoyaleWin(state.meta, royale.players.length)).replace(/^\n+/, '\n');
     saveMeta(state.meta);
     return news;
   }
