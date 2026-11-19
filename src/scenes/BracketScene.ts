@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { knockedOut, roundName } from '../logic/bracket';
 import { drawBracket, drawChampion } from '../ui/bracketView';
-import { addRoyaleWin } from '../logic/titles';
+import { addOnlineWin, addRoyaleWin } from '../logic/titles';
 import { saveMeta } from '../logic/run';
 import { titleNews } from '../logic/cosmetics';
 import { lookForName } from '../data/trainerLook';
 import { leaveDuelRoyale } from '../net/runtime';
-import { royale, royaleQuit } from '../net/royale';
+import { royale, royaleLabel, royaleQuit } from '../net/royale';
 import { myPid, session } from '../net/session';
 import { state } from '../state';
 import { showMessage } from '../ui/picker';
@@ -36,7 +36,7 @@ export class BracketScene extends Phaser.Scene {
       if (royale.onChange === redraw) royale.onChange = null;
     });
 
-    text(this, W / 2, LANDSCAPE ? 8 : 16, 'Battle royale', LANDSCAPE ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
+    text(this, W / 2, LANDSCAPE ? 8 : 16, royale.tourney ? 'Online tournament' : 'Battle royale', LANDSCAPE ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0);
     const status = text(this, W / 2, LANDSCAPE ? 36 : 52, this.statusText(), 13, COLORS.text, { align: 'center', wordWrap: { width: W - 40 } }).setOrigin(0.5, 0);
 
     const b = royale.bracket;
@@ -52,7 +52,7 @@ export class BracketScene extends Phaser.Scene {
     }
 
     const done = !!royale.champion || !!royale.ended || !session.connected;
-    button(this, W / 2, H - (LANDSCAPE ? 28 : 36), 260, LANDSCAPE ? 42 : 48, done ? 'Back to the lobby' : 'Leave the battle royale', () => this.leave(done), {
+    button(this, W / 2, H - (LANDSCAPE ? 28 : 36), 260, LANDSCAPE ? 42 : 48, done ? 'Back to the lobby' : `Leave the ${royaleLabel()}`, () => this.leave(done), {
       color: done ? 0x3b6d4a : 0x5a2a2a,
       fontSize: 16,
     });
@@ -68,19 +68,21 @@ export class BracketScene extends Phaser.Scene {
     if (royale.ended) return royale.ended;
     if (!session.connected) return 'Lost the connection to the game.';
     if (royale.champion) {
-      if (royale.champion !== myPid) return `${this.nameOf(royale.champion)} wins the battle royale!`;
+      if (royale.champion !== myPid) return `${this.nameOf(royale.champion)} wins the ${royaleLabel()}!`;
       let news = '';
       if (!royale.winCounted) {
         royale.winCounted = true;
-        news = titleNews(addRoyaleWin(state.meta, royale.players.length)).replace(/^\n+/, ' ');
+        // Online tournament wins count as tournament wins (and an online win), not royale wins.
+        if (royale.tourney) state.meta.tourneyWins = (state.meta.tourneyWins ?? 0) + 1;
+        news = titleNews(royale.tourney ? addOnlineWin(state.meta) : addRoyaleWin(state.meta, royale.players.length)).replace(/^\n+/, ' ');
         saveMeta(state.meta);
         sfx.victory();
       }
-      return `You win the battle royale!${news}`;
+      return `You win the ${royaleLabel()}!${news}`;
     }
     if (!b) return 'Setting up the bracket…';
     const inIt = b.rounds[0].some((m) => m.a === myPid || m.b === myPid);
-    if (!inIt) return 'Your team fell in the stage, so you’re watching the bracket.';
+    if (!inIt) return royale.tourney ? 'You have no Arena team saved, so you’re watching the bracket.' : 'Your team fell in the stage, so you’re watching the bracket.';
     if (knockedOut(b, myPid)) return 'You’re out. Watch the rest, or head back to the lobby.';
     // Your next match: who against (or who you're waiting for).
     for (let r = 0; r < b.rounds.length; r++) {
@@ -105,11 +107,11 @@ export class BracketScene extends Phaser.Scene {
     };
     if (done) return go();
     if (session.role === 'host')
-      return showMessage(this, 'End the battle royale?', 'You’re the host, so leaving ends it for everyone.', () => {
+      return showMessage(this, `End the ${royaleLabel()}?`, 'You’re the host, so leaving ends it for everyone.', () => {
         leaveDuelRoyale();
         go();
       });
-    showMessage(this, 'Leave the battle royale?', 'Any match you still have will count as a loss.', () => {
+    showMessage(this, `Leave the ${royaleLabel()}?`, 'Any match you still have will count as a loss.', () => {
       royaleQuit();
       go();
     });

@@ -73,6 +73,8 @@ export interface RaceInfo {
   seed: number;
   mapId: string;
   starters: string[];
+  /** Online tournament: no stage, everyone brings their saved Lv 50 Arena team straight into the bracket. */
+  tourney?: boolean;
 }
 
 /** Where a racer is: shown on the other phone's map. */
