@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.11';
+export const APP_VERSION = '1.12';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.12',
+    title: 'Steadier online play',
+    items: [
+      'Duels and stage battles try more ways to link two devices, including relays over TCP for networks that block the usual route (office and school Wi-Fi, some phone carriers).',
+      'If the code is found but the devices can\u2019t link, it now says so (with tips) instead of \u201cNo answer\u201d.',
+      'Greatsword: the front view now matches the back.',
+    ],
+  },
   {
     version: '1.11',
     title: 'Scrolling and battle info',
