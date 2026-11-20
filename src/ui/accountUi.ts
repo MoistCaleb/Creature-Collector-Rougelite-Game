@@ -26,6 +26,8 @@ const FONT = 'system-ui,-apple-system,sans-serif';
 interface Field {
   type: 'email' | 'code' | 'textarea' | 'text';
   placeholder: string;
+  /** Starting text. */
+  value?: string;
 }
 interface Card {
   value(): string;
@@ -74,6 +76,7 @@ export function card(o: { title: string; body: string; field?: Field; buttons: {
       input = i;
     }
     input.placeholder = o.field.placeholder;
+    if (o.field.value) input.value = o.field.value;
     input.style.cssText += `;width:100%;box-sizing:border-box;background:#15111f;color:#f4efff;border:1px solid #4a3f66;border-radius:8px;padding:12px;font:16px ${FONT};margin-bottom:10px`;
     box.append(input);
   }

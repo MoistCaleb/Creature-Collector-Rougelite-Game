@@ -1,3 +1,4 @@
+import { editTrainerName } from '../ui/friendsUi';
 import Phaser from 'phaser';
 import {
   CLOTH_COLORS,
@@ -254,11 +255,6 @@ export class TrainerScene extends Phaser.Scene {
   }
 
   private rename() {
-    const meta = state.meta;
-    const name = window.prompt('Your trainer name', myName(meta));
-    if (name === null) return;
-    meta.duelName = name.trim().slice(0, 16) || 'Trainer';
-    saveMeta(meta);
-    this.scene.restart({ from: this.from });
+    editTrainerName({ onDone: () => this.scene.restart({ from: this.from }) });
   }
 }

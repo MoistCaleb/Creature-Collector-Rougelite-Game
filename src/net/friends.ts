@@ -1,5 +1,5 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { cleanLook, type TrainerLook } from '../data/trainerLook';
+import { cleanLook, cleanName, nameProblem, type TrainerLook } from '../data/trainerLook';
 import { accountClient, accountsAvailable, currentUser } from './account';
 import { GAME_MODES, type GameMode } from './duel';
 
@@ -64,17 +64,13 @@ export async function loadProfile(): Promise<Profile | null> {
   return profile;
 }
 
-/** Usernames: 3-16 letters, numbers or underscores. Returns an error message, or null when fine. */
-export function usernameProblem(name: string): string | null {
-  const n = name.trim();
-  if (!/^[A-Za-z0-9_]{3,16}$/.test(n)) return 'Use 3 to 16 letters, numbers or underscores.';
-  return null;
-}
+/** Your username is your trainer name: the same rules (see nameProblem). */
+export const usernameProblem = (name: string): string | null => nameProblem(name);
 
 export async function claimUsername(name: string): Promise<Profile> {
   const problem = usernameProblem(name);
   if (problem) throw new Error(problem);
-  const { data, error } = await accountClient().rpc('claim_username', { name: name.trim() });
+  const { data, error } = await accountClient().rpc('claim_username', { name: cleanName(name) });
   if (error) throw err(error, 'Couldn’t save that username.');
   const row = Array.isArray(data) ? data[0] : data;
   profile = { userId: row.user_id, username: row.username, friendCode: row.friend_code };

@@ -1,8 +1,9 @@
 import type Phaser from 'phaser';
-import { myLook } from '../data/trainerLook';
+import { cleanName, myLook, myName, nameProblem } from '../data/trainerLook';
+import { saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
 import { GAME_MODES } from '../net/duel';
-import { dismissInvite, friendsAvailable, listenForInvites, loadProfile, shareLook, startPresence, stopListening, type Invite } from '../net/friends';
+import { claimUsername, dismissInvite, friendsAvailable, listenForInvites, loadProfile, shareLook, startPresence, stopListening, type Invite } from '../net/friends';
 import { session } from '../net/session';
 import { state } from '../state';
 import { card } from './accountUi';
@@ -28,6 +29,17 @@ export async function startFriends() {
     const p = await loadProfile();
     if (!p) return;
     started = true;
+    // Your username is your trainer name: if they drifted apart (renamed while offline), line them up.
+    const name = myName(state.meta);
+    if (p.username !== name) {
+      try {
+        if (nameProblem(name) || name === 'Trainer') throw new Error('keep');
+        await claimUsername(name);
+      } catch {
+        state.meta.duelName = p.username;
+        saveMeta(state.meta);
+      }
+    }
     void shareLook(myLook(state.meta), myTitle(state.meta) ?? null).catch(() => {});
     startPresence(activityNow);
     listenForInvites(showInvite);
@@ -70,6 +82,52 @@ function showInvite(inv: Invite) {
           // Leave whatever you're doing (a run is saved as you go) and go straight to their lobby.
           for (const s of g.scene.getScenes(true)) s.scene.stop();
           g.scene.start('Duel', { joinCode: inv.code });
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Change your trainer name, which is also your username for friends: signed in, the name has to
+ * be free (it's claimed on the server first); otherwise it just changes on this device.
+ */
+export function editTrainerName(o: { title?: string; body?: string; onDone: () => void; onCancel?: () => void }) {
+  const signedIn = friendsAvailable();
+  card({
+    title: o.title ?? 'Your trainer name',
+    body:
+      o.body ??
+      `Shown in battles and to other players${signedIn ? ', and it’s your username: friends find you by it' : ''}. 3 to 16 letters, numbers, spaces, _ - or .`,
+    field: { type: 'text', placeholder: 'Trainer name', value: myName(state.meta) === 'Trainer' ? '' : myName(state.meta) },
+    buttons: [
+      { label: 'Cancel', onClick: (c) => (c.close(), o.onCancel?.()) },
+      {
+        label: 'Save',
+        primary: true,
+        onClick: async (c) => {
+          const name = cleanName(c.value());
+          const problem = nameProblem(name);
+          if (problem) return c.status(problem, 'error');
+          c.busy(true);
+          try {
+            // Signed in: the name must be free (it becomes your username too). Before friends are
+            // set up on the server, it just changes here.
+            if (signedIn) {
+              try {
+                await claimUsername(name);
+              } catch (e) {
+                if (!(e instanceof Error && /set up on the server/.test(e.message))) throw e;
+              }
+            }
+            state.meta.duelName = name;
+            saveMeta(state.meta);
+            c.close();
+            o.onDone();
+          } catch (e) {
+            c.busy(false);
+            c.status(e instanceof Error ? e.message : 'Couldn’t save that name.', 'error');
+          }
         },
       },
     ],

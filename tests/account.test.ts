@@ -137,10 +137,15 @@ describe('Accounts: keeping the device and the account in step', () => {
 
 describe('Friends', async () => {
   const friends = await import('../src/net/friends');
-  it('checks usernames', () => {
+  it('usernames follow the trainer name rules', async () => {
+    const { cleanName, nameProblem } = await import('../src/data/trainerLook');
     expect(friends.usernameProblem('ab')).toBeTruthy();
-    expect(friends.usernameProblem('has space')).toBeTruthy();
+    expect(friends.usernameProblem('Ash Ketch')).toBeNull();
     expect(friends.usernameProblem('Sam_99')).toBeNull();
+    expect(nameProblem('_sam')).toBeTruthy();
+    expect(nameProblem('sam!')).toBeTruthy();
+    expect(nameProblem('a'.repeat(17))).toBeTruthy();
+    expect(cleanName('  Big    Al ')).toBe('Big Al');
   });
   it('lists friends online first, and says what they are up to', async () => {
     await account.verifyCode('me@example.com', '123456');

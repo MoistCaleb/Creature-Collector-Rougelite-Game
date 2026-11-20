@@ -9,7 +9,8 @@
 
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  username text not null check (username ~ '^[A-Za-z0-9_]{3,16}$'),
+  -- Your username is your trainer name (3-16 letters, numbers, spaces, _ - or .).
+  username text not null,
   friend_code text not null unique,
   -- What friends see: your trainer's look and title.
   look jsonb,
@@ -19,6 +20,11 @@ create table if not exists public.profiles (
   activity text,
   created_at timestamptz not null default now()
 );
+-- (Re)set the username rule, so running this file again updates an older project too.
+alter table public.profiles drop constraint if exists profiles_username_check;
+alter table public.profiles add constraint profiles_username_check
+  check (username ~ '^[A-Za-z0-9][A-Za-z0-9 _.-]{1,14}[A-Za-z0-9]$' and username !~ '  ');
+
 -- Usernames are unique whatever the capitals (Sam and sam are the same name).
 create unique index if not exists profiles_username_lower on public.profiles (lower(username));
 alter table public.profiles enable row level security;
@@ -108,7 +114,7 @@ $$;
 
 -- ---------------------------------------------------------------- what the game calls
 
--- Pick (or change) your username. You get a friend code the first time.
+-- Pick (or change) your username, which is your trainer name. You get a friend code the first time.
 create or replace function public.claim_username(name text) returns public.profiles
 language plpgsql security definer set search_path = public as $$
 declare
@@ -117,15 +123,15 @@ declare
   code text;
 begin
   if me is null then raise exception 'Sign in first.'; end if;
-  name := trim(name);
-  if name !~ '^[A-Za-z0-9_]{3,16}$' then
-    raise exception 'Usernames are 3 to 16 letters, numbers or underscores.';
+  name := regexp_replace(trim(name), '\s+', ' ', 'g');
+  if name !~ '^[A-Za-z0-9][A-Za-z0-9 _.-]{1,14}[A-Za-z0-9]$' then
+    raise exception 'Names are 3 to 16 letters, numbers, spaces, _ - or ., starting and ending with a letter or number.';
   end if;
-  if lower(name) ~ '(fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|nazi|hitler|porn|sex|dick|cock|pussy|penis|vagina|kys)' then
-    raise exception 'Please pick a different username.';
+  if lower(regexp_replace(name, '[ _.-]', '', 'g')) ~ '(fuck|shit|cunt|nigg|fag|bitch|whore|slut|rape|nazi|hitler|porn|sex|dick|cock|pussy|penis|vagina|kys)' then
+    raise exception 'Please pick a different name.';
   end if;
   if exists (select 1 from profiles where lower(username) = lower(name) and user_id <> me) then
-    raise exception 'That username is taken.';
+    raise exception 'Someone already has that name. Try another.';
   end if;
   if exists (select 1 from profiles where user_id = me) then
     update profiles set username = name where user_id = me returning * into result;
