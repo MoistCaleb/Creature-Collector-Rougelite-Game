@@ -13,6 +13,7 @@ import {
   CARE,
   campCrew,
   campHearts,
+  campStage,
   caredToday,
   care,
   challenges,
@@ -527,6 +528,12 @@ export class CampScene extends Phaser.Scene {
     c.add([shadow, img]);
     const hearts = campHearts(state.meta, speciesId);
     if (hearts) c.add(text(this, 0, 4, '♥'.repeat(hearts), 10, '#ff8ab0', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0));
+    // Best friends: a warm glow.
+    if (hearts >= CAMP_HEARTS.length) {
+      const halo = this.add.ellipse(0, -14, 46, 46, 0xff8ab0, 0.18);
+      c.addAt(halo, 0);
+      if (!calm()) this.tweens.add({ targets: halo, scale: 1.15, alpha: 0.32, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
+    }
     c.setDepth(c.y / 1000);
     img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       cry(speciesId, stage);
@@ -582,7 +589,7 @@ export class CampScene extends Phaser.Scene {
       subtitle:
         hearts >= CAMP_HEARTS.length
           ? `Best friends! ${name} starts your runs with a bond heart, so it can hang on when it would faint.`
-          : `Spend time together to build your bond (${next! - points} more to the next heart). With a full bond, ${name} starts your runs with a bond heart.`,
+          : `Spend time together to build your bond (${next! - points} more to the next heart). Each heart evolves it here at camp, and with a full bond, ${name} starts your runs with a bond heart.`,
       options: CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
       cancelLabel: 'Back',
       onCancel: () => {},
@@ -593,7 +600,15 @@ export class CampScene extends Phaser.Scene {
         this.bubble(c, '♥', '#ff8ab0');
         if (gained) {
           const now = campHearts(meta, speciesId);
-          showMessage(this, `${name} trusts you more!`, now >= CAMP_HEARTS.length ? `A full bond! ${name} will start your runs with a bond heart.` : `Camp bond: ${'♥'.repeat(now)}`, () => this.scene.restart());
+          const evolved = now <= 2 ? SPECIES_BY_ID[speciesId].names[now] : null;
+          showMessage(
+            this,
+            `${name} trusts you more!`,
+            now >= CAMP_HEARTS.length
+              ? `A full bond! ${name} glows with happiness, and will start your runs with a bond heart.`
+              : `Camp bond: ${'♥'.repeat(now)}. ${name} evolved into ${evolved} here at camp!`,
+            () => this.scene.restart(),
+          );
         }
       },
     });
@@ -766,7 +781,7 @@ export class CampScene extends Phaser.Scene {
         ...Array.from({ length: CREW_MAX }, (_, i) => {
           const id = current[i];
           return id
-            ? { label: SPECIES_BY_ID[id].names[0], sub: `${'♥'.repeat(campHearts(meta, id)) || 'No bond yet'} · tap to swap`, icon: createCreature(id, 5), color: 0x3a4a2a }
+            ? { label: SPECIES_BY_ID[id].names[campStage(meta, id)], sub: `${'♥'.repeat(campHearts(meta, id)) || 'No bond yet'} · tap to swap`, icon: createCreature(id, 5, campStage(meta, id)), color: 0x3a4a2a }
             : { label: 'Empty spot', sub: 'Tap to invite someone', color: 0x2a2440 };
         }),
         ...(meta.camp?.crew?.length ? [{ label: 'Back to last run’s team', color: 0x4a3a2a }] : []),
@@ -811,7 +826,7 @@ export class CampScene extends Phaser.Scene {
           const n = used(id);
           const hearts = '♥'.repeat(campHearts(meta, id));
           const runs = n ? `${n} run${n === 1 ? '' : 's'}` : '';
-          return { label: SPECIES_BY_ID[id].names[0], sub: [runs, hearts].filter(Boolean).join(' · ') || ' ', icon: createCreature(id, 5) };
+          return { label: SPECIES_BY_ID[id].names[campStage(meta, id)], sub: [runs, hearts].filter(Boolean).join(' · ') || ' ', icon: createCreature(id, 5, campStage(meta, id)) };
         }),
       ],
       rowHeight: 60,

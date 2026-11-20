@@ -252,14 +252,21 @@ export function closestBond(m: Meta): { speciesId: string; points: number } | nu
   return e ? { speciesId: e[0], points: e[1] } : null;
 }
 
-/** Who stays at camp: your pick, else last run's team (or your first starters). */
+/**
+ * At camp a Hexling's form follows your bond, not its level: it starts in its first form, and each
+ * camp heart evolves it (first heart: middle form, second: final form; the third adds a glow).
+ */
+export const campStage = (m: Meta, speciesId: string) => Math.min(campHearts(m, speciesId), 2);
+
+/** Who stays at camp: your pick, else last run's team (or your first starters), in their camp forms. */
 export function campCrew(m: Meta): { speciesId: string; stage: number; shiny: boolean }[] {
   const shiny = (id: string) => (m.shinyOwned ?? []).includes(id) && !(m.shinyOff ?? []).includes(id);
-  const topStage = (id: string) => Math.max(0, ...m.dex.forms.filter((f) => f.startsWith(`${id}:`)).map((f) => Number(f.split(':')[1]) || 0));
-  if (m.camp?.crew?.length) return m.camp.crew.filter((id) => SPECIES_BY_ID[id]).map((id) => ({ speciesId: id, stage: topStage(id), shiny: shiny(id) }));
-  const last = m.history?.[0];
-  if (last?.team.length) return last.team.slice(0, CREW_MAX).map((c) => ({ speciesId: c.speciesId, stage: c.stage, shiny: !!c.shiny }));
-  return m.unlockedStarters.slice(0, CREW_MAX).map((id) => ({ speciesId: id, stage: 0, shiny: false }));
+  const ids = m.camp?.crew?.length
+    ? m.camp.crew
+    : m.history?.[0]?.team.length
+      ? m.history[0].team.slice(0, CREW_MAX).map((c) => c.speciesId)
+      : m.unlockedStarters.slice(0, CREW_MAX);
+  return ids.filter((id) => SPECIES_BY_ID[id]).map((id) => ({ speciesId: id, stage: campStage(m, id), shiny: shiny(id) }));
 }
 
 /** Runs that are the same for everyone don't get camp perks. */
