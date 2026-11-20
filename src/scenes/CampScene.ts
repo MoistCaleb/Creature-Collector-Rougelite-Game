@@ -1,16 +1,42 @@
-import { friendsAvailable } from '../net/friends';
 import Phaser from 'phaser';
-import { LEGENDS } from '../data/legends';
+import { DEX_FORMS, LEGENDS } from '../data/legends';
 import { MAP_BY_ID } from '../data/maps';
-import { SPECIES_BY_ID } from '../data/species';
+import { SPECIES, SPECIES_BY_ID } from '../data/species';
+import { CLOTH_COLORS, cleanLook, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { ELEMENT_COLORS } from '../data/types';
-import { myLook, myName } from '../data/trainerLook';
 import { dayPhase } from '../logic/ambience';
-import { clearSavedRun, hasSavedRun, legendsCaught, loadRun } from '../logic/run';
+import {
+  buyCampItem,
+  camp,
+  CAMP_HEARTS,
+  CAMP_ITEMS,
+  CARE,
+  campCrew,
+  campHearts,
+  caredToday,
+  care,
+  challenges,
+  claimChallenge,
+  CREW_MAX,
+  fireColors,
+  growth,
+  legendFloors,
+  prepOffers,
+  PREPS,
+  TIER_EMBERS,
+  TIER_NAMES,
+  type Care,
+  type ChallengeState,
+  type PrepId,
+} from '../logic/camp';
+import { createCreature } from '../logic/creature';
+import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
+import { friendsAvailable, listFriends, type Friend } from '../net/friends';
 import { state } from '../state';
 import { cry } from '../ui/cries';
 import { calm } from '../ui/motion';
+import { openPicker, showMessage } from '../ui/picker';
 import { prefs } from '../ui/prefs';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -19,27 +45,55 @@ import { trainerFx } from '../ui/trainerFx';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
 import { background, button, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
+/** The camp's regular visitors: who they are, how they look, and which daily challenge they hand out. */
+const VISITORS = [
+  { name: 'Mori', tier: 0, look: { hat: 3, hatColor: 10, top: 9, topColor: 17, accent: 1, hair: 4, hairColor: 2, skin: 2 } },
+  { name: 'Professor Alder', tier: 1, look: { hat: 0, top: 3, topColor: 11, accent: 6, hair: 0, hairColor: 4, face: 1, skin: 0 } },
+  { name: 'Your rival', tier: 2, look: { hat: 13, hatColor: 0, top: 2, topColor: 13, accent: 0, hair: 1, hairColor: 0, skin: 3 } },
+] as const;
+
+const CHALLENGE_LINES = [
+  (c: string) => `Do me a favour today? ${c}, and I'll pay you in embers!`,
+  (c: string) => `For my research: ${c.charAt(0).toLowerCase()}${c.slice(1)}. Embers for your trouble.`,
+  (c: string) => `Bet you can't ${c.charAt(0).toLowerCase()}${c.slice(1)} today. Prove me wrong.`,
+];
+
 /**
- * Camp: where you rest between runs. Purely for looks: your trainer by the fire, the Hexlings who
- * finished your last run wandering around it, your trophies, and signposts to everywhere else.
- * Nothing here carries into a run.
+ * Camp: where you rest between runs, and where every run starts. Before a run (prep mode) you take
+ * one thing for the road and hear the news; between runs your visitors hand out daily challenges
+ * for embers, you spend time with the Hexlings who stay here, and the camp grows as you play.
+ * Online friends sit by your fire with their favourite Hexling.
  */
 export class CampScene extends Phaser.Scene {
+  private prep = false;
+  private alive = false;
+  private fx = 0;
+  private fy = 0;
+  private rx = 0;
+  private ry = 0;
+
   constructor() {
     super('Camp');
   }
 
+  init(data: { prep?: boolean }) {
+    this.prep = !!data.prep && !!state.run;
+  }
+
   create() {
+    this.alive = true;
+    this.events.once('shutdown', () => (this.alive = false));
     const meta = state.meta;
+    camp(meta);
     background(this, 0x0c0a18);
     playMusic('title');
     const phase = prefs.worldClock ? dayPhase() : 'night';
     const sky: Record<string, [number, number]> = { dawn: [0x3a2a5a, 0xd88a7a], day: [0x2a5a9a, 0x8ac0e8], dusk: [0x2a1a4a, 0xe07a4a], night: [0x0a0a24, 0x1e1a40] };
     const [top, bottom] = sky[phase];
     const groundY = H * (LANDSCAPE ? 0.5 : 0.4);
-    // The open ground around the fire: clear of the signposts.
-    const x1 = LANDSCAPE ? W - 200 : W;
-    const floorBottom = LANDSCAPE ? H - 20 : H - 136;
+    // The open ground around the fire: clear of the signposts (or the choice before a run).
+    const x1 = LANDSCAPE ? W - (this.prep ? 280 : 200) : W;
+    const floorBottom = LANDSCAPE ? H - 20 : H - (this.prep ? 286 : 136);
 
     // ---- sky, stars, hills, ground
     const g = this.add.graphics();
@@ -59,7 +113,6 @@ export class CampScene extends Phaser.Scene {
     } else this.add.circle(W * 0.84, LANDSCAPE ? groundY * 0.22 : groundY * 0.45, 26, 0xfff0a0);
     const hills = this.add.graphics().fillStyle(0x14102a, 1);
     for (let x = -40; x < W + 80; x += 70) hills.fillTriangle(x, groundY, x + 50, groundY - 70 - ((x * 7) % 40), x + 100, groundY);
-    // Pines along the horizon.
     const pines = this.add.graphics().fillStyle(0x0e0c1e, 1);
     for (let x = 10; x < W; x += 34 + ((x * 13) % 20)) {
       const h = 44 + ((x * 31) % 30);
@@ -68,19 +121,28 @@ export class CampScene extends Phaser.Scene {
     this.add.rectangle(-W, groundY, W * 3, H - groundY + 40, 0x1e2a1c).setOrigin(0);
     this.add.rectangle(-W, groundY, W * 3, 6, 0x2c3a26).setOrigin(0);
 
-    // ---- the fire
-    const fx = x1 / 2;
-    const fy = groundY + (floorBottom - groundY) * 0.48;
-    const rx = Math.min(190, x1 * 0.38);
-    const ry = (floorBottom - groundY) * 0.34;
+    // ---- the fire (bigger as you win more, in the colour you chose)
+    const grow = growth(meta, DEX_FORMS);
+    const fx = (this.fx = x1 / 2);
+    const fy = (this.fy = groundY + (floorBottom - groundY) * 0.5);
+    const rx = (this.rx = Math.min(190, x1 * 0.38));
+    const ry = (this.ry = (floorBottom - groundY) * 0.34);
+    this.growthBack(grow, groundY, x1, floorBottom);
     const fireDepth = fy / 1000;
-    this.add.circle(fx, fy - 10, 150, 0xff9a3a, 0.05);
-    const glow = this.add.circle(fx, fy - 10, 95, 0xff9a3a, 0.08);
+    const [c0, c1, c2] = fireColors(meta);
+    const big = 1 + grow.fire * 0.14;
+    this.add.circle(fx, fy - 10, 150 * big, c1, 0.05);
+    const glow = this.add.circle(fx, fy - 10, 95 * big, c1, 0.08);
     if (!calm()) this.tweens.add({ targets: glow, scale: 1.12, alpha: 0.18, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
-    this.add.ellipse(fx, fy + 6, 70, 16, 0x000000, 0.35);
-    this.add.rectangle(fx, fy, 56, 9, 0x6a3a1a).setAngle(18).setStrokeStyle(1, 0x2a160a);
-    this.add.rectangle(fx, fy, 56, 9, 0x7a4a24).setAngle(-18).setStrokeStyle(1, 0x2a160a);
-    const flames = [0xff4a1a, 0xff8a2a, 0xffd04a].map((c, i) => this.add.ellipse(fx, fy - 14 - i * 4, 34 - i * 10, 40 - i * 10, c, 0.95).setOrigin(0.5, 0.8).setDepth(fireDepth));
+    this.add.ellipse(fx, fy + 6, 70 * big, 16, 0x000000, 0.35);
+    this.add.rectangle(fx, fy, 56 * big, 9, 0x6a3a1a).setAngle(18).setStrokeStyle(1, 0x2a160a);
+    this.add.rectangle(fx, fy, 56 * big, 9, 0x7a4a24).setAngle(-18).setStrokeStyle(1, 0x2a160a);
+    if (grow.fire >= 2) this.add.rectangle(fx, fy + 2, 60 * big, 8, 0x5a321a).setStrokeStyle(1, 0x2a160a);
+    // A ring of stones once you've won a run.
+    if (grow.fire >= 1) for (let i = 0; i < 10; i++) this.add.ellipse(fx + Math.cos((i / 10) * Math.PI * 2) * 38 * big, fy + 4 + Math.sin((i / 10) * Math.PI * 2) * 9, 12, 7, 0x6a6a7a).setStrokeStyle(1, 0x2a2a3a);
+    const flames = [c0, c1, c2].map((c, i) =>
+      this.add.ellipse(fx, fy - 14 - i * 4, (34 - i * 10) * big, (40 - i * 10) * big, c, 0.95).setOrigin(0.5, 0.8).setDepth(fireDepth),
+    );
     flames.forEach((f, i) => {
       if (!calm()) this.tweens.add({ targets: f, scaleY: 1.25, scaleX: 0.85, yoyo: true, repeat: -1, duration: 160 + i * 70, ease: 'Sine.easeInOut' });
     });
@@ -91,16 +153,16 @@ export class CampScene extends Phaser.Scene {
       pg.destroy();
     }
     this.add.particles(fx, fy - 30, px, {
-      // (over the fire)
       speedY: { min: -60, max: -30 },
       speedX: { min: -12, max: 12 },
       lifespan: 1600,
-      frequency: calm() ? 300 : 110,
-      tint: [0xffd04a, 0xff8a2a],
+      frequency: calm() ? 300 : 110 / big,
+      tint: [c2, c1],
       alpha: { start: 1, end: 0 },
       scale: { min: 0.8, max: 1.4 },
       blendMode: 'ADD',
     });
+    this.growthFront(grow, x1, floorBottom);
 
     // ---- your trainer, sitting by the fire
     const look = myLook(meta);
@@ -109,50 +171,195 @@ export class CampScene extends Phaser.Scene {
     this.add.ellipse(mx, my, 34, 9, 0x000000, 0.35);
     const me = this.add.image(mx, my, ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(2).setDepth(my / 1000);
     trainerFx(this, me, look);
-    me.setFlipX(false);
     text(this, mx, my + 6, myName(meta), 12, '#ffe9a8', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0).setDepth(2);
 
-    // ---- the Hexlings who finished your last run (or your starters, before your first run)
-    const last = meta.history?.[0];
-    const team = last?.team.length
-      ? last.team.slice(0, 6)
-      : meta.unlockedStarters.slice(0, 3).map((id) => ({ speciesId: id, stage: 0, level: 5, shiny: false }));
-    // In a ring around the fire (your trainer has the spot on the left).
-    team.forEach((c, i) => {
-      const a = Math.PI + ((i + 1) * Math.PI * 2) / (team.length + 1);
-      this.wanderer(c.speciesId, c.stage, !!c.shiny, { x: fx + Math.cos(a) * rx, y: fy + Math.sin(a) * ry + 8 }, fx);
+    // ---- the Hexlings who stay at camp, around the back of the fire
+    const crew = campCrew(meta);
+    crew.forEach((c, i) => {
+      const a = Math.PI + ((i + 1) * Math.PI) / (crew.length + 1);
+      this.wanderer(c.speciesId, c.stage, c.shiny, { x: fx + Math.cos(a) * rx, y: fy + Math.sin(a) * ry + 8 }, fx);
     });
 
-    // ---- header: camp, and how the last run went
+    // ---- visitors
+    this.visitors(groundY, x1);
+
+    // ---- header
+    const last = meta.history?.[0];
     text(this, W / 2, LANDSCAPE ? 14 : 22, 'Camp', LANDSCAPE ? 24 : 28, '#ffc94d', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5, 0);
-    const lastLine = last
-      ? last.won
-        ? `Last run: won ${MAP_BY_ID[last.mapId]?.name ?? ''}${last.heat ? ` at Heat ${last.heat}` : ''}!`
-        : `Last run: fell on floor ${last.floor}${last.endedBy ? ` to ${last.endedBy}` : ''}.`
-      : 'Rest up. Adventure is waiting.';
+    const run = state.run;
+    const lastLine = this.prep && run
+      ? `Getting ready for ${MAP_BY_ID[run.mapId]?.name ?? 'the road'}`
+      : last
+        ? last.won
+          ? `Last run: won ${MAP_BY_ID[last.mapId]?.name ?? ''}${last.heat ? ` at Heat ${last.heat}` : ''}!`
+          : `Last run: fell on floor ${last.floor}${last.endedBy ? ` to ${last.endedBy}` : ''}.`
+        : 'Rest up. Adventure is waiting.';
     text(this, W / 2, LANDSCAPE ? 44 : 56, lastLine, 13, '#e8e0ff', { stroke: '#14101e', strokeThickness: 3, align: 'center', wordWrap: { width: W - 40 } }).setOrigin(0.5, 0);
     const title = myTitle(meta);
     if (title) titleBadge(this, W / 2, LANDSCAPE ? 70 : 84, title, 12, { maxW: 220 });
 
-    // ---- trophies: a little shelf of what you've done
     this.trophies(LANDSCAPE ? 16 : 14, LANDSCAPE ? 96 : 110);
+    if (this.prep) this.prepPanel();
+    else {
+      this.campButtons();
+      this.signposts();
+    }
 
-    // ---- signposts
-    this.signposts();
+    // ---- friends who are online, by your fire
+    if (friendsAvailable()) void this.friendsByFire();
   }
 
-  /** One of last run's Hexlings, idling around the fire: little walks, naps, tap for a cry. */
+  // ================================================================ growth
+
+  /** What's behind the fire: tents, banners, statues, the string lights. */
+  private growthBack(grow: ReturnType<typeof growth>, groundY: number, x1: number, floorBottom: number) {
+    const owned = state.meta.camp?.owned ?? [];
+    const depth = (y: number) => y / 1000;
+    // Tents (runs played).
+    const tents = [
+      [x1 * 0.2, groundY + 30],
+      [x1 * 0.8, groundY + 26],
+      [x1 * 0.34, groundY + 12],
+    ].slice(0, grow.tents);
+    const tentColors = [0x8a4a2a, 0x2a6a5a, 0x5a3a8a];
+    tents.forEach(([x, y], i) => {
+      const t = this.add.graphics().setDepth(depth(y));
+      t.fillStyle(tentColors[i], 1).fillTriangle(x - 30, y, x, y - 40, x + 30, y);
+      t.fillStyle(0x14101e, 1).fillTriangle(x - 8, y, x, y - 22, x + 8, y);
+      t.lineStyle(2, 0x2a1a10, 1).strokeTriangle(x - 30, y, x, y - 40, x + 30, y);
+    });
+    // A banner for each map won, on poles along the horizon.
+    grow.banners.slice(0, 8).forEach((id, i, all) => {
+      const x = x1 / 2 + (i - (all.length - 1) / 2) * 26;
+      const y = groundY + 6;
+      const m = MAP_BY_ID[id];
+      const color = m?.biomes ? ELEMENT_COLORS[m.biomes[0]] : 0xc9c0e0;
+      this.add.rectangle(x, y, 2, 30, 0x8a6a4a).setOrigin(0.5, 1);
+      const flag = this.add.rectangle(x + 1, y - 28, 14, 18, color).setOrigin(0, 0).setStrokeStyle(1, 0x14101e);
+      if (!calm()) this.tweens.add({ targets: flag, scaleX: 0.8, yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
+    });
+    // Statues of the legendaries you've caught.
+    grow.statues.forEach((id, i) => {
+      const x = x1 * 0.66 + i * 34;
+      const y = groundY + 16;
+      this.add.rectangle(x, y, 26, 8, 0x5a5a6a).setStrokeStyle(1, 0x2a2a3a).setDepth(depth(y));
+      this.add.image(x, y - 4, ensureCreatureTexture(this, id, 0)).setOrigin(0.5, 1).setScale(0.9 * SPRITE_FIT).setTint(0xb8b8c8).setDepth(depth(y));
+    });
+    // Bought: string lights over camp.
+    if (owned.includes('lanterns')) {
+      const ly = groundY - 34;
+      const n = 11;
+      for (let i = 0; i < n; i++) {
+        const x = x1 * 0.08 + ((x1 * 0.84) / (n - 1)) * i;
+        const sag = Math.sin((i / (n - 1)) * Math.PI) * 16;
+        const bulb = this.add.circle(x, ly + sag, 3, [0xffd04a, 0xff8ab0, 0x8ad0ff, 0x8fe08a][i % 4]);
+        this.add.circle(x, ly + sag, 7, 0xffe08a, 0.12);
+        if (!calm()) this.tweens.add({ targets: bulb, alpha: 0.5, yoyo: true, repeat: -1, duration: 900 + i * 60 });
+      }
+    }
+    if (owned.includes('chimes')) {
+      const x = x1 * 0.08;
+      this.add.rectangle(x, groundY - 50, 30, 3, 0x6a4a2a);
+      for (let i = 0; i < 4; i++) {
+        const bar = this.add.rectangle(x - 10 + i * 7, groundY - 48, 2, 14 + i * 3, 0xc9d3e0).setOrigin(0.5, 0);
+        if (!calm()) this.tweens.add({ targets: bar, angle: 8, yoyo: true, repeat: -1, duration: 600 + i * 130, ease: 'Sine.easeInOut' });
+      }
+    }
+    if (owned.includes('pond')) {
+      const y = groundY + 54;
+      this.add.ellipse(x1 * 0.86, y, 70, 22, 0x2a6ad8, 0.85).setStrokeStyle(2, 0x1a3a7a).setDepth(depth(y) - 0.01);
+      this.add.ellipse(x1 * 0.84, y - 3, 22, 4, 0xa0d8ff, 0.6).setDepth(depth(y));
+    }
+    if (owned.includes('crystal')) {
+      const x = x1 * 0.58;
+      const y = groundY + 30;
+      const c = this.add.polygon(x, y, [0, -24, 9, -6, 0, 6, -9, -6], 0x6ae0f0).setStrokeStyle(2, 0xd0f8ff).setDepth(depth(y));
+      const halo = this.add.circle(x, y - 10, 18, 0x6ae0f0, 0.15);
+      if (!calm()) this.tweens.add({ targets: [c, halo], alpha: 0.6, yoyo: true, repeat: -1, duration: 1400 });
+    }
+    if (owned.includes('flag')) {
+      const x = x1 * 0.42;
+      const y = groundY + 34;
+      this.add.rectangle(x, y, 3, 70, 0x8a6a4a).setOrigin(0.5, 1).setDepth(depth(y));
+      const look = myLook(state.meta);
+      const flag = this.add.rectangle(x + 2, y - 68, 26, 16, CLOTH_COLORS[look.topColor] ?? 0xd8443a).setOrigin(0, 0).setStrokeStyle(2, CLOTH_COLORS[look.accent] ?? 0xffffff).setDepth(depth(y));
+      if (!calm()) this.tweens.add({ targets: flag, scaleX: 0.85, yoyo: true, repeat: -1, duration: 650, ease: 'Sine.easeInOut' });
+    }
+    void floorBottom;
+  }
+
+  /** What's around the fire: lanterns (Heat), the Hexlidex board, the gilded shrine, and bought bits. */
+  private growthFront(grow: ReturnType<typeof growth>, x1: number, floorBottom: number) {
+    const { fx, fy, rx, ry } = this;
+    const owned = state.meta.camp?.owned ?? [];
+    // A lantern for each Heat level won, around the front of the fire.
+    for (let i = 0; i < Math.min(8, grow.lanterns); i++) {
+      const a = 0.15 + (i / 7) * (Math.PI - 0.3);
+      const x = fx + Math.cos(a) * rx * 1.18;
+      const y = fy + Math.sin(a) * ry * 1.3 + 10;
+      this.add.rectangle(x, y, 2, 16, 0x5a4a3a).setOrigin(0.5, 1).setDepth(y / 1000);
+      const l = this.add.circle(x, y - 18, 4, 0xffb04a).setDepth(y / 1000);
+      this.add.circle(x, y - 18, 9, 0xffb04a, 0.15).setDepth(y / 1000);
+      if (!calm()) this.tweens.add({ targets: l, alpha: 0.6, yoyo: true, repeat: -1, duration: 700 + i * 80 });
+    }
+    // The Hexlidex board.
+    if (grow.board >= 10) {
+      const x = x1 * 0.1 + 6;
+      const y = floorBottom - 18;
+      this.add.rectangle(x, y, 3, 30, 0x6a4a2a).setOrigin(0.5, 1).setDepth(y / 1000);
+      this.add.rectangle(x, y - 34, 52, 30, 0x8a6a3a).setStrokeStyle(2, 0x3a2a1a).setDepth(y / 1000);
+      text(this, x, y - 40, 'Hexlidex', 9, '#2a1a08', { fontStyle: 'bold' }).setOrigin(0.5).setDepth(y / 1000 + 0.001);
+      text(this, x, y - 28, `${grow.board}%`, 11, '#2a1a08', { fontStyle: 'bold' }).setOrigin(0.5).setDepth(y / 1000 + 0.001);
+    }
+    // The gilded shrine.
+    if (grow.shrine) {
+      const x = x1 * 0.9 - 6;
+      const y = floorBottom - 16;
+      this.add.rectangle(x, y, 26, 10, 0x8a6a2a).setStrokeStyle(1, 0x3a2a0a).setDepth(y / 1000);
+      this.add.rectangle(x, y - 14, 16, 18, 0xe0a820).setStrokeStyle(1, 0x6a4a0a).setDepth(y / 1000);
+      const star = text(this, x, y - 34, '✦', 16, '#ffe08a').setOrigin(0.5).setDepth(y / 1000);
+      if (!calm()) this.tweens.add({ targets: star, y: star.y - 4, alpha: 0.6, yoyo: true, repeat: -1, duration: 1000 });
+    }
+    if (owned.includes('flowers')) {
+      for (let i = 0; i < 9; i++) {
+        const x = x1 * 0.24 + (i % 3) * 9 + Math.floor(i / 3) * 4;
+        const y = floorBottom - 8 - Math.floor(i / 3) * 7;
+        this.add.circle(x, y, 3, [0xff8ab0, 0xffd04a, 0xc8a8f0][i % 3]).setDepth(y / 1000);
+      }
+    }
+    if (owned.includes('bench')) {
+      const y = fy + ry + 22;
+      this.add.rectangle(fx + rx * 0.35, y, 54, 10, 0x7a4a24).setStrokeStyle(1, 0x2a160a).setDepth(y / 1000);
+    }
+    if (owned.includes('mushrooms')) {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const x = x1 * 0.74 + Math.cos(a) * 16;
+        const y = floorBottom - 14 + Math.sin(a) * 6;
+        this.add.rectangle(x, y, 2, 5, 0xf0e2c0).setDepth(y / 1000);
+        const cap = this.add.ellipse(x, y - 3, 8, 5, 0x6ae0a0).setDepth(y / 1000);
+        if (!calm()) this.tweens.add({ targets: cap, alpha: 0.5, yoyo: true, repeat: -1, duration: 1100 + i * 120 });
+      }
+    }
+  }
+
+  // ================================================================ the Hexlings at camp
+
+  /** One of the Hexlings staying at camp: little walks and naps. Tap to spend time with it. */
   private wanderer(speciesId: string, stage: number, shiny: boolean, home: { x: number; y: number }, fx: number) {
     if (!SPECIES_BY_ID[speciesId]) return;
     const c = this.add.container(home.x, home.y);
     const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, 0.35);
     const img = this.add.image(0, 0, ensureCreatureTexture(this, speciesId, stage, shiny)).setOrigin(0.5, 0.92).setScale(1.8 * SPRITE_FIT).setFlipX(home.x > fx);
     c.add([shadow, img]);
+    const hearts = campHearts(state.meta, speciesId);
+    if (hearts) c.add(text(this, 0, 4, '♥'.repeat(hearts), 10, '#ff8ab0', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0));
     c.setDepth(c.y / 1000);
     img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       cry(speciesId, stage);
-      this.bubble(c, '♥', '#ff8ab0');
       this.tweens.add({ targets: img, y: -12, yoyo: true, duration: 180, ease: 'Quad.easeOut' });
+      if (!this.prep) this.careFor(speciesId, stage, c);
+      else this.bubble(c, '♥', '#ff8ab0');
     });
     const act = () => {
       if (!c.active) return;
@@ -177,7 +384,6 @@ export class CampScene extends Phaser.Scene {
       } else if (r < 0.65) {
         for (let k = 0; k < 3; k++) this.time.delayedCall(k * 900, () => c.active && this.bubble(c, 'z', '#d8e0ff'));
       } else if (r < 0.8) {
-        // Turn to the fire for a bit.
         img.setFlipX(c.x < fx);
       } else this.tweens.add({ targets: img, y: -9, yoyo: true, duration: 170 });
       this.time.delayedCall(Phaser.Math.Between(1800, 4200), act);
@@ -185,10 +391,335 @@ export class CampScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(400, 2500), act);
   }
 
+  /** Pet, feed or play with a camp Hexling (each once a day): it builds your bond. */
+  private careFor(speciesId: string, stage: number, c: Phaser.GameObjects.Container) {
+    const meta = state.meta;
+    const name = SPECIES_BY_ID[speciesId].names[stage] ?? SPECIES_BY_ID[speciesId].names[0];
+    const hearts = campHearts(meta, speciesId);
+    const done = caredToday(meta, speciesId);
+    const points = meta.camp?.bond[speciesId] ?? 0;
+    const next = CAMP_HEARTS.find((n) => points < n);
+    const labels: Record<Care, [string, string]> = {
+      pet: ['Pet', 'A scratch behind the ears.'],
+      feed: ['Feed', 'A handful of berries.'],
+      play: ['Play', 'A game of chase around the fire.'],
+    };
+    openPicker(this, {
+      title: `${name} ${'♥'.repeat(hearts)}${'♡'.repeat(CAMP_HEARTS.length - hearts)}`,
+      subtitle:
+        hearts >= CAMP_HEARTS.length
+          ? `Best friends! ${name} starts your runs with a bond heart, so it can hang on when it would faint.`
+          : `Spend time together to build your bond (${next! - points} more to the next heart). With a full bond, ${name} starts your runs with a bond heart.`,
+      options: CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => {
+        const gained = care(meta, speciesId, CARE[i]);
+        saveMeta(meta);
+        sfx.coin();
+        this.bubble(c, '♥', '#ff8ab0');
+        if (gained) {
+          const now = campHearts(meta, speciesId);
+          showMessage(this, `${name} trusts you more!`, now >= CAMP_HEARTS.length ? `A full bond! ${name} will start your runs with a bond heart.` : `Camp bond: ${'♥'.repeat(now)}`, () => this.scene.restart());
+        }
+      },
+    });
+  }
+
   private bubble(c: Phaser.GameObjects.Container, s: string, color: string) {
     const t = text(this, c.x + 6, c.y - 46, s, 14, color, { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5).setDepth(5);
     this.tweens.add({ targets: t, y: t.y - 16, alpha: 0, duration: 1100, onComplete: () => t.destroy() });
   }
+
+  // ================================================================ visitors
+
+  private visitors(groundY: number, x1: number) {
+    const meta = state.meta;
+    const run = state.run;
+    const list = challenges(meta);
+    const spots = [
+      { x: 34, y: groundY + 44 },
+      { x: x1 - 34, y: groundY + 44 },
+      { x: x1 * 0.62, y: groundY + 22 },
+    ];
+    VISITORS.forEach((v, i) => {
+      // Before a run, your rival only drops by if this run has one.
+      if (this.prep && i === 2 && !run?.rival) return;
+      const { x, y } = spots[i];
+      const look = cleanLook(v.look) as TrainerLook;
+      this.add.ellipse(x, y, 30, 8, 0x000000, 0.35).setDepth(y / 1000);
+      const img = this.add.image(x, y, ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.6).setDepth(y / 1000).setFlipX(x > this.fx);
+      const short = i === 1 ? 'Alder' : i === 2 ? (this.prep && run?.rival ? run.rival.name : 'Rival') : v.name;
+      text(this, x, y + 4, short, 10, '#e8e0ff', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0).setDepth(2);
+      // "!" when they have something for you.
+      const ch = list[v.tier];
+      const news = this.prep ? this.newsFrom(i) : null;
+      const flag = this.prep ? (i === 1 && legendFloors(run!, FLOORS).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
+      if (flag) {
+        const f = text(this, x, y - 66, flag, 18, flag === '!' ? '#ffd04a' : '#c8d8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5).setDepth(3);
+        if (!calm()) this.tweens.add({ targets: f, y: f.y - 5, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
+      }
+      img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        sfx.click();
+        if (news) showMessage(this, short === 'Alder' ? 'Professor Alder' : short, news);
+        else if (!this.prep) this.challengeFrom(i, ch);
+      });
+    });
+  }
+
+  /** What a visitor has to say before a run. */
+  private newsFrom(i: number): string {
+    const run = state.run!;
+    if (i === 0) return run.prep && run.prep !== 'skip' ? 'Good choice! Safe travels, and come see me in the shops.' : 'Take something for the road! On the house, just this once. Pick one below.';
+    if (i === 1) {
+      const floors = legendFloors(run, FLOORS);
+      const lands = (run.biomes ?? []).slice(0, FLOORS).join(', then ');
+      if (floors.length)
+        return `Exciting news! A legendary Hexling has been sighted up ahead: it should be roaming floor ${floors.map((f) => f + 1).join(' and ')}. Look for the glowing hex!${lands ? ` The lands ahead: ${lands}.` : ''}`;
+      return lands ? `My notes say the lands ahead are ${lands}. Plan your team around them!` : 'Stay curious out there!';
+    }
+    return rivalHello(run) || 'See you out there.';
+  }
+
+  private challengeFrom(i: number, ch: ChallengeState) {
+    const meta = state.meta;
+    const who = VISITORS[i].name;
+    const line = ch.claimed ? 'That’s done for today. New one tomorrow!' : ch.complete ? 'You did it! Here, as promised.' : CHALLENGE_LINES[i](ch.text);
+    openPicker(this, {
+      title: who,
+      subtitle: `“${line}”\n\n${TIER_NAMES[ch.tier]}: ${ch.text} (${ch.progress}/${ch.goal}) · ${TIER_EMBERS[ch.tier]} embers`,
+      options: [
+        ch.claimed
+          ? { label: 'Claimed', disabled: true }
+          : { label: ch.complete ? `Claim ${TIER_EMBERS[ch.tier]} embers` : `${ch.progress}/${ch.goal} so far`, disabled: !ch.complete, color: 0x8a5a1a, glyph: 'flame' as const },
+        { label: 'All of today’s challenges', color: 0x2f4a6b },
+      ],
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (k) => {
+        if (k === 1) return this.challengeList();
+        const got = claimChallenge(meta, ch.tier);
+        saveMeta(meta);
+        if (got) sfx.coin();
+        this.scene.restart();
+      },
+    });
+  }
+
+  private challengeList() {
+    const meta = state.meta;
+    const list = challenges(meta);
+    openPicker(this, {
+      title: 'Daily challenges',
+      subtitle: `From your visitors. New ones every day at midnight. You have ${meta.camp?.embers ?? 0} embers: spend them at the Ember stall.`,
+      options: list.map((ch, i) => ({
+        label: `${TIER_NAMES[ch.tier]}: ${ch.text}`,
+        sub: `${VISITORS[i].name} · ${ch.claimed ? 'Claimed' : ch.complete ? `Tap to claim ${TIER_EMBERS[ch.tier]} embers` : `${ch.progress}/${ch.goal} · ${TIER_EMBERS[ch.tier]} embers`}`,
+        disabled: ch.claimed || !ch.complete,
+        color: ch.complete && !ch.claimed ? 0x8a5a1a : undefined,
+      })),
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => {
+        if (claimChallenge(meta, list[i].tier)) sfx.coin();
+        saveMeta(meta);
+        this.scene.restart();
+      },
+    });
+  }
+
+  // ================================================================ buttons between runs
+
+  private campButtons() {
+    const meta = state.meta;
+    const c = camp(meta);
+    const ready = challenges(meta).filter((ch) => ch.complete && !ch.claimed).length;
+    const items: [string, () => void, number][] = [
+      [`Challenges${ready ? ` (${ready}!)` : ''}`, () => this.challengeList(), ready ? 0x8a5a1a : 0x4a3a2a],
+      [`Ember stall · ${c.embers}`, () => this.stall(), 0x6a3a1a],
+      ['Camp crew', () => this.crewPicker(), 0x3a4a2a],
+    ];
+    items.forEach(([label, fn, color], i) => {
+      // Upright: a stack top right. Sideways: a row along the top right.
+      const bx = LANDSCAPE ? W - 300 + i * 100 : W - 72;
+      const by = LANDSCAPE ? 30 : 110 + i * 40;
+      button(this, bx, by, LANDSCAPE ? 94 : 128, 34, label, () => (sfx.click(), fn()), { fontSize: LANDSCAPE ? 11 : 12, color }).setDepth(3);
+    });
+  }
+
+  /** Spend embers on decorations and fire colours; switch between the fires you own. */
+  private stall() {
+    const meta = state.meta;
+    const c = camp(meta);
+    const opts = CAMP_ITEMS.map((it) => {
+      const own = c.owned.includes(it.id);
+      const inUse = it.kind === 'fire' && c.fire === it.id;
+      return {
+        label: it.name,
+        sub: own ? (it.kind === 'fire' ? (inUse ? 'Burning now' : 'Owned · tap to light it') : 'At your camp') : `${it.cost} embers · ${it.desc}`,
+        disabled: own ? it.kind !== 'fire' || inUse : c.embers < it.cost,
+        color: own ? 0x2f3f2a : 0x6a3a1a,
+      };
+    });
+    const plain = c.fire ? [{ label: 'Plain fire', sub: 'The good old orange campfire', color: 0x4a3a2a }] : [];
+    openPicker(this, {
+      title: 'Ember stall',
+      subtitle: `You have ${c.embers} embers. Earn more from the daily challenges.`,
+      options: [...opts, ...plain],
+      rowHeight: 56,
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => {
+        if (i >= CAMP_ITEMS.length) c.fire = undefined;
+        else {
+          const it = CAMP_ITEMS[i];
+          if (c.owned.includes(it.id)) c.fire = it.id;
+          else if (buyCampItem(meta, it.id) === null) sfx.coin();
+        }
+        saveMeta(meta);
+        this.scene.restart();
+      },
+    });
+  }
+
+  /** Choose who stays at camp (up to three of the species you've caught). */
+  private crewPicker() {
+    const meta = state.meta;
+    const current = campCrew(meta).map((c) => c.speciesId);
+    openPicker(this, {
+      title: 'Camp crew',
+      subtitle: `Who stays at camp (up to ${CREW_MAX}). Spend time with them each day to build your bond.`,
+      options: [
+        ...Array.from({ length: CREW_MAX }, (_, i) => {
+          const id = current[i];
+          return id
+            ? { label: SPECIES_BY_ID[id].names[0], sub: `${'♥'.repeat(campHearts(meta, id)) || 'No bond yet'} · tap to swap`, icon: createCreature(id, 5), color: 0x3a4a2a }
+            : { label: 'Empty spot', sub: 'Tap to invite someone', color: 0x2a2440 };
+        }),
+        ...(meta.camp?.crew?.length ? [{ label: 'Back to last run’s team', color: 0x4a3a2a }] : []),
+      ],
+      cancelLabel: 'Done',
+      onCancel: () => this.scene.restart(),
+      onPick: (slot) => {
+        if (slot >= CREW_MAX) {
+          camp(meta).crew = undefined;
+          saveMeta(meta);
+          return this.scene.restart();
+        }
+        this.pickSpecies(current, slot);
+      },
+    });
+  }
+
+  private pickSpecies(current: string[], slot: number) {
+    const meta = state.meta;
+    const caught = [...new Set([...meta.dex.caught, ...meta.unlockedStarters])].filter((id) => SPECIES_BY_ID[id] && SPECIES.some((s) => s.id === id));
+    const pool = caught
+      .filter((id) => !current.includes(id) || current[slot] === id)
+      .sort((a, b) => (meta.camp?.bond[b] ?? 0) - (meta.camp?.bond[a] ?? 0) || SPECIES_BY_ID[a].names[0].localeCompare(SPECIES_BY_ID[b].names[0]));
+    openPicker(this, {
+      title: 'Who stays at camp?',
+      subtitle: 'Any Hexling line you’ve caught.',
+      options: [
+        ...(current[slot] ? [{ label: 'Leave this spot empty', color: 0x4a3a2a }] : []),
+        ...pool.map((id) => ({ label: SPECIES_BY_ID[id].names[0], sub: '♥'.repeat(campHearts(meta, id)) || ' ', icon: createCreature(id, 5) })),
+      ],
+      rowHeight: 60,
+      cancelLabel: 'Back',
+      onCancel: () => this.crewPicker(),
+      onPick: (i) => {
+        const offset = current[slot] ? 1 : 0;
+        const next = [...current];
+        if (offset && i === 0) next.splice(slot, 1);
+        else next[slot] = pool[i - offset];
+        camp(meta).crew = next.filter(Boolean).slice(0, CREW_MAX);
+        saveMeta(meta);
+        this.crewPicker();
+      },
+    });
+  }
+
+  // ================================================================ before a run
+
+  /** One thing for the road (three to choose from), then set out. */
+  private prepPanel() {
+    const run = state.run!;
+    const offers = prepOffers(run.seed);
+    const [px, py, pw, ph] = LANDSCAPE ? [W - 272, 92, 262, H - 100] : [10, H - 280, W - 20, 272];
+    this.add.rectangle(px, py, pw, ph, 0x1a1428, 0.94).setOrigin(0).setStrokeStyle(2, 0x6a4a2a).setDepth(4);
+    text(this, px + pw / 2, py + 10, 'Before you set out', 16, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0).setDepth(4);
+    const floors = legendFloors(run, FLOORS);
+    const tip = floors.length
+      ? `Alder: “A legendary is roaming floor ${floors.map((f) => f + 1).join(' and ')}!”`
+      : 'Take one thing for the road. Tap a visitor for news.';
+    text(this, px + pw / 2, py + 32, tip, 12, floors.length ? '#ffe08a' : COLORS.textDim, { align: 'center', wordWrap: { width: pw - 20 } }).setOrigin(0.5, 0).setDepth(4);
+
+    const take = (id: PrepId | 'skip') => {
+      applyPrep(run, id);
+      sfx.coin();
+      const p = id === 'skip' ? null : PREPS[id];
+      this.scene.start('Map', p ? { banner: `${p.name}: ${p.desc}` } : {});
+    };
+    const top = py + 66;
+    if (LANDSCAPE) {
+      const ch = (ph - 66 - 54) / 3 - 6;
+      offers.forEach((id, i) => this.offerCard(px + 10, top + i * (ch + 6), pw - 20, ch, id, () => take(id)));
+    } else {
+      const cw = (pw - 20 - 12) / 3;
+      offers.forEach((id, i) => this.offerCard(px + 10 + i * (cw + 6), top, cw, 132, id, () => take(id)));
+    }
+    button(this, px + pw / 2, py + ph - 28, Math.min(220, pw - 20), 38, 'Set out with nothing', () => take('skip'), { fontSize: 13, color: 0x3a3352 }).setDepth(4);
+  }
+
+  private offerCard(x: number, y: number, w: number, h: number, id: PrepId, onTake: () => void) {
+    const p = PREPS[id];
+    const bg = this.add.rectangle(x, y, w, h, 0x3a2a1a).setOrigin(0).setStrokeStyle(2, 0xffc94d, 0.7).setDepth(4).setInteractive({ useHandCursor: true });
+    text(this, x + w / 2, y + 8, p.name, 13, '#ffe08a', { fontStyle: 'bold', align: 'center', wordWrap: { width: w - 10 } }).setOrigin(0.5, 0).setDepth(4);
+    text(this, x + w / 2, y + (LANDSCAPE ? 26 : 44), p.desc, 11, COLORS.text, { align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0).setDepth(4);
+    if (!LANDSCAPE) text(this, x + w / 2, y + h - 18, `from ${p.from}`, 10, COLORS.textDim).setOrigin(0.5, 0).setDepth(4);
+    bg.on('pointerover', () => bg.setFillStyle(0x5a3a1a)).on('pointerout', () => bg.setFillStyle(0x3a2a1a)).on('pointerup', onTake);
+  }
+
+  // ================================================================ friends by the fire
+
+  private async friendsByFire() {
+    let friends: Friend[] = [];
+    try {
+      friends = (await listFriends()).filter((f) => f.status === 'accepted' && f.online).slice(0, 3);
+    } catch {
+      return;
+    }
+    if (!this.alive || !friends.length) return;
+    const { fx, fy, rx, ry } = this;
+    friends.forEach((f, i) => {
+      const a = 0.3 + i * 0.62;
+      const x = fx + Math.cos(a) * rx;
+      const y = fy + Math.sin(a) * ry + 10;
+      this.add.ellipse(x, y, 30, 8, 0x000000, 0.35).setDepth(y / 1000);
+      const img = this.add.image(x, y, ensureTrainerTexture(this, f.look, 'stand')).setOrigin(0.5, 0.94).setScale(1.6).setDepth(y / 1000).setFlipX(true);
+      trainerFx(this, img, f.look);
+      text(this, x, y + 4, f.username, 10, '#8fe08a', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0).setDepth(2);
+      if (f.buddy && SPECIES_BY_ID[f.buddy.id]) {
+        const bx = x + 26;
+        const b = this.add.image(bx, y + 2, ensureCreatureTexture(this, f.buddy.id, f.buddy.stage, f.buddy.shiny)).setOrigin(0.5, 0.92).setScale(1.3 * SPRITE_FIT).setDepth(y / 1000).setFlipX(true);
+        if (!calm()) this.tweens.add({ targets: b, y: b.y - 3, yoyo: true, repeat: -1, duration: 900 + i * 150, ease: 'Sine.easeInOut' });
+      }
+      img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        sfx.click();
+        const buddy = f.buddy && SPECIES_BY_ID[f.buddy.id] ? ` with ${SPECIES_BY_ID[f.buddy.id].names[f.buddy.stage] ?? SPECIES_BY_ID[f.buddy.id].names[0]}` : '';
+        openPicker(this, {
+          title: f.username,
+          subtitle: `Sitting by your fire${buddy}. ${f.activity && f.activity !== 'Online' ? f.activity : 'Online'}.`,
+          options: [{ label: 'Invite to play', color: 0x8a2c2c }],
+          cancelLabel: 'Back',
+          onCancel: () => {},
+          onPick: () => this.scene.start('Friends', { from: 'Camp' }),
+        });
+      });
+    });
+  }
+
+  // ================================================================ trophies and signposts
 
   /** Runs won, tournaments, legendaries, and a pennant for each map you've won. */
   private trophies(x: number, y: number) {
@@ -199,21 +730,12 @@ export class CampScene extends Phaser.Scene {
       ['Legendaries', `${legendsCaught(meta)}/${LEGENDS.length}`],
     ];
     const w = LANDSCAPE ? 150 : 132;
-    const h = 22 + rows.length * 18 + (meta.clearedMaps.length ? 26 : 0);
+    const h = 22 + rows.length * 18;
     this.add.rectangle(x, y, w, h, 0x1a1428, 0.82).setOrigin(0).setStrokeStyle(2, 0x6a4a2a);
     text(this, x + 8, y + 5, 'TROPHIES', 10, '#ffc94d', { fontStyle: 'bold' });
     rows.forEach(([label, value], i) => {
       text(this, x + 8, y + 22 + i * 18, label, 11, COLORS.textDim);
       text(this, x + w - 8, y + 22 + i * 18, value, 11, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0);
-    });
-    // Pennants: one per map won, in its first land's color.
-    meta.clearedMaps.slice(0, 8).forEach((id, i) => {
-      const m = MAP_BY_ID[id];
-      const color = m?.biomes ? ELEMENT_COLORS[m.biomes[0]] : 0xc9c0e0;
-      const px = x + 10 + i * 15;
-      const py = y + h - 22;
-      this.add.rectangle(px, py, 2, 16, 0x8a6a4a).setOrigin(0);
-      this.add.triangle(px + 2, py, 0, 0, 10, 4, 0, 8, color).setOrigin(0);
     });
   }
 
@@ -243,13 +765,11 @@ export class CampScene extends Phaser.Scene {
       ['Title screen', () => this.scene.start('Title', {}), 0x4a3a2a],
     ];
     if (LANDSCAPE) {
-      // A column of signs on the right.
       go.forEach(([label, fn, color], i) => {
         button(this, W - 100, 110 + i * 54, 180, 46, label, () => (sfx.click(), fn()), { fontSize: 15, color }).setDepth(3);
       });
       return;
     }
-    // Upright: the main way out big, the rest in a row of four under it.
     const [first, ...rest] = go;
     button(this, W / 2, H - 98, 260, 52, first[0], () => (sfx.click(), first[1]()), { fontSize: 18, color: first[2] }).setDepth(3);
     const bw = (W - 40) / rest.length;

@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.27';
+export const APP_VERSION = '1.28';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,18 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.28',
+    title: 'Camp comes alive',
+    items: [
+      'Every run now starts at camp (not dailies or weeklies). Take one thing for the road: coins, potions, a trinket, an Evolution Stone, a shop coupon or a bond heart for your starter.',
+      'Visitors drop by: Professor Alder tells you if a legendary is roaming the map ahead and what lands are coming, Mori sees you off, and your rival sizes you up.',
+      'Three daily challenges (easy, medium and hard) from Mori, Alder and your rival. Finish them for embers, and spend embers at the Ember stall on decorations and new fire colours.',
+      'Choose who stays at camp (Camp crew) and pet, feed and play with them each day to build a bond. With a full bond, that Hexling starts your runs with a bond heart. Bonds show in the Hexlidex and Records.',
+      'Your camp grows as you play: tents, banners for maps won, lanterns for Heat, a Hexlidex board, a gilded shrine, statues of legendaries, and a bigger fire.',
+      'Friends who are online sit by your fire with their favourite Hexling (or their last starter).',
+    ],
+  },
   {
     version: '1.27',
     title: 'Friend codes',

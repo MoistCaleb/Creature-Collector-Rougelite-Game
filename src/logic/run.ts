@@ -41,6 +41,7 @@ import {
 import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
+import { applyCampBond, camp, CAMP_START_BOND, type PrepId } from './camp';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
@@ -183,6 +184,10 @@ export interface Meta {
   seenTitles?: string[];
   /** Highest Gilded milestone (species count) already announced. */
   gildedAnnounced?: number;
+  /** Camp: challenges, embers, decorations, who stays there and your bond with them (see logic/camp). */
+  camp?: import('./camp').CampState;
+  /** The starter of your latest run (what friends see by your fire if you have no favourite). */
+  lastStarter?: string;
 }
 
 /** One finished run, for the Records screen. */
@@ -417,6 +422,8 @@ export interface Run {
    * hex a floor (`node`), and `beaten` lists the floors you beat them on.
    */
   rival?: Rival | null;
+  /** The choice made at camp before setting out ('skip' if none was taken). */
+  prep?: import('./camp').PrepId | 'skip';
   /** Shops visited this run (the shopkeeper remembers you). */
   shopVisits?: number;
 }
@@ -741,6 +748,9 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
   const starter = run.team[0];
   starter.nature = natureFor(`${seed}:starter`);
   starter.hp = stats(starter).hp;
+  if (!daily && !weekly) meta.lastStarter = starterId;
+  camp(meta);
+  applyCampBond(run, starter);
   makeRival(run);
   applyFloorCap(run);
   return run;
@@ -1225,6 +1235,21 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
 
 /** How many potions this run can carry, and how much each heals. */
 export const maxPotions = (run: Run) => (run.passive === 'apothecary' ? 8 : 5);
+
+/** Take the choice offered at camp before setting out. */
+export function applyPrep(run: Run, id: PrepId | 'skip') {
+  run.prep = id;
+  const prepRng = new Rng(hashString(`${run.seed}:prep:take`));
+  if (id === 'purse') run.coins += 60;
+  if (id === 'potions') run.potions = Math.min(maxPotions(run), (run.potions ?? 0) + 2);
+  if (id === 'held') (run.bag ??= []).push(rollHeld(prepRng));
+  if (id === 'stone') {
+    run.evoStones += 1;
+    run.stonesSeen = (run.stonesSeen ?? 0) + 1;
+  }
+  if (id === 'charm' && run.team[0]) run.team[0].bond = Math.max(run.team[0].bond ?? 0, CAMP_START_BOND);
+  saveRun(run);
+}
 export const potionHeal = (run: Run) => (run.passive === 'apothecary' ? 0.75 : 0.5);
 
 /** A potion helps a living creature that's hurt or has a status condition. */
@@ -1444,6 +1469,7 @@ export function registerJoin(run: Run, c: Creature): boolean {
     c.nature = natureFor(`${run.seed}:${c.uid}:${c.speciesId}`);
     c.hp = Math.max(1, Math.round(stats(c).hp * frac));
   }
+  applyCampBond(run, c);
   if (!meta.dex.caught.includes(c.speciesId)) meta.dex.caught.push(c.speciesId);
   let fresh = false;
   if (!meta.unlockedStarters.includes(c.speciesId)) {

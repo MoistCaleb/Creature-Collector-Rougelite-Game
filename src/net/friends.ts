@@ -21,11 +21,26 @@ export interface Friend {
   friendCode: string;
   look: TrainerLook;
   title: string | null;
+  /** Their favourite Hexling (or last starter), to sit by your campfire. */
+  buddy: Buddy | null;
   status: 'pending' | 'accepted';
   /** A request they sent you (pending only). */
   incoming: boolean;
   online: boolean;
   activity: string | null;
+}
+
+export interface Buddy {
+  id: string;
+  stage: number;
+  shiny: boolean;
+}
+
+function cleanBuddy(x: unknown): Buddy | null {
+  const b = (x && typeof x === 'object' ? x : null) as Record<string, unknown> | null;
+  if (!b || typeof b.id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(b.id)) return null;
+  const stage = Number(b.stage);
+  return { id: b.id, stage: Number.isInteger(stage) && stage >= 0 && stage <= 2 ? stage : 0, shiny: b.shiny === true };
 }
 
 export interface Invite {
@@ -77,11 +92,13 @@ export async function claimUsername(name: string): Promise<Profile> {
   return profile;
 }
 
-/** What friends see of you: your trainer and title. */
-export async function shareLook(look: TrainerLook, title: string | null) {
+/** What friends see of you: your trainer and title (and the Hexling by your side at their camp). */
+export async function shareLook(look: TrainerLook, title: string | null, buddy?: Buddy | null) {
   const u = currentUser();
   if (!u || !profile) return;
-  await accountClient().from('profiles').update({ look, title }).eq('user_id', u.id);
+  const { error } = await accountClient().from('profiles').update({ look, title, ...(buddy ? { buddy } : {}) }).eq('user_id', u.id);
+  // Before camp.sql has been run there's no buddy column: share the rest.
+  if (error && buddy) await accountClient().from('profiles').update({ look, title }).eq('user_id', u.id);
 }
 
 // ---------------------------------------------------------------- the list
@@ -99,6 +116,7 @@ export async function listFriends(): Promise<Friend[]> {
         friendCode: String(r.friend_code),
         look: cleanLook(r.look),
         title: typeof r.title === 'string' ? r.title : null,
+        buddy: cleanBuddy(r.buddy),
         status: r.status === 'accepted' ? 'accepted' : 'pending',
         incoming: !!r.incoming,
         online: r.status === 'accepted' && now - seen < ONLINE_MS,

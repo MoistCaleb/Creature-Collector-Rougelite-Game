@@ -79,7 +79,7 @@ export interface Shop {
 
 export function priceFor(run: Run, base: number): number {
   const floorMult = 1 + BALANCE.shopFloorMarkup * run.floor;
-  const discount = run.passive === 'haggler' ? 0.75 : 1;
+  const discount = (run.passive === 'haggler' ? 0.75 : 1) * (run.prep === 'haggle' && run.floor === 0 ? 0.75 : 1);
   return Math.max(1, Math.round((base * floorMult * discount * heatRules(run.heat ?? 0).priceMult) / 5) * 5);
 }
 

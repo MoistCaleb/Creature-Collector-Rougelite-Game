@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { prepsAvailable } from '../logic/camp';
 import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
@@ -160,6 +161,8 @@ export class StarterScene extends Phaser.Scene {
         ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
         : startRun(state.meta, id, Date.now(), this.mapId);
     }
-    this.scene.start('Map', {});
+    // Every run but dailies and weeklies stops at camp first: one thing for the road, and the news.
+    if (prepsAvailable(state.run)) this.scene.start('Camp', { prep: true });
+    else this.scene.start('Map', {});
   }
 }

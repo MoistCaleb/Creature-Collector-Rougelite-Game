@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import { cleanName, myLook, myName, nameProblem } from '../data/trainerLook';
+import { myBuddy } from '../logic/camp';
 import { saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
 import { GAME_MODES } from '../net/duel';
@@ -42,7 +43,7 @@ export async function startFriends() {
         saveMeta(state.meta);
       }
     }
-    void shareLook(myLook(state.meta), myTitle(state.meta) ?? null).catch(() => {});
+    void shareLook(myLook(state.meta), myTitle(state.meta) ?? null, myBuddy(state.meta)).catch(() => {});
     startPresence(activityNow);
     listenForInvites(showInvite);
     // Leaderboards: send your numbers now and whenever they change (checked every minute).

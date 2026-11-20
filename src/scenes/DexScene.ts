@@ -1,5 +1,6 @@
 import { DEX_FORMS, DEX_SPECIES, dexStages, isLegend } from '../data/legends';
 import Phaser from 'phaser';
+import { campHearts } from '../logic/camp';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
 import { SPECIES } from '../data/species';
@@ -326,7 +327,8 @@ export class DexScene extends Phaser.Scene {
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
     const caught = dex.caught.includes(sp.id);
-    row.add(text(this, W - 138, y + 10, caught ? '● Caught' : '○ Seen · not caught yet', 12, caught ? '#8fe08a' : '#8e86ad').setOrigin(1, 0));
+    const bond = campHearts(state.meta, sp.id);
+    row.add(text(this, W - 138, y + 10, caught ? `● Caught${bond ? ` · camp bond ${'♥'.repeat(bond)}` : ''}` : '○ Seen · not caught yet', 12, caught ? '#8fe08a' : '#8e86ad').setOrigin(1, 0));
     // Favorite: this line always shows up among your starter choices.
     const meta = state.meta;
     const fav = meta.favorite === sp.id;
