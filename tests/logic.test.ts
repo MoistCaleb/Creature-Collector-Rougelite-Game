@@ -238,6 +238,27 @@ describe('shop', () => {
     clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
+  it('run W/L: seeded once from recent runs, then every finished or abandoned run', async () => {
+    const { seedRunRecord, abandonSavedRun, saveRun, recordRun } = await import('../src/logic/run');
+    const m = mkMeta();
+    const rec = (won: boolean) => ({ at: 0, won, floor: 3, mapId: 'wildlands', heat: 0, battlesWon: 0, caught: 0, team: [] });
+    // Newest first: three wins after a loss.
+    m.history = [rec(true), rec(true), rec(true), rec(false)] as typeof m.history;
+    m.runs = 40;
+    seedRunRecord(m);
+    expect(m.runRecord).toEqual({ wins: 3, losses: 1 });
+    expect(m.streak).toBe(3);
+    const run = startRun(m, 'emberkit', 7);
+    recordRun(run, true);
+    expect([m.runRecord!.wins, m.streak]).toEqual([4, 4]);
+    const run2 = startRun(m, 'emberkit', 8);
+    saveRun(run2);
+    abandonSavedRun(m);
+    expect(m.runRecord).toEqual({ wins: 4, losses: 1 + 1 });
+    expect(m.streak).toBe(0);
+    abandonSavedRun(m); // nothing saved any more
+    expect(m.runRecord!.losses).toBe(2);
+  });
   it('online races don\'t count as runs; online W/L and streaks are their own', async () => {
     const { addOnlineWin, addOnlineLoss } = await import('../src/logic/titles');
     const m = mkMeta();
@@ -908,7 +929,8 @@ describe('caught creatures keep their level and evolution', () => {
     expect(c.stage).toBe(1);
     expect(c.moves.map((m) => m.id)).toEqual(wild.moves.map((m) => m.id));
     expect(c.uid).not.toBe(wild.uid);
-    expect(c.hp).toBe(Math.round(stats(c).hp * BALANCE.catchHp)); // still recovering from the fight
+    // Still recovering from the fight (±1: a wild one with no nature gets one on joining, which rescales its HP).
+    expect(Math.abs(c.hp - Math.round(stats(c).hp * BALANCE.catchHp))).toBeLessThanOrEqual(1);
   });
   it('Scout adds 3 levels, never past the level cap', () => {
     const run = startRun({ ...meta(), equippedPassive: 'scout', unlockedPassives: ['scout'] }, 'emberkit', 12);
@@ -1965,7 +1987,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

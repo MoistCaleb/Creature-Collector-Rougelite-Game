@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
 import { TWISTS, twistShort, weekId, weeklyInfo, weeklyPlayed } from '../logic/run';
 import { MAP_BY_ID } from '../data/maps';
-import { clearSavedRun, dailyPassives, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, PASSIVES, todayUtc } from '../logic/run';
+import { abandonSavedRun, dailyPassives, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, PASSIVES, todayUtc } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
@@ -151,7 +151,7 @@ export class DailyScene extends Phaser.Scene {
       subtitle,
       options: [{ label, color: 0x8a2c2c }],
       onPick: () => {
-        clearSavedRun();
+        abandonSavedRun(state.meta);
         start();
       },
       onCancel: () => {},
@@ -166,7 +166,7 @@ export class DailyScene extends Phaser.Scene {
       subtitle: 'Starting a daily run ends your current run.',
       options: [{ label: 'Abandon and play the daily', color: 0x8a2c2c }],
       onPick: () => {
-        clearSavedRun();
+        abandonSavedRun(state.meta);
         go();
       },
       onCancel: () => {},
