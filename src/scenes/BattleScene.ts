@@ -1,3 +1,4 @@
+import { GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
 import { titleBadge } from '../ui/titleBadge';
@@ -83,6 +84,10 @@ import {
   releaseNote,
   trackStat,
   growBond,
+  rivalBeaten,
+  rivalHello,
+  rivalHere,
+  rivalTrainerName,
   legendBeaten,
   legendFled,
   isUnlockedStarter,
@@ -258,7 +263,10 @@ export class BattleScene extends Phaser.Scene {
       this.enemies = makeEncounter(run, run.map.nodes[run.currentId]);
       run.activeBattle = { kind: this.kind, enemies: this.enemies, settled: false, summary: '' };
       if (this.enemies[0] && isLegend(this.enemies[0].speciesId)) run.activeBattle.legend = this.enemies[0].speciesId;
-      if (this.kind === 'elite') run.activeBattle.trainer = trainerName((xs) => run.rng.pick(xs));
+      if (this.kind === 'elite' && run.rival && rivalHere(run, run.currentId)) {
+        run.activeBattle.trainer = rivalTrainerName(run.rival);
+        run.activeBattle.rival = true;
+      } else if (this.kind === 'elite') run.activeBattle.trainer = trainerName((xs) => run.rng.pick(xs));
       persist();
     }
     const boss = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
@@ -402,7 +410,7 @@ export class BattleScene extends Phaser.Scene {
         if (boss || this.kind === 'elite') {
           await trainerCutIn(this, {
             name: boss ? boss.name : trainer,
-            sub: boss ? `${boss.title} · ${run.hunt ? `Gilded Hunt floor ${run.hunt.depth}` : `Guardian of floor ${run.floor + 1}`}` : 'Trainer',
+            sub: boss ? `${boss.title} · ${run.hunt ? `Gilded Hunt floor ${run.hunt.depth}` : `Guardian of floor ${run.floor + 1}`}` : run.activeBattle?.rival ? `Your rival · floor ${run.floor + 1}` : 'Trainer',
             look: boss ? bossLook(boss.element) : lookForName(trainer),
             team: this.enemies,
             boss: !!boss,
@@ -412,6 +420,19 @@ export class BattleScene extends Phaser.Scene {
         await this.wait(250);
         await this.enterEnemy();
         if (this.kind === 'battle') this.msg.setText(intro);
+        // Trainers, your rival and guardians say something as the fight starts.
+        const said = boss
+          ? `${boss.name}: “${pickLine(GUARDIAN_TAUNTS[boss.element], `${run.seed}:${run.floor}:${run.hunt?.depth ?? 0}:taunt`)}”`
+          : run.activeBattle?.rival
+            ? `${trainer}: “${rivalHello(run)}”`
+            : this.kind === 'elite'
+              ? `${trainer}: “${pickLine(TRAINER_LINES, `${run.seed}:${run.log.fights}:${trainer}`)}”`
+              : '';
+        if (said && !resuming) {
+          this.msg.setText(said);
+          this.hop('enemy');
+          await this.wait(1900 / prefs.battleSpeed);
+        }
         await this.wait(200);
         this.msg.setText(`Go, ${creatureName(this.battle.p.c)}!`);
         await this.enterPlayer();
@@ -1709,7 +1730,10 @@ export class BattleScene extends Phaser.Scene {
         const theirs = this.enemies.map((e) => e.held).filter((h) => !!h);
         const prize = theirs.length ? run.rng.pick(theirs)! : rollHeld(run.rng);
         stash(run, prize);
-        ab.summary = `${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        // Your rival: a word from them, and an Evolution Stone on top.
+        const rivalNote = ab.rival ? `${ab.trainer}: “${rivalBeaten(run)}”\n\n◆ Beating your rival earns an extra Evolution Stone.\n\n` : '';
+        if (ab.rival) run.evoStones += 1;
+        ab.summary = `${rivalNote}${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);

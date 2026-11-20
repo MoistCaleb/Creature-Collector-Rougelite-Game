@@ -1,4 +1,5 @@
-import { BOSSES, EXTRA_RULE_LEVELS, extraRuleCount } from '../data/trainers';
+import { BOSSES, EXTRA_RULE_LEVELS, extraRuleCount, TRAINER_NAMES } from '../data/trainers';
+import { pickLine, RIVAL_HELLO, RIVAL_LOST, RIVAL_SKIPPED } from '../data/dialogue';
 import * as storage from '../storage';
 import { BALANCE } from '../data/balance';
 import { HELD, HELD_IDS, type HeldId } from '../data/held';
@@ -411,11 +412,28 @@ export interface Run {
   treasure: import('./events').TreasureOffer | null;
   /** A legendary roaming this floor, on a battle hex ahead (see data/legends). */
   roamer?: { id: string; node: string; announced?: boolean } | null;
+  /**
+   * Your rival this run: a trainer with a team that grows each floor. They wait on one trainer
+   * hex a floor (`node`), and `beaten` lists the floors you beat them on.
+   */
+  rival?: Rival | null;
+  /** Shops visited this run (the shopkeeper remembers you). */
+  shopVisits?: number;
+}
+
+export interface Rival {
+  name: string;
+  /** Their lead Hexling's line, picked to have the edge on your starter. */
+  ace: string;
+  node: string | null;
+  beaten: number[];
 }
 
 export interface ActiveBattle {
   /** A roaming legendary's battle: its id. */
   legend?: string;
+  /** The battle against your rival. */
+  rival?: boolean;
   kind: EncounterKind;
   enemies: Creature[];
   /** Opponent's name for trainer battles, e.g. "Ace Trainer Rhea". */
@@ -723,6 +741,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
   const starter = run.team[0];
   starter.nature = natureFor(`${seed}:starter`);
   starter.hp = stats(starter).hp;
+  makeRival(run);
   applyFloorCap(run);
   return run;
 }
@@ -1067,6 +1086,8 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     enemies.push(c);
   }
   run.log.fights += 1;
+  // Your rival: their own team instead, led by their ace.
+  if (kind === 'elite' && rivalHere(run, node.id)) return rivalTeam(run, enemies);
   return enemies;
 }
 
@@ -1544,5 +1565,75 @@ export function clearFloor(run: Run): boolean {
   run.visited = [run.map.startId];
   run.bossPending = false;
   placeRoamer(run);
+  placeRival(run);
   return false;
+}
+
+// ---------------------------------------------------------------- your rival
+
+/** Each run's rival: a name, and a lead line with the edge on your starter (both from the seed). */
+export function makeRival(run: Run) {
+  run.rival = null;
+  if (run.race || run.hunt || !run.team[0]) return;
+  const mine = creatureTypes(run.team[0]);
+  const counters = SPECIES.filter((sp) => DEFAULT_STARTERS.includes(sp.id) || sp.types[0] === sp.types[1]).filter((sp) => typeMultiplier(sp.types[0], mine) > 1);
+  const pool = counters.length ? counters : SPECIES;
+  const h = hashString(`${run.seed}:rival`);
+  run.rival = { name: TRAINER_NAMES[h % TRAINER_NAMES.length], ace: pool[(h >>> 8) % pool.length].id, node: null, beaten: [] };
+  placeRival(run);
+}
+
+/**
+ * The hex your rival waits on this floor: a trainer hex around the middle of the floor (a battle
+ * hex becomes one if the floor has none there).
+ */
+export function placeRival(run: Run) {
+  const r = run.rival;
+  if (!r) return;
+  r.node = null;
+  const mid = (n: MapNode) => n.progress >= 0.3 && n.progress <= 0.8;
+  const nodes = Object.values(run.map.nodes);
+  const pickFrom = (xs: MapNode[]) => xs.sort((a, b) => Math.abs(a.progress - 0.55) - Math.abs(b.progress - 0.55) || a.id.localeCompare(b.id))[0];
+  let n = pickFrom(nodes.filter((x) => x.kind === 'elite' && mid(x)));
+  if (!n) {
+    n = pickFrom(nodes.filter((x) => x.kind === 'battle' && mid(x)));
+    if (n) n.kind = 'elite';
+  }
+  r.node = n?.id ?? null;
+}
+
+/** Is this the hex your rival waits on (and haven't you beaten them on this floor yet)? */
+export const rivalHere = (run: Run, nodeId: string): boolean => !!run.rival && run.rival.node === nodeId && !run.rival.beaten.includes(run.floor);
+
+export const rivalTrainerName = (r: Rival) => `Rival ${r.name}`;
+
+/** Their team grows each floor (2, 3, then 4 Hexlings), led by their ace, which evolves as they go. */
+function rivalTeam(run: Run, team: Creature[]): Creature[] {
+  const r = run.rival!;
+  const f = run.floor;
+  const top = Math.max(...team.map((c) => c.level));
+  const ace = createCreature(r.ace, top + 2, Math.min(2, f));
+  ace.nature = natureFor(`${run.seed}:rival:ace`);
+  ace.stars = Math.max(...team.map((c) => c.stars));
+  for (const m of ace.moves) m.tier = Math.max(m.tier, f > 0 ? 2 : 1);
+  ace.hp = stats(ace).hp;
+  const out = [...team.slice(0, f + 1), ace];
+  return out;
+}
+
+/** You beat your rival on this floor. Returns what they say. */
+export function rivalBeaten(run: Run): string {
+  const r = run.rival;
+  if (!r) return '';
+  if (!r.beaten.includes(run.floor)) r.beaten.push(run.floor);
+  return RIVAL_LOST[Math.min(run.floor, RIVAL_LOST.length - 1)];
+}
+
+/** What your rival says as the battle starts. */
+export function rivalHello(run: Run): string {
+  const r = run.rival;
+  if (!r) return '';
+  if (run.floor > 0 && !r.beaten.includes(run.floor - 1)) return RIVAL_SKIPPED;
+  const lines = RIVAL_HELLO[Math.min(run.floor, RIVAL_HELLO.length - 1)];
+  return pickLine(lines, `${run.seed}:${run.floor}:rival`).replace('{ace}', SPECIES_BY_ID[r.ace].names[Math.min(2, run.floor)]);
 }
