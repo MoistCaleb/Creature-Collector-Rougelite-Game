@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.31';
+export const APP_VERSION = '1.32';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.32',
+    title: 'A smarter Hexlidex',
+    items: [
+      'Open any Hexling in the Hexlidex to see where to find it (its lands and the maps that have them) and its matchups: what it’s weak to, resists and is immune to.',
+      'Your record with each line: times caught, runs on your team, run wins, MVPs and best level.',
+      'Shortcuts: add a Hexling to your camp crew or your Battle Arena team right from its page.',
+      'Completion rewards: embers for catching 10%, 25%, 50%, 75% and all of the Hexlidex, and for every line of each element. Claim them from the top of the Hexlings list.',
+    ],
+  },
   {
     version: '1.31',
     title: 'Bonds you can see',

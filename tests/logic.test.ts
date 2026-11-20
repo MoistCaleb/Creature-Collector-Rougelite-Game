@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2882,5 +2882,44 @@ describe('Camp', async () => {
     m.shinyCaught = 1;
     m.clearedMaps = ['wildlands'];
     expect(campMod.growth(m, 100)).toMatchObject({ tents: 2, shrine: true, fire: 2, banners: ['wildlands'] });
+  });
+});
+
+describe('Hexlidex extras', async () => {
+  const info = await import('../src/logic/dexInfo');
+  const { SPECIES } = await import('../src/data/species');
+  const { typeMultiplier } = await import('../src/data/types');
+  it('says where a line lives: its lands, and the maps that have them', () => {
+    const sp = SPECIES.find((s) => s.types.includes('Fire'))!;
+    const h = info.habitat(sp.id);
+    expect(h.lands).toContain('Fire');
+    expect(h.maps).toContain('Wildlands');
+    expect(h.maps).toContain('Volcanic Rift');
+  });
+  it('matchups agree with the type chart', () => {
+    for (const sp of SPECIES.slice(0, 40)) {
+      const m = info.matchups(sp.types);
+      for (const w of m.weak) expect(typeMultiplier(w.el, sp.types)).toBeGreaterThan(1);
+      for (const r of m.resist) expect(typeMultiplier(r.el, sp.types)).toBeLessThan(1);
+      for (const el of m.immune) expect(typeMultiplier(el, sp.types)).toBe(0);
+    }
+  });
+  it('keeps your record with each line, starting from your run history', () => {
+    const m = blankMeta();
+    m.dex.caught = ['emberkit'];
+    m.history = [{ at: 1, won: true, floor: 3, mapId: 'wildlands', heat: 0, battlesWon: 9, caught: 2, team: [{ speciesId: 'emberkit', stage: 2, level: 31 }], mvp: { speciesId: 'emberkit', stage: 2, name: 'x', dealt: 9 } }];
+    expect(info.lineRecord(m, 'emberkit')).toMatchObject({ caught: 1, wins: 1, mvp: 1, best: 31 });
+    info.noteCatch(m, 'emberkit');
+    expect(info.lineRecord(m, 'emberkit').caught).toBe(2);
+  });
+  it('completion rewards pay embers once each', () => {
+    const m = blankMeta();
+    const fire = SPECIES.filter((s) => s.types.includes('Fire')).map((s) => s.id);
+    expect(info.claimDexReward(m, 'el-Fire')).toBe(0);
+    m.dex.caught = fire;
+    expect(info.dexRewardsReady(m)).toBeGreaterThan(0);
+    expect(info.claimDexReward(m, 'el-Fire')).toBe(15);
+    expect(info.claimDexReward(m, 'el-Fire')).toBe(0);
+    expect(m.camp!.embers).toBe(15);
   });
 });

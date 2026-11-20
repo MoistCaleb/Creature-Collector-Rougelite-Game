@@ -1,9 +1,13 @@
 import { DEX_FORMS, DEX_SPECIES, dexStages, isLegend } from '../data/legends';
 import Phaser from 'phaser';
-import { campHearts } from '../logic/camp';
+import { camp, campCrew, campHearts, CREW_MAX } from '../logic/camp';
+import { claimDexReward, dexRewards, habitat, lineRecord, matchups } from '../logic/dexInfo';
+import { activeTeam, activeTeamIndex, ARENA_LEVEL, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, savedTeams, validArenaTeam } from '../logic/arena';
+import { openPicker, showMessage } from '../ui/picker';
+import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
-import { SPECIES } from '../data/species';
+import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
 import { formName, hasSeenForm } from '../logic/dex';
@@ -12,7 +16,7 @@ import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/spri
 import { background, button, COLORS, H, LANDSCAPE, text, typeChip, W } from '../ui/widgets';
 import { createCreature, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
-import { toggleFavorite } from '../logic/run';
+import { saveMeta, toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
 import { openElementChart } from '../ui/elementChart';
 import { shinySparkle } from '../ui/shiny';
@@ -24,8 +28,13 @@ type Tab = 'creatures' | 'moves' | 'elements';
 let TOP = 196;
 /** Creature rows: collapsed, and expanded into a big card. */
 const ROW_H = 124;
-const CARD_H = 478;
 const STAGE_LABEL = ['Base form', 'First evolution', 'Final form'];
+/** Card extras: the signature line, where it lives, a row of matchup chips, your record, shortcuts. */
+const SIG_H = 34;
+const INFO_HAB = 70;
+const CHIP_ROW = 22;
+const INFO_REC = 52;
+const INFO_BTN = 48;
 
 /** Hexlings tab: search text and which lines to show (kept while you browse). */
 let dexQuery = '';
@@ -265,13 +274,19 @@ export class DexScene extends Phaser.Scene {
     const owned = state.meta.shinyOwned ?? [];
     const q = dexQuery.trim().toLowerCase().replace(/^#/, '');
     let y = 8;
+    // Completion rewards, at the top of the list.
+    if (!q && dexFilter === 'all') {
+      const ry = y;
+      this.addRow(ry, 58, (row) => this.rewardsRow(row, ry));
+      y += 58;
+    }
     DEX_SPECIES.forEach((sp, i) => {
       if (dexFilter === 'caught' && !dex.caught.includes(sp.id)) return;
       if (dexFilter === 'gilded' && !owned.includes(sp.id)) return;
       // Search: names of forms you've seen (unseen names stay secret), or the number.
       if (q && !(/^\d+$/.test(q) ? Number(q) === i + 1 : sp.names.some((n, st) => hasSeenForm(dex, sp.id, st) && n.toLowerCase().includes(q)))) return;
       this.rowOf.set(i, this.rows.length);
-      const h = this.expanded === i ? CARD_H : ROW_H;
+      const h = this.expanded === i ? this.cardH(sp) : ROW_H;
       const yy = y;
       this.addRow(yy, h, (row) => (this.expanded === i ? this.drawCreatureCard(row, sp, i, yy, h) : this.drawCreatureRow(row, sp, i, yy, h)));
       for (const el of new Set(sp.types)) this.anchor(el, yy);
@@ -300,7 +315,7 @@ export class DexScene extends Phaser.Scene {
     this.content.y = Phaser.Math.Clamp(screenY - this.rows[r].y, min, TOP);
     // An opened card should be fully visible if it fits.
     if (this.expanded === i) {
-      const bottom = this.content.y + this.rows[r].y + CARD_H;
+      const bottom = this.content.y + this.rows[r].y + this.rows[r].h;
       if (bottom > H - 10) this.content.y = Phaser.Math.Clamp(this.content.y - (bottom - (H - 10)), min, TOP);
     }
     this.refreshRows();
@@ -378,9 +393,230 @@ export class DexScene extends Phaser.Scene {
     });
     const sig = MOVES[sp.signature];
     const seenSig = dex.moves.includes(sig.id);
+    const sigY = y + 38 + stages.length * 136;
     row.add(
-      text(this, 22, y + h - 32, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 12, seenSig ? '#ffc94d' : '#4a4068', {
+      text(this, 22, sigY, seenSig ? `Signature: ${sig.name} · ${moveSummary(sig, 1)} · ${accText(sig)}` : 'Signature: ???', 12, seenSig ? '#ffc94d' : '#4a4068', {
         wordWrap: { width: W - 50 },
+      }),
+    );
+    this.drawInfo(row, sp, sigY + SIG_H);
+  }
+
+  // ---------------------------------------------------------------- card extras
+
+  /** Matchup chips laid out in rows: each chip's spot, and how many rows they take. */
+  private chipRows(items: { el: Element; x: number }[]): { spots: { el: Element; x: number; dx: number; row: number }[]; rows: number } {
+    const maxW = W - 24 - 104;
+    let dx = 0;
+    let row = 0;
+    const spots = items.map((it) => {
+      const w = 52 + (it.x >= 4 || (it.x > 0 && it.x <= 0.25) ? 24 : 0);
+      if (dx + w > maxW && dx > 0) {
+        row += 1;
+        dx = 0;
+      }
+      const spot = { ...it, dx, row };
+      dx += w;
+      return spot;
+    });
+    return { spots, rows: items.length ? row + 1 : 0 };
+  }
+
+  private infoH(sp: (typeof SPECIES)[number]): number {
+    const m = matchups(sp.types);
+    const rows = this.chipRows(m.weak).rows + this.chipRows(m.resist).rows + this.chipRows(m.immune.map((el) => ({ el, x: 0 }))).rows;
+    return INFO_HAB + 24 + rows * CHIP_ROW + 8 + INFO_REC + INFO_BTN;
+  }
+
+  private cardH(sp: (typeof SPECIES)[number]): number {
+    return 38 + dexStages(sp.id).length * 136 + SIG_H + this.infoH(sp) + 8;
+  }
+
+  /** Where it lives, what hurts it, your record with it, and shortcuts. */
+  private drawInfo(row: Phaser.GameObjects.Container, sp: (typeof SPECIES)[number], y0: number) {
+    const meta = state.meta;
+    const head = (yy: number, label: string) => row.add(text(this, 22, yy, label, 13, '#ffc94d', { fontStyle: 'bold' }));
+    row.add(this.add.rectangle(22, y0 - 6, W - 44, 1, COLORS.stroke).setOrigin(0));
+    let y = y0;
+
+    // Where to find it.
+    const hab = habitat(sp.id);
+    head(y, 'Where to find it');
+    const where = hab.legend
+      ? 'A roaming legendary: it can turn up on floors 2 and 3 of any map (not dailies, weeklies or online). Professor Alder at camp tells you when one is near.'
+      : `Wild in ${hab.lands.join(' and ')} lands. Maps: ${hab.maps.join(', ')}.`;
+    row.add(text(this, 22, y + 18, where, 12, COLORS.text, { wordWrap: { width: W - 50 }, maxLines: 3 }));
+    y += INFO_HAB;
+
+    // Matchups.
+    head(y, 'Matchups');
+    y += 24;
+    const m = matchups(sp.types);
+    const group = (label: string, items: { el: Element; x: number }[], color: string) => {
+      const { spots, rows } = this.chipRows(items);
+      if (!rows) return;
+      row.add(text(this, 22, y + 8, label, 12, color, { fontStyle: 'bold' }).setOrigin(0, 0.5));
+      for (const chip of spots) {
+        const cx = 126 + chip.dx;
+        const cy = y + 8 + chip.row * CHIP_ROW;
+        row.add(typeChip(this, cx, cy, chip.el, true));
+        if (chip.x >= 4) row.add(text(this, cx + 50, cy, '×4', 11, '#ff8a7a', { fontStyle: 'bold' }).setOrigin(0, 0.5));
+        else if (chip.x > 0 && chip.x <= 0.25) row.add(text(this, cx + 50, cy, '×¼', 11, '#8fe08a', { fontStyle: 'bold' }).setOrigin(0, 0.5));
+      }
+      y += rows * CHIP_ROW;
+    };
+    group('Weak to', m.weak, '#ff8a7a');
+    group('Resists', m.resist, '#8fe08a');
+    group('Immune to', m.immune.map((el) => ({ el, x: 0 })), '#8fd0ff');
+    y += 8;
+
+    // Your record.
+    head(y, 'Your record');
+    const caught = meta.dex.caught.includes(sp.id);
+    const rec = lineRecord(meta, sp.id);
+    const line = caught || rec.runs
+      ? `Caught ${rec.caught} · On your team ${rec.runs} run${rec.runs === 1 ? '' : 's'} · Wins ${rec.wins} · MVP ${rec.mvp}${rec.best ? ` · Best Lv ${rec.best}` : ''}`
+      : 'Not caught yet.';
+    row.add(text(this, 22, y + 18, line, 12, COLORS.text, { wordWrap: { width: W - 50 } }));
+    y += INFO_REC;
+
+    // Shortcuts.
+    const bw = (W - 56) / 2;
+    const inCrew = campCrew(meta).some((c) => c.speciesId === sp.id) && !!meta.camp?.crew?.length;
+    const canCamp = caught && !isLegend(sp.id) && !inCrew;
+    row.add(
+      button(this, 22 + bw / 2, y + 20, bw, 36, inCrew ? 'At your camp' : isLegend(sp.id) ? 'Legendaries roam free' : caught ? 'Add to camp crew' : 'Catch to add to camp', () => this.addToCamp(sp.id), {
+        fontSize: 12,
+        color: 0x3a4a2a,
+        enabled: canCamp,
+      }),
+    );
+    const inRoster = arenaRoster(meta).includes(sp.id);
+    const onTeam = activeTeam(meta).some((p) => p.speciesId === sp.id);
+    row.add(
+      button(this, 34 + bw * 1.5, y + 20, bw, 36, onTeam ? 'On your Arena team' : inRoster ? 'Add to Arena team' : 'Catch to use in Arena', () => this.addToArena(sp.id), {
+        fontSize: 12,
+        color: 0x6a2a2a,
+        enabled: inRoster && !onTeam,
+      }),
+    );
+  }
+
+  private redrawCards() {
+    for (const c of this.live.values()) c.destroy();
+    this.live.clear();
+    this.refreshRows();
+  }
+
+  /** Put this line in your camp crew (choosing who leaves if it's full). */
+  private addToCamp(id: string) {
+    const meta = state.meta;
+    const crew = campCrew(meta).map((c) => c.speciesId).filter((x) => x !== id);
+    const name = SPECIES_BY_ID[id].names[0];
+    const save = (next: string[]) => {
+      camp(meta).crew = next.slice(0, CREW_MAX);
+      saveMeta(meta);
+      this.redrawCards();
+    };
+    if (crew.length < CREW_MAX) {
+      save([...crew, id]);
+      return this.overlay((done) => showMessage(this, 'Off to camp!', `${name} is staying at camp now. Visit to spend time together.`, done));
+    }
+    this.overlay((done) =>
+      openPicker(this, {
+        title: 'Camp is full',
+        subtitle: `Who heads out so ${name} can stay?`,
+        options: crew.map((c) => ({ label: SPECIES_BY_ID[c].names[0], icon: createCreature(c, 5), color: 0x3a4a2a })),
+        cancelLabel: 'Cancel',
+        onCancel: done,
+        onPick: (i) => {
+          const next = [...crew];
+          next[i] = id;
+          save(next);
+          done();
+        },
+      }),
+    );
+  }
+
+  /** Put this line on your active Arena team (choosing who it replaces if the team is full). */
+  private addToArena(id: string) {
+    const meta = state.meta;
+    const team = savedTeams(meta)[activeTeamIndex(meta)];
+    const picks = validArenaTeam(meta, team.picks);
+    const stage = Math.max(...arenaForms(meta, id));
+    const pick = { speciesId: id, stage, moves: defaultArenaMoves(id, stage) };
+    const name = SPECIES_BY_ID[id].names[stage];
+    const save = (next: typeof picks) => {
+      team.picks = next;
+      saveMeta(meta);
+      this.redrawCards();
+    };
+    if (picks.length < ARENA_TEAM) {
+      save([...picks, pick]);
+      return this.overlay((done) => showMessage(this, 'Added!', `${name} joined ${team.name} in the Battle Arena (Lv ${ARENA_LEVEL}).`, done));
+    }
+    this.overlay((done) =>
+      openPicker(this, {
+        title: `${team.name} is full`,
+        subtitle: `Who does ${name} replace?`,
+        options: picks.map((p) => ({ label: SPECIES_BY_ID[p.speciesId].names[p.stage], icon: createCreature(p.speciesId, 5, p.stage), color: 0x6a2a2a })),
+        cancelLabel: 'Cancel',
+        onCancel: done,
+        onPick: (i) => {
+          const next = [...picks];
+          next[i] = pick;
+          save(next);
+          done();
+        },
+      }),
+    );
+  }
+
+  // ---------------------------------------------------------------- completion rewards
+
+  private rewardsRow(row: Phaser.GameObjects.Container, y: number) {
+    const meta = state.meta;
+    const list = dexRewards(meta);
+    const ready = list.filter((r) => r.done && !r.claimed).length;
+    const claimed = list.filter((r) => r.claimed).length;
+    const bg = this.add
+      .rectangle(12, y, W - 24, 50, ready ? 0x3a2a14 : COLORS.panel)
+      .setOrigin(0)
+      .setStrokeStyle(ready ? 2 : 1, ready ? 0xffc94d : COLORS.stroke)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => !this.scroller.moved && this.openRewards());
+    row.add(bg);
+    row.add(icon(this, 34, y + 25, 'crown', 18));
+    row.add(text(this, 54, y + 8, 'Completion rewards', 15, '#ffc94d', { fontStyle: 'bold' }));
+    row.add(text(this, 54, y + 28, ready ? `${ready} ready to claim! Tap to collect your embers.` : `${claimed}/${list.length} claimed · fill the Hexlidex for embers`, 12, ready ? '#ffe08a' : COLORS.textDim));
+    row.add(icon(this, W - 30, y + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+  }
+
+  private openRewards() {
+    const meta = state.meta;
+    const list = dexRewards(meta).sort((a, b) => Number(b.done && !b.claimed) - Number(a.done && !a.claimed) || Number(a.claimed) - Number(b.claimed) || b.have / b.goal - a.have / a.goal);
+    this.overlay((done) =>
+      openPicker(this, {
+        title: 'Completion rewards',
+        subtitle: `Embers are spent at camp’s Ember stall. You have ${meta.camp?.embers ?? 0}.`,
+        options: list.map((r) => ({
+          label: r.name,
+          sub: r.claimed ? `Claimed · ${r.embers} embers` : r.done ? `Tap to claim ${r.embers} embers!` : `${r.have}/${r.goal} · ${r.embers} embers · ${r.desc}`,
+          disabled: r.claimed || !r.done,
+          color: r.done && !r.claimed ? 0x8a5a1a : undefined,
+          glyph: r.claimed ? undefined : ('flame' as const),
+        })),
+        rowHeight: 56,
+        cancelLabel: 'Back',
+        onCancel: () => (done(), this.redrawCards()),
+        onPick: (i) => {
+          if (claimDexReward(meta, list[i].id)) sfx.coin();
+          saveMeta(meta);
+          done();
+          this.redrawCards();
+          this.openRewards();
+        },
       }),
     );
   }

@@ -42,6 +42,7 @@ import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { applyCampBond, camp, CAMP_START_BOND, type PrepId } from './camp';
+import { lines, noteCatch, noteRunRecord } from './dexInfo';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
@@ -188,6 +189,10 @@ export interface Meta {
   camp?: import('./camp').CampState;
   /** The starter of your latest run (what friends see by your fire if you have no favourite). */
   lastStarter?: string;
+  /** Your record with each line: times caught, run wins, MVPs and best level (see logic/dexInfo). */
+  lines?: Record<string, import('./dexInfo').LineRecord>;
+  /** Hexlidex completion rewards already claimed. */
+  dexClaimed?: string[];
 }
 
 /** One finished run, for the Records screen. */
@@ -236,6 +241,7 @@ export function recordRun(run: Run, won: boolean) {
     mvp: mvp && mvp.dealt > 0 ? { speciesId: mvp.speciesId, stage: mvp.stage, name: mvp.name, dealt: mvp.dealt } : undefined,
     endedBy: won ? undefined : run.log.endedBy?.label,
   };
+  noteRunRecord(meta, rec);
   meta.history = [rec, ...(meta.history ?? [])].slice(0, HISTORY_MAX);
   meta.streak = won ? (meta.streak ?? 0) + 1 : 0;
   meta.bestStreak = Math.max(meta.bestStreak ?? 0, meta.streak);
@@ -325,6 +331,7 @@ export function loadMeta(): Meta {
     // Saves from before shinies were tracked per species: count the ones seen shiny as caught.
     if (!saved.shinyOwned && (saved.shinyCaught ?? 0) > 0) meta.shinyOwned = [...(saved.shinySeen ?? [])];
     checkAchievements(meta);
+    lines(meta);
     // Saves from before titles had their own list: titles you already have aren't news.
     if (!saved.titlesAnnounced) meta.titlesAnnounced = earnedTitles(meta);
     // Saves from before NEW tags: what you already have isn't new.
@@ -1395,6 +1402,7 @@ export function catchCreature(
   addToParty(run, c, release);
   run.log.caught += 1;
   track(run.meta, 'caught');
+  noteCatch(run.meta, c.speciesId);
   saveMeta(run.meta);
   return { c, bonus, newlyClaimed };
 }
