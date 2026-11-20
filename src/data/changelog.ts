@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.42';
+export const APP_VERSION = '1.43';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.43',
+    title: 'Limit Breakers on reroll',
+    items: ['Limit Breakers sell out again once bought, but every shop reroll on Gilded Hunt floor 6+ brings a fresh one.'],
+  },
   {
     version: '1.42',
     title: 'Limit Breakers restock',

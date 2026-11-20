@@ -46,12 +46,9 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sigil: { name: 'Prestige Sigil', desc: 'Prestige a Hexling, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
   recruit: { name: 'Recruit', desc: 'A Hexling joins your party', basePrice: 80, weight: 6, target: 'none' },
   held: { name: 'Held item', desc: 'Give it to a Hexling from the Team screen', basePrice: 60, weight: 7, target: 'none' },
-  limit: { name: 'Limit Breaker', desc: `+${LIMIT_BREAK} to one Hexling\u2019s level cap (stacks). Stored XP turns into levels. Restocks after each buy · Gilded Hunt floor 6+ only`, basePrice: 140, weight: 0, target: 'creature' },
+  limit: { name: 'Limit Breaker', desc: `+${LIMIT_BREAK} to one Hexling\u2019s level cap (stacks). Stored XP turns into levels. Every reroll brings a new one · Gilded Hunt floor 6+ only`, basePrice: 140, weight: 0, target: 'creature' },
   relearn: { name: 'Move Relearn', desc: 'Swap one of a Hexling\u2019s moves for any move it would naturally know', basePrice: 50, weight: 6, target: 'creature' },
 };
-
-/** Items that stay in stock after you buy one. */
-export const restocks = (item: ItemId) => item === 'limit';
 
 /** Display name of a slot (held items show which item). */
 export function slotName(slot: { item: ItemId; held?: HeldId }): string {
@@ -102,7 +99,7 @@ export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop
   const rng = placeRng(run, `shop:${rerolls}`);
   const ids = Object.keys(ITEMS) as ItemId[];
   const chosen: ItemId[] = [...guaranteed];
-  // Deep in a Gilded Hunt, every shop has a Limit Breaker (and only there).
+  // Deep in a Gilded Hunt, every shop (and every reroll) has a Limit Breaker, and only there.
   if (limitShop(run) && !chosen.includes('limit')) chosen.unshift('limit');
   while (chosen.length < 5) {
     const weights: Partial<Record<ItemId, number>> = {};
