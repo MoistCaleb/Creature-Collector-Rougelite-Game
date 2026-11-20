@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.30';
+export const APP_VERSION = '1.31';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,13 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.31',
+    title: 'Bonds you can see',
+    items: [
+      'At camp, your Hexlings’ forms now follow your bond: each one starts in its first form, the first camp heart evolves it to its middle form, the second to its final form, and the third makes it glow (and it still starts your runs with a bond heart).',
+    ],
+  },
   {
     version: '1.30',
     title: 'Camp crew search',
