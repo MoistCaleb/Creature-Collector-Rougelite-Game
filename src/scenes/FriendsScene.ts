@@ -11,6 +11,7 @@ import {
   listFriends,
   loadProfile,
   myProfile,
+  normalizeCode,
   pingPresence,
   removeFriend,
   respond,
@@ -141,7 +142,7 @@ export class FriendsScene extends Phaser.Scene {
     const mine = (o: Phaser.GameObjects.GameObject) => o.setData('mine', true);
     const online = this.friends.filter((f) => f.status === 'accepted' && f.online).length;
     const total = this.friends.filter((f) => f.status === 'accepted').length;
-    this.status.setText(total ? `${online} of ${total} friend${total === 1 ? '' : 's'} online` : 'No friends yet. Add one with their username or friend code.');
+    this.status.setText(total ? `${online} of ${total} friend${total === 1 ? '' : 's'} online` : 'No friends yet. Add one with their friend code.');
 
     // You: your name and friend code (tap to copy), and Add a friend.
     const bw = LANDSCAPE ? 300 : (W - 36) / 2;
@@ -149,7 +150,7 @@ export class FriendsScene extends Phaser.Scene {
     mine(
       button(this, W / 2 - bw / 2 - 6, y, bw, 52, p.username, () => this.myCode(), { color: 0x2f4a6b, fontSize: 16, sub: `${p.friendCode} · tap to share` }),
     );
-    mine(button(this, W / 2 + bw / 2 + 6, y, bw, 52, 'Add a friend', () => this.addFriend(), { color: 0x3b6d4a, fontSize: 16, sub: 'By username or friend code' }));
+    mine(button(this, W / 2 + bw / 2 + 6, y, bw, 52, 'Add a friend', () => this.addFriend(), { color: 0x3b6d4a, fontSize: 16, sub: 'With their friend code' }));
 
     // The list: requests first, then friends (online first).
     this.top = y + 40;
@@ -208,7 +209,7 @@ export class FriendsScene extends Phaser.Scene {
     const p = myProfile()!;
     openPicker(this, {
       title: p.username,
-      subtitle: `Your friend code is ${p.friendCode}. Friends can add you with it, or with your username.`,
+      subtitle: `Your friend code is ${p.friendCode}. Send it to friends so they can add you.`,
       options: [
         { label: 'Copy my friend code', color: 0x2f4a6b },
         { label: 'Change my trainer name', color: 0x3a3352, sub: 'It’s your username too' },
@@ -225,22 +226,22 @@ export class FriendsScene extends Phaser.Scene {
   private addFriend() {
     card({
       title: 'Add a friend',
-      body: 'Type their exact username, or their friend code (like HEX-4K9P2). They get a request to accept.',
-      field: { type: 'text', placeholder: 'username or HEX-…' },
+      body: 'Type their friend code (like HEX-4K9P2). They’ll find it at the top of their Friends screen. They get a request to accept.',
+      field: { type: 'text', placeholder: 'HEX-…' },
       buttons: [
         { label: 'Cancel', onClick: (c) => c.close() },
         {
           label: 'Send request',
           primary: true,
           onClick: async (c) => {
-            const q = c.value().trim();
-            if (q.length < 3) return c.status('Type a username or friend code.', 'error');
+            const q = normalizeCode(c.value());
+            if (!q) return c.status('Friend codes look like HEX-4K9P2.', 'error');
             c.busy(true);
             try {
               const who = await findPlayer(q);
               if (!who) {
                 c.busy(false);
-                return c.status('No player with that username or code.', 'error');
+                return c.status('No player with that friend code.', 'error');
               }
               const out = await sendRequest(who.userId);
               c.close();

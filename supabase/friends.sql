@@ -1,8 +1,8 @@
 -- Hexbound friends: run this once in Supabase › SQL Editor › New query (after schema.sql).
 -- Usernames and friend codes, friend requests, blocking, who's online, and lobby invites.
 --
--- Privacy: there is no player directory. You can only find someone by their exact username or
--- friend code, and you only ever see the profiles of your friends (and of people with a request
+-- Privacy: you can only add someone by their friend code (usernames show on the leaderboards, so
+-- they aren't enough to send a request), and you only ever see the profiles of your friends (and of people with a request
 -- open between you). Everything goes through the functions below, which check who is asking.
 
 -- ---------------------------------------------------------------- profiles
@@ -149,13 +149,13 @@ begin
   return result;
 end $$;
 
--- Find one player by their exact username or friend code (never yourself, never someone who blocked you).
+-- Find one player by their friend code (never yourself, never someone who blocked you).
 create or replace function public.find_player(q text)
 returns table (user_id uuid, username text, friend_code text, look jsonb, title text)
 language sql stable security definer set search_path = public as $$
   select p.user_id, p.username, p.friend_code, p.look, p.title
   from profiles p
-  where (lower(p.username) = lower(trim(q)) or p.friend_code = upper(trim(q)))
+  where p.friend_code = upper(trim(q))
     and p.user_id <> auth.uid()
     and not is_blocked(auth.uid(), p.user_id)
   limit 1;

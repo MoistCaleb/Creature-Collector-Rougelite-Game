@@ -147,6 +147,13 @@ describe('Friends', async () => {
     expect(nameProblem('a'.repeat(17))).toBeTruthy();
     expect(cleanName('  Big    Al ')).toBe('Big Al');
   });
+  it('friend codes work however they are typed', () => {
+    expect(friends.normalizeCode('hex 4k9p2')).toBe('HEX-4K9P2');
+    expect(friends.normalizeCode('4K9P2')).toBe('HEX-4K9P2');
+    expect(friends.normalizeCode(' HEX-4K9P2 ')).toBe('HEX-4K9P2');
+    expect(friends.normalizeCode('Sam')).toBeNull();
+    expect(friends.normalizeCode('Sammy99')).toBeNull();
+  });
   it('lists friends online first, and says what they are up to', async () => {
     await account.verifyCode('me@example.com', '123456');
     const list = await friends.listFriends();

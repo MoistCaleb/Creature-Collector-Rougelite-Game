@@ -4,7 +4,7 @@ import { accountClient, accountsAvailable, currentUser } from './account';
 import { GAME_MODES, type GameMode } from './duel';
 
 /**
- * Friends: a username and friend code each, friend requests, who's online (and what they're up
+ * Friends: a username and friend code each (you add people by code), friend requests, who's online (and what they're up
  * to), and invites into your online lobby. All of it goes through the account (see
  * supabase/friends.sql for the rules the server enforces).
  */
@@ -108,8 +108,16 @@ export async function listFriends(): Promise<Friend[]> {
     .sort((a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username));
 }
 
+/** A friend code however it was typed ("hex 4k9p2", "4K9P2") as HEX-4K9P2, or null if it can't be one. */
+export function normalizeCode(q: string): string | null {
+  const raw = q.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const body = raw.startsWith('HEX') && raw.length === 8 ? raw.slice(3) : raw;
+  return /^[A-Z0-9]{5}$/.test(body) ? `HEX-${body}` : null;
+}
+
+/** Find a player by friend code (the only way to add someone). */
 export async function findPlayer(q: string): Promise<{ userId: string; username: string; look: TrainerLook; title: string | null } | null> {
-  const { data, error } = await accountClient().rpc('find_player', { q: q.trim() });
+  const { data, error } = await accountClient().rpc('find_player', { q: normalizeCode(q) ?? q.trim() });
   if (error) throw err(error, 'Couldn’t search.');
   const r = (data as Record<string, unknown>[] | null)?.[0];
   return r ? { userId: String(r.user_id), username: String(r.username), look: cleanLook(r.look), title: typeof r.title === 'string' ? r.title : null } : null;
