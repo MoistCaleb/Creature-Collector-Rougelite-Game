@@ -30,6 +30,7 @@ import {
   type PrepId,
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
+import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
 import { friendsAvailable, listFriends, type Friend } from '../net/friends';
@@ -127,6 +128,7 @@ export class CampScene extends Phaser.Scene {
     const fy = (this.fy = groundY + (floorBottom - groundY) * 0.5);
     const rx = (this.rx = Math.min(190, x1 * 0.38));
     const ry = (this.ry = (floorBottom - groundY) * 0.34);
+    this.scenery(groundY, x1, floorBottom, phase);
     this.growthBack(grow, groundY, x1, floorBottom);
     const fireDepth = fy / 1000;
     const [c0, c1, c2] = fireColors(meta);
@@ -210,6 +212,176 @@ export class CampScene extends Phaser.Scene {
   }
 
   // ================================================================ growth
+
+  /**
+   * The camp itself, there from day one: a dirt clearing and path, grass, trees, bushes and rocks,
+   * your gear by the fire, smoke, fireflies (or butterflies by day), and wild Hexlings wandering by.
+   */
+  private scenery(groundY: number, x1: number, floorBottom: number, phase: string) {
+    const { fx, fy, rx, ry } = this;
+    const rng = new Rng(7331);
+    const r = (a: number, b: number) => a + rng.next() * (b - a);
+    const d = (y: number) => y / 1000;
+
+    // Grass: lighter and darker patches, then tufts.
+    const ground = this.add.graphics();
+    for (let i = 0; i < 26; i++) {
+      ground.fillStyle(i % 2 ? 0x24341f : 0x1a2618, 0.7).fillEllipse(r(0, W), r(groundY + 10, H), r(60, 140), r(14, 30));
+    }
+    // The clearing around the fire, and a path out of camp.
+    ground.fillStyle(0x3a3020, 0.55).fillEllipse(fx, fy + 4, rx * 2.3, ry * 2.5);
+    ground.fillStyle(0x4a3c28, 0.35).fillEllipse(fx, fy + 4, rx * 1.4, ry * 1.5);
+    ground.fillStyle(0x3a3020, 0.5).fillPoints(
+      [
+        { x: fx - 16, y: fy + ry },
+        { x: fx + 16, y: fy + ry },
+        { x: fx + 50, y: H + 20 },
+        { x: fx - 34, y: H + 20 },
+      ],
+      true,
+    );
+    const tufts = this.add.graphics();
+    for (let i = 0; i < 70; i++) {
+      const x = r(0, W);
+      const y = r(groundY + 8, H);
+      if (Math.hypot((x - fx) / (rx * 1.15), (y - fy) / (ry * 1.25)) < 1) continue;
+      const c = rng.next() < 0.5 ? 0x3a5a30 : 0x2e4a28;
+      tufts.lineStyle(2, c, 1);
+      tufts.lineBetween(x, y, x - 3, y - 6).lineBetween(x, y, x, y - 8).lineBetween(x, y, x + 3, y - 6);
+    }
+    // Tiny wildflowers in the grass.
+    for (let i = 0; i < 18; i++) {
+      const x = r(0, W);
+      const y = r(groundY + 14, H);
+      if (Math.hypot((x - fx) / (rx * 1.2), (y - fy) / (ry * 1.3)) < 1) continue;
+      this.add.circle(x, y, 1.6, [0xf0e2c0, 0xffd04a, 0xc8a8f0, 0xff8ab0][i % 4]).setAlpha(0.85);
+    }
+
+    // Trees: a row of small ones on the horizon, big ones framing the camp.
+    const pine = (x: number, y: number, h: number, color: number) => {
+      const t = this.add.graphics().setDepth(d(y));
+      t.fillStyle(0x3a2a1a, 1).fillRect(x - h * 0.05, y - h * 0.22, h * 0.1, h * 0.22);
+      for (let k = 0; k < 3; k++) {
+        const w = h * (0.42 - k * 0.1);
+        const base = y - h * 0.18 - k * h * 0.24;
+        t.fillStyle(color, 1).fillTriangle(x - w, base, x, base - h * 0.42, x + w, base);
+      }
+      t.fillStyle(0xffffff, 0.04).fillTriangle(x, y - h, x + h * 0.1, y - h * 0.5, x, y - h * 0.5);
+    };
+    const oak = (x: number, y: number, size: number) => {
+      const t = this.add.graphics().setDepth(d(y));
+      t.fillStyle(0x3a2a1a, 1).fillRect(x - size * 0.08, y - size * 0.7, size * 0.16, size * 0.7);
+      t.fillStyle(0x1e3a22, 1).fillCircle(x, y - size * 0.95, size * 0.45).fillCircle(x - size * 0.32, y - size * 0.75, size * 0.34).fillCircle(x + size * 0.32, y - size * 0.75, size * 0.34);
+      t.fillStyle(0x2a4a2c, 1).fillCircle(x - size * 0.1, y - size * 1.05, size * 0.25);
+    };
+    for (let i = 0; i < 6; i++) pine(r(0, x1), groundY + r(2, 8), r(34, 50), 0x16301e);
+    pine(-6, floorBottom - 30, LANDSCAPE ? 120 : 150, 0x14301c);
+    oak(x1 + 4, LANDSCAPE ? floorBottom : floorBottom - 60, LANDSCAPE ? 80 : 96);
+    pine(x1 * 0.16, groundY + 70, 70, 0x18341f);
+
+    // Bushes (some with berries) and rocks around the edges.
+    const bush = (x: number, y: number, s: number, berries: boolean) => {
+      const b = this.add.graphics().setDepth(d(y));
+      b.fillStyle(0x1e3a20, 1).fillCircle(x - s * 0.5, y - s * 0.4, s * 0.5).fillCircle(x + s * 0.5, y - s * 0.4, s * 0.5).fillCircle(x, y - s * 0.7, s * 0.6);
+      b.fillStyle(0x2c5030, 1).fillCircle(x - s * 0.15, y - s * 0.85, s * 0.28);
+      if (berries) for (let k = 0; k < 4; k++) b.fillStyle(0xd8443a, 1).fillCircle(x + r(-s * 0.7, s * 0.7), y - r(s * 0.3, s), 2);
+    };
+    const rock = (x: number, y: number, s: number) => {
+      const g = this.add.graphics().setDepth(d(y));
+      g.fillStyle(0x4a4a58, 1).fillEllipse(x, y - s * 0.3, s * 1.6, s);
+      g.fillStyle(0x6a6a7a, 1).fillEllipse(x - s * 0.2, y - s * 0.45, s * 0.8, s * 0.4);
+    };
+    bush(x1 * 0.3, groundY + 40, 14, true);
+    bush(x1 * 0.72, floorBottom - 6, 16, false);
+    bush(x1 * 0.06 + 30, floorBottom - 64, 13, true);
+    bush(x1 * 0.93, groundY + 92, 12, true);
+    rock(x1 * 0.4, floorBottom - 10, 12);
+    rock(x1 * 0.88, groundY + 120, 9);
+    rock(x1 * 0.2, groundY + 120, 8);
+    rock(x1 * 0.56, groundY + 50, 7);
+
+    // Your gear: a bedroll and pack by your spot, log seats, a woodpile and a cooking pot.
+    const mx = fx - rx * 0.8;
+    const gear = this.add.graphics().setDepth(d(fy - 6));
+    gear.fillStyle(0x8a3a3a, 1).fillRoundedRect(mx - 46, fy - 26, 34, 14, 4);
+    gear.fillStyle(0xb85a4a, 1).fillCircle(mx - 46, fy - 19, 7);
+    gear.fillStyle(0x6a5a2a, 1).fillRoundedRect(mx + 16, fy - 18, 14, 16, 3);
+    gear.fillStyle(0x8a7a3a, 1).fillRect(mx + 18, fy - 14, 10, 3);
+    const log = (x: number, y: number, a: number) => this.add.rectangle(x, y, 40, 10, 0x6a4424).setStrokeStyle(1, 0x2a160a).setAngle(a).setDepth(d(y));
+    log(fx - rx * 0.45, fy - ry * 0.9, -8);
+    log(fx + rx * 0.45, fy - ry * 0.9, 8);
+    const wp = this.add.graphics().setDepth(d(fy + ry * 0.6));
+    const wx = fx + rx * 0.95;
+    const wy = fy + ry * 0.6;
+    [[0, 0], [10, 0], [20, 0], [5, -8], [15, -8], [10, -16]].forEach(([ox, oy]) => wp.fillStyle(0x7a4a24, 1).fillCircle(wx + ox, wy + oy, 5).fillStyle(0xc89a5a, 1).fillCircle(wx + ox, wy + oy, 2.5));
+    const pot = this.add.graphics().setDepth(d(fy + 2));
+    const ptx = fx + 34;
+    pot.lineStyle(2, 0x3a3a44, 1).lineBetween(ptx - 10, fy + 6, ptx, fy - 22).lineBetween(ptx + 10, fy + 6, ptx, fy - 22);
+    pot.fillStyle(0x2a2a34, 1).fillEllipse(ptx, fy - 6, 18, 14);
+    pot.fillStyle(0x8a6a4a, 1).fillEllipse(ptx, fy - 12, 14, 4);
+    if (!calm()) {
+      // Steam from the pot, smoke from the fire.
+      this.time.addEvent({
+        delay: 700,
+        loop: true,
+        callback: () => {
+          const s = this.add.circle(ptx + r(-3, 3), fy - 16, 3, 0xffffff, 0.35).setDepth(d(fy + 3));
+          this.tweens.add({ targets: s, y: s.y - 24, x: s.x + r(-6, 6), alpha: 0, scale: 2, duration: 1600, onComplete: () => s.destroy() });
+        },
+      });
+      this.time.addEvent({
+        delay: 900,
+        loop: true,
+        callback: () => {
+          const s = this.add.circle(fx + r(-6, 6), fy - 54, 6, 0x9a9aaa, 0.22).setDepth(d(fy) + 0.002);
+          this.tweens.add({ targets: s, y: s.y - 80, x: s.x + r(-20, 20), alpha: 0, scale: 3, duration: 3200, onComplete: () => s.destroy() });
+        },
+      });
+    }
+
+    // Fireflies after dark, butterflies by day.
+    if (!calm()) {
+      const night = phase !== 'day';
+      for (let i = 0; i < (night ? 16 : 6); i++) {
+        const x = r(10, x1 - 10);
+        const y = r(groundY + 10, floorBottom);
+        const bug = night
+          ? this.add.circle(x, y, 2, 0xe8ff8a).setBlendMode(Phaser.BlendModes.ADD).setDepth(3)
+          : this.add.text(x, y, '⋈', { fontSize: '10px', color: ['#ffd04a', '#8ad0ff', '#ff8ab0'][i % 3] }).setOrigin(0.5).setDepth(3);
+        const drift = () => {
+          if (!bug.active) return;
+          this.tweens.add({ targets: bug, x: Phaser.Math.Clamp(bug.x + r(-40, 40), 6, x1 - 6), y: Phaser.Math.Clamp(bug.y + r(-30, 30), groundY + 6, floorBottom), duration: r(1800, 3600), ease: 'Sine.easeInOut', onComplete: drift });
+        };
+        drift();
+        if (night) this.tweens.add({ targets: bug, alpha: 0.15, yoyo: true, repeat: -1, duration: r(500, 1400), delay: r(0, 1200) });
+        else this.tweens.add({ targets: bug, scaleX: 0.3, yoyo: true, repeat: -1, duration: 160 });
+      }
+    }
+
+    // Now and then a wild Hexling wanders past on the far side of camp.
+    if (!calm()) {
+      const pool = SPECIES.filter((sp) => !LEGENDS.some((l) => l.id === sp.id));
+      const passBy = () => {
+        if (!this.alive) return;
+        const sp = pool[Math.floor(Math.random() * pool.length)];
+        const left = Math.random() < 0.5;
+        const y = groundY + r(14, 26);
+        const w = this.add.image(left ? -20 : x1 + 20, y, ensureCreatureTexture(this, sp.id, 0)).setOrigin(0.5, 0.92).setScale(1.1 * SPRITE_FIT).setFlipX(left).setAlpha(0.95).setDepth(d(y));
+        const hop = this.tweens.add({ targets: w, y: y - 3, yoyo: true, repeat: -1, duration: 170 });
+        this.tweens.add({
+          targets: w,
+          x: left ? x1 + 20 : -20,
+          duration: r(9000, 14000),
+          onComplete: () => {
+            hop.remove();
+            w.destroy();
+          },
+        });
+        this.time.delayedCall(r(5000, 11000), passBy);
+      };
+      this.time.delayedCall(1200, passBy);
+    }
+  }
 
   /** What's behind the fire: tents, banners, statues, the string lights. */
   private growthBack(grow: ReturnType<typeof growth>, groundY: number, x1: number, floorBottom: number) {
