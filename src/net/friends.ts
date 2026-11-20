@@ -149,7 +149,7 @@ export function startPresence(whatImDoing: () => string) {
   const beat = () => {
     const u = currentUser();
     if (!u || !profile || document.visibilityState !== 'visible') return;
-    void accountClient().from('profiles').update({ last_seen: new Date().toISOString(), activity: activity().slice(0, 40) }).eq('user_id', u.id);
+    void checkIn(u.id);
   };
   heartbeat = setInterval(beat, HEARTBEAT_MS);
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && beat());
@@ -160,7 +160,12 @@ export function startPresence(whatImDoing: () => string) {
 export function pingPresence() {
   const u = currentUser();
   if (!u || !profile) return;
-  void accountClient().from('profiles').update({ last_seen: new Date().toISOString(), activity: activity().slice(0, 40) }).eq('user_id', u.id);
+  void checkIn(u.id);
+}
+
+async function checkIn(uid: string) {
+  const { error } = await accountClient().from('profiles').update({ last_seen: new Date().toISOString(), activity: activity().slice(0, 40) }).eq('user_id', uid);
+  if (error) console.warn('Couldn’t check in as online', error.message);
 }
 
 // ---------------------------------------------------------------- invites

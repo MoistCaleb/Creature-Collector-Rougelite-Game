@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { myLook, myName, nameProblem } from '../data/trainerLook';
-import { editTrainerName } from '../ui/friendsUi';
+import { editTrainerName, startFriends } from '../ui/friendsUi';
 import { myTitle } from '../logic/titles';
 import { GAME_MODES, type GameMode } from '../net/duel';
 import {
@@ -11,6 +11,7 @@ import {
   listFriends,
   loadProfile,
   myProfile,
+  pingPresence,
   removeFriend,
   respond,
   sendInvite,
@@ -79,6 +80,9 @@ export class FriendsScene extends Phaser.Scene {
       const p = myProfile() ?? (await loadProfile());
       if (!this.alive) return;
       if (!p) return this.pickUsername();
+      // Make sure you show as online (and hear invites), even if you only just got your username.
+      void startFriends();
+      pingPresence();
       void shareLook(myLook(state.meta), myTitle(state.meta) ?? null).catch(() => {});
       this.friends = await listFriends();
       if (!this.alive) return;
