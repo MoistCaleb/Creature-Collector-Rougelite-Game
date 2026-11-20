@@ -11,7 +11,7 @@ export interface HeatLevel {
 export const HEAT_LEVELS: HeatLevel[] = [
   { name: 'Heat 0', desc: 'The standard game.' },
   { name: 'Heat 1', desc: 'Enemies are 1/1/2 levels higher on floors 1/2/3.' },
-  { name: 'Heat 2', desc: 'Survivors only recover 25% HP after a win (Iron Will: 43%).' },
+  { name: 'Heat 2', desc: 'Survivors only recover 25% HP after a win (Iron Will: 34%).' },
   { name: 'Heat 3', desc: 'Shop prices are 25% higher.' },
   { name: 'Heat 4', desc: 'Trainers are 1/2/3 more levels higher and always carry held items. Guardians bring a second rule (and are 2 levels lower for it).' },
   { name: 'Heat 5', desc: 'Guardians are 3 levels higher.' },

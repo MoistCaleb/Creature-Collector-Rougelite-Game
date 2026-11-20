@@ -95,7 +95,7 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
   bodyguard: { name: 'Bodyguard', desc: 'Bench steps in fully healed after a wipe.' },
   hunter: { name: 'Big Game Hunter', desc: 'Trainers always drop an Evolution Stone, sometimes 2.' },
   naturalist: { name: 'Naturalist', desc: 'Wild battles give 25% more XP.' },
-  ironwill: { name: 'Iron Will', desc: 'Survivors heal 70% after wins, not 40%.' },
+  ironwill: { name: 'Iron Will', desc: 'Survivors heal 55% after wins, not 40%.' },
   lucky: { name: 'Lucky Charm', desc: 'Coin-flip events succeed 75% of the time.' },
   apothecary: { name: 'Apothecary', desc: '2 starting potions, carry 8, they heal 75%.' },
   quartermaster: { name: 'Quartermaster', desc: 'Start each run with two random held items.' },
@@ -193,6 +193,8 @@ export interface Meta {
   lines?: Record<string, import('./dexInfo').LineRecord>;
   /** Hexlidex completion rewards already claimed. */
   dexClaimed?: string[];
+  /** Your fastest won run (active play time, ms). */
+  fastestWin?: number;
 }
 
 /** One finished run, for the Records screen. */
@@ -212,6 +214,8 @@ export interface RunRecord {
   team: { speciesId: string; stage: number; level: number; shiny?: boolean }[];
   mvp?: { speciesId: string; stage: number; name: string; dealt: number };
   endedBy?: string;
+  /** Active play time (ms). */
+  time?: number;
 }
 
 /** How many finished runs the Records screen keeps. */
@@ -240,6 +244,7 @@ export function recordRun(run: Run, won: boolean) {
       .map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, ...(c.shiny ? { shiny: true } : {}) })),
     mvp: mvp && mvp.dealt > 0 ? { speciesId: mvp.speciesId, stage: mvp.stage, name: mvp.name, dealt: mvp.dealt } : undefined,
     endedBy: won ? undefined : run.log.endedBy?.label,
+    ...(run.playMs ? { time: run.playMs } : {}),
   };
   noteRunRecord(meta, rec);
   meta.history = [rec, ...(meta.history ?? [])].slice(0, HISTORY_MAX);
@@ -438,6 +443,9 @@ export interface Run {
   rival?: Rival | null;
   /** The choice made at camp before setting out ('skip' if none was taken). */
   prep?: import('./camp').PrepId | 'skip';
+  /** Active play time so far (see logic/runClock), and when the run ended (its clock stops). */
+  playMs?: number;
+  endedAt?: number;
   /** Shops visited this run (the shopkeeper remembers you). */
   shopVisits?: number;
 }

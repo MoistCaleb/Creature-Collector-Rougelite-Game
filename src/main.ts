@@ -3,6 +3,8 @@ import { setupPwa } from './pwa';
 import { initStorage } from './storage';
 import { accountAtBoot } from './ui/accountUi';
 import { startFriends } from './ui/friendsUi';
+import { startRunClock } from './logic/runClock';
+import { state } from './state';
 
 setupPwa();
 
@@ -21,6 +23,11 @@ initStorage()
   .then(() => {
     note.remove();
     startGame();
+    // How long runs take: active play only.
+    startRunClock(
+      () => state.run ?? null,
+      () => (globalThis as unknown as { game?: { scene: { getScenes(active: boolean): { scene: { key: string } }[] } } }).game?.scene.getScenes(true)[0]?.scene.key ?? '',
+    );
     // Friends: show as online, and hear about invites.
     void startFriends();
   });

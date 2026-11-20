@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.33';
+export const APP_VERSION = '1.34';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.34',
+    title: 'Stadium battles',
+    items: [
+      'Online battles (duels, stage battle finals, battle royale and tournament matches, and watching them) now happen in a stadium packed with fans who roar for big hits, knockouts and the winning blow.',
+      'Run time: the end screen shows how long your run took (active play only: the clock stops when you leave the app). Your fastest win is in Records and has its own leaderboard.',
+      'Iron Will now heals survivors 55% after wins (was 70%).',
+    ],
+  },
   {
     version: '1.33',
     title: 'Fairer online races',

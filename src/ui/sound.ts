@@ -375,6 +375,20 @@ export const sfx = {
     tone(320 + i * 60, 0.12, { type: 'triangle', vol: 0.22, slide: 220 + i * 60 });
     noise(0.06, { freq: 2500, vol: 0.12, type: 'bandpass' });
   },
+  /** The crowd roars: 1 a big hit, 2 a knockout, 3 the winning blow. */
+  crowd(level: 1 | 2 | 3 = 1) {
+    const n = 3 + level * 3;
+    for (let i = 0; i < n; i++) {
+      // Many voices: overlapping bands of noise, swelling then fading.
+      noise(0.5 + level * 0.35 + Math.random() * 0.3, { vol: 0.05 + level * 0.02, freq: 500 + Math.random() * 900, type: 'bandpass', q: 0.8, delay: Math.random() * 0.25 * level });
+    }
+    // A few whoops on the bigger moments.
+    if (level >= 2)
+      for (let i = 0; i < level * 2; i++) {
+        const f = 500 + Math.random() * 300;
+        tone(f, 0.25, { type: 'triangle', vol: 0.04, slide: f * 1.6, delay: 0.1 + Math.random() * 0.5 });
+      }
+  },
   victory() {
     const seq = [0, 4, 7, 12, 7, 12, 16];
     seq.forEach((s, i) => tone(note(s, 523), i === seq.length - 1 ? 0.5 : 0.12, { type: 'square', vol: 0.16, delay: i * 0.11 }));
