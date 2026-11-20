@@ -917,15 +917,33 @@ export function placeRoamer(run: Run, force = false) {
   run.roamer = { id: left[h % left.length].id, node: spots[h % spots.length] };
 }
 
-/** The legendary moves to another battle hex ahead, or leaves the floor when there's none. */
+/** Hexes between two map nodes (rows of pointy-top hexes: side neighbours are 2 columns apart). */
+export function hexDistance(a: MapNode, b: MapNode): number {
+  const dy = Math.abs(a.y - b.y);
+  const dc = Math.abs(a.col - b.col);
+  return dy + Math.max(0, (dc - dy) / 2);
+}
+
+/** How far a roaming legendary can jump each time you move. */
+export const ROAM_JUMP = 2;
+
+/**
+ * The legendary hops 1 or 2 hexes to another battle hex ahead. If none is that close (you've
+ * caught up with it), it slips to the nearest one; it leaves the floor when there's none.
+ */
 export function moveRoamer(run: Run) {
   if (!run.roamer) return;
+  const from = run.map.nodes[run.roamer.node];
   const spots = roamSpots(run).filter((id) => id !== run.roamer!.node);
-  if (!spots.length) {
+  if (!spots.length || !from) {
     run.roamer = null;
     return;
   }
-  run.roamer.node = spots[hashString(`${run.seed}:roam:${run.floor}:${run.visited.length}`) % spots.length];
+  const dist = (id: string) => hexDistance(from, run.map.nodes[id]);
+  const near = spots.filter((id) => dist(id) <= ROAM_JUMP);
+  const closest = Math.min(...spots.map(dist));
+  const pool = near.length ? near : spots.filter((id) => dist(id) === closest);
+  run.roamer.node = pool[hashString(`${run.seed}:roam:${run.floor}:${run.visited.length}`) % pool.length];
 }
 
 /**

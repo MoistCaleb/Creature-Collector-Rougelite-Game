@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2580,7 +2580,7 @@ describe('Time of day and holidays', () => {
 import { setWorldClock } from '../src/logic/ambience';
 import { DEX_FORMS, DEX_SPECIES, LEGENDS, isLegend } from '../src/data/legends';
 import { arenaForms, arenaRoster, validArenaTeam } from '../src/logic/arena';
-import { legendBeaten, legendFled, legendsCaught, placeRoamer, moveRoamer } from '../src/logic/run';
+import { legendBeaten, legendFled, legendsCaught, placeRoamer, moveRoamer, hexDistance } from '../src/logic/run';
 import { vi } from 'vitest';
 // Tests shouldn't depend on the time of day they run at.
 setWorldClock(false);
@@ -2633,6 +2633,25 @@ describe('Roaming legendaries and night Hexlings', () => {
     const f1 = startRun(mkMeta(), 'emberkit', 3);
     placeRoamer(f1, true);
     expect(f1.roamer).toBeNull();
+  });
+  it('hops only 1 or 2 hexes at a time while it can', () => {
+    for (let s = 0; s < 20; s++) {
+      const run = floor2();
+      run.seed = 1000 + s;
+      placeRoamer(run, true);
+      while (run.roamer) {
+        const before = run.map.nodes[run.roamer.node];
+        const next = run.map.nodes[run.currentId].next[0];
+        if (!next || run.map.nodes[next].kind === 'boss') break;
+        const room = Object.values(run.map.nodes).some((n) => n.kind === 'battle' && n.id !== before.id && n.y < run.map.nodes[next].y - 1 && n.y > run.map.nodes[run.map.bossId].y + 1 && hexDistance(before, n) <= 2);
+        moveTo(run, next);
+        if (run.roamer && room && next !== before.id) {
+          const d = hexDistance(before, run.map.nodes[run.roamer.node]);
+          expect(d).toBeGreaterThanOrEqual(1);
+          expect(d).toBeLessThanOrEqual(2);
+        }
+      }
+    }
   });
   it('a meeting is the legendary alone; it keeps its damage, and once caught it roams no more', () => {
     const run = floor2();
