@@ -6,6 +6,8 @@ import { myTitle } from '../logic/titles';
 import { GAME_MODES } from '../net/duel';
 import { claimUsername, dismissInvite, friendsAvailable, listenForInvites, loadProfile, shareLook, startPresence, stopListening, type Invite } from '../net/friends';
 import { postMyScores } from '../net/leaderboard';
+import { royale, royaleQuit } from '../net/royale';
+import { leaveDuel } from '../net/runtime';
 import { session } from '../net/session';
 import { state } from '../state';
 import { card } from './accountUi';
@@ -65,10 +67,15 @@ function showInvite(inv: Invite) {
   sfx.coin();
   const mode = GAME_MODES[inv.mode]?.name ?? 'game';
   if (session.role) {
+    // Already in that very lobby: nothing to do.
+    if (session.role === 'guest' && session.code === inv.code) return void dismissInvite(inv.id);
     card({
       title: `${inv.username} invited you`,
-      body: `They want you in their ${mode}, but you’re already in an online game. Leave it first, then join with code ${inv.code}.`,
-      buttons: [{ label: 'OK', primary: true, onClick: (c) => (c.close(), void dismissInvite(inv.id)) }],
+      body: `They want you in their ${mode}, but you’re in another online game right now. Leave it and join theirs?`,
+      buttons: [
+        { label: 'Stay here', onClick: (c) => (c.close(), void dismissInvite(inv.id)) },
+        { label: 'Leave and join', primary: true, onClick: (c) => (c.close(), joinInvite(inv, true)) },
+      ],
     });
     return;
   }
@@ -80,18 +87,25 @@ function showInvite(inv: Invite) {
       {
         label: 'Join',
         primary: true,
-        onClick: (c) => {
-          c.close();
-          void dismissInvite(inv.id);
-          const g = (globalThis as unknown as { game?: Phaser.Game }).game;
-          if (!g) return;
-          // Leave whatever you're doing (a run is saved as you go) and go straight to their lobby.
-          for (const s of g.scene.getScenes(true)) s.scene.stop();
-          g.scene.start('Duel', { joinCode: inv.code });
-        },
+        onClick: (c) => (c.close(), joinInvite(inv, false)),
       },
     ],
   });
+}
+
+/** Go straight to the inviter's lobby (leaving any online game you're in first). */
+function joinInvite(inv: Invite, leaveFirst: boolean) {
+  void dismissInvite(inv.id);
+  const g = (globalThis as unknown as { game?: Phaser.Game }).game;
+  if (!g) return;
+  if (leaveFirst) {
+    if (royale.active) royaleQuit();
+    leaveDuel();
+    if (state.run?.race) state.run = null;
+  }
+  // Leave whatever you're doing (a run is saved as you go) and go straight to their lobby.
+  for (const s of g.scene.getScenes(true)) s.scene.stop();
+  g.scene.start('Duel', { joinCode: inv.code });
 }
 
 /**

@@ -1,3 +1,4 @@
+import { shieldInput } from './domShield';
 /**
  * A plain HTML text box over the game, for things a canvas can't do well: showing a long code
  * the player can select and copy, or a box they can paste into. Phaser input is blocked
@@ -30,6 +31,7 @@ export function openTextBox(opts: {
   const shade = document.createElement('div');
   shade.style.cssText =
     'position:fixed;inset:0;z-index:60;background:rgba(10,8,16,.82);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  shieldInput(shade);
   const card = document.createElement('div');
   card.style.cssText = `width:100%;max-width:440px;max-height:100%;overflow:auto;box-sizing:border-box;background:#241d33;border:2px solid #4a3f66;border-radius:12px;padding:16px;color:#f4efff;font:14px ${font}`;
   const h = document.createElement('div');

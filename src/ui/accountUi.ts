@@ -18,6 +18,7 @@ import {
 } from '../net/account';
 import { decodeSave, encodeSave, importSave, summarize, type SaveBundle } from '../logic/saveCode';
 import { openPicker, showMessage } from './picker';
+import { shieldInput } from './domShield';
 
 const FONT = 'system-ui,-apple-system,sans-serif';
 
@@ -39,6 +40,7 @@ interface Card {
 export function card(o: { title: string; body: string; field?: Field; buttons: { label: string; primary?: boolean; onClick: (c: Card) => void }[] }): Card {
   const shade = document.createElement('div');
   shade.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(10,8,16,.86);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  shieldInput(shade);
   const box = document.createElement('div');
   box.style.cssText = `width:100%;max-width:420px;max-height:100%;overflow:auto;box-sizing:border-box;background:#241d33;border:2px solid #4a3f66;border-radius:12px;padding:16px;color:#f4efff;font:15px ${FONT}`;
   const h = document.createElement('div');
