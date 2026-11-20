@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2767,5 +2767,109 @@ describe('Leaderboards', async () => {
   it('every board is one the server knows', async () => {
     const sql = (await import('../supabase/leaderboard.sql?raw')).default;
     for (const b of BOARDS) expect(sql).toContain(`"${b.id}":`);
+  });
+});
+
+describe('Camp', async () => {
+  const campMod = await import('../src/logic/camp');
+  const { startRun, applyPrep } = await import('../src/logic/run');
+  const { priceFor } = await import('../src/logic/shop');
+  const day = (d: number) => new Date(2026, 10, d, 12);
+
+  it('three challenges a day, measured from the start of the day, claimed once for embers', () => {
+    const m = blankMeta();
+    m.stats.battlesWon = 100;
+    const list = campMod.challenges(m, day(20));
+    expect(list.map((c) => c.tier)).toEqual([0, 1, 2]);
+    expect(list.every((c) => c.progress === 0)).toBe(true);
+    // Do everything today asks for.
+    for (const c of list) {
+      const key = { battles: 'battlesWon', caught: 'caught', evolutions: 'evolutions', elites: 'elites', treasures: 'treasures', statuses: 'statusInflicted', events: 'events', coins: 'coinsEarned', levelups: 'levelups' }[c.stat];
+      if (key) (m.stats as unknown as Record<string, number>)[key] += c.goal;
+      else if (c.stat === 'guardians') m.bossesDefeated += c.goal;
+      else if (c.stat === 'wins') m.wins += c.goal;
+    }
+    const after = campMod.challenges(m, day(20));
+    expect(after.every((c) => c.complete)).toBe(true);
+    expect(campMod.challengesFor(m.camp!.day)).toEqual(campMod.challengesFor(m.camp!.day));
+  });
+
+  it('claims pay out once, and a new day brings fresh challenges and care', () => {
+    const m = blankMeta();
+    campMod.camp(m, day(1));
+    m.camp!.day = campMod.localDay();
+    m.camp!.base = campMod.counters(m);
+    m.wins = 5;
+    m.stats.battlesWon = 50;
+    m.stats.caught = 30;
+    m.stats.coinsEarned = 1000;
+    m.stats.levelups = 50;
+    m.stats.events = 10;
+    m.stats.treasures = 10;
+    m.stats.elites = 10;
+    m.stats.evolutions = 10;
+    m.stats.statusInflicted = 10;
+    m.bossesDefeated = 10;
+    expect(campMod.claimChallenge(m, 0)).toBe(campMod.TIER_EMBERS[0]);
+    expect(campMod.claimChallenge(m, 0)).toBe(0);
+    expect(m.camp!.embers).toBe(campMod.TIER_EMBERS[0]);
+    expect(campMod.care(m, 'emberkit', 'pet')).toBe(0);
+    expect(campMod.care(m, 'emberkit', 'pet')).toBeNull();
+    campMod.camp(m, new Date(Date.now() + 86_400_000 * 2));
+    expect(m.camp!.claimed).toEqual([false, false, false]);
+    expect(m.camp!.cared).toEqual({});
+    expect(m.camp!.embers).toBe(campMod.TIER_EMBERS[0]);
+  });
+
+  it('embers buy decorations and fire colours', () => {
+    const m = blankMeta();
+    campMod.camp(m).embers = 25;
+    expect(campMod.buyCampItem(m, 'fire-blue')).toBeNull();
+    expect(campMod.fireColors(m)).toEqual(campMod.CAMP_ITEM['fire-blue'].flame);
+    expect(campMod.buyCampItem(m, 'fire-blue')).toBeTruthy();
+    expect(campMod.buyCampItem(m, 'crystal')).toMatch(/more embers/);
+  });
+
+  it('a full camp bond means that Hexling starts runs with a bond heart (not on dailies)', () => {
+    const m = blankMeta();
+    campMod.camp(m).bond.emberkit = campMod.CAMP_HEARTS[2];
+    expect(campMod.campHearts(m, 'emberkit')).toBe(3);
+    expect(startRun(m, 'emberkit', 7).team[0].bond).toBe(campMod.CAMP_START_BOND);
+    expect(startRun(m, 'emberkit', 7, 'wildlands', '2026-11-20').team[0].bond ?? 0).toBe(0);
+    expect(startRun(m, 'frostling', 7).team[0].bond ?? 0).toBe(0);
+  });
+
+  it('the choice at the fire: three offers from the seed, each doing what it says', () => {
+    expect(campMod.prepOffers(42)).toEqual(campMod.prepOffers(42));
+    expect(new Set(campMod.prepOffers(42)).size).toBe(3);
+    const m = blankMeta();
+    const purse = startRun(m, 'emberkit', 9);
+    applyPrep(purse, 'purse');
+    expect(purse.coins).toBe(60);
+    const pots = startRun(m, 'emberkit', 9);
+    applyPrep(pots, 'potions');
+    expect(pots.potions).toBe(2);
+    const held = startRun(m, 'emberkit', 9);
+    applyPrep(held, 'held');
+    expect(held.bag?.length).toBe(1);
+    const sale = startRun(m, 'emberkit', 9);
+    const full = priceFor(sale, 100);
+    applyPrep(sale, 'haggle');
+    expect(priceFor(sale, 100)).toBeLessThan(full);
+    sale.floor = 1;
+    expect(priceFor(sale, 100)).toBeGreaterThan(priceFor({ ...sale, floor: 0 }, 100));
+    expect(campMod.prepsAvailable(sale)).toBe(false);
+    expect(campMod.prepsAvailable(startRun(m, 'emberkit', 9))).toBe(true);
+    expect(campMod.prepsAvailable(startRun(m, 'emberkit', 9, 'wildlands', '2026-11-20'))).toBe(false);
+  });
+
+  it('camp grows with what you have done', () => {
+    const m = blankMeta();
+    expect(campMod.growth(m, 100)).toMatchObject({ tents: 0, shrine: false, fire: 0 });
+    m.runs = 30;
+    m.wins = 12;
+    m.shinyCaught = 1;
+    m.clearedMaps = ['wildlands'];
+    expect(campMod.growth(m, 100)).toMatchObject({ tents: 2, shrine: true, fire: 2, banners: ['wildlands'] });
   });
 });

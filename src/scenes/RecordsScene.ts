@@ -1,6 +1,7 @@
 import { DEX_FORMS, LEGENDS } from '../data/legends';
 import { legendsCaught } from '../logic/run';
 import Phaser from 'phaser';
+import { campHearts, closestBond } from '../logic/camp';
 import { gildedCount } from '../logic/gilded';
 import { earnedTitles, TITLES } from '../logic/titles';
 import { MAP_BY_ID } from '../data/maps';
@@ -73,6 +74,7 @@ export class RecordsScene extends Phaser.Scene {
     // Lifetime counts, two columns.
     heading(x0, 'Lifetime');
     const forms = DEX_FORMS;
+    const closest = closestBond(meta);
     const counts: [string, string][] = [
       ['Battles won', st.battlesWon.toLocaleString()],
       ['Hexlings caught', st.caught.toLocaleString()],
@@ -96,6 +98,8 @@ export class RecordsScene extends Phaser.Scene {
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
       ['Gilded species', `${gildedCount(meta)}/${SPECIES.length}`],
       ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
+      ['Closest camp bond', closest ? `${SPECIES_BY_ID[closest.speciesId].names[0]} ${'♥'.repeat(campHearts(meta, closest.speciesId))}` : '—'],
+      ['Camp challenges', String(meta.camp?.done ?? 0)],
       ['Dailies played', String(Object.values(meta.dailies ?? {}).filter((r) => r.attempts > 0).length)],
       ['Weeklies won', `${Object.values(meta.weeklies ?? {}).filter((r) => r.best?.won).length}/${Object.values(meta.weeklies ?? {}).filter((r) => r.attempts > 0).length}`],
     ];

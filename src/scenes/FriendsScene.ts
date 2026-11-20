@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { myBuddy } from '../logic/camp';
 import { myLook, myName, nameProblem } from '../data/trainerLook';
 import { editTrainerName, startFriends } from '../ui/friendsUi';
 import { myTitle } from '../logic/titles';
@@ -84,7 +85,7 @@ export class FriendsScene extends Phaser.Scene {
       // Make sure you show as online (and hear invites), even if you only just got your username.
       void startFriends();
       pingPresence();
-      void shareLook(myLook(state.meta), myTitle(state.meta) ?? null).catch(() => {});
+      void shareLook(myLook(state.meta), myTitle(state.meta) ?? null, myBuddy(state.meta)).catch(() => {});
       this.friends = await listFriends();
       if (!this.alive) return;
       this.draw();
