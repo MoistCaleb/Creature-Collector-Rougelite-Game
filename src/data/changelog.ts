@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.50';
+export const APP_VERSION = '1.51';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.51',
+    title: 'Know the matchup',
+    items: ['Tapping a Hexling in battle now shows its matchups: which elements it hits hard, which attacks it’s weak to (×4 marked), and which it resists or is immune to.'],
+  },
   {
     version: '1.50',
     title: 'Clear of the camera',
