@@ -1,3 +1,4 @@
+import { DEX_FORMS, DEX_SPECIES, dexStages, isLegend } from '../data/legends';
 import Phaser from 'phaser';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
@@ -113,12 +114,12 @@ export class DexScene extends Phaser.Scene {
       .on('pointerup', () => this.overlay((done) => openGildedMilestones(this, state.meta, done)));
     button(this, W - 56, 30, 92, 40, 'Back', () => this.scene.start(this.from), { fontSize: 16 });
     button(this, W - 156, 30, 96, 40, 'Chart', () => this.overlay((done) => openElementChart(this, [], done)), { fontSize: 15, glyph: 'sparkle', color: 0x2f4a6b });
-    const totalForms = SPECIES.length * 3;
+    const totalForms = DEX_FORMS;
     text(
       this,
       16,
       L.stats,
-      `Forms ${dex.forms.length}/${totalForms}  Caught ${dex.caught.length}/${SPECIES.length}  Moves ${dex.moves.length}/${allMoveIds().length}  Elements ${dex.elements.length}/${ELEMENTS.length}`,
+      `Forms ${dex.forms.length}/${totalForms}  Caught ${dex.caught.length}/${DEX_SPECIES.length}  Moves ${dex.moves.length}/${allMoveIds().length}  Elements ${dex.elements.length}/${ELEMENTS.length}`,
       13,
       COLORS.textDim,
     );
@@ -263,7 +264,7 @@ export class DexScene extends Phaser.Scene {
     const owned = state.meta.shinyOwned ?? [];
     const q = dexQuery.trim().toLowerCase().replace(/^#/, '');
     let y = 8;
-    SPECIES.forEach((sp, i) => {
+    DEX_SPECIES.forEach((sp, i) => {
       if (dexFilter === 'caught' && !dex.caught.includes(sp.id)) return;
       if (dexFilter === 'gilded' && !owned.includes(sp.id)) return;
       // Search: names of forms you've seen (unseen names stay secret), or the number.
@@ -331,7 +332,7 @@ export class DexScene extends Phaser.Scene {
     const fav = meta.favorite === sp.id;
     const canFav = meta.unlockedStarters.includes(sp.id);
     row.add(
-      button(this, W - 74, y + 20, 104, 28, fav ? 'Favorite' : canFav ? 'Set favorite' : 'Catch to favorite', () => {
+      button(this, W - 74, y + 20, 104, 28, fav ? 'Favorite' : canFav ? 'Set favorite' : isLegend(sp.id) ? 'Never a starter' : 'Catch to favorite', () => {
         toggleFavorite(meta, sp.id);
         for (const c of this.live.values()) c.destroy();
         this.live.clear();
@@ -339,8 +340,9 @@ export class DexScene extends Phaser.Scene {
       }, { fontSize: 12, glyph: 'star', color: fav ? 0x7a5a1c : 0x3a3450, enabled: canFav || fav }),
     );
     const shinySeen = (meta.shinySeen ?? []).includes(sp.id);
-    for (let s = 0; s < 3; s++) {
-      const sy = y + 38 + s * 136;
+    const stages = dexStages(sp.id);
+    stages.forEach((s, k) => {
+      const sy = y + 38 + k * 136;
       const seen = hasSeenForm(dex, sp.id, s);
       row.add(this.add.rectangle(24, sy, 112, 124, 0x15111f).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
       if (seen) {
@@ -356,7 +358,7 @@ export class DexScene extends Phaser.Scene {
           if (!owned) row.add(icon(this, 128, sy + 84, 'sparkle', 10));
         }
         row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
-        row.add(text(this, 150, sy + 34, STAGE_LABEL[s], 12, '#8e86ad'));
+        row.add(text(this, 150, sy + 34, isLegend(sp.id) ? 'Legendary' : STAGE_LABEL[s], 12, isLegend(sp.id) ? '#e0c8ff' : '#8e86ad'));
         if (caught) {
           // Stats at this form's level cap (no prestige stars): only once you've caught the line.
           const c = createCreature(sp.id, 1, s);
@@ -368,10 +370,10 @@ export class DexScene extends Phaser.Scene {
       } else {
         row.add(text(this, 80, sy + 62, '?', 40, '#4a4068', { fontStyle: 'bold' }).setOrigin(0.5));
         row.add(text(this, 150, sy + 6, '???', 20, '#4a4068', { fontStyle: 'bold' }));
-        row.add(text(this, 150, sy + 34, `${STAGE_LABEL[s]} · not yet seen`, 12, '#4a4068'));
+        row.add(text(this, 150, sy + 34, `${isLegend(sp.id) ? 'Legendary' : STAGE_LABEL[s]} · not yet seen`, 12, '#4a4068'));
       }
-      if (s < 2) row.add(icon(this, 80, sy + 130, 'arrowUp', 12).setAngle(180).setAlpha(0.5));
-    }
+      if (k < stages.length - 1) row.add(icon(this, 80, sy + 130, 'arrowUp', 12).setAngle(180).setAlpha(0.5));
+    });
     const sig = MOVES[sp.signature];
     const seenSig = dex.moves.includes(sig.id);
     row.add(
@@ -406,8 +408,9 @@ export class DexScene extends Phaser.Scene {
         const t = sp.types;
         (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 54, y + 14, el, true)));
       }
-      for (let s = 0; s < 3; s++) {
-        const cx = 70 + s * 130;
+      const stages = dexStages(sp.id);
+      stages.forEach((s, k) => {
+        const cx = 70 + k * 130;
         const cy = y + 54;
         if (hasSeenForm(dex, sp.id, s)) {
           // Seen but never caught: grayed out.
@@ -431,8 +434,9 @@ export class DexScene extends Phaser.Scene {
           if (!LANDSCAPE && sigT.width > W - 50) sigT.setScale((W - 50) / sigT.width);
           row.add(sigT);
         }
-        if (s < 2) row.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
-      }
+        if (k < stages.length - 1) row.add(text(this, cx + 65, cy, '›', 20, '#4a4068').setOrigin(0.5));
+      });
+      if (isLegend(sp.id)) row.add(text(this, 70 + 130 - 30, y + 46, 'LEGENDARY · roams floors 2-3', 11, '#e0c8ff', { fontStyle: 'bold' }));
     }
   }
 

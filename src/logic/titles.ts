@@ -1,5 +1,5 @@
+import { DEX_SPECIES } from '../data/legends';
 import { MAPS } from '../data/maps';
-import { SPECIES } from '../data/species';
 import type { Meta } from './run';
 
 /**
@@ -62,7 +62,7 @@ export const TITLES: TitleDef[] = [
   // Legendary
   { name: 'Inferno Walker', tier: 'legendary', desc: 'Win a run at Heat 8.', progress: (m) => [Math.min(topHeat(m), 8), 8] },
   { name: 'Living Legend', tier: 'legendary', desc: 'Win 10 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 10] },
-  { name: 'Hexlidex Master', tier: 'legendary', desc: `Catch all ${SPECIES.length} species.`, progress: (m) => [m.dex.caught.length, SPECIES.length] },
+  { name: 'Hexlidex Master', tier: 'legendary', desc: `Catch all ${DEX_SPECIES.length} species, legendaries included.`, progress: (m) => [m.dex.caught.length, DEX_SPECIES.length] },
   { name: 'Grand Duelist', tier: 'legendary', desc: 'Win 50 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 50] },
   { name: 'Royale Champion', tier: 'legendary', desc: 'Win a battle royale with 6 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 6 ? 1 : 0, 1] },
   { name: 'Gilded Legend', tier: 'legendary', desc: 'Own 60 Gilded species.', progress: (m) => [gilded(m), 60], gilded: true },

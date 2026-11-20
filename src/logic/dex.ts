@@ -1,4 +1,3 @@
-import { isLegend } from '../data/legends';
 import { MOVES } from '../data/moves';
 import { SPECIES_BY_ID } from '../data/species';
 import type { Element } from '../data/types';
@@ -46,8 +45,7 @@ export function seeMove(dex: Dex, id: string): boolean {
 
 /** A creature you own or face: its form, its elements and the moves it knows. */
 export function seeCreature(dex: Dex, c: Creature, includeMoves: boolean): boolean {
-  // Roaming legendaries aren't Hexlidex entries.
-  let changed = isLegend(c.speciesId) ? false : seeForm(dex, c.speciesId, c.stage);
+  let changed = seeForm(dex, c.speciesId, c.stage);
   for (const t of creatureTypes(c)) changed = seeElement(dex, t) || changed;
   if (includeMoves) for (const m of c.moves) changed = seeMove(dex, m.id) || changed;
   return changed;

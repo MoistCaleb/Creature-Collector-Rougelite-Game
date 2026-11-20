@@ -1,4 +1,4 @@
-import { LEGENDS } from '../data/legends';
+import { DEX_FORMS, LEGENDS } from '../data/legends';
 import { legendsCaught } from '../logic/run';
 import Phaser from 'phaser';
 import { gildedCount } from '../logic/gilded';
@@ -72,7 +72,7 @@ export class RecordsScene extends Phaser.Scene {
 
     // Lifetime counts, two columns.
     heading(x0, 'Lifetime');
-    const forms = SPECIES.length * 3;
+    const forms = DEX_FORMS;
     const counts: [string, string][] = [
       ['Battles won', st.battlesWon.toLocaleString()],
       ['Hexlings caught', st.caught.toLocaleString()],
