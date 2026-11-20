@@ -8,6 +8,7 @@ import { royale, royaleQuit, royaleSummary } from '../net/royale';
 import { myPid, session } from '../net/session';
 import { state } from '../state';
 import { showMessage } from './picker';
+import { playMusic } from './sound';
 import { button, text } from './widgets';
 
 /**
@@ -55,6 +56,7 @@ export interface WaitBox {
 /** Draw the panel in `box` and keep it up to date until the scene closes. */
 export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: WaitBox) {
   handIn(run, won);
+  playMusic('lurk');
   const depth = box.depth ?? 0;
   scene.add.rectangle(box.x, box.y, box.w, box.h, 0x14223a, 0.95).setOrigin(0).setStrokeStyle(2, 0x8fd0ff, 0.8).setDepth(depth).setInteractive();
   const status = text(scene, box.x + box.w / 2, box.y + 10, '', 13, '#8fd0ff', { align: 'center', wordWrap: { width: box.w - 24 } }).setOrigin(0.5, 0).setDepth(depth);
