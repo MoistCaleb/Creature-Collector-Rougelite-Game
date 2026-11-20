@@ -31,7 +31,7 @@ import { hashString } from '../logic/rng';
 import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
-import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
+import { applyItem, restocks, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
 import { announceGilded } from '../ui/gildedUi';
@@ -1335,7 +1335,8 @@ export class MapScene extends Phaser.Scene {
     const finish = (target?: Creature, moveIndex?: number, newMove?: string) => {
       pay(run, slot.price);
       sfx.coin();
-      slot.sold = true;
+      // Limit Breakers restock: buy as many as you can afford.
+      if (!restocks(slot.item)) slot.sold = true;
       const result = applyItem(run, slot, target, moveIndex, newMove);
       if (newMove) dex.move(newMove);
       if (slot.item === 'recruit') {
