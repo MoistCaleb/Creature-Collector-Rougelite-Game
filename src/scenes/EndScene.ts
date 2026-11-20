@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { takeNewMilestones } from '../logic/gilded';
 import { takeNewTitles } from '../logic/titles';
 import { unlocksOf } from '../logic/cosmetics';
+import { finishRunClock, formatDuration } from '../logic/runClock';
 import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
@@ -21,6 +22,8 @@ const historyRuns = new WeakSet<object>();
 
 /** End of a run: what happened, who carried the team, who made it and who didn't. */
 export class EndScene extends Phaser.Scene {
+  /** This win was your fastest yet. */
+  private newBest = false;
   constructor() {
     super('End');
   }
@@ -60,7 +63,10 @@ export class EndScene extends Phaser.Scene {
         state.meta.bestHunt = Math.max(state.meta.bestHunt ?? 0, hunt.depth);
         state.meta.bestHuntShinies = Math.max(state.meta.bestHuntShinies ?? 0, hunt.shinies);
         saveMeta(state.meta);
-      } else recordRun(run, data.won);
+      } else {
+        this.newBest = finishRunClock(state.meta, run, data.won);
+        recordRun(run, data.won);
+      }
     }
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>
       this.add.image(x, y, ensureCreatureTexture(this, speciesId, stage)).setScale(scale * SPRITE_FIT);
@@ -125,8 +131,15 @@ export class EndScene extends Phaser.Scene {
     const stats: [string, string][] = [
       ['Battles won', String(run.log.battlesWon)],
       hunt ? ['Hunt floor', String(hunt.depth)] : race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? 3 : run.floor)],
-      ['Caught', String(run.log.caught)],
-      ['Lost', String(run.log.lost)],
+      ...((hunt || race
+        ? [
+            ['Caught', String(run.log.caught)],
+            ['Lost', String(run.log.lost)],
+          ]
+        : [
+            ['Caught · lost', `${run.log.caught} · ${run.log.lost}`],
+            ['Run time', `${formatDuration(run.playMs ?? 0)}${this.newBest ? ' ★ best' : ''}`],
+          ]) as [string, string][]),
       ['Coins earned', String(run.log.coins ?? 0)],
       ['Damage dealt', totalDamage.toLocaleString()],
     ];

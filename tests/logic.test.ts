@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2947,5 +2947,30 @@ describe('Shared seeds (online races)', async () => {
     expect(r.passive).toBe(run.racePassives(7, starters)[starters[0]]);
     const differs = [8, 9, 10, 11, 12].some((s) => JSON.stringify(run.racePassives(s, starters)) !== JSON.stringify(run.racePassives(7, starters)));
     expect(differs).toBe(true);
+  });
+});
+
+describe('Run time', async () => {
+  const clock = await import('../src/logic/runClock');
+  const run = await import('../src/logic/run');
+  it('reads like a clock', () => {
+    expect(clock.formatDuration(42_000)).toBe('0:42');
+    expect(clock.formatDuration(23 * 60_000 + 41_000)).toBe('23:41');
+    expect(clock.formatDuration(3_909_000)).toBe('1:05:09');
+  });
+  it('a win sets your fastest only if it beats it; losses and online races never do', () => {
+    const m = blankMeta();
+    const r = run.startRun(m, 'emberkit', 1);
+    r.playMs = 20 * 60_000;
+    expect(clock.finishRunClock(m, r, true)).toBe(true);
+    expect(m.fastestWin).toBe(20 * 60_000);
+    expect(clock.finishRunClock(m, r, true)).toBe(false); // already stopped
+    const slow = run.startRun(m, 'emberkit', 2);
+    slow.playMs = 30 * 60_000;
+    expect(clock.finishRunClock(m, slow, true)).toBe(false);
+    const lost = run.startRun(m, 'emberkit', 3);
+    lost.playMs = 5 * 60_000;
+    expect(clock.finishRunClock(m, lost, false)).toBe(false);
+    expect(m.fastestWin).toBe(20 * 60_000);
   });
 });

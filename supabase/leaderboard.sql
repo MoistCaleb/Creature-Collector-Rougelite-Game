@@ -18,9 +18,14 @@ language sql immutable as $$
   select '{
     "wins": 100000, "streak": 100000, "heat": 20, "dex": 2000, "caught": 10000000,
     "battles": 10000000, "guardians": 1000000, "gilded": 1000000, "legends": 100,
-    "hunt": 100000, "tourney": 100000, "online": 1000000, "titles": 1000, "coins": 2000000000
+    "hunt": 100000, "tourney": 100000, "online": 1000000, "titles": 1000, "coins": 2000000000,
+    "fastest": 86400
   }'::jsonb;
 $$;
+
+-- Boards where lower is better (a time, in seconds).
+create or replace function public.leaderboard_low(stat text) returns boolean
+language sql immutable as $$ select stat in ('fastest') $$;
 
 -- Send your numbers: any that beat your best become your new best.
 create or replace function public.post_scores(s jsonb) returns void
@@ -39,7 +44,13 @@ begin
   for k in select jsonb_object_keys(caps) loop
     if jsonb_typeof(s -> k) = 'number' then
       v := least(greatest(floor((s ->> k)::numeric), 0), (caps ->> k)::numeric)::bigint;
-      if v > coalesce((cur ->> k)::bigint, 0) then
+      -- A time: lower is better (and under a minute isn't a real run).
+      if leaderboard_low(k) then
+        if v >= 60 and (cur ->> k is null or v < (cur ->> k)::bigint) then
+          cur := cur || jsonb_build_object(k, v);
+          at := at || jsonb_build_object(k, now());
+        end if;
+      elsif v > coalesce((cur ->> k)::bigint, 0) then
         cur := cur || jsonb_build_object(k, v);
         at := at || jsonb_build_object(k, now());
       end if;
@@ -56,7 +67,8 @@ language sql stable security definer set search_path = public as $$
   with board as (
     select p.user_id, p.username, p.look, p.title, (p.scores ->> stat)::bigint as value,
       row_number() over (
-        order by (p.scores ->> stat)::bigint desc, (p.scores_at ->> stat)::timestamptz asc nulls last, p.created_at
+        order by (case when leaderboard_low(stat) then 1 else -1 end) * (p.scores ->> stat)::bigint asc,
+          (p.scores_at ->> stat)::timestamptz asc nulls last, p.created_at
       ) as place
     from profiles p
     where leaderboard_caps() ? stat

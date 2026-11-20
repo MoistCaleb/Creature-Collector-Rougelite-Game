@@ -2,6 +2,7 @@ import { DEX_FORMS, LEGENDS } from '../data/legends';
 import { legendsCaught } from '../logic/run';
 import Phaser from 'phaser';
 import { campHearts, closestBond } from '../logic/camp';
+import { formatDuration } from '../logic/runClock';
 import { gildedCount } from '../logic/gilded';
 import { earnedTitles, TITLES } from '../logic/titles';
 import { MAP_BY_ID } from '../data/maps';
@@ -100,6 +101,8 @@ export class RecordsScene extends Phaser.Scene {
       ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
       ['Closest camp bond', closest ? `${SPECIES_BY_ID[closest.speciesId].names[0]} ${'♥'.repeat(campHearts(meta, closest.speciesId))}` : '—'],
       ['Camp challenges', String(meta.camp?.done ?? 0)],
+      ['Fastest win', meta.fastestWin ? formatDuration(meta.fastestWin) : '—'],
+      ['Hexlidex rewards', String(meta.dexClaimed?.length ?? 0)],
       ['Dailies played', String(Object.values(meta.dailies ?? {}).filter((r) => r.attempts > 0).length)],
       ['Weeklies won', `${Object.values(meta.weeklies ?? {}).filter((r) => r.best?.won).length}/${Object.values(meta.weeklies ?? {}).filter((r) => r.attempts > 0).length}`],
     ];

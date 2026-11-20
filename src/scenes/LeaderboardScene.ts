@@ -143,8 +143,13 @@ export class LeaderboardScene extends Phaser.Scene {
       y += 26;
     } else if (!meOnBoard) {
       const v = board.get(state.meta);
+      if (board.low && !v) {
+        this.list.add(text(this, W / 2, y, 'Win a run to set your time.', 12, COLORS.textDim).setOrigin(0.5, 0));
+        y += 26;
+      } else {
       this.list.add(text(this, W / 2, y, `You: ${showScore(board, Math.max(0, v))}${v > 0 ? '' : ' (get going to make the board!)'}`, 12, COLORS.textDim).setOrigin(0.5, 0));
       y += 26;
+      }
     }
 
     // Show or hide yourself.

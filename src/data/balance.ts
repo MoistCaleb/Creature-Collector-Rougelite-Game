@@ -12,7 +12,7 @@ export const BALANCE = {
   /** After each battle, bench creatures get back this share of each limited move's uses. */
   benchUseRestore: 0.25,
   /** Iron Will passive's post-battle recovery instead. */
-  ironWillHeal: 0.7,
+  ironWillHeal: 0.55,
   /** Fraction of max HP a caught creature joins with. */
   catchHp: 0.4,
   /** Enemy level = floorBase + progress x floorRamp (+ small random). */

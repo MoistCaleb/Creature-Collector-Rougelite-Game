@@ -13,6 +13,7 @@ import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
+import { arenaBackdrop, type Crowd } from '../ui/arena';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
@@ -247,6 +248,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(data: { kind: EncounterKind; match?: BattleMatch }) {
+    this.crowd = null;
     this.statsOpen = false;
     // Only this fight counts (kept with a run's saved battle, so a reload remembers them).
     this.foeSeen = new Set(state.run?.activeBattle?.seenMoves ?? []);
@@ -611,6 +613,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
+  /** Online battles: the stadium crowd. */
+  private crowd: Crowd | null = null;
+
   private trainers: Partial<Record<'player' | 'enemy', { img: Phaser.GameObjects.Image; rest: string; act: string; look: TrainerLook; timer?: Phaser.Time.TimerEvent; hopping?: boolean }>> = {};
 
   /** A trainer gives an order (a move or sending a creature out): raise the arm, then lower it. */
@@ -676,7 +681,9 @@ export class BattleScene extends Phaser.Scene {
     // Outside a run, the field is the opponent's lead creature's home ground.
     const el = creatureTypes(this.enemies[0])[0];
     m.stage ??= pickStage(el);
-    this.drawField(el, m.stage);
+    // Online battles (duels, stage finals, brackets, and watching them) are in the stadium.
+    if (m.duel) this.crowd = arenaBackdrop(this, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
+    else this.drawField(el, m.stage);
     this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
@@ -1422,6 +1429,7 @@ export class BattleScene extends Phaser.Scene {
             if (shinyHit) shinyImpact(this, at, s.depth + 3);
             sfx.hit(ev.mult);
             if (big) {
+              this.crowd?.cheer(1);
               // Hit-stop, flash and a heavy shake sell a super-effective blow.
               this.cameras.main.shake(260, 0.016);
               this.cameras.main.flash(120, 255, 255, 255, true);
@@ -1450,6 +1458,7 @@ export class BattleScene extends Phaser.Scene {
           const s = this.spriteOf(ev.side);
           const c = ev.side === 'player' ? this.battle.player[ev.index].c : this.battle.enemy[ev.index].c;
           sfx.faint();
+          this.crowd?.cheer(2);
           this.clearAura(ev.side);
           cry(c.speciesId, c.stage, true);
           s.setTintFill(0xffffff);
@@ -1614,12 +1623,17 @@ export class BattleScene extends Phaser.Scene {
     }
     this.hideWaiting();
     this.actions.setVisible(false);
-    if (won !== null) this.cheer(won ? 'player' : 'enemy');
+    if (won !== null) {
+      this.cheer(won ? 'player' : 'enemy');
+      this.crowd?.cheer(3);
+    }
     stopWatching();
     showMessage(this, winner ? `${winner} wins!` : 'Match over', winner ? `${winner} goes through in the bracket.` : 'The match has ended.', () => this.scene.start('Bracket', {}));
   }
 
   private endDuel(won: boolean) {
+    // The stadium goes wild for the winning blow.
+    this.crowd?.cheer(3);
     const opp = this.match!.opponent;
     // A battle royale bracket match: report it, then back to the bracket.
     if (royale.match) {
