@@ -156,6 +156,8 @@ export interface Meta {
   usage?: Record<string, number>;
   /** Deepest Shiny Hunting floor reached, and the most shinies caught in one hunt. */
   bestHunt?: number;
+  /** The Heat of that deepest hunt (the higher Heat wins a tie in depth). */
+  bestHuntHeat?: number;
   bestHuntShinies?: number;
   /**
    * Species you've caught (or claimed) shiny, in any form: every form of the line is unlocked shiny
@@ -1166,9 +1168,11 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     // About 1 wild Hexling in 200 is shiny (a hash, so the run's random rolls are untouched).
     // Shiny Hunting: far more often, and trainers' and guardians' Hexlings can be shiny too.
     const odds = run.hunt
-      ? kind === 'battle' ? HUNT_SHINY_IN.wild : HUNT_SHINY_IN.trainer
+      ? huntShinyIn(run.heat ?? 0)[kind === 'battle' ? 'wild' : 'trainer']
       : kind === 'battle' ? (run.twist === 'gilded' ? GILDED_WEEK_IN : SHINY_IN) : 0;
-    if (odds && hashString(`${run.seed}:shiny:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`) % odds === 0) c.shiny = true;
+    const roll = hashString(`${run.seed}:shiny:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`);
+    // (Hunt odds can be fractional with Heat: 1 in 10.5 and so on.)
+    if (odds && (run.hunt ? roll % 100000 < 100000 / odds : roll % odds === 0)) c.shiny = true;
     c.hp = stats(c).hp;
     enemies.push(c);
   }
@@ -1184,6 +1188,21 @@ export const SHINY_IN = 200;
 export const GILDED_WEEK_IN = 15;
 /** Shiny Hunting: one in this many wild Hexlings, and trainers' / guardians' Hexlings, is shiny. */
 export const HUNT_SHINY_IN = { wild: 12, trainer: 20 };
+
+/** Gilded odds on a Gilded Hunt: a little better each Heat, up to 1 in 9 wild (1 in 15 trainers) at Heat 8. */
+export function huntShinyIn(heat: number): { wild: number; trainer: number } {
+  const t = Math.max(0, Math.min(MAX_HEAT, heat)) / MAX_HEAT;
+  return { wild: HUNT_SHINY_IN.wild - 3 * t, trainer: HUNT_SHINY_IN.trainer - 5 * t };
+}
+
+/** Note how deep a hunt got: deeper is better, and at the same depth a higher Heat. */
+export function noteHunt(meta: Meta, depth: number, heat: number) {
+  const best = meta.bestHunt ?? 0;
+  if (depth > best || (depth === best && heat > (meta.bestHuntHeat ?? 0))) {
+    meta.bestHunt = depth;
+    meta.bestHuntHeat = heat;
+  }
+}
 /** Shiny Hunting enemies can carry one more star than yours can. */
 export const HUNT_MAX_STARS = 6;
 
@@ -1628,7 +1647,7 @@ export function clearFloor(run: Run): boolean {
   if (run.hunt) {
     // Shiny Hunting never ends in a win: deeper you go.
     run.hunt.depth += 1;
-    meta.bestHunt = Math.max(meta.bestHunt ?? 0, run.hunt.depth);
+    noteHunt(meta, run.hunt.depth, run.heat ?? 0);
     saveMeta(meta);
     for (const c of allCreatures(run)) restoreUses(c);
     nextHuntFloor(run);

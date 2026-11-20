@@ -17,6 +17,13 @@ export interface Board {
   low?: boolean;
 }
 
+/** A hunt score: "Floor 9 · Heat 6" (or just the floor, for a score from before Heat counted). */
+export function showHunt(v: number): string {
+  if (v < 100) return `Floor ${v}`;
+  const heat = v % 100;
+  return `Floor ${Math.floor(v / 100)}${heat ? ` · Heat ${heat}` : ''}`;
+}
+
 const topHeat = (m: Meta) => Math.max(0, ...Object.values(m.mapHeats ?? {}).flat());
 
 export const BOARDS: Board[] = [
@@ -29,7 +36,8 @@ export const BOARDS: Board[] = [
   { id: 'guardians', name: 'Guardians beaten', get: (m) => m.bossesDefeated },
   { id: 'gilded', name: 'Gilded caught', get: (m) => m.shinyCaught ?? 0 },
   { id: 'legends', name: 'Legendaries caught', get: legendsCaught },
-  { id: 'hunt', name: 'Deepest Gilded Hunt', get: (m) => m.bestHunt ?? 0, show: (v) => `Floor ${v}` },
+  // Floor × 100 + Heat, so a higher Heat breaks a tie in depth (older scores are just the floor).
+  { id: 'hunt', name: 'Deepest Gilded Hunt', get: (m) => (m.bestHunt ? m.bestHunt * 100 + (m.bestHuntHeat ?? 0) : 0), show: showHunt },
   { id: 'tourney', name: 'Tournaments won', get: (m) => m.tourneyWins ?? 0 },
   { id: 'online', name: 'Online wins', get: (m) => m.onlineWins ?? 0 },
   { id: 'titles', name: 'Titles earned', get: (m) => earnedTitles(m).length },

@@ -238,6 +238,27 @@ describe('shop', () => {
     clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
+  it('Gilded Hunt: better gilded odds with Heat, and Heat breaks a tie in depth', async () => {
+    const { huntShinyIn, noteHunt } = await import('../src/logic/run');
+    const { showHunt, myScores } = await import('../src/logic/leaderboard');
+    expect(huntShinyIn(0)).toEqual({ wild: 12, trainer: 20 });
+    expect(huntShinyIn(8)).toEqual({ wild: 9, trainer: 15 });
+    expect(huntShinyIn(4).wild).toBeCloseTo(10.5);
+    const m = mkMeta();
+    noteHunt(m, 9, 2);
+    noteHunt(m, 9, 6);
+    noteHunt(m, 9, 3);
+    expect([m.bestHunt, m.bestHuntHeat]).toEqual([9, 6]);
+    noteHunt(m, 10, 0);
+    expect([m.bestHunt, m.bestHuntHeat]).toEqual([10, 0]);
+    noteHunt(m, 9, 8);
+    expect([m.bestHunt, m.bestHuntHeat]).toEqual([10, 0]);
+    m.bestHuntHeat = 6;
+    expect(myScores(m).hunt).toBe(1006);
+    expect(showHunt(1006)).toBe('Floor 10 · Heat 6');
+    expect(showHunt(900)).toBe('Floor 9');
+    expect(showHunt(9)).toBe('Floor 9');
+  });
   it('stocks a Limit Breaker in every shop from Gilded Hunt floor 6, and nowhere else', () => {
     const run = startRun(mkMeta(), 'emberkit', 11);
     for (let r = 0; r < 30; r++) expect(rollShop(run, r).slots.some((s) => s.item === 'limit')).toBe(false);
@@ -1929,7 +1950,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.43';
+export const APP_VERSION = '1.44';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.44',
+    title: 'Hotter hunts',
+    items: [
+      'Gilded Hunts at higher Heat find Gilded Hexlings a little more often each level: from 1 wild Hexling in 12 at Heat 0 to 1 in 9 at Heat 8 (trainers: 1 in 20 to 1 in 15).',
+      'Your deepest Gilded Hunt now remembers its Heat (Records and the leaderboard show "Floor 9 · Heat 6"). At the same depth, the higher Heat ranks higher.',
+    ],
+  },
   {
     version: '1.43',
     title: 'Limit Breakers on reroll',
