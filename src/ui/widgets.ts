@@ -71,12 +71,8 @@ export function boardFor(key: string) {
   const ins = safeInsets();
   // Sideways, the home bar only needs a thin strip: let the layout reach the bottom edge.
   if (wide) ins.b = Math.min(ins.b, 6);
-  // A notch takes both sides alike (the phone reports it on both); an inset on one side only is an
-  // overlay (like a foldable's status bubble), and keeping clear of it shoved the whole layout off
-  // centre. Keep clear of the shared part only.
-  const side = Math.min(ins.l, ins.r);
-  ins.l = side;
-  ins.r = side;
+  // Keep clear of every inset the phone reports (camera cutouts, a foldable's status bubble): what
+  // sits under one can't be seen or tapped. The margin left over is filled by each screen's scenery.
   const safeW = Math.max(1, sw - ins.l - ins.r);
   const safeH = Math.max(1, sh - ins.t - ins.b);
   const s = Math.min(safeW / base.w, safeH / base.h);
