@@ -615,8 +615,38 @@ function floor(g: Phaser.GameObjects.Graphics, rng: Rng, t: Theme, w: number, h:
 
 /** The moving weather for an element, over the area (x, y, w, h). */
 function weather(scene: Phaser.Scene, el: Element, area: Phaser.Geom.Rectangle) {
+  return weatherFx(scene, THEMES[el].weather, area);
+}
+
+/**
+ * Battle weather called by a move, over the field: a tinted wash and its particles (heavier than a
+ * land's own weather). Returns what to destroy when it clears.
+ */
+export function fieldWeather(scene: Phaser.Scene, id: import('../data/moves').WeatherId, area: Phaser.Geom.Rectangle): Phaser.GameObjects.GameObject[] {
+  const look: Record<typeof id, [number, number, Weather, number]> = {
+    sun: [0xffa030, 0.2, 'glints', 2],
+    rain: [0x203a6a, 0.25, 'rain', 2],
+    dust: [0x8a6a3a, 0.3, 'dust', 3],
+    hail: [0xd8f0ff, 0.2, 'snow', 3],
+  };
+  const [color, alpha, kind, heavy] = look[id];
+  const wash = scene.add.rectangle(area.x, area.y, area.width, area.height, color, alpha).setOrigin(0).setAlpha(0);
+  scene.tweens.add({ targets: wash, alpha: 1, duration: 500 });
+  const out: Phaser.GameObjects.GameObject[] = [wash];
+  for (let i = 0; i < heavy; i++) {
+    const extra: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig =
+      id === 'hail'
+        ? { speedY: { min: 160, max: 240 }, speedX: { min: -40, max: -10 }, lifespan: 2600, frequency: 40 }
+        : id === 'dust'
+          ? { speedX: { min: 120, max: 220 }, frequency: 25 }
+          : {};
+    out.push(weatherFx(scene, kind, area, extra));
+  }
+  return out;
+}
+
+function weatherFx(scene: Phaser.Scene, kind: Weather, area: Phaser.Geom.Rectangle, extra: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig = {}) {
   const key = ensurePixel(scene);
-  const t = THEMES[el];
   const top = new Phaser.Geom.Rectangle(area.x - 40, area.y - 10, area.width + 80, 10);
   const all = area;
   const bottom = new Phaser.Geom.Rectangle(area.x, area.bottom - 20, area.width, 20);
@@ -636,7 +666,7 @@ function weather(scene: Phaser.Scene, el: Element, area: Phaser.Geom.Rectangle) 
     wisps: { ...base, emitZone: zone(all), speedY: { min: -18, max: -8 }, speedX: { min: -10, max: 10 }, lifespan: 5000, frequency: 340, tint: [0xa8f0ff, 0xf29ad8], alpha: { start: 0, end: 0.9 }, scale: { start: 1.6, end: 0.4 }, blendMode: 'ADD' },
     ash: { ...base, emitZone: zone(top), speedY: { min: 14, max: 28 }, speedX: { min: -20, max: -6 }, lifespan: 16000, frequency: 160, tint: [0x5a4a4a, 0x8a7a7a, 0xff8a4a], alpha: { min: 0.5, max: 0.9 }, scale: { min: 0.5, max: 1 } },
   };
-  const em = scene.add.particles(0, 0, key, cfg[t.weather]);
+  const em = scene.add.particles(0, 0, key, { ...cfg[kind], ...extra });
   // Particles only fall within the field (in landscape the side column covers the rest anyway).
   const mask = scene.make.graphics({}, false).fillRect(area.x, area.y, area.width, area.height);
   em.setMask(mask.createGeometryMask());

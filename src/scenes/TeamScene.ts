@@ -1,3 +1,4 @@
+import { bondHearts, natureShort, NATURES } from '../data/natures';
 import Phaser from 'phaser';
 import { accText, maxUses, moveSummary, moveColor } from '../data/moves';
 import { ELEMENT_COLORS, elementTextColor } from '../data/types';
@@ -156,7 +157,9 @@ export class TeamScene extends Phaser.Scene {
     const dy = wide ? 18 : 0;
     const fit = (t: Phaser.GameObjects.Text, room: number) => (t.width > room ? t.setScale(room / t.width, 1) : t);
     fit(text(this, lx, y0 + 31 + dy, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim), pw - 20);
-    fit(text(this, lx, y0 + 47 + dy, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}`, 13, COLORS.text), pw - 20);
+    const nat = c.nature ? `  ·  ${NATURES[c.nature].name} (${natureShort(c.nature)})` : '';
+    const hearts = bondHearts(c.bond);
+    fit(text(this, lx, y0 + 47 + dy, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}${nat}${hearts ? `  ·  ${'♥'.repeat(hearts)}` : ''}`, 13, COLORS.text), pw - 20);
     c.moves.forEach((m, i) => {
       const d = moveDef(m);
       const left = usesLeft(m);

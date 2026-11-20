@@ -20,7 +20,7 @@ const ROW = 50;
  * battle speed, first-time tips, How to play, the element chart, and erasing all progress.
  */
 export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}) {
-  const rows = 6;
+  const rows = 7;
   const bigs = 5;
   const p = openPanel(scene, 'Settings', {
     w: LANDSCAPE ? 760 : 430,
@@ -92,6 +92,9 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
 
     toggle('Reduce motion', 'Less screen shake, flashes and zooms', prefs.reduceMotion, () => {
       prefs.reduceMotion = !prefs.reduceMotion;
+    });
+    toggle('Day, night & holidays', 'The map follows your clock and calendar', prefs.worldClock, () => {
+      prefs.worldClock = !prefs.worldClock;
     });
 
     // Battle speed: three choices.

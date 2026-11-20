@@ -44,6 +44,9 @@ import { calm } from '../ui/motion';
 import { Scroller } from '../ui/scroll';
 import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
 import { mapBackdrop } from '../ui/backdrops';
+import { dot, mapLife, type MapLife } from '../ui/mapLife';
+import { cry } from '../ui/cries';
+import { bondHearts } from '../data/natures';
 
 /** How the Prestige Altar works, in one place for every prompt. */
 const ALTAR_RULES =
@@ -125,6 +128,7 @@ export class MapScene extends Phaser.Scene {
     this.wonByDefault = false;
     this.rival = null;
     this.rivals = new Map();
+    this.roamerSprite = null;
     this.hopping = false;
     this.underToken = [];
     if (run.activeBattle) {
@@ -153,10 +157,11 @@ export class MapScene extends Phaser.Scene {
     const nodes = Object.values(map.nodes);
     const minY = Math.min(...nodes.map((n) => n.y));
     const gridW = (cols - 1) * colStep;
-    const pos = (n: MapNode) => ({
-      x: area.x + area.w / 2 - gridW / 2 + n.col * colStep,
-      y: 50 + (n.y - minY) * rowStep,
+    const at = (col: number, y: number) => ({
+      x: area.x + area.w / 2 - gridW / 2 + col * colStep,
+      y: 50 + (y - minY) * rowStep,
     });
+    const pos = (n: MapNode) => at(n.col, n.y);
 
     const reachableIds = new Set<string>();
     if (run.bossPending) reachableIds.add(run.currentId);
@@ -215,12 +220,27 @@ export class MapScene extends Phaser.Scene {
       }
     }
 
+    // Wild Hexlings, birds, the time of day and holidays.
+    this.life = mapLife(this, {
+      layer: this.layer,
+      biome: map.biome,
+      stage: run.hunt ? 2 : map.floor,
+      nodes,
+      cols,
+      at,
+      hexW,
+      hexH,
+      area,
+      tapOk: () => !this.scroller?.moved,
+    });
+
     // Your token: your trainer standing on the hex you're on (see hopTo).
     this.posOf = (id: string) => {
       const q = pos(map.nodes[id]);
       return { x: q.x, y: q.y + hexH * 0.12 };
     };
     this.makeToken();
+    this.drawRoamer();
 
     // scrolling
     const mapH = 50 + (map.maxY - minY) * rowStep + hexH;
@@ -501,6 +521,7 @@ export class MapScene extends Phaser.Scene {
   /** Battle royale: every other racer still on the stage, by player id. */
   private rivals = new Map<string, Walker>();
   private hopping = false;
+  private life: MapLife | null = null;
   private underToken: Phaser.GameObjects.GameObject[] = [];
 
   /** Your trainer on the current hex (gold ring), with your lead Hexling a step behind. */
@@ -508,7 +529,114 @@ export class MapScene extends Phaser.Scene {
     const run = state.run!;
     const lead = run.team[0];
     this.me = this.makeWalker(run.currentId, myLook(run.meta), lead ? { speciesId: lead.speciesId, stage: lead.stage, shiny: lead.shiny } : null, run.followSide ?? -1, null);
+    this.leadMood();
   }
+
+  /**
+   * Your lead Hexling's mood on the map: happy after a win, worn out when hurt, uneasy with the
+   * guardian a step away. Tap it for a cry (and its bond hearts); now and then it looks around.
+   */
+  private leadMood() {
+    const run = state.run!;
+    const w = this.me;
+    const lead = run.team[0];
+    if (!w?.f || !w.fBody || !lead) return;
+    const body = w.fBody;
+    const f = w.f;
+    const say = (s: string, color = '#ffffff', delay = 0) =>
+      this.time.delayedCall(delay, () => {
+        if (!f.active) return;
+        const t = text(this, f.x, f.y - 40, s, 15, color, { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
+        this.layer.add(t);
+        this.tweens.add({ targets: t, y: t.y - 14, alpha: 0, delay: 500, duration: 900, onComplete: () => t.destroy() });
+      });
+    const jump = (delay = 0, times = 1) => this.tweens.add({ targets: body, y: -9, yoyo: true, repeat: times - 1, duration: 170, delay, ease: 'Quad.easeOut' });
+    const key = `${run.seed}:${lead.uid}`;
+    const wins = run.log.battlesWon;
+    const seen = MapScene.mood;
+    const frac = lead.hp / stats(lead).hp;
+    if (seen.key === key && wins > seen.wins) {
+      say(frac < 0.3 ? '♪…' : '♪', '#ffe14d', 500);
+      jump(500, 2);
+    } else if (frac < 0.3) say('…', '#a8c0e8', 600);
+    else if (!run.bossPending && stepsToBoss(run.map, run.currentId) === 1) say('!', '#ff8a7a', 600);
+    MapScene.mood = { key, wins };
+    body.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      if (this.scroller.moved || this.hopping) return;
+      cry(lead.speciesId, lead.stage);
+      const hearts = bondHearts(lead.bond);
+      say(hearts ? '♥'.repeat(hearts) : '♪', hearts ? '#ff8ab0' : '#ffffff');
+      jump();
+    });
+    // Now and then: a look around, or a happy hop if you're close.
+    this.time.addEvent({
+      delay: 9000,
+      loop: true,
+      callback: () => {
+        if (this.hopping || !f.active) return;
+        if (bondHearts(lead.bond) >= 2 && Math.random() < 0.4) {
+          jump();
+          say('♥', '#ff8ab0');
+        } else {
+          body.setFlipX(!body.flipX);
+          this.time.delayedCall(800, () => f.active && body.setFlipX(!body.flipX));
+        }
+      },
+    });
+  }
+
+  private roamerSprite: Phaser.GameObjects.Container | null = null;
+
+  /**
+   * A roaming legendary: its dark silhouette hovering over the battle hex it's on, glimmering. It
+   * glides to a new hex each time you move. The first time on a floor, a line says it's there.
+   */
+  private drawRoamer() {
+    const run = state.run!;
+    const r = run.roamer;
+    if (!r || !run.map.nodes[r.node]) {
+      if (this.roamerSprite) {
+        const s = this.roamerSprite;
+        this.roamerSprite = null;
+        this.tweens.add({ targets: s, alpha: 0, duration: 500, onComplete: () => s.destroy() });
+      }
+      return;
+    }
+    const p = this.posOf(r.node);
+    const at = { x: p.x, y: p.y - 6 };
+    if (this.roamerSprite?.active) {
+      this.tweens.add({ targets: this.roamerSprite, x: at.x, y: at.y, duration: 900, ease: 'Sine.easeInOut' });
+      return;
+    }
+    const c = this.add.container(at.x, at.y);
+    const glow = this.add.ellipse(0, 4, 64, 22, 0xb48aff, 0.25);
+    const body = this.add.image(0, 0, ensureGrayTexture(this, r.id, 2, true)).setOrigin(0.5, 0.85).setScale(1.9 * SPRITE_FIT).setTint(0x2a1a4a).setAlpha(0.9);
+    const mark = text(this, 0, -62, '?', 16, '#e0c8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5);
+    c.add([glow, body, mark]);
+    this.layer.add(c);
+    this.roamerSprite = c;
+    this.tweens.add({ targets: body, y: -5, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: glow, scaleX: 1.3, alpha: 0.08, yoyo: true, repeat: -1, duration: 900 });
+    const sparks = this.add.particles(0, -20, dot(this), {
+      emitZone: { type: 'random', source: new Phaser.Geom.Circle(0, 0, 26) as never },
+      lifespan: 1000,
+      frequency: 240,
+      tint: [0xe0c8ff, 0xffffff],
+      alpha: { start: 1, end: 0 },
+      scale: { start: 1.6, end: 0 },
+      blendMode: 'ADD',
+    });
+    c.add(sparks);
+    if (!r.announced) {
+      r.announced = true;
+      persist();
+      const t = text(this, mapArea().x + mapArea().w / 2, mapArea().top + 52, 'Something legendary is roaming this floor…', 14, '#e0c8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5).setDepth(6);
+      this.tweens.add({ targets: t, alpha: 0, delay: 3500, duration: 900, onComplete: () => t.destroy() });
+    }
+  }
+
+  /** The last wins count the lead Hexling reacted to (per run and Hexling). */
+  private static mood = { key: '', wins: 0 };
 
   /**
    * A trainer token with their lead Hexling following (drawn in front of the trainer). A rival
@@ -580,6 +708,7 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: this.underToken, alpha: 0.5, duration: 300 });
     this.hopWalker(w, id, () => {
       state.run!.followSide = w.side as -1 | 1;
+      this.life?.scare(w.c.x, w.c.y);
       this.time.delayedCall(90, () => {
         this.hopping = false;
         done();
@@ -803,6 +932,7 @@ export class MapScene extends Phaser.Scene {
   private arrive(n: MapNode) {
     const run = state.run!;
     moveTo(run, n.id);
+    this.drawRoamer();
     // The other player sees you hop there.
     this.shareProgress();
     if (['levelup', 'skill', 'prestige', 'treasure', 'event'].includes(n.kind)) {
