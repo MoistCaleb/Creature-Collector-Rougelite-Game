@@ -21,7 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Bond: each battle a Hexling wins with you brings you closer. At 3, 8 and 15 wins it earns a heart (♥), and each heart gives it a better chance to hang on at 1 HP from a knockout blow, once a battle.',
       'Your lead Hexling reacts on the map: a happy hop after a win, worn out when hurt, uneasy with the guardian a step away. Tap it for a cry and its hearts.',
       'Weather: four rare moves change the battle’s weather for 5 turns. Scorching Sky (sun: Fire +30%, Water −30%), Downpour (rain: Water +30%, Fire −30%), Dust Storm (Earth +30%, wears down all but Earth and Metal) and Hail Front (Frost +30%, wears down all but Frost). Only two lines learn each one, at Lv 28.',
-      'Roaming legendaries: Solmane, Tidecrown and Umbrawyrm wander floors 2 and 3 now and then. Their silhouette shows on a battle hex ahead and moves as you do. Meet one and it flees after 4 turns, but keeps the damage you did. Wear it down to catch it for that run. Not in daily, weekly or online runs.',
+      'Roaming legendaries: Solmane, Tidecrown and Umbrawyrm wander floors 2 and 3 now and then. Their silhouette shows on a battle hex ahead and moves as you do. Meet one and it flees after 4 turns, but keeps the damage you did. Wear it down to catch it: it joins that run, fills its Hexlidex entry (#121-123, counted toward the Hexlidex) and can be brought to Arena battles, tournaments and online Arena duels from then on. Legendaries are never starters. They don't roam daily, weekly or online runs.',
     ],
   },
   {

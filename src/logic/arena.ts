@@ -1,3 +1,4 @@
+import { DEX_SPECIES, isLegend } from '../data/legends';
 import { attackEl, attackId, elementPool, MOVES, teamMoveId } from '../data/moves';
 import { ELEMENTS } from '../data/types';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
@@ -31,14 +32,15 @@ export function ownsShiny(meta: Meta, speciesId: string): boolean {
   return (meta.shinyOwned ?? []).includes(speciesId);
 }
 
-/** Species you can bring: everything you've caught, plus your starters. */
+/** Species you can bring: everything you've caught (legendaries too), plus your starters. */
 export function arenaRoster(meta: Meta): string[] {
   const have = new Set([...meta.dex.caught, ...meta.unlockedStarters]);
-  return SPECIES.filter((s) => have.has(s.id)).map((s) => s.id);
+  return DEX_SPECIES.filter((s) => have.has(s.id)).map((s) => s.id);
 }
 
-/** Forms of a species you can bring: the base form, and any evolution you've seen. */
+/** Forms of a species you can bring: the base form, and any evolution you've seen (a legendary's one form). */
 export function arenaForms(meta: Meta, speciesId: string): number[] {
+  if (isLegend(speciesId)) return [2];
   return [0, 1, 2].filter((st) => st === 0 || hasSeenForm(meta.dex, speciesId, st));
 }
 

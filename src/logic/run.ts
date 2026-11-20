@@ -1278,6 +1278,7 @@ function addToParty(run: Run, c: Creature, release?: Creature) {
 /** Room for one more, either free or by releasing someone. */
 export const canMakeRoom = (run: Run, release?: Creature) => !rosterFull(run) || (!!release && allCreatures(run).includes(release));
 
+/** Every regular line caught (the catch bonus turns per element). Legendaries aren't needed for this. */
 export function dexComplete(run: Run): boolean {
   return SPECIES.every((s) => run.meta.dex.caught.includes(s.id));
 }
@@ -1407,11 +1408,12 @@ export function growBond(run: Run, fought: number[]): string[] {
  */
 export function registerJoin(run: Run, c: Creature): boolean {
   const meta = run.meta;
-  // A legendary: caught for good (it roams no more), but never a starter or a Hexlidex entry.
+  // A legendary: caught for good (it roams no more) and in the Hexlidex, but never a starter.
   if (isLegend(c.speciesId)) {
     (meta.legends ??= {})[c.speciesId] = { ...(meta.legends[c.speciesId] ?? { hp: 1 }), caught: true };
+    if (!meta.dex.caught.includes(c.speciesId)) meta.dex.caught.push(c.speciesId);
     if (run.roamer?.id === c.speciesId) run.roamer = null;
-    run.unlockedThisRun.push(`Legendary: ${SPECIES_BY_ID[c.speciesId].names[2]}`);
+    run.unlockedThisRun.push(`Legendary: ${SPECIES_BY_ID[c.speciesId].names[2]} (Hexlidex and Arena)`);
     saveMeta(meta);
     return false;
   }

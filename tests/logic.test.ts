@@ -2578,7 +2578,8 @@ describe('Time of day and holidays', () => {
 });
 
 import { setWorldClock } from '../src/logic/ambience';
-import { LEGENDS, isLegend } from '../src/data/legends';
+import { DEX_FORMS, DEX_SPECIES, LEGENDS, isLegend } from '../src/data/legends';
+import { arenaForms, arenaRoster, validArenaTeam } from '../src/logic/arena';
 import { legendBeaten, legendFled, legendsCaught, placeRoamer, moveRoamer } from '../src/logic/run';
 import { vi } from 'vitest';
 // Tests shouldn't depend on the time of day they run at.
@@ -2604,12 +2605,14 @@ describe('Roaming legendaries and night Hexlings', () => {
     run.visited = [run.map.startId];
     return run;
   };
-  it('stay out of every pool, the Hexlidex and the extra-move thresholds', () => {
+  it('stay out of every spawn pool and the extra-move thresholds, but have Hexlidex entries', () => {
     for (const l of LEGENDS) {
       expect(SPECIES.some((s) => s.id === l.id)).toBe(false);
       expect(SPECIES_BY_ID[l.id]).toBe(l);
       expect(isLegend(l.id)).toBe(true);
+      expect(DEX_SPECIES).toContain(l);
     }
+    expect(DEX_FORMS).toBe(SPECIES.length * 3 + LEGENDS.length);
   });
   it('roam battle hexes ahead, move as you do, and only in unseeded runs after floor 1', () => {
     const run = floor2();
@@ -2647,8 +2650,14 @@ describe('Roaming legendaries and night Hexlings', () => {
     legendBeaten(run, id);
     const caught = catchCreature(run, again[0]);
     expect(caught).toBeTruthy();
-    expect(run.meta.dex.caught).not.toContain(again[0].speciesId);
+    // In the Hexlidex and the Arena, never a starter.
+    expect(run.meta.dex.caught).toContain(again[0].speciesId);
     expect(run.meta.unlockedStarters).not.toContain(again[0].speciesId);
+    expect(arenaRoster(run.meta)).toContain(again[0].speciesId);
+    expect(arenaForms(run.meta, again[0].speciesId)).toEqual([2]);
+    const team = validArenaTeam(run.meta, [{ speciesId: again[0].speciesId, stage: 2, moves: [] }]);
+    expect(team).toHaveLength(1);
+    expect(mkArena(team[0]).speciesId).toBe(again[0].speciesId);
     expect(legendsCaught(run.meta)).toBe(1);
     for (let s = 0; s < 20; s++) {
       placeRoamer(run, true);

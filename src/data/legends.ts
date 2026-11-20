@@ -1,11 +1,11 @@
 import { fastId } from './moves';
-import { SPECIES_BY_ID, type Species } from './species';
+import { SPECIES, SPECIES_BY_ID, type Species } from './species';
 
 /**
  * Roaming legendaries: three one-of-a-kind Hexlings that wander the later floors of a run. They
- * aren't part of the Hexlidex count, can't be starters, and flee after a few turns, keeping the
- * damage you did for the next time you meet. Catch one and it joins that run; caught, it roams
- * no more.
+ * flee after a few turns, keeping the damage you did for the next time you meet. Catch one and it
+ * joins that run, gets its Hexlidex entry and can be brought to the Arena; caught, it roams no
+ * more. They are never starters, and they only have one form (their final one).
  */
 export const LEGENDS: Species[] = [
   { id: 'solmane', names: ['Solmane', 'Solmane', 'Solmane'], types: ['Light', 'Fire'], base: { hp: 92, atk: 90, def: 78, spd: 84 }, signature: fastId('Light') },
@@ -14,10 +14,17 @@ export const LEGENDS: Species[] = [
 ];
 
 // Known by id everywhere (sprites, stats, battles), but kept out of SPECIES and so out of every
-// pool, the Hexlidex, starters and the Arena.
+// spawn pool, starter choice and computer Arena team.
 for (const l of LEGENDS) SPECIES_BY_ID[l.id] = l;
 
 export const isLegend = (id: string): boolean => LEGENDS.some((l) => l.id === id);
+
+/** Every Hexlidex entry: the regular lines, then the legendaries. */
+export const DEX_SPECIES: Species[] = [...SPECIES, ...LEGENDS];
+/** Forms a species has: three, or a legendary's one. */
+export const dexStages = (id: string): number[] => (isLegend(id) ? [2] : [0, 1, 2]);
+/** Every form in the Hexlidex. */
+export const DEX_FORMS = DEX_SPECIES.reduce((t, s) => t + dexStages(s.id).length, 0);
 
 /** A legendary's attacks do this share of their usual damage. */
 export const LEGEND_DAMAGE = 0.6;
