@@ -53,6 +53,13 @@ installed game, so the game uses the 6-digit *code* instead.
 
 Once that's deployed, Settings shows **Account & saves**.
 
+## 6. Friends (usernames, friend list, online status, invites)
+
+1. **SQL Editor** › **New query**: paste everything from
+   [`supabase/friends.sql`](../supabase/friends.sql) and press **Run**.
+2. That's it. It also turns on live updates for invites (they arrive the moment they're sent);
+   if live updates are ever off, invites still arrive within about 20 seconds.
+
 ## Good to know
 
 - **Email limits:** Supabase's built-in email sender only sends a few emails an hour, which is

@@ -2,6 +2,7 @@ import { startGame } from './boot';
 import { setupPwa } from './pwa';
 import { initStorage } from './storage';
 import { accountAtBoot } from './ui/accountUi';
+import { startFriends } from './ui/friendsUi';
 
 setupPwa();
 
@@ -20,4 +21,6 @@ initStorage()
   .then(() => {
     note.remove();
     startGame();
+    // Friends: show as online, and hear about invites.
+    void startFriends();
   });

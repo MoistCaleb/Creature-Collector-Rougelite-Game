@@ -58,6 +58,8 @@ function sb(): SupabaseClient {
 }
 
 export const currentUser = (): AccountUser | null => user;
+/** The signed-in Supabase client, for the friends features. */
+export const accountClient = (): SupabaseClient => sb();
 
 function readJson<T>(key: string): T | null {
   try {
