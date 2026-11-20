@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.38';
+export const APP_VERSION = '1.39';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.39',
+    title: 'Invites that land',
+    items: [
+      'Fixed: tapping Join on a friend’s invite (or any button on a pop-up card) could also tap whatever was behind it in the game, sending you somewhere else instead of into their lobby.',
+      'An invite that arrives while you’re in another online lobby or game now has a Leave and join button, instead of telling you to leave first and type the code.',
+    ],
+  },
   {
     version: '1.38',
     title: 'The big stage',
