@@ -74,7 +74,7 @@ export class DuelScene extends Phaser.Scene {
     if (session.connected && hello !== DuelScene.lastHello) sendHello();
     DuelScene.lastHello = session.connected ? hello : '';
     background(this);
-    playMusic('lurk');
+    playMusic('showdown');
     const redraw = () => this.scene.isActive() && this.scene.restart({ typed: this.typed, pick: this.picking });
     duel.onChange = redraw;
     const off = session.onStatus(redraw);
