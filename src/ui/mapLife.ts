@@ -10,13 +10,13 @@ import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
 import { text } from './widgets';
 
 /**
- * The map's life: wild Hexlings of the land wandering the empty spaces between hexes (they run
- * off when your trainer lands close by, and squeak when tapped), birds and cloud shadows, glints
+ * The map's life: wild Hexlings of the land roaming the hexes, hopping from hex to hex along the
+ * paths (they scatter when your trainer lands close by, and squeak when tapped), birds and cloud shadows, glints
  * on rest and treasure hexes, the time of day, and holiday touches on holidays.
  */
 
 export interface MapLifeOpts {
-  /** The scrolling map layer: wild Hexlings go in it, under the hexes. */
+  /** The scrolling map layer: wild Hexlings go in it, standing on the hexes. */
   layer: Phaser.GameObjects.Container;
   biome: Element;
   /** Evolution stage the land's wild Hexlings show at. */
@@ -31,11 +31,13 @@ export interface MapLifeOpts {
   area: { x: number; w: number; top: number; bottom: number };
   /** May a tap count (false right after a drag). */
   tapOk: () => boolean;
+  /** Hexes wild Hexlings keep off: yours, the ones you can move to next, and the guardian's. */
+  blocked: (at?: string) => Set<string>;
 }
 
 export interface MapLife {
-  /** Your trainer landed here (layer coordinates): wild Hexlings close by run off. */
-  scare(x: number, y: number): void;
+  /** Your trainer landed on hex `id` at (x, y), layer coordinates: wild Hexlings close by scatter. */
+  scare(x: number, y: number, id: string): void;
   phase: DayPhase | null;
   holiday: Holiday | null;
 }
@@ -45,7 +47,10 @@ interface Wild {
   img: Phaser.GameObjects.Image;
   speciesId: string;
   stage: number;
-  home: { x: number; y: number };
+  /** The hex it's on. */
+  node: string;
+  /** Which corner of the hex it stands in (-1 left, 1 right). */
+  side: number;
   busy: boolean;
   gone: boolean;
   timer?: Phaser.Time.TimerEvent;
@@ -190,18 +195,13 @@ export function mapLife(scene: Phaser.Scene, o: MapLifeOpts): MapLife {
     o.layer.add(em);
   }
 
-  // ---- wild Hexlings in the gaps between hexes
-  const wilds = makeWilds(scene, o);
+  // ---- wild Hexlings roaming the hexes
+  const herd = new Herd(scene, o);
 
   return {
     phase,
     holiday,
-    scare(x, y) {
-      for (const w of wilds) {
-        if (w.gone || Phaser.Math.Distance.Between(w.c.x, w.c.y, x, y) > o.hexW * 1.35) continue;
-        flee(scene, w, x, y, o);
-      }
-    },
+    scare: (x, y, id) => herd.scare(x, y, id),
   };
 }
 
@@ -316,160 +316,187 @@ function holidayFx(
   scene.tweens.add({ targets: t, alpha: 0, delay: 3200, duration: 900, onComplete: () => t.destroy() });
 }
 
-/** Lattice cells with no hex: where wild Hexlings can stand. */
-function freeCells(o: MapLifeOpts): { x: number; y: number }[] {
-  if (!o.nodes.length) return [];
-  const taken = new Set(o.nodes.map((n) => `${n.col},${n.y}`));
-  const parity = (((o.nodes[0].col + o.nodes[0].y) % 2) + 2) % 2;
-  const ys = o.nodes.map((n) => n.y);
-  const lo = Math.min(...ys);
-  const hi = Math.max(...ys);
-  const out: { x: number; y: number }[] = [];
-  // Any column that lands inside the map's area (wide screens have room beside the grid).
-  const step = o.at(1, lo).x - o.at(0, lo).x;
-  const first = Math.floor((o.area.x - o.at(0, lo).x) / step);
-  const last = Math.ceil((o.area.x + o.area.w - o.at(0, lo).x) / step);
-  for (let y = lo; y <= hi; y++)
-    for (let col = first; col <= last; col++) {
-      if ((((col + y) % 2) + 2) % 2 !== parity || taken.has(`${col},${y}`)) continue;
-      const p = o.at(col, y);
-      if (p.x < o.area.x + 18 || p.x > o.area.x + o.area.w - 18) continue;
-      out.push(p);
-    }
-  return out;
-}
+/** The wild Hexlings on the map, hopping between connected hexes. */
+class Herd {
+  private wilds: Wild[] = [];
+  /** The hex your trainer just landed on (before the run records the move). */
+  private landing: string | null = null;
+  private links = new Map<string, string[]>();
+  private byId = new Map<string, MapNode>();
 
-function makeWilds(scene: Phaser.Scene, o: MapLifeOpts): Wild[] {
-  const cells = freeCells(o);
-  const pool = speciesWithElement(o.biome);
-  if (!cells.length || !pool.length) return [];
-  const count = Phaser.Math.Clamp(Math.round(cells.length / 5), 2, 9);
-  Phaser.Utils.Array.Shuffle(cells);
-  const homes: { x: number; y: number }[] = [];
-  for (const c of cells) {
-    if (homes.length >= count) break;
-    if (homes.some((h) => Phaser.Math.Distance.Between(h.x, h.y, c.x, c.y) < o.hexH * 1.6)) continue;
-    homes.push(c);
+  constructor(
+    private scene: Phaser.Scene,
+    private o: MapLifeOpts,
+  ) {
+    // Paths both ways: up the map and back down.
+    for (const n of o.nodes) {
+      this.byId.set(n.id, n);
+      for (const m of n.next) {
+        this.links.set(n.id, [...(this.links.get(n.id) ?? []), m]);
+        this.links.set(m, [...(this.links.get(m) ?? []), n.id]);
+      }
+    }
+    const pool = speciesWithElement(o.biome);
+    if (!pool.length) return;
+    const free = Phaser.Utils.Array.Shuffle(this.freeNodes());
+    const count = Phaser.Math.Clamp(Math.round(o.nodes.length / 5), 3, 11);
+    for (const id of free) {
+      if (this.wilds.length >= count) break;
+      // Spread out: not right next to another one.
+      if (this.wilds.some((w) => w.node === id || (this.links.get(id) ?? []).includes(w.node))) continue;
+      this.add(id, Phaser.Utils.Array.GetRandom(pool).id);
+    }
   }
-  const wilds: Wild[] = homes.map((home) => {
-    const sp = Phaser.Utils.Array.GetRandom(pool);
+
+  /** Hexes a wild Hexling may stand on now. */
+  private freeNodes(except?: Wild): string[] {
+    const blocked = this.o.blocked(this.landing ?? undefined);
+    return this.o.nodes.filter((n) => n.kind !== 'start' && !blocked.has(n.id) && !this.wilds.some((w) => w !== except && !w.gone && w.node === n.id)).map((n) => n.id);
+  }
+
+  /** Where it stands on a hex: in a lower corner, clear of the icon. */
+  private spot(id: string, side: number) {
+    const n = this.byId.get(id)!;
+    const p = this.o.at(n.col, n.y);
+    return { x: p.x + side * this.o.hexW * 0.22, y: p.y + this.o.hexH * 0.24 };
+  }
+
+  private add(node: string, speciesId: string) {
+    const { scene, o } = this;
     // Mostly the land's young ones, now and then a grown one.
     const stage = Math.min(2, Math.max(0, o.stage - (Math.random() < 0.6 ? 1 : 0)));
-    const c = scene.add.container(home.x, home.y + o.hexH * 0.1);
-    const shadow = scene.add.ellipse(0, 0, 22, 7, 0x000000, 0.35);
-    const img = scene.add.image(0, 0, ensureCreatureTexture(scene, sp.id, stage)).setOrigin(0.5, 0.92).setScale(1.4 * SPRITE_FIT).setFlipX(Math.random() < 0.5);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const at = this.spot(node, side);
+    const c = scene.add.container(at.x, at.y);
+    const shadow = scene.add.ellipse(0, 0, 24, 7, 0x000000, 0.45);
+    const img = scene.add.image(0, 0, ensureCreatureTexture(scene, speciesId, stage)).setOrigin(0.5, 0.92).setScale(1.45 * SPRITE_FIT).setFlipX(side > 0);
     c.add([shadow, img]);
     c.setAlpha(0);
-    // Under the hexes, over the paths.
-    o.layer.addAt(c, 1);
+    o.layer.add(c);
     scene.tweens.add({ targets: c, alpha: 1, duration: 600, delay: Phaser.Math.Between(0, 900) });
-    const w: Wild = { c, img, speciesId: sp.id, stage, home, busy: false, gone: false };
+    const w: Wild = { c, img, speciesId, stage, node, side, busy: false, gone: false };
     img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-      if (!o.tapOk() || w.gone) return;
+      if (!o.tapOk() || w.gone || w.busy) return;
       cry(w.speciesId, w.stage);
-      bubble(scene, w, Math.random() < 0.5 ? '♪' : '!');
-      hop(scene, w);
+      this.bubble(w, Math.random() < 0.5 ? '♪' : '!');
+      this.bounce(w);
     });
-    schedule(scene, w, o);
-    return w;
-  });
-  return wilds;
-}
-
-function schedule(scene: Phaser.Scene, w: Wild, o: MapLifeOpts) {
-  w.timer?.remove();
-  w.timer = scene.time.delayedCall(Phaser.Math.Between(1400, 4200), () => act(scene, w, o));
-}
-
-function act(scene: Phaser.Scene, w: Wild, o: MapLifeOpts) {
-  if (w.gone || !w.c.active) return;
-  if (w.busy) return schedule(scene, w, o);
-  const r = Math.random();
-  if (r < 0.5) {
-    // Wander a little way from home.
-    const tx = w.home.x + Phaser.Math.Between(-1, 1) * o.hexW * 0.22;
-    const ty = w.home.y + o.hexH * 0.1 + Phaser.Math.Between(-1, 1) * o.hexH * 0.12;
-    walk(scene, w, tx, ty, 24, () => schedule(scene, w, o));
-    return;
+    this.wilds.push(w);
+    this.schedule(w);
   }
-  if (r < 0.7) {
-    // Look around.
-    w.img.setFlipX(!w.img.flipX);
-    scene.time.delayedCall(700, () => w.c.active && w.img.setFlipX(!w.img.flipX));
-  } else if (r < 0.85) {
-    // A nap.
+
+  private schedule(w: Wild) {
+    w.timer?.remove();
+    w.timer = this.scene.time.delayedCall(Phaser.Math.Between(1600, 4600), () => this.act(w));
+  }
+
+  private act(w: Wild) {
+    if (w.gone || !w.c.active) return;
+    if (w.busy) return this.schedule(w);
+    const r = Math.random();
+    if (r < 0.5) {
+      // Hop along a path to a neighboring hex (if one is free).
+      const free = new Set(this.freeNodes(w));
+      const next = (this.links.get(w.node) ?? []).filter((id) => free.has(id));
+      if (next.length) return this.hopTo(w, Phaser.Utils.Array.GetRandom(next), false, () => this.schedule(w));
+    } else if (r < 0.7) {
+      // Look around.
+      w.img.setFlipX(!w.img.flipX);
+      this.scene.time.delayedCall(700, () => w.c.active && w.img.setFlipX(!w.img.flipX));
+    } else if (r < 0.85) {
+      // A nap.
+      w.busy = true;
+      this.scene.tweens.add({ targets: w.img, scaleY: w.img.scaleY * 0.9, yoyo: true, repeat: 3, duration: 900 });
+      for (let i = 0; i < 4; i++) this.scene.time.delayedCall(i * 900, () => w.c.active && !w.gone && this.bubble(w, 'z', true));
+      this.scene.time.delayedCall(3800, () => (w.busy = false));
+    } else this.bounce(w);
+    this.schedule(w);
+  }
+
+  /** A hop in an arc to another hex, landing in a corner of it. */
+  private hopTo(w: Wild, id: string, fast: boolean, done: () => void) {
+    const from = { x: w.c.x, y: w.c.y };
+    w.side = Math.random() < 0.5 ? -1 : 1;
+    const to = this.spot(id, w.side);
+    w.node = id;
     w.busy = true;
-    scene.tweens.add({ targets: w.img, scaleY: w.img.scaleY * 0.9, yoyo: true, repeat: 3, duration: 900 });
-    for (let i = 0; i < 4; i++) scene.time.delayedCall(i * 900, () => w.c.active && !w.gone && bubble(scene, w, 'z', true));
-    scene.time.delayedCall(3800, () => (w.busy = false));
-  } else hop(scene, w);
-  schedule(scene, w, o);
-}
+    w.img.setFlipX(to.x > from.x);
+    const arc = { t: 0 };
+    const lift = calm() ? 6 : fast ? 16 : 22;
+    this.scene.tweens.add({
+      targets: arc,
+      t: 1,
+      duration: fast ? 260 : 460,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        w.c.setPosition(from.x + (to.x - from.x) * arc.t, from.y + (to.y - from.y) * arc.t);
+        w.img.setY(-Math.sin(arc.t * Math.PI) * lift);
+      },
+      onComplete: () => {
+        w.img.setY(0);
+        w.busy = false;
+        done();
+      },
+    });
+  }
 
-function walk(scene: Phaser.Scene, w: Wild, x: number, y: number, speed: number, done: () => void) {
-  const d = Phaser.Math.Distance.Between(w.c.x, w.c.y, x, y);
-  if (d < 2) return done();
-  w.img.setFlipX(x < w.c.x);
-  const duration = (d / speed) * 1000;
-  const bounce = scene.tweens.add({ targets: w.img, y: -3, yoyo: true, repeat: -1, duration: 140 });
-  scene.tweens.add({
-    targets: w.c,
-    x,
-    y,
-    duration,
-    ease: 'Sine.easeInOut',
-    onComplete: () => {
-      bounce.remove();
+  private bounce(w: Wild) {
+    this.scene.tweens.add({ targets: w.img, y: -10, yoyo: true, duration: 180, ease: 'Quad.easeOut' });
+  }
+
+  private bubble(w: Wild, s: string, drift = false) {
+    const b = text(this.scene, w.c.x + (drift ? 8 : 0), w.c.y - 30, s, drift ? 11 : 15, drift ? '#d8e0ff' : '#ffffff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
+    this.o.layer.add(b);
+    this.scene.tweens.add({ targets: b, y: b.y - (drift ? 18 : 10), x: b.x + (drift ? 8 : 0), alpha: 0, duration: drift ? 1300 : 900, onComplete: () => b.destroy() });
+  }
+
+  /** Your trainer landed at (x, y): anyone on your hexes or close by scatters, a hex or two away. */
+  scare(x: number, y: number, id: string) {
+    this.landing = id;
+    const blocked = this.o.blocked(id);
+    for (const w of this.wilds) {
+      if (w.gone) continue;
+      if (!blocked.has(w.node) && Phaser.Math.Distance.Between(w.c.x, w.c.y, x, y) > this.o.hexW * 1.3) continue;
+      w.timer?.remove();
+      this.scene.tweens.killTweensOf(w.img);
       w.img.setY(0);
-      done();
-    },
-  });
-}
+      w.busy = false;
+      this.bubble(w, '!');
+      this.run(w, x, y, 2);
+    }
+  }
 
-function hop(scene: Phaser.Scene, w: Wild) {
-  scene.tweens.add({ targets: w.img, y: -10, yoyo: true, duration: 180, ease: 'Quad.easeOut' });
-}
-
-function bubble(scene: Phaser.Scene, w: Wild, s: string, drift = false) {
-  const b = text(scene, w.c.x + (drift ? 8 : 0), w.c.y - 34, s, drift ? 11 : 15, drift ? '#d8e0ff' : '#ffffff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
-  w.c.parentContainer?.add(b);
-  scene.tweens.add({ targets: b, y: b.y - (drift ? 18 : 10), x: b.x + (drift ? 8 : 0), alpha: 0, duration: drift ? 1300 : 900, onComplete: () => b.destroy() });
-}
-
-/** Startled: a jump, then a dash away, fading; it comes back somewhere else a while later. */
-function flee(scene: Phaser.Scene, w: Wild, fx: number, fy: number, o: MapLifeOpts) {
-  w.gone = true;
-  w.timer?.remove();
-  scene.tweens.killTweensOf(w.c);
-  scene.tweens.killTweensOf(w.img);
-  w.img.setY(0);
-  bubble(scene, w, '!');
-  const a = Math.atan2(w.c.y - fy, w.c.x - fx) || Math.random() * Math.PI * 2;
-  scene.tweens.add({
-    targets: w.img,
-    y: -12,
-    yoyo: true,
-    duration: 160,
-    onComplete: () => {
-      w.img.setFlipX(Math.cos(a) < 0);
-      walk(scene, w, w.c.x + Math.cos(a) * o.hexW * 1.6, w.c.y + Math.sin(a) * o.hexH * 1.2, 150, () => {});
-      scene.tweens.add({
-        targets: w.c,
-        alpha: 0,
-        duration: 650,
-        onComplete: () =>
-          scene.time.delayedCall(Phaser.Math.Between(5000, 9000), () => {
-            if (!w.c.active) return;
-            // Back at a quiet spot away from where it was scared.
-            const cells = freeCells(o).filter((c) => Phaser.Math.Distance.Between(c.x, c.y, fx, fy) > o.hexW * 2);
-            const home = cells.length ? Phaser.Utils.Array.GetRandom(cells) : w.home;
-            w.home = home;
-            w.c.setPosition(home.x, home.y + o.hexH * 0.1);
-            w.gone = false;
-            scene.tweens.add({ targets: w.c, alpha: 1, duration: 700 });
-            schedule(scene, w, o);
-          }),
-      });
-    },
-  });
+  /** Hop away from (x, y), `steps` hexes; with nowhere to go, slip away and come back elsewhere. */
+  private run(w: Wild, x: number, y: number, steps: number) {
+    const free = new Set(this.freeNodes(w));
+    const away = (id: string) => {
+      const n = this.byId.get(id)!;
+      const p = this.o.at(n.col, n.y);
+      return Phaser.Math.Distance.Between(p.x, p.y, x, y);
+    };
+    const here = away(w.node);
+    const options = (this.links.get(w.node) ?? []).filter((id) => free.has(id) && away(id) >= here).sort((a, b) => away(b) - away(a));
+    if (steps > 0 && options.length) return this.hopTo(w, options[0], true, () => this.run(w, x, y, steps - 1));
+    if (!this.o.blocked(this.landing ?? undefined).has(w.node) && Phaser.Math.Distance.Between(w.c.x, w.c.y, x, y) > this.o.hexW * 1.1) return this.schedule(w);
+    // Cornered: it dashes off the map and turns up again later on a quiet hex.
+    w.gone = true;
+    this.scene.tweens.add({
+      targets: w.c,
+      alpha: 0,
+      y: w.c.y - 12,
+      duration: 500,
+      onComplete: () =>
+        this.scene.time.delayedCall(Phaser.Math.Between(5000, 9000), () => {
+          if (!w.c.active) return;
+          const spots = this.freeNodes(w).filter((id) => away(id) > this.o.hexW * 2);
+          if (!spots.length) return;
+          w.node = Phaser.Utils.Array.GetRandom(spots);
+          const p = this.spot(w.node, w.side);
+          w.c.setPosition(p.x, p.y);
+          w.gone = false;
+          this.scene.tweens.add({ targets: w.c, alpha: 1, duration: 700 });
+          this.schedule(w);
+        }),
+    });
+  }
 }
