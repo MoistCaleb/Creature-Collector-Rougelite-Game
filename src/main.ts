@@ -1,6 +1,7 @@
 import { startGame } from './boot';
 import { setupPwa } from './pwa';
 import { initStorage } from './storage';
+import { accountAtBoot } from './ui/accountUi';
 
 setupPwa();
 
@@ -12,6 +13,9 @@ note.style.cssText = 'color:#8e86ad;font:16px sans-serif;text-align:center;paddi
 el?.appendChild(note);
 
 initStorage()
+  .catch(() => {})
+  // Signed in: sync with the account before the game reads the save.
+  .then(() => accountAtBoot())
   .catch(() => {})
   .then(() => {
     note.remove();

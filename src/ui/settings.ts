@@ -1,3 +1,5 @@
+import { accountsAvailable, currentUser } from '../net/account';
+import { openAccount } from './accountUi';
 import type Phaser from 'phaser';
 import { resetProgress } from '../logic/run';
 import { flushCloud } from '../storage';
@@ -120,7 +122,10 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
     };
     big('How to play', 'The basics, in a few pages', () => openHowToPlay(scene), 0x2f4a6b, 'book');
     big('Element chart', 'What beats what', () => openElementChart(scene), 0x2f4a6b);
-    big('Save transfer', 'Move your progress to another device', () => openSaveTransfer(scene), 0x2f5a4a, 'phone');
+    if (accountsAvailable()) {
+      const u = currentUser();
+      big('Account & saves', u ? `Signed in · ${u.email}` : 'Sign in to keep your progress on every device', () => openAccount(scene, { copy: () => void showCode(), load: () => pasteCode(scene) }), 0x2f5a4a, 'phone');
+    } else big('Save transfer', 'Move your progress to another device', () => openSaveTransfer(scene), 0x2f5a4a, 'phone');
     big('Credits & version', `v${APP_VERSION} · what’s new`, () => openCredits(scene), 0x3a3352, 'star');
     big('Erase all progress', 'Start over from scratch', () => confirmErase(scene), 0x5a2a2a, 'skull');
   };
@@ -226,7 +231,7 @@ function pasteCode(scene: Phaser.Scene) {
             const when = s.at ? new Date(s.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'an unknown date';
             openPicker(scene, {
               title: 'Replace your progress?',
-              subtitle: `The code is from ${when}:\n${s.runs} runs · ${s.wins} wins · ${s.caught} species caught · ${s.gilded} Gilded${s.runInProgress ? '\nIt has a run in progress.' : ''}\n\nEverything on this device is replaced. Copy your own code first if you want to keep it.`,
+              subtitle: `The code is from ${when}:\n${s.runs} runs · ${s.wins} wins · ${s.caught} species caught · ${s.gilded} Gilded${s.runInProgress ? '\nIt has a run in progress.' : ''}\n\nEverything on this device${currentUser() ? ' and in your account' : ''} is replaced. Copy your own code first if you want to keep it.`,
               options: [{ label: 'Load this save', color: 0x8a2c2c, glyph: 'arrowUp' }],
               onPick: async () => {
                 await importSave(bundle);
