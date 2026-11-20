@@ -214,9 +214,9 @@ export class EndScene extends Phaser.Scene {
         sub: 'Keep its form and moves for the team builder',
       });
     }
-    button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 410 : 756, 260, 52, 'Back to title', () => {
+    button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 410 : 756, 260, 52, 'Back to camp', () => {
       state.run = null;
-      this.scene.start('Title', {});
+      this.scene.start('Camp', {});
     }, { color: 0x3b6d4a, fontSize: 20 });
   }
 

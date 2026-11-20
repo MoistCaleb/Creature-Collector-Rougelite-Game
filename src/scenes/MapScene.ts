@@ -24,6 +24,9 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
+import { rivalHere, rivalTrainerName } from '../logic/run';
+import { researcherHint, shopTalk } from '../logic/talk';
+import { hashString } from '../logic/rng';
 import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
@@ -198,7 +201,7 @@ export class MapScene extends Phaser.Scene {
       );
       const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
       const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
-      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
       // Your token stands on the current hex: fade what's under it (it comes back as you hop away).
       if (isCurrent) {
@@ -236,7 +239,7 @@ export class MapScene extends Phaser.Scene {
       blocked: (at) => {
         const r = state.run!;
         const here = at ?? r.currentId;
-        return new Set([here, r.map.bossId, ...(r.map.nodes[here]?.next ?? []), ...(r.roamer ? [r.roamer.node] : [])]);
+        return new Set([here, r.map.bossId, ...(r.map.nodes[here]?.next ?? []), ...(r.roamer ? [r.roamer.node] : []), ...(r.rival?.node ? [r.rival.node] : [])]);
       },
     });
 
@@ -247,6 +250,7 @@ export class MapScene extends Phaser.Scene {
     };
     this.makeToken();
     this.drawRoamer();
+    this.drawRival();
 
     // scrolling
     const mapH = 50 + (map.maxY - minY) * rowStep + hexH;
@@ -589,6 +593,24 @@ export class MapScene extends Phaser.Scene {
         }
       },
     });
+  }
+
+  /** Your rival, standing on the trainer hex they wait on this floor, with a RIVAL tag. */
+  private drawRival() {
+    const run = state.run!;
+    const r = run.rival;
+    if (!r?.node || !rivalHere(run, r.node) || run.currentId === r.node) return;
+    const p = this.posOf(r.node);
+    const c = this.add.container(p.x + 16, p.y - 2);
+    const look = lookForName(rivalTrainerName(r));
+    const body = this.add.image(0, 0, ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.25).setFlipX(true);
+    const shadow = this.add.ellipse(0, 0, 22, 7, 0x000000, 0.4);
+    const tagText = text(this, 0, -54, 'RIVAL', 10, '#ffffff', { fontStyle: 'bold' }).setOrigin(0.5);
+    const tag = this.add.rectangle(0, -54, tagText.width + 10, 15, 0xc8323c).setStrokeStyle(1, 0x14101e);
+    c.add([shadow, body, tag, tagText]);
+    this.layer.add(c);
+    trainerFx(this, body, look);
+    this.tweens.add({ targets: body, y: -2, yoyo: true, repeat: -1, duration: 640, ease: 'Sine.easeInOut' });
   }
 
   private roamerSprite: Phaser.GameObjects.Container | null = null;
@@ -971,6 +993,7 @@ export class MapScene extends Phaser.Scene {
       case 'shop':
         // The shop right before the floor 1 boss always stocks healing.
         run.shop = rollShop(run, 0, run.floor === 0 && n.next.includes(run.map.bossId) ? ['potion', 'restore'] : []);
+        run.shopVisits = (run.shopVisits ?? 0) + 1;
         persist();
         return this.openShop();
       default:
@@ -1033,9 +1056,11 @@ export class MapScene extends Phaser.Scene {
     }
     const ev = EVENT_BY_ID[run.eventId];
     const opts = ev.options;
+    // Now and then the researcher is there too, with a hint.
+    const hint = hashString(`${run.seed}:${run.currentId}:alder`) % 2 === 0 ? `\n\n${researcherHint(run)}` : '';
     openPicker(this, {
       title: ev.title,
-      subtitle: ev.text,
+      subtitle: ev.text + hint,
       options: [
         ...opts.map((o) => {
           const blocked = o.blocked?.(run) ?? (o.target && !allCreatures(run).some((c) => o.eligible?.(run, c) ?? true) ? 'No Hexling can do this' : null);
@@ -1263,7 +1288,7 @@ export class MapScene extends Phaser.Scene {
     const reroll = rerollPrice(run, shop);
     openPicker(this, {
       title: `Shop   ◉ ${run.coins}`,
-      subtitle: 'Items take effect right away.',
+      subtitle: `${shopTalk(run)}\nItems take effect right away.`,
       options: [
         ...shop.slots.map((sl) => {
           const reason = sl.sold ? 'Sold' : unusableReason(run, sl);

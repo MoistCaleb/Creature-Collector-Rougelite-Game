@@ -37,6 +37,8 @@ export class TitleScene extends Phaser.Scene {
     muteButton(this, W - 30, 30);
     // Settings: volumes, battle speed, tips, erasing progress.
     button(this, W - 78, 30, 40, 40, '', () => openSettings(this, () => this.scene.restart({})), { fontSize: 20, glyph: 'gear' });
+    // Camp: rest between runs.
+    button(this, W - 126, 30, 40, 40, '', () => this.scene.start('Camp', {}), { fontSize: 20, glyph: 'flame', color: 0x6a3a1a });
     const meta = state.meta;
     // Upright: one centered column. Sideways: the title and parade on the left, buttons on the right.
     const lx = LANDSCAPE ? 215 : W / 2;

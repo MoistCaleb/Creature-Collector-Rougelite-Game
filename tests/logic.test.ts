@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2685,3 +2685,64 @@ describe('Roaming legendaries and night Hexlings', () => {
     expect(night).toBeGreaterThan(day);
   });
 });
+
+import { rivalBeaten, rivalHello, rivalHere, placeRival } from '../src/logic/run';
+import { researcherHint, shopTalk } from '../src/logic/talk';
+describe('Your rival, the shopkeeper and the researcher', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('a rival waits on a trainer hex mid-floor, with an ace that has the edge on your starter', () => {
+    const run = startRun(mkMeta(), 'emberkit', 31);
+    const r = run.rival!;
+    expect(r).toBeTruthy();
+    const node = run.map.nodes[r.node!];
+    expect(node.kind).toBe('elite');
+    expect(node.progress).toBeGreaterThanOrEqual(0.3);
+    expect(typeMultiplier(SPECIES_BY_ID[r.ace].types[0], ['Fire', 'Fire'])).toBeGreaterThan(1);
+    // Same seed, same rival (daily runs too).
+    expect(startRun(mkMeta(), 'emberkit', 31).rival).toEqual(r);
+  });
+  it('the rival team grows each floor and is led by their ace; beating them clears the hex', () => {
+    const run = startRun(mkMeta(), 'emberkit', 32);
+    const sizes: number[] = [];
+    for (let f = 0; f < 3; f++) {
+      run.floor = f;
+      run.map = generateFloor(f, run.biomes[f], 100 + f);
+      placeRival(run);
+      const team = makeEncounter(run, run.map.nodes[run.rival!.node!]);
+      sizes.push(team.length);
+      expect(team[team.length - 1].speciesId).toBe(run.rival!.ace);
+      expect(team[team.length - 1].stage).toBe(f);
+      expect(rivalHello(run).length).toBeGreaterThan(5);
+      expect(rivalBeaten(run).length).toBeGreaterThan(5);
+      expect(rivalHere(run, run.rival!.node!)).toBe(false);
+    }
+    expect(sizes).toEqual([2, 3, 4]);
+  });
+  it('no rival in online or Gilded Hunt runs', () => {
+    const run = startRun(mkMeta(), 'emberkit', 33);
+    run.race = { opponent: 'A', role: 'host' };
+    makeRivalFor(run);
+    expect(run.rival).toBeNull();
+  });
+  it('the shopkeeper and researcher say something that fits', () => {
+    const run = startRun(mkMeta(), 'emberkit', 34);
+    run.shopVisits = 1;
+    expect(shopTalk(run)).toMatch(/^Mori: “.+”$/);
+    run.shopVisits = 3;
+    run.team[0].hp = 1;
+    expect(shopTalk(run)).toMatch(/rough|seen better/);
+    expect(researcherHint(run)).toMatch(/^Professor Alder: “.+”$/);
+  });
+});
+import { makeRival as makeRivalFor } from '../src/logic/run';

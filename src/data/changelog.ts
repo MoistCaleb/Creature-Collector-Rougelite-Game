@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.22';
+export const APP_VERSION = '1.23';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.23',
+    title: 'Familiar faces',
+    items: [
+      'Your rival: every run has one, with a lead Hexling picked to have the edge on your starter. They wait on one trainer hex a floor (marked RIVAL on the map), with a team that grows from 2 to 4 Hexlings as their ace evolves. Beat them for an extra Evolution Stone, or go around them, but they’ll remember.',
+      'Trainers, your rival and the guardians now say something as the fight starts.',
+      'Mori the shopkeeper chats while you shop, and notices how your run is going.',
+      'Professor Alder turns up on some event hexes with a hint: Hexlings around here you haven’t caught, when your lead can evolve, how your Hexlidex is coming along, or a legendary nearby.',
+      'Camp: rest between runs by the campfire, with your trainer and the Hexlings who finished your last run (tap them), your trophies, and signposts to a new run, the Arena, the Hexlidex and Records. The end of a run brings you here, and the flame button on the title screen does too. It’s just for looks: nothing carries into a run.',
+    ],
+  },
   {
     version: '1.22',
     title: 'A living world',
