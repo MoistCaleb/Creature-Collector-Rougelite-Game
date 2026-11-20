@@ -1,3 +1,4 @@
+import { accountsAvailable, currentUser } from '../net/account';
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
 import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed } from '../logic/run';
@@ -161,12 +162,24 @@ export class TitleScene extends Phaser.Scene {
     // How to play and Records (sideways: under the title, on the left).
     const hx = LANDSCAPE ? lx : cx;
     const hy = LANDSCAPE ? 392 : ry(676);
-    button(this, hx - 82, hy, 156, 46, 'How to play', () => openHowToPlay(this), { fontSize: 15, glyph: 'book' });
-    button(this, hx + 82, hy, 156, 46, 'Records', () => this.scene.start('Records', {}), {
-      fontSize: 15,
+    // Friends (where accounts work): a third button on the row upright, on the right sideways.
+    const friends = accountsAvailable();
+    const three = friends && !LANDSCAPE;
+    const bw = three ? 128 : 156;
+    const gap = three ? 134 : 82;
+    button(this, hx - gap, hy, bw, 46, 'How to play', () => openHowToPlay(this), { fontSize: three ? 13 : 15, glyph: 'book' });
+    button(this, three ? hx : hx + gap, hy, bw, 46, 'Records', () => this.scene.start('Records', {}), {
+      fontSize: three ? 13 : 15,
       glyph: 'chart',
       sub: meta.streak ? `Win streak ${meta.streak}` : undefined,
     });
+    if (friends) {
+      button(this, three ? hx + gap : cx, hy, three ? bw : 320, 46, 'Friends', () => this.scene.start('Friends', { from: 'Title' }), {
+        fontSize: three ? 13 : 15,
+        color: 0x2f4a6b,
+        sub: currentUser() ? 'Online · invites' : 'Sign in first',
+      });
+    }
   }
 
   private continueRun() {
