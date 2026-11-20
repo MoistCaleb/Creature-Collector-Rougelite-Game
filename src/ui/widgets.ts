@@ -41,6 +41,9 @@ export let FH = 800;
 
 /** The phone's safe-area insets in CSS pixels (0 where there are none). */
 function safeInsets() {
+  // Tests can stand in for a device's insets.
+  const fake = (window as unknown as { __insets?: { t: number; r: number; b: number; l: number } }).__insets;
+  if (fake) return { ...fake };
   const probe = document.createElement('div');
   probe.style.cssText =
     'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
@@ -51,21 +54,40 @@ function safeInsets() {
   return out;
 }
 
+/** How far a board may stretch across its short side on roomier screens (wider upright, taller sideways). */
+export const BOARD_STRETCH = 1.25;
+
+/** Screens whose layouts are fixed spots on the designed board, so they don't stretch. */
+const FIXED_BOARD = new Set(['Battle']);
+
 /** The board a scene should use on this screen right now. */
 export function boardFor(key: string) {
   const wide = wantsWide(key);
-  const bw = wide ? 800 : 450;
-  const bh = wide ? 450 : 800;
-  if (typeof window === 'undefined') return { wide, bw, bh, ox: 0, oy: 0, fw: bw, fh: bh };
+  const base = { w: wide ? 800 : 450, h: wide ? 450 : 800 };
+  if (typeof window === 'undefined') return { wide, bw: base.w, bh: base.h, ox: 0, oy: 0, fw: base.w, fh: base.h };
   const box = document.getElementById('game');
   const sw = box?.clientWidth || window.innerWidth;
   const sh = box?.clientHeight || window.innerHeight;
   const ins = safeInsets();
   // Sideways, the home bar only needs a thin strip: let the layout reach the bottom edge.
   if (wide) ins.b = Math.min(ins.b, 6);
+  // A notch takes both sides alike (the phone reports it on both); an inset on one side only is an
+  // overlay (like a foldable's status bubble), and keeping clear of it shoved the whole layout off
+  // centre. Keep clear of the shared part only.
+  const side = Math.min(ins.l, ins.r);
+  ins.l = side;
+  ins.r = side;
   const safeW = Math.max(1, sw - ins.l - ins.r);
   const safeH = Math.max(1, sh - ins.t - ins.b);
-  const s = Math.min(safeW / bw, safeH / bh);
+  const s = Math.min(safeW / base.w, safeH / base.h);
+  // Wider (or taller) screens than the board: the board grows to use the room, up to a point
+  // (layouts read W and H, so they spread out), and any rest is margin.
+  // Screens laid out at fixed spots (the battle) keep the designed board; the scenery fills the rest.
+  const stretch = FIXED_BOARD.has(key) ? 1 : BOARD_STRETCH;
+  // Only across a board's short side (wider upright, taller sideways): ordinary phones, which are
+  // narrower and taller than the board, keep it exactly as designed.
+  const bw = wide ? base.w : Math.round(Math.min(base.w * stretch, Math.max(base.w, safeW / s)));
+  const bh = wide ? Math.round(Math.min(base.h * stretch, Math.max(base.h, safeH / s))) : base.h;
   // Very unusual shapes (e.g. a nearly square unfolded screen) get at most this much margin.
   const fw = Math.round(Math.min(sw / s, bw * 1.6));
   const fh = Math.round(Math.min(sh / s, bh * 1.6));

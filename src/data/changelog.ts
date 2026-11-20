@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.48';
+export const APP_VERSION = '1.49';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.49',
+    title: 'Fits foldables',
+    items: ['Better fit on wide screens like unfolded phones and split view: screens are centred again (an overlay on one edge was pushing everything to the side) and spread out to use the extra width (upright) or height (sideways). Battles keep their layout, centred, with the scenery filling the sides.'],
+  },
   {
     version: '1.48',
     title: 'Revival',
