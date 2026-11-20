@@ -95,7 +95,7 @@ export class RecordsScene extends Phaser.Scene {
       ['Tournaments won', `${meta.tourneyWins ?? 0}`],
       ['Legendaries caught', `${legendsCaught(meta)}/${LEGENDS.length}`],
       ['Maps won', `${meta.clearedMaps.length}/${Object.keys(MAP_BY_ID).length}`],
-      ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
+      ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}${meta.bestHuntHeat ? ` · Heat ${meta.bestHuntHeat}` : ''}` : '—'],
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
       ['Gilded species', `${gildedCount(meta)}/${SPECIES.length}`],
       ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
