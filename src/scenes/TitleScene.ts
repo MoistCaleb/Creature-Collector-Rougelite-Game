@@ -77,8 +77,10 @@ export class TitleScene extends Phaser.Scene {
     text(this, lx, LANDSCAPE ? 104 : 86, 'HEXBOUND', 52, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, lx, LANDSCAPE ? 146 : 126, 'A HEXLING ROGUELITE', 18, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
-    text(this, lx, ly(270), `Runs: ${meta.runs}   Wins: ${meta.wins}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked} unlocked` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
-    text(this, lx, ly(294), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}`, 16, COLORS.textDim).setOrigin(0.5);
+    // Every run started counts: a run given up (or still going) isn't a win. The one in progress isn't a loss yet.
+    const losses = Math.max(0, meta.runs - meta.wins - (hasSavedRun() ? 1 : 0));
+    text(this, lx, ly(270), `Run W/L: ${meta.wins}–${losses}   Consecutive wins: ${meta.streak ?? 0}`, 16, COLORS.textDim).setOrigin(0.5);
+    text(this, lx, ly(294), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked}` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
 
     if (hasSavedRun()) {
       button(this, cx, ry(360), 280, 64, 'CONTINUE RUN', () => this.continueRun(), { color: 0x3b6d4a, fontSize: 24 });
