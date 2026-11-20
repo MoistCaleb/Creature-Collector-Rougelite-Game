@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.26';
+export const APP_VERSION = '1.27';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.27',
+    title: 'Friend codes',
+    items: [
+      'Friends are now added by friend code only (like HEX-4K9P2), not by username, since usernames show on the leaderboards. Find your code at the top of the Friends screen and tap it to copy.',
+      'Codes work however they’re typed: hex 4k9p2, 4K9P2 or HEX-4K9P2.',
+    ],
+  },
   {
     version: '1.26',
     title: 'Leaderboards',

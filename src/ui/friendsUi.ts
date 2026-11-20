@@ -103,7 +103,7 @@ export function editTrainerName(o: { title?: string; body?: string; onDone: () =
     title: o.title ?? 'Your trainer name',
     body:
       o.body ??
-      `Shown in battles and to other players${signedIn ? ', and it’s your username: friends find you by it' : ''}. 3 to 16 letters, numbers, spaces, _ - or .`,
+      `Shown in battles and to other players${signedIn ? ', and it’s your username on friends lists and leaderboards' : ''}. 3 to 16 letters, numbers, spaces, _ - or .`,
     field: { type: 'text', placeholder: 'Trainer name', value: myName(state.meta) === 'Trainer' ? '' : myName(state.meta) },
     buttons: [
       { label: 'Cancel', onClick: (c) => (c.close(), o.onCancel?.()) },
