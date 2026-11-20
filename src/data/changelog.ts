@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.34';
+export const APP_VERSION = '1.35';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.35',
+    title: 'Stadium from the field',
+    items: ['The online battle stadium is now seen from the same low angle as every other battle: the arena floor stretches away to the stands, the fans get smaller toward the back rows, and both Hexlings stand on stone battle pads.'],
+  },
   {
     version: '1.34',
     title: 'Stadium battles',

@@ -13,7 +13,7 @@ import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
-import { arenaBackdrop, type Crowd } from '../ui/arena';
+import { arenaBackdrop, arenaPad, type Crowd } from '../ui/arena';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
@@ -682,7 +682,11 @@ export class BattleScene extends Phaser.Scene {
     const el = creatureTypes(this.enemies[0])[0];
     m.stage ??= pickStage(el);
     // Online battles (duels, stage finals, brackets, and watching them) are in the stadium.
-    if (m.duel) this.crowd = arenaBackdrop(this, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
+    if (m.duel) {
+      this.crowd = arenaBackdrop(this, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
+      arenaPad(this, ENEMY_POS.x, ENEMY_POS.y + 72);
+      arenaPad(this, PLAYER_POS.x, PLAYER_POS.y + 72);
+    }
     else this.drawField(el, m.stage);
     this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
