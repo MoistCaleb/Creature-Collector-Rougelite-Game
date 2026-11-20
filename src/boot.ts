@@ -1,4 +1,5 @@
 import { FriendsScene } from './scenes/FriendsScene';
+import { LeaderboardScene } from './scenes/LeaderboardScene';
 import { CampScene } from './scenes/CampScene';
 import Phaser from 'phaser';
 import { installTapGuard } from './ui/tapGuard';
@@ -50,6 +51,7 @@ export function startGame() {
       TitleScene,
       CampScene,
       FriendsScene,
+      LeaderboardScene,
       MapSelectScene,
       StarterScene,
       MapScene,

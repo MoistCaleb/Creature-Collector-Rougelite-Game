@@ -127,6 +127,7 @@ export class RecordsScene extends Phaser.Scene {
     text(this, 16, 14, 'Records', 24, '#ffc94d', { fontStyle: 'bold' });
     text(this, 16, 44, 'Every run counts, won or lost', 12, COLORS.textDim);
     button(this, W - 50, 30, 80, 40, 'Back', () => this.scene.start('Title', {}), { fontSize: 15 });
+    button(this, W - 150, 30, 108, 40, 'Top 10', () => this.scene.start('Leaderboard', { from: 'Records' }), { fontSize: 15, color: 0x8a6a1a, glyph: 'crown' });
 
     const min = Math.min(TOP, H - bottom - 16);
     new Scroller(this, { get: () => list.y, set: (v) => list.setY(v), min: () => min, max: () => TOP });

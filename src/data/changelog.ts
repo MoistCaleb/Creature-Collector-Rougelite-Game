@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.25';
+export const APP_VERSION = '1.26';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.26',
+    title: 'Leaderboards',
+    items: [
+      'All-time Top 10 leaderboards: runs won, best win streak, highest Heat, Hexlidex forms, Hexlings caught, battles won, guardians beaten, gilded and legendaries caught, deepest Gilded Hunt, tournaments, online wins, titles and coins earned.',
+      'Find them under Records › Top 10. See everyone, or just you and your friends, and where you stand if you’re not in the top 10 yet.',
+      'Your best ever counts, so a fresh save never knocks you down. Ties go to whoever got there first.',
+      'Signed in with a trainer name, you’re on the boards automatically. Rather not be? Hide yourself at the bottom of the board.',
+    ],
+  },
   {
     version: '1.25',
     title: 'Friends',
