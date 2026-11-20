@@ -175,8 +175,12 @@ export interface Meta {
   trainerTitle?: string;
   /** Titles already announced as earned. */
   titlesAnnounced?: string[];
-  /** Online duels (series) and stage battles won. */
+  /** Online games won: duels (series), stage battles, battle royales and online tournaments. */
   onlineWins?: number;
+  /** Online games lost (counted from v1.46), and online wins in a row (now and best). */
+  onlineLosses?: number;
+  onlineStreak?: number;
+  bestOnlineStreak?: number;
   /** Most players in a battle royale you won (for the battle royale titles). */
   royaleBest?: number;
   /** Arena tournament in progress (saved so it survives closing the app), and tournaments won. */
@@ -735,7 +739,8 @@ export function startRun(
   const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
   if (!daily && !weekly) meta.lastMap = def.id;
   const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31));
-  meta.runs += 1;
+  // Online races have their own W/L (see addOnlineWin / addOnlineLoss), so they don't count here.
+  if (racePassive === undefined) meta.runs += 1;
   if (daily) {
     const rec = dailyRecord(meta, daily);
     rec.attempts += 1;

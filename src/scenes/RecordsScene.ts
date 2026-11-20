@@ -49,6 +49,10 @@ export class RecordsScene extends Phaser.Scene {
       ['Win streak', String(meta.streak ?? 0)],
       ['Best streak', String(meta.bestStreak ?? 0)],
       ['Top Heat won', topHeat ? String(topHeat) : '—'],
+      // Online games: duels, stage battles, battle royales and online tournaments (losses from v1.46).
+      ['Online W/L', `${meta.onlineWins ?? 0}–${meta.onlineLosses ?? 0}`],
+      ['Online streak', String(meta.onlineStreak ?? 0)],
+      ['Best online streak', String(meta.bestOnlineStreak ?? 0)],
     ];
     const tw = (colW - 8) / 3;
     tiles.forEach(([label, value], i) => {
@@ -58,7 +62,7 @@ export class RecordsScene extends Phaser.Scene {
       list.add(text(this, x + tw / 2, yy + 22, value, 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5));
       list.add(text(this, x + tw / 2, yy + 44, label, 11, COLORS.textDim).setOrigin(0.5));
     });
-    y += 2 * 62 + 8;
+    y += Math.ceil(tiles.length / 3) * 62 + 8;
 
     // Most used Hexling.
     const fav = mostUsed(meta);

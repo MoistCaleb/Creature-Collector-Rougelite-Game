@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.45';
+export const APP_VERSION = '1.46';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.46',
+    title: 'Online record',
+    items: [
+      'Fixed: stage battles and battle royales counted as runs, so every one showed up as a loss in your run W/L (they could never count as a run win). They don’t count as runs any more. Online races already played can’t be told apart from other runs, so older totals stay as they are.',
+      'New online W/L and online consecutive wins, on the title screen and in Records. They cover duels, stage battles, battle royales and online tournaments. Online losses count from this version (your online wins go back further).',
+    ],
+  },
   {
     version: '1.45',
     title: 'Hot hunts, golden hauls',

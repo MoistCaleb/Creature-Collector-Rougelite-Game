@@ -6,7 +6,7 @@ import { saveMeta } from '../logic/run';
 import { titleNews } from '../logic/cosmetics';
 import { lookForName } from '../data/trainerLook';
 import { leaveDuelRoyale } from '../net/runtime';
-import { canWatch, royale, royaleLabel, royaleQuit, watchMatch } from '../net/royale';
+import { canWatch, countRoyaleLoss, royale, royaleLabel, royaleQuit, watchMatch } from '../net/royale';
 import { myPid, session } from '../net/session';
 import { state } from '../state';
 import { showMessage } from '../ui/picker';
@@ -118,6 +118,8 @@ export class BracketScene extends Phaser.Scene {
         go();
       });
     showMessage(this, `Leave the ${royaleLabel()}?`, 'Any match you still have will count as a loss.', () => {
+      // Still in the running: leaving loses it.
+      if (royale.bracket?.rounds[0].some((m) => m.a === myPid || m.b === myPid) && !knockedOut(royale.bracket, myPid)) countRoyaleLoss();
       royaleQuit();
       go();
     });

@@ -123,5 +123,13 @@ export function addRoyaleWin(meta: Meta, players: number): TitleDef[] {
 /** Count an online win (a duel series or a stage battle) and return any titles it earned. Caller saves meta. */
 export function addOnlineWin(meta: Meta): TitleDef[] {
   meta.onlineWins = (meta.onlineWins ?? 0) + 1;
+  meta.onlineStreak = (meta.onlineStreak ?? 0) + 1;
+  meta.bestOnlineStreak = Math.max(meta.bestOnlineStreak ?? 0, meta.onlineStreak);
   return takeNewTitles(meta);
+}
+
+/** Count a lost online game (a duel series, stage battle, battle royale or online tournament). Caller saves meta. */
+export function addOnlineLoss(meta: Meta) {
+  meta.onlineLosses = (meta.onlineLosses ?? 0) + 1;
+  meta.onlineStreak = 0;
 }

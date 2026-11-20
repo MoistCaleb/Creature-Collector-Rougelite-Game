@@ -44,7 +44,7 @@ export class TitleScene extends Phaser.Scene {
     // Upright: one centered column. Sideways: the title and parade on the left, buttons on the right.
     const lx = LANDSCAPE ? 215 : W / 2;
     const cx = LANDSCAPE ? 600 : W / 2;
-    const ly = (y: number) => (LANDSCAPE ? { 70: 90, 115: 136, 190: 228, 180: 218, 270: 300, 294: 324 }[y] ?? y : y);
+    const ly = (y: number) => (LANDSCAPE ? { 70: 90, 115: 136, 190: 228, 180: 218, 262: 290, 284: 316, 306: 342 }[y] ?? y : y);
     const ry = (y: number) => (LANDSCAPE ? y - 280 : y);
 
     // Your trainer (top-left): tap to edit name and look.
@@ -79,8 +79,9 @@ export class TitleScene extends Phaser.Scene {
 
     // Every run started counts: a run given up (or still going) isn't a win. The one in progress isn't a loss yet.
     const losses = Math.max(0, meta.runs - meta.wins - (hasSavedRun() ? 1 : 0));
-    text(this, lx, ly(270), `Run W/L: ${meta.wins}–${losses}   Consecutive wins: ${meta.streak ?? 0}`, 16, COLORS.textDim).setOrigin(0.5);
-    text(this, lx, ly(294), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked}` : ''}`, 16, COLORS.textDim).setOrigin(0.5);
+    text(this, lx, ly(262), `Run W/L: ${meta.wins}–${losses}   Consecutive wins: ${meta.streak ?? 0}`, 15, COLORS.textDim).setOrigin(0.5);
+    text(this, lx, ly(284), `Online W/L: ${meta.onlineWins ?? 0}–${meta.onlineLosses ?? 0}   Consecutive wins: ${meta.onlineStreak ?? 0}`, 15, COLORS.textDim).setOrigin(0.5);
+    text(this, lx, ly(306), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked}` : ''}`, 15, COLORS.textDim).setOrigin(0.5);
 
     if (hasSavedRun()) {
       button(this, cx, ry(360), 280, 64, 'CONTINUE RUN', () => this.continueRun(), { color: 0x3b6d4a, fontSize: 24 });

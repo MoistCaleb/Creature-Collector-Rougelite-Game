@@ -3,6 +3,8 @@ import type { Creature } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { activeTeam, ARENA_POTIONS, makeArenaCreature } from '../logic/arena';
 import { state } from '../state';
+import { saveMeta } from '../logic/run';
+import { addOnlineLoss } from '../logic/titles';
 import { SPECIES } from '../data/species';
 import { applySnap, duelBattle, DuelController, type DuelMsg, type Next, type Snap, type RaceInfo, type RaceProgress, type RosterEntry, type Standing, type StartInfo } from './duel';
 import { myPid, session } from './session';
@@ -43,6 +45,8 @@ export const royale = {
   match: null as { id: string; opp: string; controller: DuelController } | null,
   /** The champion's online win has been counted. */
   winCounted: false,
+  /** Your loss has been counted (knocked out, or your team fell in the race). */
+  lossCounted: false,
   /** Host: everyone's race and team. */
   racers: new Map<string, HostRacer>(),
   /** Host: matches already started. */
@@ -71,6 +75,7 @@ export const royale = {
     this.ended = '';
     this.match = null;
     this.winCounted = false;
+    this.lossCounted = false;
     this.racers = new Map();
     this.started = new Set();
     this.watching = null;
@@ -565,4 +570,12 @@ export function royaleQuit() {
 /** Host leaving: tell everyone it's over. */
 export function hostAbandonRoyale() {
   if (session.role === 'host' && royale.active && !royale.champion) session.send({ t: 'royaleEnd', why: `The host left, so the ${royaleLabel()} is over.` });
+}
+
+/** Your battle royale (or online tournament) is lost: count it once. */
+export function countRoyaleLoss() {
+  if (royale.winCounted || royale.lossCounted) return;
+  royale.lossCounted = true;
+  addOnlineLoss(state.meta);
+  saveMeta(state.meta);
 }
