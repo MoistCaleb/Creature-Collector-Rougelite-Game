@@ -20,6 +20,8 @@ export interface Creature {
   xp: number;
   stage: number; // 0..2 evolution stage
   stars: number; // prestige
+  /** Extra level cap from Limit Breakers (Gilded Hunt shops), 5 per use. */
+  capBonus?: number;
   hp: number;
   moves: MoveSlot[];
   /** Index of the next learnset entry not yet processed. */
@@ -76,10 +78,13 @@ export function creatureTypes(c: Creature): TypePair {
   return species(c).types;
 }
 
-/** Level caps per evolution stage; each prestige star adds 5. */
+/** What a creature's level cap depends on. */
+export type CapInfo = Pick<Creature, 'stage' | 'stars' | 'capBonus'>;
+
+/** Level caps per evolution stage; each prestige star adds 5 (and each Limit Breaker 5 more). */
 export const STAGE_CAPS = [30, 65, 100];
-export function stageCap(c: Pick<Creature, 'stage' | 'stars'>): number {
-  return STAGE_CAPS[c.stage] + c.stars * 5;
+export function stageCap(c: CapInfo): number {
+  return STAGE_CAPS[c.stage] + c.stars * 5 + (c.capBonus ?? 0);
 }
 
 /**
@@ -93,12 +98,12 @@ export function setFloorCeiling(n: number) {
 export const getFloorCeiling = () => floorCeiling;
 
 /** Effective level cap: the stage cap, or the floor ceiling if that's lower. */
-export function levelCap(c: Pick<Creature, 'stage' | 'stars'>): number {
+export function levelCap(c: CapInfo): number {
   return Math.min(stageCap(c), floorCeiling);
 }
 
 /** True when the floor ceiling (not the creature's own stage cap) is what's holding it back. */
-export const floorCapped = (c: Pick<Creature, 'stage' | 'stars'>) => floorCeiling < stageCap(c);
+export const floorCapped = (c: CapInfo) => floorCeiling < stageCap(c);
 
 export function xpToNext(level: number): number {
   return Math.round(10 + level * BALANCE.xpPerLevelNeeded + level * level * BALANCE.xpQuad);
@@ -503,7 +508,7 @@ export function addLevels(c: Creature, n: number): number {
 export const BANK_LEVELS = 5;
 
 /** The most XP a creature can store at its cap: enough for the next BANK_LEVELS levels. */
-export function bankLimit(c: Pick<Creature, 'stage' | 'stars'>): number {
+export function bankLimit(c: CapInfo): number {
   const cap = levelCap(c);
   let t = 0;
   for (let l = cap; l < cap + BANK_LEVELS; l++) t += xpToNext(l);
@@ -602,6 +607,15 @@ export function evolve(c: Creature): boolean {
   c.hp = Math.min(newMax, c.hp + (newMax - oldMax));
   releaseBanked(c);
   return true;
+}
+
+/** Levels a Limit Breaker adds to the cap. */
+export const LIMIT_BREAK = 5;
+
+/** Limit Breaker: raise the level cap by 5 (stacks); stored XP pours in. Returns levels gained. */
+export function limitBreak(c: Creature): number {
+  c.capBonus = (c.capBonus ?? 0) + LIMIT_BREAK;
+  return releaseBanked(c);
 }
 
 export function canPrestige(c: Creature): boolean {
