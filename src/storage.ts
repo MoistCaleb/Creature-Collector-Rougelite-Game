@@ -39,8 +39,35 @@ export function getItem(key: string): string | null {
   }
 }
 
+// ---- other listeners (the account sync): told about every change to the save, unless applying one
+let changeHook: ((key: string) => void) | null = null;
+let quiet = false;
+const flushHooks: (() => Promise<void>)[] = [];
+
+/** Be told when the save changes on this device. */
+export function onLocalChange(fn: (key: string) => void) {
+  changeHook = fn;
+}
+/** Write without telling the change listener (e.g. a save just downloaded from your account). */
+export function applyQuietly(fn: () => void) {
+  quiet = true;
+  try {
+    fn();
+  } finally {
+    quiet = false;
+  }
+}
+/** Something else to wait for in flushCloud (e.g. the account upload). */
+export function onFlush(fn: () => Promise<void>) {
+  flushHooks.push(fn);
+}
+function changed(key: string) {
+  if (!quiet && key in CLOUD_DOCS) changeHook?.(key);
+}
+
 export function setItem(key: string, value: string) {
   cache.set(key, value);
+  changed(key);
   try {
     local()?.setItem(key, value);
   } catch {
@@ -51,6 +78,7 @@ export function setItem(key: string, value: string) {
 
 export function removeItem(key: string) {
   cache.set(key, null);
+  changed(key);
   try {
     local()?.removeItem(key);
   } catch {
@@ -86,6 +114,7 @@ function pushCloud(key: string, value: string | null) {
 export async function flushCloud(): Promise<void> {
   const until = Date.now() + 6000;
   while (writing.size && Date.now() < until) await timeout(Promise.all([...writing.values()]), 6000);
+  await timeout(Promise.all(flushHooks.map((f) => f().catch(() => {}))), 8000);
 }
 
 function timeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
