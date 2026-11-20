@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.36';
+export const APP_VERSION = '1.37';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.37',
+    title: 'Something stirs',
+    items: ['A new eerie theme plays while you wait online: in the duel lobby, on the map once your part of a stage battle or battle royale is done, and on the battle royale bracket. A slow heartbeat, a low throbbing drone and a far-off chime.'],
+  },
   {
     version: '1.36',
     title: 'Steadier legendaries',
