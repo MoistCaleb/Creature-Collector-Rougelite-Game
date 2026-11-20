@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.49';
+export const APP_VERSION = '1.50';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.50',
+    title: 'Clear of the camera',
+    items: ['Fixed: on some phones the camera cutout and the battery indicator covered buttons and text (since 1.49). Screens keep clear of them again, and still spread out to use any extra room.'],
+  },
   {
     version: '1.49',
     title: 'Fits foldables',
