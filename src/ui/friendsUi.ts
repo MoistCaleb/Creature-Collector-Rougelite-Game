@@ -123,6 +123,8 @@ export function editTrainerName(o: { title?: string; body?: string; onDone: () =
             state.meta.duelName = name;
             saveMeta(state.meta);
             c.close();
+            // A brand-new username: start showing as online and listening for invites now.
+            void startFriends();
             o.onDone();
           } catch (e) {
             c.busy(false);
