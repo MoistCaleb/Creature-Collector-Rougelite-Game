@@ -104,6 +104,20 @@ export function cleanLook(x: unknown): TrainerLook {
 export const myLook = (meta: { trainerLook?: unknown }): TrainerLook => cleanLook(meta.trainerLook);
 export const myName = (meta: { duelName?: string }): string => meta.duelName || 'Trainer';
 
+/** A trainer name as typed, tidied: trimmed, with single spaces. */
+export const cleanName = (name: string): string => name.trim().replace(/\s+/g, ' ');
+
+/**
+ * Trainer names (which are also your username for friends): 3-16 letters, numbers, spaces, _ - or .,
+ * starting and ending with a letter or number. Returns what's wrong, or null when it's fine.
+ */
+export function nameProblem(name: string): string | null {
+  const n = cleanName(name);
+  if (n.length < 3 || n.length > 16) return 'Use 3 to 16 characters.';
+  if (!/^[A-Za-z0-9][A-Za-z0-9 _.-]*[A-Za-z0-9]$/.test(n)) return 'Use letters, numbers, spaces, _ - or ., starting and ending with a letter or number.';
+  return null;
+}
+
 /** A random look (the editor's Shuffle, and NPC trainers). */
 export function randomLook(rng: Rng): TrainerLook {
   const look = { ...DEFAULT_LOOK };

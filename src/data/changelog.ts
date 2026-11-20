@@ -13,7 +13,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.25',
     title: 'Friends',
     items: [
-      'Friends: pick a username and get a friend code (like HEX-4K9P2). Add friends by either one; they get a request to accept. Find it under Play online › Friends, or at camp.',
+      'Friends: your trainer name is your username, and you get a friend code (like HEX-4K9P2). Add friends by either one; they get a request to accept. Find it under Play online › Friends, or at camp.',
+      'Trainer names are now 3 to 16 letters, numbers, spaces, _ - or ., and signed in, no two players share one. Renaming your trainer renames your username too.',
       'See who’s online and what they’re up to (in a run, in the Arena, in an online lobby...), with their trainer and title.',
       'Invite a friend in one tap: choose what to play, and they get a pop-up wherever they are in the game. Join takes them straight into your lobby, no code to type. Hosting already? Invite more friends from the lobby.',
       'Remove or block anyone any time. There’s no public player list: people can only find you by your exact username or friend code.',

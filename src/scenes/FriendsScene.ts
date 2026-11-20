@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { myLook } from '../data/trainerLook';
+import { myLook, myName, nameProblem } from '../data/trainerLook';
+import { editTrainerName } from '../ui/friendsUi';
 import { myTitle } from '../logic/titles';
 import { GAME_MODES, type GameMode } from '../net/duel';
 import {
@@ -16,7 +17,6 @@ import {
   sendRequest,
   shareLook,
   statusLine,
-  usernameProblem,
   type Friend,
 } from '../net/friends';
 import { session } from '../net/session';
@@ -101,32 +101,32 @@ export class FriendsScene extends Phaser.Scene {
     }
   }
 
-  private pickUsername(again = false) {
-    this.status.setText('Pick a username to get started.');
-    card({
-      title: again ? 'Change your username' : 'Pick a username',
-      body: 'This is how friends find you and see you. 3 to 16 letters, numbers or underscores. You can change it later.',
-      field: { type: 'text', placeholder: 'username' },
-      buttons: [
-        { label: 'Cancel', onClick: (c) => (c.close(), again ? null : this.scene.start(this.from, {})) },
-        {
-          label: 'Save',
-          primary: true,
-          onClick: async (c) => {
-            const problem = usernameProblem(c.value());
-            if (problem) return c.status(problem, 'error');
-            c.busy(true);
-            try {
-              await claimUsername(c.value());
-              c.close();
-              this.scene.restart();
-            } catch (e) {
-              c.busy(false);
-              c.status(e instanceof Error ? e.message : 'Couldn’t save that.', 'error');
-            }
-          },
-        },
-      ],
+  /**
+   * First time here: your trainer name becomes your username. Only when it can't (still the
+   * default "Trainer", or someone has it) do you choose one, and that renames your trainer too.
+   */
+  private async pickUsername() {
+    const name = myName(state.meta);
+    if (name !== 'Trainer' && !nameProblem(name)) {
+      try {
+        await claimUsername(name);
+        if (this.alive) this.scene.restart();
+        return;
+      } catch (e) {
+        if (!this.alive) return;
+        return this.chooseName(e instanceof Error ? `“${name}” can’t be your username: ${e.message}` : undefined);
+      }
+    }
+    this.chooseName(name === 'Trainer' ? 'Give your trainer a name. It’s also your username: friends find you by it.' : undefined);
+  }
+
+  private chooseName(why?: string) {
+    this.status.setText('Choose your trainer name to get started.');
+    editTrainerName({
+      title: 'Your trainer name',
+      body: `${why ?? 'Your trainer name is your username: friends find you by it.'}\n\n3 to 16 letters, numbers, spaces, _ - or .`,
+      onDone: () => this.scene.restart(),
+      onCancel: () => this.scene.start(this.from, {}),
     });
   }
 
@@ -207,10 +207,10 @@ export class FriendsScene extends Phaser.Scene {
       subtitle: `Your friend code is ${p.friendCode}. Friends can add you with it, or with your username.`,
       options: [
         { label: 'Copy my friend code', color: 0x2f4a6b },
-        { label: 'Change my username', color: 0x3a3352 },
+        { label: 'Change my trainer name', color: 0x3a3352, sub: 'It’s your username too' },
       ],
       onPick: async (i) => {
-        if (i === 1) return this.pickUsername(true);
+        if (i === 1) return editTrainerName({ onDone: () => this.scene.restart() });
         const ok = await copyText(p.friendCode);
         showMessage(this, ok ? 'Copied' : 'Your friend code', ok ? `${p.friendCode} is copied. Send it to a friend.` : p.friendCode, () => {});
       },
