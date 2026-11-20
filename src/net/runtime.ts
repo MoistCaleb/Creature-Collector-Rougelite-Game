@@ -334,11 +334,20 @@ export function beginDuel(controller: DuelController, initialNext?: Next, opp: {
   goTo('Battle', { kind: 'elite', match });
 }
 
+/** Phaser scene states: INIT 1 … CREATING 4, RUNNING 5, PAUSED 6 (then SLEEPING, SHUTDOWN). */
+const SCENE_INIT = 1;
+const SCENE_PAUSED = 6;
+
 /** Switch to a screen from outside it (stopping whatever is showing; restarting it if it's that one). */
 export function goTo(key: string, data: object) {
   const mgr = duel.game?.scene;
   if (!mgr) return;
-  const active = mgr.getScenes(true);
+  // Every screen that's showing or still being set up (one can be mid-create when this is called
+  // from inside it, e.g. the host's own bracket match starting as their map screen opens).
+  const active = mgr.getScenes(false).filter((s) => {
+    const st = s.sys.settings.status;
+    return st >= SCENE_INIT && st <= SCENE_PAUSED;
+  });
   for (const s of active) if (s.scene.key !== key) s.scene.stop();
   const same = active.find((s) => s.scene.key === key);
   if (same) same.scene.restart(data);

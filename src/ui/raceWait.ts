@@ -93,9 +93,10 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
       } else if (royale.bracket || royale.champion) {
         status.setText('Everyone’s done. The tournament bracket is set!');
         setButton(null);
-        if (!toBracket) {
+        // (Unless your own first match has already taken over the screen.)
+        if (!toBracket && !royale.match) {
           toBracket = true;
-          scene.time.delayedCall(1400, () => scene.scene.start('Bracket', {}));
+          scene.time.delayedCall(1400, () => !royale.match && scene.scene.isActive() && scene.scene.start('Bracket', {}));
         }
       } else {
         status.setText(`${won ? 'Your team is ready for the bracket.' : 'Your team fell, but you can watch the bracket.'} Watching the others climb: ${royaleSummary()}`);

@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.39';
+export const APP_VERSION = '1.40';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.40',
+    title: 'Host joins the fight',
+    items: [
+      'Fixed: in a battle royale, when the host was the last to finish the stage, their first bracket match could start behind the bracket screen, leaving the host stuck watching it.',
+      'The title screen now shows your run W/L and your current consecutive wins.',
+    ],
+  },
   {
     version: '1.39',
     title: 'Invites that land',
