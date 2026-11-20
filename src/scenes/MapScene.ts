@@ -24,7 +24,8 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { rivalHere, rivalTrainerName } from '../logic/run';
+import { placeRng, rivalHere, rivalTrainerName } from '../logic/run';
+import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
 import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
@@ -288,7 +289,7 @@ export class MapScene extends Phaser.Scene {
       });
       showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', () => announceGilded(this, meta, after));
     };
-    const afterBanner = () => (data.banner ? showMessage(this, run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
+    const afterBanner = () => (data.banner ? showMessage(this, run.race?.done ? (run.race.done.won ? 'Stage cleared!' : 'Stage over') : run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
     // New held items and Evolution Stones since the map was last shown get their own moments.
     const items = run.newItems ?? [];
     run.newItems = [];
@@ -443,7 +444,7 @@ export class MapScene extends Phaser.Scene {
   /** Stage race: tell the other player where we are (for their map) and who leads our team. */
   private shareProgress() {
     const run = state.run!;
-    if (!run.race) return;
+    if (!run.race || run.race.done) return;
     const lead = run.team[0];
     sendProgress({
       floor: run.floor,
@@ -492,6 +493,14 @@ export class MapScene extends Phaser.Scene {
 
   private drawBottomBar() {
     const run = state.run!;
+    // Your part of the race is over: the bar becomes a panel about the others still climbing.
+    if (run.race?.done) {
+      const box = LANDSCAPE ? { x: W - SIDE_R + 4, y: 8, w: SIDE_R - 8, h: H - 16 } : { x: 6, y: H - BOTTOM_BAR + 4, w: W - 12, h: BOTTOM_BAR - 8 };
+      if (LANDSCAPE) this.add.rectangle(W - SIDE_R, -OY, FW - OX - (W - SIDE_R), FH, 0x0b0912, 0.92).setOrigin(0);
+      else this.add.rectangle(-OX, H - BOTTOM_BAR, FW, FH - OY - (H - BOTTOM_BAR), 0x0b0912, 0.92).setOrigin(0);
+      raceWaitPanel(this, run, run.race.done.won, { ...box, depth: 5 });
+      return;
+    }
     if (LANDSCAPE) {
       // Sideways: the team down a right column.
       const x0 = W - SIDE_R;
@@ -840,6 +849,7 @@ export class MapScene extends Phaser.Scene {
   /** Stage race: the other racer's whole team fell, so the stage battle is over and you win it. */
   private checkRivalWiped() {
     const run = state.run!;
+    if (run.race?.done) return;
     if (run.race?.royale) return this.checkRoyaleOver();
     const them = duel.race?.theirs;
     if (!run.race || this.wonByDefault || !them?.finished || them.team?.length) return;
@@ -930,7 +940,7 @@ export class MapScene extends Phaser.Scene {
 
   private enterNode(n: MapNode) {
     const run = state.run!;
-    if (this.hopping) return;
+    if (this.hopping || run.race?.done) return;
     if (run.bossPending) {
       this.scene.start('Battle', { kind: 'boss' });
       return;
@@ -1177,7 +1187,7 @@ export class MapScene extends Phaser.Scene {
     // Three offers (four with Sage), never the same move twice.
     const want = run.passive === 'sage' ? 4 : 3;
     const picks: { c: Creature; i: number }[] = [];
-    for (const o of run.rng.shuffle(offers)) {
+    for (const o of placeRng(run, 'shrine').shuffle(offers)) {
       if (picks.length === want) break;
       if (!picks.some((p) => p.c.moves[p.i].id === o.c.moves[o.i].id)) picks.push(o);
     }

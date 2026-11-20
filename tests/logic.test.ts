@@ -1669,7 +1669,7 @@ describe('shiny hunting', () => {
     run.floor = 2;
     startHunt(run);
     expect(run.hunt).toEqual({ depth: 1, shinies: 0 });
-    const node = (kind: string) => ({ ...run.map.nodes[run.map.nodes[run.currentId].next[0]], kind, progress: 0.5 }) as never;
+    const node = (kind: string, id?: string) => ({ ...run.map.nodes[run.map.nodes[run.currentId].next[0]], kind, progress: 0.5, ...(id ? { id } : {}) }) as never;
     const first = makeEncounter(run, node('battle'));
     expect(first.every((e) => e.stage === 2)).toBe(true);
     expect(first[0].level).toBeGreaterThan(90);
@@ -1683,13 +1683,13 @@ describe('shiny hunting', () => {
     let maxLevel = 0;
     let maxStars = 0;
     for (let k = 0; k < 300; k++) {
-      for (const e of makeEncounter(run, node('battle'))) {
+      for (const e of makeEncounter(run, node('battle', `hex${k}`))) {
         total++;
         if (e.shiny) shiny++;
         maxLevel = Math.max(maxLevel, e.level);
         maxStars = Math.max(maxStars, e.stars);
       }
-      for (const e of makeEncounter(run, node('elite'))) if (e.shiny) trainerShiny++;
+      for (const e of makeEncounter(run, node('elite', `hex${k}`))) if (e.shiny) trainerShiny++;
     }
     expect(maxLevel).toBeGreaterThan(125);
     expect(maxStars).toBe(HUNT_MAX_STARS);
@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2921,5 +2921,31 @@ describe('Hexlidex extras', async () => {
     expect(info.claimDexReward(m, 'el-Fire')).toBe(15);
     expect(info.claimDexReward(m, 'el-Fire')).toBe(0);
     expect(m.camp!.embers).toBe(15);
+  });
+});
+
+describe('Shared seeds (online races)', async () => {
+  const run = await import('../src/logic/run');
+  const { rollShop } = await import('../src/logic/shop');
+  const { DEFAULT_STARTERS } = await import('../src/data/species');
+  it('the same seed gives the same Hexlings, shops and floors, however differently players play', () => {
+    const a = run.startRun(blankMeta(), DEFAULT_STARTERS[0], 4242, 'wildlands', undefined, true);
+    const b = run.startRun(blankMeta(), DEFAULT_STARTERS[0], 4242, 'wildlands', undefined, true);
+    // Player B burns through lots of randomness first (battles, crits, misses...).
+    for (let i = 0; i < 500; i++) b.rng.next();
+    const hex = Object.values(a.map.nodes).find((n) => n.kind === 'battle')!;
+    const sig = (cs: { speciesId: string; level: number }[]) => cs.map((c) => `${c.speciesId}@${c.level}`).join(',');
+    expect(sig(run.makeEncounter(a, hex))).toBe(sig(run.makeEncounter(b, b.map.nodes[hex.id])));
+    a.currentId = b.currentId = hex.id;
+    expect(rollShop(a).slots.map((s) => s.item)).toEqual(rollShop(b).slots.map((s) => s.item));
+    expect(rollShop(a, 1).slots.map((s) => s.item)).toEqual(rollShop(b, 1).slots.map((s) => s.item));
+  });
+  it('each starter gets a passive from the race seed: the same for everyone, new each race', () => {
+    const starters = DEFAULT_STARTERS.slice(0, 3);
+    expect(run.racePassives(7, starters)).toEqual(run.racePassives(7, starters));
+    const r = run.startRun(blankMeta(), starters[0], 7, 'wildlands', undefined, true, undefined, run.racePassives(7, starters)[starters[0]]);
+    expect(r.passive).toBe(run.racePassives(7, starters)[starters[0]]);
+    const differs = [8, 9, 10, 11, 12].some((s) => JSON.stringify(run.racePassives(s, starters)) !== JSON.stringify(run.racePassives(7, starters)));
+    expect(differs).toBe(true);
   });
 });

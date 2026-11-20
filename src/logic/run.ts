@@ -411,7 +411,14 @@ export interface Run {
   /** Ascendant: the floor its free (no-sacrifice) prestige was used on. */
   ascendFloor?: number;
   /** Stage race against a friend: same map and seed, double battle rewards, a live duel at the end. */
-  race?: { opponent: string; role: 'host' | 'guest'; /** A battle royale (3-8 players, bracket at the end). */ royale?: boolean };
+  race?: {
+    opponent: string;
+    role: 'host' | 'guest';
+    /** A battle royale (3-8 players, bracket at the end). */
+    royale?: boolean;
+    /** Your part is over (reached the boss, or your team fell): you watch the others on the map. */
+    done?: { won: boolean; byDefault?: boolean };
+  };
   /** Potions carried (usable any time, including mid-battle). */
   potions?: number;
   /** Held items not on any creature. */
@@ -539,6 +546,11 @@ export const ELEMENT_PASSIVES: Record<Element, PassiveId[]> = {
  * The passive each of a day's starters comes with: one that suits its elements, the same for
  * everyone that day, and different for each of the three where possible.
  */
+/** Online races: a passive for each starter on offer, from the race's seed (new every race). */
+export function racePassives(seed: number, starters: string[]): Record<string, PassiveId> {
+  return suitedPassives(starters, `race-passive:${seed}`);
+}
+
 export function dailyPassives(date: string): Record<string, PassiveId> {
   return suitedPassives(dailyStarters(date), `daily-passive:${date}`);
 }
@@ -697,7 +709,17 @@ export function describeDaily(r: DailyResult): string {
 
 /** `even`: Heat 0 and no passive of your own (daily runs and stage races, so everyone starts level).
  *  A daily run's starter brings the passive that day gives it (see dailyPassives). */
-export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId = 'wildlands', daily?: string, even = !!daily, weekly?: string): Run {
+export function startRun(
+  meta: Meta,
+  starterId: string,
+  seed = Date.now(),
+  mapId = 'wildlands',
+  daily?: string,
+  even = !!daily,
+  weekly?: string,
+  /** Online races: the passive the seed gives this starter (the same for every player). */
+  racePassive?: PassiveId | null,
+): Run {
   const rng = new Rng(seed);
   const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
   const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
@@ -717,7 +739,7 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     : weekly
       ? (weeklyInfo(weekly).passives[starterId] ?? null)
       : even
-        ? null
+        ? (racePassive ?? null)
         : meta.equippedPassive;
   saveMeta(meta);
   const run: Run = {
@@ -1027,9 +1049,31 @@ export function enemyStars(run: Run, kind: EncounterKind, rng: Rng): number {
   return Math.max(0, Math.min(max, n));
 }
 
+/**
+ * Randomness tied to a place: the same seed, floor and hex give the same result, whatever happened
+ * before (so everyone on a shared seed meets the same Hexlings, trainers, shops and events).
+ */
+export function placeRng(run: Run, tag: string, node: string = run.currentId): Rng {
+  return new Rng(hashString(`${run.seed}:${run.floor}:${node}:${tag}`));
+}
+
+const eventRngs = new WeakMap<Run, { key: string; rng: Rng }>();
+/** One stream of randomness per hex for events (several draws as an event plays out). */
+export function eventRng(run: Run): Rng {
+  const key = `${run.floor}:${run.currentId}`;
+  const cur = eventRngs.get(run);
+  if (cur?.key === key) return cur.rng;
+  const rng = placeRng(run, 'event');
+  eventRngs.set(run, { key, rng });
+  return rng;
+}
+
+/** A floor's layout, from the seed alone. */
+const floorSeed = (run: Run) => hashString(`${run.seed}:floor:${run.floor}`);
+
 export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const kind = node.kind as EncounterKind;
-  const rng = run.rng;
+  const rng = placeRng(run, 'encounter', node.id);
   if (kind === 'battle' && run.roamer && run.roamer.node === node.id) {
     run.log.fights += 1;
     return [legendFoe(run, run.roamer.id)];
@@ -1594,7 +1638,7 @@ export function clearFloor(run: Run): boolean {
   // A new floor: everyone's moves are fully restored.
   for (const c of allCreatures(run)) restoreUses(c);
   applyFloorCap(run);
-  run.map = generateFloor(run.floor, run.biomes[run.floor], run.rng.int(0, 2 ** 31));
+  run.map = generateFloor(run.floor, run.biomes[run.floor], floorSeed(run));
   run.currentId = run.map.startId;
   run.visited = [run.map.startId];
   run.bossPending = false;

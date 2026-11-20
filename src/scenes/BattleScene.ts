@@ -99,6 +99,7 @@ import {
   type XpResult,
   noteShiny,
   GLASS_MULT,
+  placeRng,
   saveMeta,
 } from '../logic/run';
 import { dex, persist, state } from '../state';
@@ -266,7 +267,10 @@ export class BattleScene extends Phaser.Scene {
       if (this.kind === 'elite' && run.rival && rivalHere(run, run.currentId)) {
         run.activeBattle.trainer = rivalTrainerName(run.rival);
         run.activeBattle.rival = true;
-      } else if (this.kind === 'elite') run.activeBattle.trainer = trainerName((xs) => run.rng.pick(xs));
+      } else if (this.kind === 'elite') {
+        const r = placeRng(run, 'trainer');
+        run.activeBattle.trainer = trainerName((xs) => r.pick(xs));
+      }
       persist();
     }
     const boss = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
@@ -1716,19 +1720,21 @@ export class BattleScene extends Phaser.Scene {
       postBattleRecover(run);
       ab.summary = fallen;
       // Wild creatures sometimes leave an Evolution Stone behind.
-      if (this.kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) {
+      // Drops come from the hex (the same for everyone on a shared seed).
+      const drops = placeRng(run, 'drops');
+      if (this.kind === 'battle' && drops.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) {
         run.evoStones += 1;
         ab.summary = `\n\n◆ It dropped an Evolution Stone!${fallen}`;
       }
       if (this.kind === 'elite') {
         // Half the time a trainer pays a stone; Big Game Hunter always gets one on top.
-        const stones = (run.passive === 'hunter' ? 1 : 0) + (run.rng.chance(BALANCE.eliteStoneChance) ? 1 : 0);
+        const stones = (run.passive === 'hunter' ? 1 : 0) + (drops.chance(BALANCE.eliteStoneChance) ? 1 : 0);
         run.evoStones += stones;
         earnCoins(run, coins);
         trackStat(run, 'elites');
         // The trainer hands over one of their held items (or a random one).
         const theirs = this.enemies.map((e) => e.held).filter((h) => !!h);
-        const prize = theirs.length ? run.rng.pick(theirs)! : rollHeld(run.rng);
+        const prize = theirs.length ? drops.pick(theirs)! : rollHeld(drops);
         stash(run, prize);
         // Your rival: a word from them, and an Evolution Stone on top.
         const rivalNote = ab.rival ? `${ab.trainer}: “${rivalBeaten(run)}”\n\n◆ Beating your rival earns an extra Evolution Stone.\n\n` : '';
