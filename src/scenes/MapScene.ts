@@ -232,6 +232,12 @@ export class MapScene extends Phaser.Scene {
       hexH,
       area,
       tapOk: () => !this.scroller?.moved,
+      // Wild Hexlings keep off your hex, the hexes you can move to, and the guardian's.
+      blocked: (at) => {
+        const r = state.run!;
+        const here = at ?? r.currentId;
+        return new Set([here, r.map.bossId, ...(r.map.nodes[here]?.next ?? []), ...(r.roamer ? [r.roamer.node] : [])]);
+      },
     });
 
     // Your token: your trainer standing on the hex you're on (see hopTo).
@@ -708,7 +714,7 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: this.underToken, alpha: 0.5, duration: 300 });
     this.hopWalker(w, id, () => {
       state.run!.followSide = w.side as -1 | 1;
-      this.life?.scare(w.c.x, w.c.y);
+      this.life?.scare(w.c.x, w.c.y, id);
       this.time.delayedCall(90, () => {
         this.hopping = false;
         done();

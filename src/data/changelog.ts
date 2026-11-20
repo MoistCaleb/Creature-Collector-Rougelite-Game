@@ -13,7 +13,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.22',
     title: 'A living world',
     items: [
-      'The map comes alive: wild Hexlings of the land wander the gaps between hexes, nap, look around, and run off when your trainer lands close by. Tap one and it squeaks.',
+      'The map comes alive: wild Hexlings of the land roam the hexes, hopping from hex to hex along the paths. They nap, look around, keep off the hexes you can move to, and scatter a hex or two away when your trainer lands close by. Tap one and it squeaks.',
       'Birds and cloud shadows cross the map, and rest and treasure hexes glimmer.',
       'Day and night follow your clock: dawn, dusk and a starry night with fireflies. At night, Shadow and Spirit Hexlings come out in every land.',
       'Holidays dress up the map for the day itself: New Year fireworks, Valentine’s hearts, St Patrick’s clovers, Halloween bats and jack-o’-lanterns, and winter snow with lights. Turn it all off in Settings (Day, night & holidays).',
