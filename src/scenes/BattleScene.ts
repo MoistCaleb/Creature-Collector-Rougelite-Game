@@ -27,7 +27,8 @@ import { SYNERGY_LABEL, synergyMults, teamSynergy } from '../logic/synergy';
 import { ensureIcon, icon } from '../ui/icons';
 import { STATUS, type StatusId } from '../data/status';
 import { HELD, heldName } from '../data/held';
-import { ELEMENT_COLORS, typeMultiplier, type Element } from '../data/types';
+import { ELEMENT_COLORS, ELEMENTS, typeMultiplier, type Element } from '../data/types';
+import { matchups } from '../logic/dexInfo';
 import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvolution, statusFx } from '../ui/fx';
 import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
@@ -939,6 +940,33 @@ export class BattleScene extends Phaser.Scene {
    * what it comes to with synergy, a Swift Scarf and paralysis; its condition, held item and moves
    * (a foe's moves only once it has used them in this battle).
    */
+/** Rows of element chips: what this Hexling's elements hit hard, what hurts it, and what it shrugs off. */
+  private matchupRows(r: Phaser.GameObjects.Container, types: readonly Element[], x0: number, y: number, w: number): number {
+    const m = matchups(types);
+    const strong = ELEMENTS.filter((el) => types.some((t) => typeMultiplier(t, [el, el]) > 1));
+    const mult = (x: number) => (x === 0 ? '×0' : x >= 4 ? '×4' : x <= 0.25 ? '×¼' : '');
+    const rows: [string, string, { el: Element; tag: string }[]][] = [
+      ['Strong vs', '#8fe08a', strong.map((el) => ({ el, tag: '' }))],
+      ['Weak to', '#ff8a7a', m.weak.map(({ el, x }) => ({ el, tag: mult(x) }))],
+      ['Resists', '#8fd0ff', [...m.resist.map(({ el, x }) => ({ el, tag: mult(x) })), ...m.immune.map((el) => ({ el, tag: '×0' }))]],
+    ];
+    const labelW = 74;
+    const step = 70;
+    for (const [label, color, list] of rows) {
+      r.add(text(this, x0, y, label, 12, color, { fontStyle: 'bold' }));
+      if (!list.length) r.add(text(this, x0 + labelW, y, 'nothing', 12, COLORS.textDim));
+      const perLine = Math.max(1, Math.floor((w - labelW) / step));
+      list.forEach(({ el, tag }, i) => {
+        const cx = x0 + labelW + (i % perLine) * step;
+        const cy = y + 8 + Math.floor(i / perLine) * 20;
+        r.add(typeChip(this, cx, cy, el, true));
+        if (tag) r.add(text(this, cx + 50, cy, tag, 11, color, { fontStyle: 'bold' }).setOrigin(0, 0.5));
+      });
+      y += Math.max(1, Math.ceil(list.length / perLine)) * 20 + (LANDSCAPE ? 1 : 4);
+    }
+    return y + (LANDSCAPE ? 0 : 4);
+  }
+
   private showCombatant(side: 'player' | 'enemy') {
     if (this.statsOpen || !this.battle) return;
     const x = side === 'player' ? this.battle.p : this.battle.e;
@@ -965,6 +993,9 @@ export class BattleScene extends Phaser.Scene {
     r.add(text(this, x0, y, `HP ${c.hp} / ${max}  ·  ${cond}`, 13, x.status ? '#ffc94d' : COLORS.textDim, { wordWrap: { width: w } }));
     y += 22 + (x.status ? 16 : 0);
 
+    // Matchups: what its own elements hit hard, and which attacks hurt it more or less.
+    y = this.matchupRows(r, t, x0, y, w);
+
     // Stats: base, change, now.
     const s = stats(c);
     const syn = x.syn ?? { atk: 1, def: 1, spd: 1 };
@@ -986,15 +1017,16 @@ export class BattleScene extends Phaser.Scene {
       r.add(text(this, cx[2], y, ch, 15, stage > 0 ? '#8fe08a' : stage < 0 ? '#ff8a7a' : COLORS.textDim, { fontStyle: stage ? 'bold' : 'normal' }));
       const n = Math.round(now);
       r.add(text(this, cx[3], y, String(n), 15, n > base ? '#8fe08a' : n < base ? '#ff8a7a' : COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0));
-      y += 28;
+      y += LANDSCAPE ? 25 : 28;
     }
-    r.add(
+    if (LANDSCAPE) r.add(text(this, x0, y, `Moves shift a stat up to ${MAX_STAGE} steps; changes wear off on switching out. “Now” includes synergy, Swift Scarf and paralysis.`, 11, COLORS.textDim));
+    else r.add(
       text(this, x0, y, `Moves can raise or lower a stat by up to ${MAX_STAGE} steps (+${MAX_STAGE} = ×${+stageMult(MAX_STAGE).toFixed(2)}, −${MAX_STAGE} = ×${+stageMult(-MAX_STAGE).toFixed(2)}). Changes wear off when it switches out. “Now” includes synergy, Swift Scarf and paralysis.`, 11, COLORS.textDim, {
         wordWrap: { width: w },
         lineSpacing: 2,
       }),
     );
-    y += LANDSCAPE ? 34 : 46;
+    y += LANDSCAPE ? 18 : 46;
 
     // Held item.
     const nat = c.nature ? `${NATURES[c.nature].name} (${natureShort(c.nature)})${bondHearts(c.bond) ? ` ${'♥'.repeat(bondHearts(c.bond))}` : ''}  ·  ` : '';
