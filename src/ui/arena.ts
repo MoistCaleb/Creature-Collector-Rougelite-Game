@@ -17,6 +17,15 @@ const SKIN = [0xffe0c4, 0xf2c39b, 0xd9a273, 0xb57a4e, 0x8a5a36, 0x5e3b22];
 const SHIRTS = [0xd8443a, 0xf08a2a, 0xf0c838, 0x5ab84a, 0x2aa8a0, 0x6ac8f0, 0x3a6ad8, 0x8a4ad0, 0xf08ac0, 0xeeeeee, 0x2a3458, 0xa8e05a];
 const HAIR = [0x2a2230, 0x5a3a24, 0x8a3a20, 0xe8c25a, 0xeeeeee, 0xd8443a];
 
+/** A stone battle pad on the arena floor, under a Hexling (the arena's version of battlePad). */
+export function arenaPad(scene: Phaser.Scene, x: number, y: number, w = 200) {
+  scene.add.ellipse(x, y + 6, w + 16, 52, 0x5a4a3a);
+  scene.add.ellipse(x, y, w + 16, 48, 0x9a8a72);
+  scene.add.ellipse(x, y, w - 6, 40, 0x000000, 0).setStrokeStyle(2, 0xf0e2c0, 0.5);
+  scene.add.ellipse(x, y + 2, w - 30, 30, 0xb8a888, 0.6);
+  scene.add.ellipse(x, y, w - 20, 34, 0x000000, 0.3);
+}
+
 export function arenaBackdrop(scene: Phaser.Scene, b: Board, field: { w: number; h: number }): Crowd {
   const left = -b.ox;
   const top = -b.oy;
@@ -45,7 +54,8 @@ export function arenaBackdrop(scene: Phaser.Scene, b: Board, field: { w: number;
   const rand = new Phaser.Math.RandomDataGenerator(['hexbound-arena']);
   for (let r = 0; r < rows; r++) {
     const y = rowTop + r * rowH;
-    const scale = 0.7 + (r / (rows - 1)) * 0.5;
+    // Far away across the floor: small fans, a little bigger in the front rows.
+    const scale = 0.38 + Math.pow(r / (rows - 1), 1.4) * 0.5;
     g.fillStyle(r % 2 ? 0x2e2240 : 0x3a2a4a, 1).fillRect(left, y, width, rowH + 1);
     g.fillStyle(0x000000, 0.25).fillRect(left, y + rowH - 3, width, 3);
     const row = scene.add.container(0, 0);
@@ -82,16 +92,41 @@ export function arenaBackdrop(scene: Phaser.Scene, b: Board, field: { w: number;
     g.fillStyle(0xffffff, 0.35).fillRect(x + 6, standsBottom + 7, bw - 12, 2);
   }
 
-  // The arena floor: packed sand, a painted ring and center line.
+  // The arena floor, seen from the same low angle as every battle field: packed sand receding to
+  // the wall, its stripes and markings squashed toward the far side.
   const floorTop = horizon;
-  g.fillStyle(0xb8935a, 1).fillRect(left, floorTop, width, bottom - floorTop);
-  g.fillStyle(0xa8834a, 1);
-  for (let i = 0; i < 40; i++) g.fillRect(left + rand.between(0, width), floorTop + rand.between(4, Math.max(5, bottom - floorTop - 4)), rand.between(6, 18), 2);
+  const depth = bottom - floorTop;
   const cx = left + width / 2;
-  const cy = floorTop + (bottom - floorTop) * 0.42;
-  g.lineStyle(3, 0xf0e2c0, 0.55).strokeEllipse(cx, cy, Math.min(width * 0.5, 240), (bottom - floorTop) * 0.34);
-  g.lineStyle(3, 0xf0e2c0, 0.4).lineBetween(cx, floorTop + 6, cx, bottom - 6);
-  g.fillStyle(0x000000, 0.18).fillRect(left, floorTop, width, 8);
+  g.fillStyle(0xb8935a, 1).fillRect(left, floorTop, width, depth);
+  // Raked stripes: thin far away, wide up close.
+  const bands = 10;
+  for (let k = 0; k < bands; k += 2) {
+    const y0 = floorTop + depth * Math.pow(k / bands, 1.7);
+    const y1 = floorTop + depth * Math.pow((k + 1) / bands, 1.7);
+    g.fillStyle(0xc4a068, 1).fillRect(left, y0, width, y1 - y0);
+  }
+  // Grit, smaller toward the far side.
+  g.fillStyle(0xa8834a, 1);
+  for (let i = 0; i < 70; i++) {
+    const t = rand.frac();
+    const y = floorTop + depth * t * t;
+    const sz = 1 + t * 3;
+    g.fillRect(left + rand.between(0, width), y, sz * 3, Math.max(1, sz * 0.6));
+  }
+  // Painted lines: the far boundary, the side lines running toward a point beyond the wall, and
+  // the halfway line and ring across the middle (flattened by the angle).
+  const vy = floorTop - depth * 1.1;
+  const sideAt = (x0: number, y: number) => cx + (x0 - cx) * ((y - vy) / (bottom - vy));
+  const farY = floorTop + depth * 0.05;
+  const lineC = 0xf0e2c0;
+  g.lineStyle(2, lineC, 0.45).lineBetween(sideAt(cx - width * 0.62, farY), farY, sideAt(cx + width * 0.62, farY), farY);
+  for (const x0 of [cx - width * 0.62, cx + width * 0.62]) g.lineStyle(3, lineC, 0.45).lineBetween(sideAt(x0, farY), farY, x0, bottom);
+  const midY = floorTop + depth * 0.45;
+  g.lineStyle(3, lineC, 0.5).lineBetween(sideAt(cx - width * 0.62, midY), midY, sideAt(cx + width * 0.62, midY), midY);
+  g.lineStyle(3, lineC, 0.5).strokeEllipse(cx, midY, width * 0.42, depth * 0.16);
+  // Haze and the wall's shadow at the far edge.
+  g.fillStyle(0x000000, 0.22).fillRect(left, floorTop, width, 6);
+  g.fillGradientStyle(0xe8d0a0, 0xe8d0a0, 0xe8d0a0, 0xe8d0a0, 0.25, 0.25, 0, 0).fillRect(left, floorTop + 6, width, depth * 0.12);
 
   // Spotlight beams sweeping the floor.
   if (!calm()) {
