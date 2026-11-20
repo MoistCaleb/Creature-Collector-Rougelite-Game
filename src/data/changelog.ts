@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.23';
+export const APP_VERSION = '1.24';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.24',
+    title: 'Accounts',
+    items: [
+      'Accounts: sign in with your email (Settings › Account & saves). You get a 6-digit code by email, no password, and your progress saves to your account and follows you to any device.',
+      'The game still saves on your device, so it plays the same offline, and catches your account up when you’re back online.',
+      'Already have progress on another device? Choose "Start from a save code" when you make your account, and it moves in.',
+      'If this device and your account both have new progress, the game asks which to keep, and keeps the other as a backup you can restore.',
+      'Save codes still work, signed in or not. You can sign out or delete your account any time.',
+    ],
+  },
   {
     version: '1.23',
     title: 'Familiar faces',

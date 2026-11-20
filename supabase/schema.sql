@@ -11,6 +11,11 @@ create table if not exists public.saves (
 
 alter table public.saves enable row level security;
 
+-- Signed-in players may use the table at all (row-level security below limits them to their own
+-- row). Signed-out visitors get nothing.
+grant select, insert, update, delete on public.saves to authenticated;
+revoke all on public.saves from anon;
+
 drop policy if exists "Players read their own save" on public.saves;
 create policy "Players read their own save" on public.saves
   for select to authenticated using (auth.uid() = user_id);
