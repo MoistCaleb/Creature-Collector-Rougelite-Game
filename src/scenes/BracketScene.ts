@@ -24,7 +24,7 @@ export class BracketScene extends Phaser.Scene {
 
   create() {
     background(this);
-    playMusic('lurk');
+    playMusic('showdown');
     // Not while your match is starting: the battle screen is taking over (a restart here would
     // bring the bracket back on top of it).
     const redraw = () => {

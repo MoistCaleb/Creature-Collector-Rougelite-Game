@@ -494,9 +494,9 @@ export const sfx = {
  * cadences, over bass, drums, pads, arpeggios and bells. Map and battle songs take the colour of the
  * floor's element (its mode, tempo and instruments), so every element sounds different.
  */
-export type Theme = 'title' | 'map' | 'battle' | 'trainer' | 'boss' | 'final' | 'shop' | 'event' | 'arena' | 'win' | 'lose' | 'lurk';
+export type Theme = 'title' | 'map' | 'battle' | 'trainer' | 'boss' | 'final' | 'shop' | 'event' | 'arena' | 'win' | 'lose' | 'showdown';
 
-type Drums = 'none' | 'soft' | 'drive' | 'march' | 'half' | 'heart';
+type Drums = 'none' | 'soft' | 'drive' | 'march' | 'half' | 'taiko';
 
 interface SongDef {
   bpm: number;
@@ -514,10 +514,8 @@ interface SongDef {
   bells?: boolean;
   /** How busy the melody is (0-1). */
   density?: number;
-  /** Chance each melody note after the downbeat is left out (long, lonely gaps). */
-  sparse?: number;
-  /** A low, slowly beating drone under everything, and a far-off tritone chime now and then. */
-  dread?: boolean;
+  /** Larger than life: a driving string ostinato, brass stabs, a choir, the melody in octaves and a big hit every four bars. */
+  epic?: boolean;
   seed: number;
 }
 
@@ -595,9 +593,9 @@ function songFor(theme: Theme, el: Element | null): SongDef {
       return { bpm: 88, root: 220, scale: MINOR, progA: [0, 5, 2, 6], progB: [3, 4, 0, 4], lead: 'triangle', bass: 'triangle', drums: 'soft', pad: true, bells: true, density: 0.5, seed: 11 };
     case 'arena':
       return { bpm: 128, root: 220, scale: MIXOLYDIAN, progA: [0, 6, 3, 0], progB: [3, 4, 6, 4], lead: 'square', bass: 'square', drums: 'half', pad: true, density: 0.6, seed: 61 };
-    case 'lurk':
-      // Online waiting rooms: something is out there. Slow, low, Phrygian, a heartbeat for drums.
-      return { bpm: 60, root: 147, scale: PHRYGIAN, progA: [0, 1, 0, 4], progB: [5, 1, 6, 1], lead: 'sine', bass: 'sine', drums: 'heart', pad: true, echo: true, density: 0.25, sparse: 0.55, dread: true, seed: 66 };
+    case 'showdown':
+      // Online waiting rooms: the big stage. Heroic minor, war drums, brass and choir.
+      return { bpm: 100, root: 147, scale: HARMONIC, progA: [0, 5, 3, 4], progB: [3, 0, 5, 4], lead: 'square', bass: 'sawtooth', drums: 'taiko', bells: true, density: 0.55, epic: true, seed: 66 };
     case 'shop':
       return { bpm: 112, root: 294, scale: MAJOR, progA: [0, 5, 1, 4], progB: [3, 2, 1, 4], lead: 'square', bass: 'triangle', drums: 'soft', arp: true, density: 0.7, seed: 71 };
     case 'event':
@@ -664,10 +662,6 @@ function compose(def: SongDef): Step[] {
       }
       if (end && i >= 4) {
         out.push(i === 4 ? chord + 7 : TIE);
-        continue;
-      }
-      if (def.sparse && rnd() < def.sparse) {
-        out.push(null);
         continue;
       }
       const r = rnd();
@@ -776,19 +770,30 @@ function startTheme(key: string) {
         tone(deg(chord + 2, def.root), step * 7.5, { type: 'sine', vol: 0.05, delay, bus, attack: 0.25 });
         tone(deg(chord + 4, def.root), step * 7.5, { type: 'sine', vol: 0.045, delay, bus, attack: 0.25 });
       }
-      // Dread: a drone a hair out of tune with itself (it throbs), and a distant tritone chime.
-      if (def.dread) {
-        if (beat === 0 && barNo % 2 === 0) {
-          const low = def.root / 4;
-          tone(low, step * 16, { type: 'sine', vol: 0.16, delay, bus, attack: 1.2 });
-          tone(low * 1.012, step * 16, { type: 'sine', vol: 0.12, delay, bus, attack: 1.6 });
-          tone(low * 2 * Math.pow(2, 6 / 12), step * 15, { type: 'triangle', vol: 0.025, delay, bus, attack: 2.5 });
+      // Epic: everything a stadium anthem needs.
+      if (def.epic) {
+        const lo = (d: number) => deg(d, def.root / 2);
+        // Strings: a relentless eighth-note ostinato on the chord's root, jumping the octave.
+        tone(beat % 4 === 2 ? lo(chord) * 2 : lo(chord), step * 0.7, { type: 'sawtooth', vol: 0.05, delay, bus });
+        // Brass: full chords stabbing the dotted rhythm (1, the and of 2, 4).
+        if (beat === 0 || beat === 3 || beat === 6)
+          for (const t of [0, 2, 4, 7]) tone(deg(chord + t, def.root / 2) * (t === 7 ? 1 : 2), step * (beat === 0 ? 1.6 : 1), { type: 'sawtooth', vol: beat === 0 ? 0.045 : 0.032, delay, bus, attack: 0.03 });
+        // Choir: the chord held through the bar, a few voices slightly apart.
+        if (beat === 0)
+          for (const t of [0, 2, 4])
+            for (const dt of [0.997, 1.003]) tone(deg(chord + t, def.root) * dt, step * 7.8, { type: 'triangle', vol: 0.03, delay, bus, attack: 0.35 });
+        // The melody again an octave down, like horns under it.
+        const m = steps[pos];
+        if (m !== null && m !== TIE) {
+          let len = 1;
+          while (steps[(pos + len) % steps.length] === TIE && len < 8) len++;
+          tone(deg(m, def.root / 2), step * len * 0.9, { type: 'sawtooth', vol: 0.05, delay, bus, attack: 0.02 });
         }
-        if (barNo % 4 === 2 && beat === 5) {
-          const f = def.root * 4 * Math.pow(2, 6 / 12);
-          for (let k = 0; k < 4; k++) tone(f, step * 3, { type: 'sine', vol: 0.03 / (k + 1), delay: delay + k * step * 1.5, bus, attack: 0.005 });
+        // Every four bars: a huge hit (sub drop and a cymbal crash).
+        if (beat === 0 && barNo % 4 === 0) {
+          tone(70, 0.9, { type: 'sine', vol: 0.5, slide: 28, delay, bus });
+          noise(1.6, { freq: 5000, to: 1500, vol: 0.09, type: 'highpass', delay, bus });
         }
-        if (barNo % 8 === 7 && beat === 2) noise(step * 5, { freq: 400, to: 120, vol: 0.05, type: 'lowpass', delay, bus });
       }
       // Arpeggio: chord tones climbing, quietly.
       if (def.arp && section !== 0) {
@@ -818,11 +823,22 @@ function startTheme(key: string) {
           if (beat === 4) snare();
           if (beat % 2 === 0) hat(0.05);
           break;
-        case 'heart':
-          // Lub-dub, low and muffled.
-          if (beat === 0) tone(62, 0.16, { type: 'sine', vol: 0.4, slide: 30, delay, bus });
-          if (beat === 1) tone(55, 0.14, { type: 'sine', vol: 0.26, slide: 28, delay, bus });
+        case 'taiko': {
+          // War drums: big low booms, a cracking snare on 3, and a tom roll into each fourth bar.
+          const boom = (v = 0.55) => {
+            tone(80, 0.35, { type: 'sine', vol: v, slide: 42, delay, bus });
+            noise(0.12, { freq: 300, vol: v * 0.35, type: 'lowpass', delay, bus });
+          };
+          const tom = (f: number, v = 0.32) => tone(f, 0.2, { type: 'sine', vol: v, slide: f * 0.55, delay, bus });
+          if (beat === 0 || beat === 3 || (beat === 7 && !lastBar)) boom(beat === 0 ? 0.6 : 0.45);
+          if (beat === 4) {
+            snare(0.26);
+            boom(0.3);
+          }
+          if (lastBar && beat >= 4) tom([0, 0, 0, 0, 180, 150, 120, 95][beat], 0.3 + (beat - 4) * 0.05);
+          if (beat % 2 === 1) hat(0.035);
           break;
+        }
         case 'soft':
           if (beat === 0) tone(90, 0.1, { type: 'sine', vol: 0.22, slide: 45, delay, bus });
           if (beat === 4) hat(0.03);

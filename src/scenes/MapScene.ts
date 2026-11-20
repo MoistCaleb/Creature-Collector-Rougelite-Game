@@ -144,7 +144,7 @@ export class MapScene extends Phaser.Scene {
     const base = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color;
     background(this, base);
     mapBackdrop(this, map.biome, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, base);
-    if (run.race?.done) playMusic('lurk');
+    if (run.race?.done) playMusic('showdown');
     else playMusic('map', map.biome);
 
     // ---- map layer
