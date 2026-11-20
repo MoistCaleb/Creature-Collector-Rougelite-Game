@@ -2,9 +2,9 @@ import type Phaser from 'phaser';
 import { titleNews } from '../logic/cosmetics';
 import { isAlive } from '../logic/creature';
 import { potionHeal, saveMeta, type Run } from '../logic/run';
-import { addOnlineWin, addRoyaleWin } from '../logic/titles';
+import { addOnlineLoss, addOnlineWin, addRoyaleWin } from '../logic/titles';
 import { duel, endRace, leaveDuelRoyale, raceVerdict, sendProgress } from '../net/runtime';
-import { royale, royaleQuit, royaleSummary } from '../net/royale';
+import { countRoyaleLoss, royale, royaleQuit, royaleSummary } from '../net/royale';
 import { myPid, session } from '../net/session';
 import { state } from '../state';
 import { showMessage } from './picker';
@@ -29,13 +29,22 @@ function handIn(run: Run, won: boolean) {
   sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run) });
 }
 
-function stageWinNews(run: Run): string {
-  if (!winNews.has(run)) {
-    winNews.set(run, titleNews(addOnlineWin(state.meta)).replace(/^\n+/, '\n'));
-    saveMeta(state.meta);
-  }
-  return winNews.get(run)!;
+/** Stage battles whose result (win or loss) is already counted. */
+const counted = new WeakSet<object>();
+
+/** Count a stage battle's result once (from the final duel, or decided without one). Returns title news for a win. */
+export function countStage(run: Run | null, won: boolean): string {
+  if (run && counted.has(run)) return run ? (winNews.get(run) ?? '') : '';
+  if (run) counted.add(run);
+  let news = '';
+  if (won) news = titleNews(addOnlineWin(state.meta)).replace(/^\n+/, '\n');
+  else addOnlineLoss(state.meta);
+  if (run && won) winNews.set(run, news);
+  saveMeta(state.meta);
+  return news;
 }
+
+const stageWinNews = (run: Run) => countStage(run, true);
 
 function royaleWinNews(): string {
   if (royale.winCounted) return '';
@@ -78,7 +87,10 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
     const leave = (confirm: boolean) => () => {
       // The host is everyone's link: leaving early ends it for all.
       if (confirm && session.role === 'host') return showMessage(scene, 'End the battle royale?', 'You’re the host, so leaving ends it for everyone.', () => (leaveDuelRoyale(), royale.reset(), toLobby()));
-      if (confirm) royaleQuit();
+      if (confirm) {
+        countRoyaleLoss();
+        royaleQuit();
+      }
       royale.reset();
       toLobby();
     };
@@ -99,6 +111,7 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
           scene.time.delayedCall(1400, () => !royale.match && scene.scene.isActive() && scene.scene.start('Bracket', {}));
         }
       } else {
+        if (!won) countRoyaleLoss();
         status.setText(`${won ? 'Your team is ready for the bracket.' : 'Your team fell, but you can watch the bracket.'} Watching the others climb: ${royaleSummary()}`);
         setButton(won ? 'Give up the battle royale' : 'Leave', leave(true));
       }
@@ -113,6 +126,9 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
   const opp = run.race!.opponent;
   const done = (l: string) =>
     setButton(l, () => {
+      // Leaving before it's decided gives it up.
+      const v = raceVerdict();
+      if (v !== 'win' && v !== 'draw') countStage(run, false);
       endRace();
       toLobby();
     });
@@ -135,7 +151,7 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
         verdict === 'win'
           ? `${opp} has no team left. You win the stage battle!${stageWinNews(run)}`
           : verdict === 'lose'
-            ? `You have no team left, so ${opp} wins the stage battle.`
+            ? (countStage(run, false), `You have no team left, so ${opp} wins the stage battle.`)
             : 'Neither of you has a team left. It’s a draw.',
       );
       done('Done');

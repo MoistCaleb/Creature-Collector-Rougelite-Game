@@ -2,7 +2,8 @@ import { GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
 import { titleBadge } from '../ui/titleBadge';
-import { addOnlineWin} from '../logic/titles';
+import { addOnlineLoss, addOnlineWin } from '../logic/titles';
+import { countStage } from '../ui/raceWait';
 import { titleNews } from '../logic/cosmetics';
 import { tip, tipDone } from '../ui/tips';
 import { trainerCutIn } from '../ui/cutin';
@@ -37,7 +38,7 @@ import { Rng } from '../logic/rng';
 import type { DuelController, Next } from '../net/duel';
 import { session } from '../net/session';
 import { afterSeriesGame, duel, endRace, leaveDuel, recordSeriesGame, sendHello } from '../net/runtime';
-import { reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
+import { countRoyaleLoss, reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
 import {
   canEvolve,
   getFloorCeiling,
@@ -1644,6 +1645,7 @@ export class BattleScene extends Phaser.Scene {
       const [round] = royale.match.id.split('-').map(Number);
       const final = !!royale.bracket && round === royale.bracket.rounds.length - 1;
       reportMatch(won);
+      if (!won) countRoyaleLoss();
       const title = won ? (final ? `You won the ${royaleLabel()}!` : `You beat ${opp}!`) : `${opp} knocks you out`;
       const body = won
         ? final
@@ -1657,8 +1659,7 @@ export class BattleScene extends Phaser.Scene {
     const meta = state.meta;
     if (race) {
       const title = won ? 'You won the stage battle!' : `${opp} won the stage battle`;
-      const body = (won ? `Your team beat ${opp}'s at the boss!` : `${opp}'s team beat yours at the boss.`) + (won ? titleNews(addOnlineWin(meta)) : '');
-      if (won) saveMeta(meta);
+      const body = (won ? `Your team beat ${opp}'s at the boss!` : `${opp}'s team beat yours at the boss.`) + countStage(state.run, won);
       return showMessage(this, title, body, () => {
         endRace();
         state.run = null;
@@ -1681,6 +1682,9 @@ export class BattleScene extends Phaser.Scene {
     }
     if (seriesWon) {
       body += titleNews(addOnlineWin(meta));
+      saveMeta(meta);
+    } else if (result === 'lost' || (!won && !sr)) {
+      addOnlineLoss(meta);
       saveMeta(meta);
     }
     showMessage(this, title, body, () => afterSeriesGame(result !== null));

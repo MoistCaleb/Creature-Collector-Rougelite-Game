@@ -238,6 +238,20 @@ describe('shop', () => {
     clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
+  it('online races don\'t count as runs; online W/L and streaks are their own', async () => {
+    const { addOnlineWin, addOnlineLoss } = await import('../src/logic/titles');
+    const m = mkMeta();
+    startRun(m, 'emberkit', 5);
+    expect(m.runs).toBe(1);
+    startRun(m, 'emberkit', 5, 'wildlands', undefined, true, undefined, null);
+    expect(m.runs).toBe(1);
+    addOnlineWin(m);
+    addOnlineWin(m);
+    expect([m.onlineWins, m.onlineStreak, m.bestOnlineStreak]).toEqual([2, 2, 2]);
+    addOnlineLoss(m);
+    addOnlineWin(m);
+    expect([m.onlineWins, m.onlineLosses, m.onlineStreak, m.bestOnlineStreak]).toEqual([3, 1, 1, 2]);
+  });
   it('Gilded Hunt: better gilded odds with Heat, and Heat breaks a tie in depth', async () => {
     const { huntShinyIn, noteHunt } = await import('../src/logic/run');
     const { showHunt, myScores } = await import('../src/logic/leaderboard');
@@ -1951,7 +1965,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

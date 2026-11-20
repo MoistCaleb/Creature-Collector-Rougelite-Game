@@ -148,7 +148,7 @@ export class StarterScene extends Phaser.Scene {
     rolled = null;
     if (this.race) {
       // Same map and seed as the other racer; Heat 0 and no passive so it's even.
-      const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true, undefined, racePassives(this.race.seed, this.race.starters)[id]);
+      const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true, undefined, racePassives(this.race.seed, this.race.starters)[id] ?? null);
       run.race = royale.active
         ? { opponent: `${royale.players.length - 1} rivals`, role: session.role === 'host' ? 'host' : 'guest', royale: true }
         : { opponent: duel.opponent?.name ?? 'Friend', role: session.role === 'host' ? 'host' : 'guest' };
