@@ -40,12 +40,14 @@ export class RecordsScene extends Phaser.Scene {
 
     // Big numbers.
     heading(x0, 'Overall');
-    const rate = meta.runs ? Math.round((meta.wins / meta.runs) * 100) : 0;
+    const rr = meta.runRecord ?? { wins: 0, losses: 0 };
+    const played = rr.wins + rr.losses;
+    const rate = played ? Math.round((rr.wins / played) * 100) : 0;
     const topHeat = Math.max(0, ...Object.values(meta.mapHeats ?? {}).flat());
     const tiles: [string, string][] = [
-      ['Runs', String(meta.runs)],
-      ['Wins', String(meta.wins)],
-      ['Win rate', meta.runs ? `${rate}%` : '—'],
+      ['Run W/L', `${rr.wins}–${rr.losses}`],
+      ['Wins (all time)', String(meta.wins)],
+      ['Win rate', played ? `${rate}%` : '—'],
       ['Win streak', String(meta.streak ?? 0)],
       ['Best streak', String(meta.bestStreak ?? 0)],
       ['Top Heat won', topHeat ? String(topHeat) : '—'],

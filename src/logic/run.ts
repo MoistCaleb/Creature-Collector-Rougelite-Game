@@ -175,6 +175,11 @@ export interface Meta {
   trainerTitle?: string;
   /** Titles already announced as earned. */
   titlesAnnounced?: string[];
+  /**
+   * Single-player runs won and lost, for the W/L (from v1.47: seeded from your recent runs, then
+   * every run that ends, abandoned runs as losses). Separate from `wins`, which unlocks things.
+   */
+  runRecord?: { wins: number; losses: number };
   /** Online games won: duels (series), stage battles, battle royales and online tournaments. */
   onlineWins?: number;
   /** Online games lost (counted from v1.46), and online wins in a row (now and best). */
@@ -254,8 +259,7 @@ export function recordRun(run: Run, won: boolean) {
   };
   noteRunRecord(meta, rec);
   meta.history = [rec, ...(meta.history ?? [])].slice(0, HISTORY_MAX);
-  meta.streak = won ? (meta.streak ?? 0) + 1 : 0;
-  meta.bestStreak = Math.max(meta.bestStreak ?? 0, meta.streak);
+  countRunResult(meta, won);
   const usage = (meta.usage = meta.usage ?? {});
   const ids = new Set([...allCreatures(run).map((c) => c.speciesId), ...(run.log.fallen ?? []).map((f) => f.speciesId)]);
   for (const id of ids) usage[id] = (usage[id] ?? 0) + 1;
@@ -348,10 +352,49 @@ export function loadMeta(): Meta {
     // Saves from before NEW tags: what you already have isn't new.
     if (!saved.seenItems) meta.seenItems = unlockedExtras(meta).map((i) => itemId(i.key, i.value));
     if (!saved.seenTitles) meta.seenTitles = earnedTitles(meta);
+    // v1.47: the run W/L starts over from your recent runs (online races had been counted as losses).
+    if (!saved.runRecord) seedRunRecord(meta);
     return meta;
   } catch {
     return fallback;
   }
+}
+
+/** Set the run W/L and the win streak from your recent runs (newest first in history). */
+export function seedRunRecord(meta: Meta) {
+  const h = meta.history ?? [];
+  meta.runRecord = { wins: h.filter((r) => r.won).length, losses: h.filter((r) => !r.won).length };
+  let streak = 0;
+  while (streak < h.length && h[streak].won) streak++;
+  meta.streak = streak;
+  meta.bestStreak = Math.max(meta.bestStreak ?? 0, streak);
+}
+
+/** Count a single-player run's result in the W/L (and the win streak). */
+function countRunResult(meta: Meta, won: boolean) {
+  const rr = (meta.runRecord ??= { wins: 0, losses: 0 });
+  if (won) rr.wins += 1;
+  else rr.losses += 1;
+  meta.streak = won ? (meta.streak ?? 0) + 1 : 0;
+  meta.bestStreak = Math.max(meta.bestStreak ?? 0, meta.streak);
+}
+
+/**
+ * Give up the saved run (to start another): it counts as a loss, unless it was a Gilded Hunt
+ * (its run was already won) or an online race. Then the save is cleared.
+ */
+export function abandonSavedRun(meta: Meta) {
+  try {
+    const raw = storage.getItem(RUN_KEY);
+    const data = raw ? JSON.parse(raw) : null;
+    if (data && !data.hunt && !data.race) {
+      countRunResult(meta, false);
+      saveMeta(meta);
+    }
+  } catch {
+    /* unreadable save: nothing to count */
+  }
+  clearSavedRun();
 }
 
 export function saveMeta(meta: Meta) {

@@ -1,7 +1,7 @@
 import { accountsAvailable, currentUser } from '../net/account';
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed } from '../logic/run';
+import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed } from '../logic/run';
 import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
@@ -77,9 +77,8 @@ export class TitleScene extends Phaser.Scene {
     text(this, lx, LANDSCAPE ? 104 : 86, 'HEXBOUND', 52, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     text(this, lx, LANDSCAPE ? 146 : 126, 'A HEXLING ROGUELITE', 18, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5);
 
-    // Every run started counts: a run given up (or still going) isn't a win. The one in progress isn't a loss yet.
-    const losses = Math.max(0, meta.runs - meta.wins - (hasSavedRun() ? 1 : 0));
-    text(this, lx, ly(262), `Run W/L: ${meta.wins}–${losses}   Consecutive wins: ${meta.streak ?? 0}`, 15, COLORS.textDim).setOrigin(0.5);
+    const rr = meta.runRecord ?? { wins: 0, losses: 0 };
+    text(this, lx, ly(262), `Run W/L: ${rr.wins}–${rr.losses}   Consecutive wins: ${meta.streak ?? 0}`, 15, COLORS.textDim).setOrigin(0.5);
     text(this, lx, ly(284), `Online W/L: ${meta.onlineWins ?? 0}–${meta.onlineLosses ?? 0}   Consecutive wins: ${meta.onlineStreak ?? 0}`, 15, COLORS.textDim).setOrigin(0.5);
     text(this, lx, ly(306), `Starters unlocked: ${meta.unlockedStarters.length} / ${SPECIES.length}${meta.heatUnlocked ? `   Heat ${meta.heatUnlocked}` : ''}`, 15, COLORS.textDim).setOrigin(0.5);
 
@@ -202,7 +201,7 @@ export class TitleScene extends Phaser.Scene {
       subtitle: 'Your current run will be lost.',
       options: [{ label: 'Abandon and start fresh', color: 0x8a2c2c }],
       onPick: () => {
-        clearSavedRun();
+        abandonSavedRun(state.meta);
         this.scene.start('MapSelect', {});
       },
       onCancel: () => {},

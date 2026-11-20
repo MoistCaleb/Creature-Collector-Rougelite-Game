@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.46';
+export const APP_VERSION = '1.47';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.47',
+    title: 'A fresh W/L',
+    items: [
+      'Your run W/L has been reset from your recent runs (the ones in Records), so old online races no longer show up as losses. From now on every run you finish counts, and abandoning a run counts as a loss.',
+      'Consecutive wins were reset the same way. Your all-time wins (and everything they unlock) are unchanged.',
+    ],
+  },
   {
     version: '1.46',
     title: 'Online record',

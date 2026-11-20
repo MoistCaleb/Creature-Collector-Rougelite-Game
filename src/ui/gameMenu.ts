@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { clearSavedRun } from '../logic/run';
+import { abandonSavedRun } from '../logic/run';
 import { persist, state } from '../state';
 import { openPicker } from './picker';
 import type { Element } from '../data/types';
@@ -40,7 +40,7 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
         subtitle: 'It ends here and can’t be continued. Starters you unlocked and Hexlidex entries are kept.',
         options: [{ label: 'Abandon run', color: 0x8a2c2c }],
         onPick: () => {
-          clearSavedRun(state.run);
+          abandonSavedRun(state.meta);
           state.run = null;
           scene.scene.start('Title', {});
         },
