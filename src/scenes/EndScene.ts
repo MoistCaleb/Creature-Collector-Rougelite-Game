@@ -5,7 +5,7 @@ import { unlocksOf } from '../logic/cosmetics';
 import { finishRunClock, formatDuration } from '../logic/runClock';
 import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
+import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
 import { persist, state } from '../state';
 import { type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
@@ -21,8 +21,8 @@ const recordedRuns = new WeakSet<object>();
 const historyRuns = new WeakSet<object>();
 
 /** End of a run: what happened, who carried the team, who made it and who didn't. */
-/** "12", "10.5", "9". */
-const oddsText = (n: number) => String(Math.round(n * 10) / 10);
+/** Gilded Hunt odds for wild Hexlings at a Heat: "1 in 12", "5 in 12", "9 in 12". */
+const oddsText = (heat: number) => `${Math.round(HUNT_SHINY_IN.wild / huntShinyIn(heat).wild)} in ${HUNT_SHINY_IN.wild}`;
 
 export class EndScene extends Phaser.Scene {
   /** This win was your fastest yet. */
@@ -252,7 +252,7 @@ export class EndScene extends Phaser.Scene {
       title: 'Gilded Hunt',
       subtitle:
         'Your win is already counted. Keep climbing with this team through endless floors of random elements.\n\n' +
-        `• Gilded Hexlings are everywhere: about 1 wild Hexling in ${oddsText(huntShinyIn(run.heat ?? 0).wild)}${run.heat ? ` (better at Heat ${run.heat})` : ''}, and trainers' and guardians' Hexlings can be gilded too.\n` +
+        `• Gilded Hexlings are everywhere: about ${oddsText(run.heat ?? 0)} wild Hexlings${run.heat ? ` (Heat ${run.heat} bonus)` : ''}, and trainers' and guardians' Hexlings can be gilded too.\n` +
         '• Your team is fully healed to start, and your Hexlings can reach their full level cap.\n' +
         `• Enemies are final forms that grow every floor, with higher levels than yours and up to ${HUNT_MAX_STARS}★.\n` +
         '• It ends when your team falls. How deep can you go?',

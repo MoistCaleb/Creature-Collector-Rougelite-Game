@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.44';
+export const APP_VERSION = '1.45';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.45',
+    title: 'Hot hunts, golden hauls',
+    items: ['Gilded Hunt odds now climb much faster with Heat: each Heat level adds another chance in 12 for wild Hexlings (1 in 12 at Heat 0, 5 in 12 at Heat 4, 9 in 12 at Heat 8) and another chance in 20 for trainers’ and guardians’ Hexlings.'],
+  },
   {
     version: '1.44',
     title: 'Hotter hunts',
