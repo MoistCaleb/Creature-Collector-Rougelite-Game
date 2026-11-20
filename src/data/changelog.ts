@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.28';
+export const APP_VERSION = '1.29';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.29',
+    title: 'A cozier camp',
+    items: [
+      'Camp is full of life from day one: trees, bushes and rocks, a dirt clearing and path, your bedroll and pack, log seats, a woodpile and a pot bubbling by the fire.',
+      'Smoke drifts up, fireflies come out after dark (butterflies by day), and wild Hexlings wander past now and then.',
+    ],
+  },
   {
     version: '1.28',
     title: 'Camp comes alive',
