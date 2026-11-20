@@ -35,6 +35,7 @@ import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, 
 import { myTitle } from '../logic/titles';
 import { friendsAvailable, listFriends, type Friend } from '../net/friends';
 import { state } from '../state';
+import { card } from '../ui/accountUi';
 import { cry } from '../ui/cries';
 import { calm } from '../ui/motion';
 import { openPicker, showMessage } from '../ui/picker';
@@ -783,31 +784,61 @@ export class CampScene extends Phaser.Scene {
     });
   }
 
-  private pickSpecies(current: string[], slot: number) {
+  /** Choose a Hexling line for a camp spot: most used first, with a name search. */
+  private pickSpecies(current: string[], slot: number, query = '') {
     const meta = state.meta;
+    const q = query.trim().toLowerCase();
     const caught = [...new Set([...meta.dex.caught, ...meta.unlockedStarters])].filter((id) => SPECIES_BY_ID[id] && SPECIES.some((s) => s.id === id));
+    const used = (id: string) => meta.usage?.[id] ?? 0;
     const pool = caught
       .filter((id) => !current.includes(id) || current[slot] === id)
-      .sort((a, b) => (meta.camp?.bond[b] ?? 0) - (meta.camp?.bond[a] ?? 0) || SPECIES_BY_ID[a].names[0].localeCompare(SPECIES_BY_ID[b].names[0]));
+      .filter((id) => !q || SPECIES_BY_ID[id].names.some((n) => n.toLowerCase().includes(q)))
+      .sort(
+        (a, b) =>
+          used(b) - used(a) ||
+          (meta.camp?.bond[b] ?? 0) - (meta.camp?.bond[a] ?? 0) ||
+          SPECIES_BY_ID[a].names[0].localeCompare(SPECIES_BY_ID[b].names[0]),
+      );
+    const empty = current[slot] && !q;
+    const lead = 1 + (empty ? 1 : 0);
     openPicker(this, {
       title: 'Who stays at camp?',
-      subtitle: 'Any Hexling line you’ve caught.',
+      subtitle: q ? `Lines matching “${query.trim()}”: ${pool.length}` : 'Any Hexling line you’ve caught, most used first.',
       options: [
-        ...(current[slot] ? [{ label: 'Leave this spot empty', color: 0x4a3a2a }] : []),
-        ...pool.map((id) => ({ label: SPECIES_BY_ID[id].names[0], sub: '♥'.repeat(campHearts(meta, id)) || ' ', icon: createCreature(id, 5) })),
+        q ? { label: `Search: ${query.trim()}`, sub: 'Tap to change or clear', glyph: 'book' as const, color: 0x2f4a6b } : { label: 'Search by name', glyph: 'book' as const, color: 0x2f4a6b },
+        ...(empty ? [{ label: 'Leave this spot empty', color: 0x4a3a2a }] : []),
+        ...pool.map((id) => {
+          const n = used(id);
+          const hearts = '♥'.repeat(campHearts(meta, id));
+          const runs = n ? `${n} run${n === 1 ? '' : 's'}` : '';
+          return { label: SPECIES_BY_ID[id].names[0], sub: [runs, hearts].filter(Boolean).join(' · ') || ' ', icon: createCreature(id, 5) };
+        }),
       ],
       rowHeight: 60,
       cancelLabel: 'Back',
       onCancel: () => this.crewPicker(),
       onPick: (i) => {
-        const offset = current[slot] ? 1 : 0;
+        if (i === 0) return this.searchSpecies(current, slot, query);
         const next = [...current];
-        if (offset && i === 0) next.splice(slot, 1);
-        else next[slot] = pool[i - offset];
+        if (empty && i === 1) next.splice(slot, 1);
+        else next[slot] = pool[i - lead];
         camp(meta).crew = next.filter(Boolean).slice(0, CREW_MAX);
         saveMeta(meta);
         this.crewPicker();
       },
+    });
+  }
+
+  /** Type part of a name (any of the line's forms). */
+  private searchSpecies(current: string[], slot: number, query: string) {
+    card({
+      title: 'Search Hexlings',
+      body: 'Type part of a name. Any form of the line counts.',
+      field: { type: 'text', placeholder: 'e.g. ember', value: query },
+      buttons: [
+        { label: 'Clear', onClick: (c) => (c.close(), this.pickSpecies(current, slot)) },
+        { label: 'Search', primary: true, onClick: (c) => (c.close(), this.pickSpecies(current, slot, c.value())) },
+      ],
     });
   }
 

@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.29';
+export const APP_VERSION = '1.30';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.30',
+    title: 'Camp crew search',
+    items: ['Choosing who stays at camp now lists your most used Hexling lines first (with how many runs), and you can search by name.'],
+  },
   {
     version: '1.29',
     title: 'A cozier camp',
