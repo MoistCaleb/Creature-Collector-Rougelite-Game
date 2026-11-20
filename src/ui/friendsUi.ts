@@ -4,6 +4,7 @@ import { saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
 import { GAME_MODES } from '../net/duel';
 import { claimUsername, dismissInvite, friendsAvailable, listenForInvites, loadProfile, shareLook, startPresence, stopListening, type Invite } from '../net/friends';
+import { postMyScores } from '../net/leaderboard';
 import { session } from '../net/session';
 import { state } from '../state';
 import { card } from './accountUi';
@@ -21,6 +22,7 @@ function activityNow(): string {
 }
 
 let started = false;
+let scoreTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Signed in with a username: show as online to friends, and pop up their invites. */
 export async function startFriends() {
@@ -43,6 +45,9 @@ export async function startFriends() {
     void shareLook(myLook(state.meta), myTitle(state.meta) ?? null).catch(() => {});
     startPresence(activityNow);
     listenForInvites(showInvite);
+    // Leaderboards: send your numbers now and whenever they change (checked every minute).
+    void postMyScores(state.meta);
+    scoreTimer ??= setInterval(() => document.visibilityState === 'visible' && void postMyScores(state.meta), 60_000);
   } catch {
     /* offline or not set up: try again next launch */
   }

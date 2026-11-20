@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2746,3 +2746,26 @@ describe('Your rival, the shopkeeper and the researcher', () => {
   });
 });
 import { makeRival as makeRivalFor } from '../src/logic/run';
+
+describe('Leaderboards', async () => {
+  const { BOARDS, myScores, showScore } = await import('../src/logic/leaderboard');
+  it('has a number for every board, whole and never negative', () => {
+    const m = blankMeta();
+    m.wins = 4;
+    m.bestStreak = 3;
+    m.mapHeats = { a: [1, 5], b: [2] };
+    m.stats.coinsEarned = 1234.7;
+    const s = myScores(m);
+    expect(Object.keys(s)).toEqual(BOARDS.map((b) => b.id));
+    expect(s.wins).toBe(4);
+    expect(s.streak).toBe(3);
+    expect(s.heat).toBe(5);
+    expect(s.coins).toBe(1234);
+    expect(Object.values(s).every((v) => Number.isInteger(v) && v >= 0)).toBe(true);
+    expect(showScore(BOARDS.find((b) => b.id === 'heat')!, 5)).toBe('Heat 5');
+  });
+  it('every board is one the server knows', async () => {
+    const sql = (await import('../supabase/leaderboard.sql?raw')).default;
+    for (const b of BOARDS) expect(sql).toContain(`"${b.id}":`);
+  });
+});
