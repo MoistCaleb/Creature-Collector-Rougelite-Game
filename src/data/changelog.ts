@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.35';
+export const APP_VERSION = '1.36';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.36',
+    title: 'Steadier legendaries',
+    items: ['Roaming legendaries now only hop 1 or 2 hexes each time you move, instead of jumping anywhere on the floor, so you can actually chase one down.'],
+  },
   {
     version: '1.35',
     title: 'Stadium from the field',
