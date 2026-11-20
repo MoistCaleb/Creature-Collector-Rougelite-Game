@@ -242,8 +242,9 @@ describe('shop', () => {
     const { huntShinyIn, noteHunt } = await import('../src/logic/run');
     const { showHunt, myScores } = await import('../src/logic/leaderboard');
     expect(huntShinyIn(0)).toEqual({ wild: 12, trainer: 20 });
-    expect(huntShinyIn(8)).toEqual({ wild: 9, trainer: 15 });
-    expect(huntShinyIn(4).wild).toBeCloseTo(10.5);
+    expect(huntShinyIn(4).wild).toBeCloseTo(12 / 5);
+    expect(huntShinyIn(8).wild).toBeCloseTo(12 / 9);
+    expect(huntShinyIn(8).trainer).toBeCloseTo(20 / 9);
     const m = mkMeta();
     noteHunt(m, 9, 2);
     noteHunt(m, 9, 6);
@@ -1950,7 +1951,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

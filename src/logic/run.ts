@@ -1189,10 +1189,13 @@ export const GILDED_WEEK_IN = 15;
 /** Shiny Hunting: one in this many wild Hexlings, and trainers' / guardians' Hexlings, is shiny. */
 export const HUNT_SHINY_IN = { wild: 12, trainer: 20 };
 
-/** Gilded odds on a Gilded Hunt: a little better each Heat, up to 1 in 9 wild (1 in 15 trainers) at Heat 8. */
+/**
+ * Gilded odds on a Gilded Hunt ("1 in N"): each Heat adds another chance, so wild Hexlings go
+ * 1 in 12 → 5 in 12 at Heat 4 → 9 in 12 at Heat 8 (trainers' 1 in 20 → 9 in 20).
+ */
 export function huntShinyIn(heat: number): { wild: number; trainer: number } {
-  const t = Math.max(0, Math.min(MAX_HEAT, heat)) / MAX_HEAT;
-  return { wild: HUNT_SHINY_IN.wild - 3 * t, trainer: HUNT_SHINY_IN.trainer - 5 * t };
+  const chances = 1 + Math.max(0, Math.min(MAX_HEAT, Math.floor(heat)));
+  return { wild: HUNT_SHINY_IN.wild / chances, trainer: HUNT_SHINY_IN.trainer / chances };
 }
 
 /** Note how deep a hunt got: deeper is better, and at the same depth a higher Heat. */
