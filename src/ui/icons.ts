@@ -477,6 +477,18 @@ const ICONS = {
     '..YY....YY..',
     '..Yy....yY..',
   ],
+  heart: [
+    '..RRR..RRR..',
+    '.RSSRRRRRRR.',
+    'RRSRRRRRRRRR',
+    'RRRRRRRRRRRR',
+    'RRRRRRRRRRRR',
+    '.RRRRRRRRRR.',
+    '..RRRRRRRR..',
+    '...RRRRRR...',
+    '....RRRR....',
+    '.....RR.....',
+  ],
   egg: [
     '....EEEE....',
     '...EEEEEE...',
@@ -544,6 +556,7 @@ export const NODE_ICONS: Record<string, IconId> = {
   shop: 'coin',
   treasure: 'chest',
   event: 'question',
+  revive: 'heart',
   boss: 'skull',
 };
 

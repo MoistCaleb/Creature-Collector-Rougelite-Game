@@ -238,6 +238,32 @@ describe('shop', () => {
     clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
+  it('every floor has exactly one Revival hex, and it brings a fallen Hexling back at 60% of its level', async () => {
+    const { reviveFallen } = await import('../src/logic/run');
+    for (let seed = 1; seed < 40; seed++)
+      for (let f = 0; f < 3; f++) {
+        const m = generateFloor(f, 'Fire', seed * 7919);
+        expect(Object.values(m.nodes).filter((n) => n.kind === 'revive').length).toBe(1);
+      }
+    const run = startRun(mkMeta(), 'emberkit', 21);
+    const c = run.team[0];
+    c.level = 40;
+    c.stars = 2;
+    c.shiny = true;
+    const uid = c.uid;
+    c.hp = 0;
+    buryFallen(run);
+    expect(run.team.length).toBe(0);
+    expect(run.log.fallen!.length).toBe(1);
+    const back = reviveFallen(run, uid)!;
+    expect(back.level).toBe(24);
+    expect([back.stars, back.shiny, back.uid]).toEqual([2, true, uid]);
+    expect(back.hp).toBe(stats(back).hp);
+    expect(run.team).toContain(back);
+    expect(run.log.fallen!.length).toBe(0);
+    expect(run.log.graveyard!.length).toBe(0);
+    expect(reviveFallen(run, uid)).toBeNull();
+  });
   it('run W/L: seeded once from recent runs, then every finished or abandoned run', async () => {
     const { seedRunRecord, abandonSavedRun, saveRun, recordRun } = await import('../src/logic/run');
     const m = mkMeta();
@@ -1987,7 +2013,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

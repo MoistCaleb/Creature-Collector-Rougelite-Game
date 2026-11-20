@@ -29,7 +29,7 @@ export const HOW_TO_PLAY: Page[] = [
     lines: [
       'Each step climbs one row: tap a glowing hex touching yours from above.',
       'Every route to the guardian is the same length, so the choice is which stops you make.',
-      'Battle and Trainer fights give XP and coins. Rest heals. Level Up, Skill and Prestige (★) make a Hexling stronger. Shops sell items. Treasure is free loot. ? is an event: a risk or a reward.',
+      'Battle and Trainer fights give XP and coins. Rest heals. Level Up, Skill and Prestige (★) make a Hexling stronger. Shops sell items. Treasure is free loot. ? is an event: a risk or a reward. Each floor has one Revival (♥): bring back a fallen Hexling at 60% of its level.',
       'Your run saves after every step. Leave any time and tap Continue run.',
     ],
   },

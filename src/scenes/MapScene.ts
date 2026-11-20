@@ -24,7 +24,7 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { placeRng, rivalHere, rivalTrainerName } from '../logic/run';
+import { placeRng, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
@@ -974,7 +974,7 @@ export class MapScene extends Phaser.Scene {
     this.drawRoamer();
     // The other player sees you hop there.
     this.shareProgress();
-    if (['levelup', 'skill', 'prestige', 'treasure', 'event'].includes(n.kind)) {
+    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive'].includes(n.kind)) {
       // Remember the unresolved choice so a reload offers it again.
       run.pendingNode = n.kind;
       persist();
@@ -1024,7 +1024,34 @@ export class MapScene extends Phaser.Scene {
         return this.doTreasure();
       case 'event':
         return this.doEvent();
+      case 'revive':
+        return this.doRevive();
     }
+  }
+
+  /** Revival hex: bring back one fallen Hexling at 60% of the level it fell at. */
+  private doRevive() {
+    const run = state.run!;
+    const grave = run.log.graveyard ?? [];
+    if (!grave.length)
+      return showMessage(this, 'Revival', 'A warm glow, but no one to bring back: none of your Hexlings has fallen this run. Lucky you.', this.done);
+    const full = rosterFull(run);
+    const forms = grave.map(revivedForm);
+    openPicker(this, {
+      title: 'Revival',
+      subtitle: `Bring back one fallen Hexling at ${Math.round(REVIVE_LEVEL * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: release someone first to make room.' : ''}`,
+      options: forms.map((c, i) => ({ creature: c, disabled: full, note: `Fell at Lv ${grave[i].level} → returns at Lv ${c.level}` })),
+      onPick: (i) => {
+        const c = reviveFallen(run, grave[i].uid);
+        if (!c) return this.done();
+        sfx.levelUp();
+        dex.creature(c, true);
+        persist();
+        showMessage(this, 'Revival', `${creatureName(c)} is back, at Lv ${c.level}! It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`, this.done);
+      },
+      onCancel: this.done,
+      cancelLabel: 'Leave',
+    });
   }
 
   // ------------------------------------------------------------ treasure & events

@@ -1,7 +1,7 @@
 import type { Element } from '../data/types';
 import { Rng } from './rng';
 
-export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'boss';
+export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boss';
 
 export interface MapNode {
   id: string;
@@ -178,6 +178,22 @@ function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: num
     const mid = Object.values(nodes).filter((n) => n.kind !== 'boss' && n.kind !== 'start' && n.progress > 0.35 && n.progress < 0.75);
     if (mid.length) rng.pick(mid).kind = 'shop';
   }
+  placeRevival(nodes, floor);
+}
+
+/**
+ * One Revival hex per floor, in place of a battle in the middle stretch. Picked by a hash of the
+ * floor's layout (not the floor's random rolls), so the rest of the map is exactly as before.
+ */
+function placeRevival(nodes: Record<string, MapNode>, floor: number) {
+  const spots = Object.values(nodes)
+    .filter((n) => n.kind === 'battle' && n.progress > 0.3 && n.progress < 0.85)
+    .map((n) => n.id)
+    .sort();
+  if (!spots.length) return;
+  let h = 2166136261 + floor;
+  for (const ch of spots.join('|')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  nodes[spots[(h >>> 0) % spots.length]].kind = 'revive';
 }
 
 /** All node ids reachable from start (used for validation). */
@@ -207,5 +223,6 @@ export const NODE_INFO: Record<NodeKind, { label: string; color: number; desc: s
   shop: { label: 'Shop', color: 0xb8862b, desc: 'Spend coins on items and recruits.' },
   treasure: { label: 'Treasure', color: 0x9c6b2f, desc: 'A chest: coins or an item.' },
   event: { label: 'Event', color: 0x2f6b9c, desc: 'Something unexpected.' },
+  revive: { label: 'Revival', color: 0xc0466e, desc: 'Bring back one fallen Hexling at 60% of the level it fell at. One per floor.' },
   boss: { label: 'Boss', color: 0x5b2c6f, desc: 'Defeat it to clear the floor.' },
 };
