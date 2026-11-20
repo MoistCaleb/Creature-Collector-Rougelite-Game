@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.47';
+export const APP_VERSION = '1.48';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.48',
+    title: 'Revival',
+    items: ['Every floor now has one Revival hex (♥): bring back one Hexling that fell this run, fully healed, at 60% of the level it fell at. It keeps its moves, stars, nature and gilding.'],
+  },
   {
     version: '1.47',
     title: 'A fresh W/L',

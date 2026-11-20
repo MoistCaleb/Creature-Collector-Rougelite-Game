@@ -442,6 +442,8 @@ export interface Run {
     /** Added later; older saves lack these. */
     coins?: number;
     fallen?: FallenRecord[];
+    /** The fallen Hexlings themselves (from v1.48), for a Revival hex. */
+    graveyard?: Creature[];
     /** What ended a lost run. */
     endedBy?: { label: string; speciesId: string; stage: number };
   };
@@ -1040,6 +1042,8 @@ export function highestLevel(run: Run): number {
 
 /** A creature lost during the run, remembered for the summary. */
 export interface FallenRecord {
+  /** The fallen Hexling's uid (from v1.48), to match it if it's revived. */
+  uid?: number;
   speciesId: string;
   stage: number;
   level: number;
@@ -1076,9 +1080,44 @@ export function buryFallen(run: Run): string[] {
   run.log.lost += fallen.length;
   run.log.fallen = [
     ...(run.log.fallen ?? []),
-    ...fallen.map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, name: creatureName(c), dealt: c.dealt ?? 0, kos: c.kos ?? 0 })),
+    ...fallen.map((c) => ({ uid: c.uid, speciesId: c.speciesId, stage: c.stage, level: c.level, name: creatureName(c), dealt: c.dealt ?? 0, kos: c.kos ?? 0 })),
   ];
+  run.log.graveyard = [...(run.log.graveyard ?? []), ...fallen.map((c) => JSON.parse(JSON.stringify(c)) as Creature)];
   return fallen.map(creatureName);
+}
+
+/** A revived Hexling comes back at this share of the level it fell at. */
+export const REVIVE_LEVEL = 0.6;
+
+/** The level a fallen Hexling comes back at. */
+export const reviveLevel = (c: Pick<Creature, 'level'>) => Math.max(1, Math.round(c.level * REVIVE_LEVEL));
+
+/** What a fallen Hexling would be like revived (full health, fresh moves, 60% of its level). */
+export function revivedForm(c: Creature): Creature {
+  const r = JSON.parse(JSON.stringify(c)) as Creature;
+  r.level = reviveLevel(c);
+  r.xp = 0;
+  r.banked = 0;
+  r.status = undefined;
+  r.held = undefined;
+  restoreUses(r);
+  r.hp = stats(r).hp;
+  return r;
+}
+
+/** Revival hex: bring a fallen Hexling back (team if there's room, else the bench). */
+export function reviveFallen(run: Run, uid: number): Creature | null {
+  const grave = run.log.graveyard ?? [];
+  const i = grave.findIndex((c) => c.uid === uid);
+  if (i < 0 || rosterFull(run)) return null;
+  const c = revivedForm(grave[i]);
+  grave.splice(i, 1);
+  // It's no longer among the fallen in the run summary.
+  const f = (run.log.fallen ?? []).findIndex((x) => x.uid === uid);
+  if (f >= 0) run.log.fallen!.splice(f, 1);
+  if (run.team.length < TEAM_MAX) run.team.push(c);
+  else run.bench.push(c);
+  return c;
 }
 
 /** Fill empty main-team slots from the front of the bench. Returns who stepped up. */
