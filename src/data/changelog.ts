@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.32';
+export const APP_VERSION = '1.33';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.33',
+    title: 'Fairer online races',
+    items: [
+      'Stage battles and battle royales are now truly the same for everyone: each hex has the same wild Hexlings, trainers, shop stock, events and drops for every player, whatever order you play in.',
+      'Each starter in a stage battle or battle royale comes with a random passive: the same for every player, different every race.',
+      'Finished your stage early (or your team fell)? You stay on the map and watch everyone still climbing, until the final duel or the bracket begins.',
+      'Daily runs benefit too: everyone meets the same Hexlings on each hex.',
+    ],
+  },
   {
     version: '1.32',
     title: 'A smarter Hexlidex',

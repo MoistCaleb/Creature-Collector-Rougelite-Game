@@ -4,7 +4,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { dailyPassives, dailySeed, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
+import { dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -63,7 +63,7 @@ export class StarterScene extends Phaser.Scene {
     rolled ??= rollStarterChoices(state.meta, new Rng());
     const choices = this.race ? this.race.starters : week ? week.starters : this.daily ? dailyStarters(this.daily) : rolled;
     // Daily runs and weekly challenges: each starter comes with a passive that suits it.
-    const passives = week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
+    const passives = this.race ? racePassives(this.race.seed, this.race.starters) : week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       dex.form(id, 0);
@@ -148,7 +148,7 @@ export class StarterScene extends Phaser.Scene {
     rolled = null;
     if (this.race) {
       // Same map and seed as the other racer; Heat 0 and no passive so it's even.
-      const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true);
+      const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true, undefined, racePassives(this.race.seed, this.race.starters)[id]);
       run.race = royale.active
         ? { opponent: `${royale.players.length - 1} rivals`, role: session.role === 'host' ? 'host' : 'guest', royale: true }
         : { opponent: duel.opponent?.name ?? 'Friend', role: session.role === 'host' ? 'host' : 'guest' };

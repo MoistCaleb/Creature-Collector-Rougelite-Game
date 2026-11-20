@@ -1,0 +1,145 @@
+import type Phaser from 'phaser';
+import { titleNews } from '../logic/cosmetics';
+import { isAlive } from '../logic/creature';
+import { potionHeal, saveMeta, type Run } from '../logic/run';
+import { addOnlineWin, addRoyaleWin } from '../logic/titles';
+import { duel, endRace, leaveDuelRoyale, raceVerdict, sendProgress } from '../net/runtime';
+import { royale, royaleQuit, royaleSummary } from '../net/royale';
+import { myPid, session } from '../net/session';
+import { state } from '../state';
+import { showMessage } from './picker';
+import { button, text } from './widgets';
+
+/**
+ * The end of your part of an online race (stage battle or battle royale): hand in your finished
+ * team once, then a panel says what's happening while the others are still climbing, until the
+ * final duel or the bracket starts (or it's decided without one).
+ */
+
+/** Runs whose finished team was already handed in. */
+const handedIn = new WeakSet<object>();
+/** Title news for a race won without a final duel, once per race. */
+const winNews = new WeakMap<object, string>();
+
+function handIn(run: Run, won: boolean) {
+  if (handedIn.has(run)) return;
+  handedIn.add(run);
+  const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
+  sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run) });
+}
+
+function stageWinNews(run: Run): string {
+  if (!winNews.has(run)) {
+    winNews.set(run, titleNews(addOnlineWin(state.meta)).replace(/^\n+/, '\n'));
+    saveMeta(state.meta);
+  }
+  return winNews.get(run)!;
+}
+
+function royaleWinNews(): string {
+  if (royale.winCounted) return '';
+  royale.winCounted = true;
+  const news = titleNews(addRoyaleWin(state.meta, royale.players.length)).replace(/^\n+/, '\n');
+  saveMeta(state.meta);
+  return news;
+}
+
+export interface WaitBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  depth?: number;
+}
+
+/** Draw the panel in `box` and keep it up to date until the scene closes. */
+export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: WaitBox) {
+  handIn(run, won);
+  const depth = box.depth ?? 0;
+  scene.add.rectangle(box.x, box.y, box.w, box.h, 0x14223a, 0.95).setOrigin(0).setStrokeStyle(2, 0x8fd0ff, 0.8).setDepth(depth).setInteractive();
+  const status = text(scene, box.x + box.w / 2, box.y + 10, '', 13, '#8fd0ff', { align: 'center', wordWrap: { width: box.w - 24 } }).setOrigin(0.5, 0).setDepth(depth);
+  let btn: Phaser.GameObjects.Container | null = null;
+  let label = '';
+  const setButton = (l: string | null, onClick: () => void = () => {}) => {
+    if (label === (l ?? '')) return;
+    label = l ?? '';
+    btn?.destroy();
+    btn = l ? button(scene, box.x + box.w / 2, box.y + box.h - 28, Math.min(280, box.w - 24), 40, l, onClick, { color: 0x3b6d4a, fontSize: 16 }).setDepth(depth) : null;
+  };
+  const toLobby = () => {
+    state.run = null;
+    scene.scene.start(session.connected ? 'Duel' : 'Title', {});
+  };
+
+  if (run.race?.royale) {
+    let toBracket = false;
+    const leave = (confirm: boolean) => () => {
+      // The host is everyone's link: leaving early ends it for all.
+      if (confirm && session.role === 'host') return showMessage(scene, 'End the battle royale?', 'You’re the host, so leaving ends it for everyone.', () => (leaveDuelRoyale(), royale.reset(), toLobby()));
+      if (confirm) royaleQuit();
+      royale.reset();
+      toLobby();
+    };
+    const draw = () => {
+      if (!status.active) return;
+      if (royale.ended) {
+        status.setText(royale.ended);
+        setButton('Back to the lobby', leave(false));
+      } else if (royale.champion === myPid && !royale.bracket) {
+        status.setText(`You’re the last trainer standing. You win the battle royale!${royaleWinNews()}`);
+        setButton('Back to the lobby', leave(false));
+      } else if (royale.bracket || royale.champion) {
+        status.setText('Everyone’s done. The tournament bracket is set!');
+        setButton(null);
+        if (!toBracket) {
+          toBracket = true;
+          scene.time.delayedCall(1400, () => scene.scene.start('Bracket', {}));
+        }
+      } else {
+        status.setText(`${won ? 'Your team is ready for the bracket.' : 'Your team fell, but you can watch the bracket.'} Watching the others climb: ${royaleSummary()}`);
+        setButton(won ? 'Give up the battle royale' : 'Leave', leave(true));
+      }
+    };
+    draw();
+    const prev = royale.onChange;
+    royale.onChange = () => (prev?.(), draw());
+    scene.events.once('shutdown', () => (royale.onChange = null));
+    return;
+  }
+
+  const opp = run.race!.opponent;
+  const done = (l: string) =>
+    setButton(l, () => {
+      endRace();
+      toLobby();
+    });
+  const draw = () => {
+    if (!status.active) return;
+    const them = duel.race?.theirs;
+    const verdict = raceVerdict();
+    if (!session.connected && verdict !== 'win' && verdict !== 'lose' && verdict !== 'draw') {
+      status.setText(`Lost the connection to ${opp}. If they come back, the final duel still happens.`);
+      done('Leave the stage battle');
+    } else if (!verdict) {
+      const where = them ? (them.finished ? 'done' : them.steps !== undefined ? `${them.steps} steps to go` : 'on the way') : 'starting';
+      status.setText(`${won ? 'Your team is ready.' : 'Your team fell.'} Watching ${opp} climb (${where})…`);
+      done(won ? 'Give up the stage battle' : 'Leave');
+    } else if (verdict === 'duel') {
+      status.setText(`${opp} is done too. The final duel is starting…`);
+      setButton(null);
+    } else {
+      status.setText(
+        verdict === 'win'
+          ? `${opp} has no team left. You win the stage battle!${stageWinNews(run)}`
+          : verdict === 'lose'
+            ? `You have no team left, so ${opp} wins the stage battle.`
+            : 'Neither of you has a team left. It’s a draw.',
+      );
+      done('Done');
+    }
+  };
+  draw();
+  const prev = duel.onRaceChange;
+  duel.onRaceChange = () => (prev?.(), draw());
+  scene.events.once('shutdown', () => (duel.onRaceChange = null));
+}

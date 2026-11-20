@@ -14,7 +14,7 @@ import {
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, earnCoins, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, prestigeTracked, registerJoin, releaseNote, rosterFull, TEAM_MAX, type Run } from './run';
+import { allCreatures, BENCH_MAX, earnCoins, eventRng, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, prestigeTracked, registerJoin, releaseNote, rosterFull, TEAM_MAX, type Run } from './run';
 import { speciesWithElement } from '../data/species';
 
 export interface EventResult {
@@ -86,7 +86,7 @@ export const EVENTS: GameEvent[] = [
         blocked: (run) => (run.coins < scale(run, 45) ? 'Not enough coins' : rosterFull(run) ? 'Your party is full' : null),
         run: (run) => {
           run.coins -= scale(run, 45);
-          const c = createCreature(run.rng.pick(SPECIES).id, Math.max(1, Math.round(highestLevel(run) * 0.5)));
+          const c = createCreature(eventRng(run).pick(SPECIES).id, Math.max(1, Math.round(highestLevel(run) * 0.5)));
           addCreature(run, c);
           return { text: `It hatched into ${creatureName(c)} (Lv ${c.level})!`, joined: c };
         },
@@ -104,7 +104,7 @@ export const EVENTS: GameEvent[] = [
         blocked: (run) => (run.coins < scale(run, 30) ? 'Not enough coins' : null),
         run: (run) => {
           const bet = scale(run, 30);
-          if (run.rng.chance(luckyOdds(run))) {
+          if (eventRng(run).chance(luckyOdds(run))) {
             earnCoins(run, bet);
             return { text: `Heads! You win ◉ ${bet}.` };
           }
@@ -143,7 +143,7 @@ export const EVENTS: GameEvent[] = [
         target: true,
         eligible: (_r, c) => tomeMoves(c).length > 0,
         run: (run, c) => {
-          const id = run.rng.pick(tomeMoves(c!));
+          const id = eventRng(run).pick(tomeMoves(c!));
           if (c!.moves.length < MAX_MOVES) c!.moves.push({ id, tier: 1 });
           else if (!c!.pendingMoves.includes(id)) c!.pendingMoves.push(id);
           return { text: `${creatureName(c!)} studies ${MOVES[id].name}.` };
@@ -200,7 +200,7 @@ export const EVENTS: GameEvent[] = [
         target: true,
         eligible: (_r, c) => canPrestige(c),
         run: (run, c) => {
-          if (run.rng.chance(luckyOdds(run))) {
+          if (eventRng(run).chance(luckyOdds(run))) {
             const lv = c!.level;
             prestigeTracked(run, c!);
             return { text: `The shrine glows. ${creatureName(c!)} is now ${'★'.repeat(c!.stars)}!${releaseNote(c!, lv)}` };
@@ -222,7 +222,7 @@ export const EVENTS: GameEvent[] = [
         blocked: (run) => (run.coins < scale(run, 20) ? 'Not enough coins' : rosterFull(run) ? 'Your party is full' : null),
         run: (run) => {
           run.coins -= scale(run, 20);
-          const c = createCreature(run.rng.pick(speciesWithElement(run.biomes[run.floor])).id, 1);
+          const c = createCreature(eventRng(run).pick(speciesWithElement(run.biomes[run.floor])).id, 1);
           addCreature(run, c);
           return { text: `${creatureName(c)} joins you, eyes bright.`, joined: c };
         },
@@ -256,7 +256,7 @@ export const EVENTS: GameEvent[] = [
         target: true,
         eligible: (_r, c) => c.moves.some((m) => m.tier < MAX_TIER) && c.hp > stats(c).hp * 0.3,
         run: (run, c) => {
-          const m = run.rng.pick(c!.moves.filter((x) => x.tier < MAX_TIER));
+          const m = eventRng(run).pick(c!.moves.filter((x) => x.tier < MAX_TIER));
           m.tier += 1;
           c!.hp = Math.max(1, c!.hp - Math.ceil(stats(c!).hp * 0.25));
           return { text: `${creatureName(c!)}'s ${MOVES[m.id].name} is now tier ${m.tier}. It's scorched but proud.` };
@@ -332,7 +332,7 @@ export const EVENTS: GameEvent[] = [
         sub: () => 'Swap one Hexling for a random one: same form, +2 levels, full HP',
         target: true,
         run: (run, c) => {
-          const pick = run.rng.pick(SPECIES.filter((sp) => sp.id !== c!.speciesId));
+          const pick = eventRng(run).pick(SPECIES.filter((sp) => sp.id !== c!.speciesId));
           const n = createCreature(pick.id, Math.min(c!.level + 2, 99), c!.stage);
           n.level = Math.min(n.level, levelCap(n));
           n.hp = stats(n).hp;
@@ -451,7 +451,7 @@ export const EVENTS: GameEvent[] = [
         label: 'Give chase',
         sub: (run) => `${luckyOdds(run) * 100}%: catch it and keep ◉ ${scale(run, 25)} it stole from others · else your lead Hexling is hurt 30%`,
         run: (run) => {
-          if (run.rng.chance(luckyOdds(run))) {
+          if (eventRng(run).chance(luckyOdds(run))) {
             earnCoins(run, scale(run, 25));
             return { text: `You corner it. It drops your pouch, and someone else’s: ◉ +${scale(run, 25)}.` };
           }
@@ -473,7 +473,7 @@ export const EVENTS: GameEvent[] = [
         blocked: (run) => (run.coins < scale(run, 12) ? 'Not enough coins' : null),
         run: (run) => {
           run.coins -= scale(run, 12);
-          if (run.rng.chance(luckyOdds(run) * 0.5)) {
+          if (eventRng(run).chance(luckyOdds(run) * 0.5)) {
             run.evoStones += 1;
             return { text: 'Something rises from the water: an Evolution Stone ◆!' };
           }
@@ -512,7 +512,7 @@ export const EVENTS: GameEvent[] = [
         blocked: (run) => (run.coins < scale(run, 25) ? 'Not enough coins' : null),
         run: (run) => {
           run.coins -= scale(run, 25);
-          const id = rollHeld(run.rng);
+          const id = rollHeld(eventRng(run));
           stash(run, id);
           return { text: `You pull out ${heldName(id)}: ${HELD[id].desc.toLowerCase()}. It's in your bag.` };
         },
@@ -541,7 +541,7 @@ export function rollEvent(run: Run): GameEvent {
   const seen = run.eventsSeen ?? [];
   let pool = EVENTS.filter((e) => !seen.includes(e.id));
   if (!pool.length) pool = EVENTS;
-  const ev = run.rng.pick(pool);
+  const ev = eventRng(run).pick(pool);
   run.eventsSeen = [...(pool === EVENTS ? [] : seen), ev.id];
   return ev;
 }
@@ -566,11 +566,11 @@ export interface TreasureOffer {
 
 export function rollTreasure(run: Run): TreasureOffer {
   const items: import('./shop').ItemId[] = ['potion', 'manual', 'scroll', 'stone', 'restore', 'sigil', 'held', 'held'];
-  const coins = scale(run, 30) + run.rng.int(0, 15);
-  const item = run.rng.pick(items);
+  const coins = scale(run, 30) + eventRng(run).int(0, 15);
+  const item = eventRng(run).pick(items);
   return {
     coins: Math.round(coins * (run.passive === 'explorer' ? 1.5 : 1)),
     item,
-    ...(item === 'held' ? { held: rollHeld(run.rng) } : {}),
+    ...(item === 'held' ? { held: rollHeld(eventRng(run)) } : {}),
   };
 }
