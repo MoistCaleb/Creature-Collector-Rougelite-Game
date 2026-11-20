@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.24';
+export const APP_VERSION = '1.25';
 
 export interface ChangelogEntry {
   version: string;
@@ -10,10 +10,20 @@ export interface ChangelogEntry {
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.25',
+    title: 'Friends',
+    items: [
+      'Friends: pick a username and get a friend code (like HEX-4K9P2). Add friends by either one; they get a request to accept. Find it under Play online › Friends, or at camp.',
+      'See who’s online and what they’re up to (in a run, in the Arena, in an online lobby...), with their trainer and title.',
+      'Invite a friend in one tap: choose what to play, and they get a pop-up wherever they are in the game. Join takes them straight into your lobby, no code to type. Hosting already? Invite more friends from the lobby.',
+      'Remove or block anyone any time. There’s no public player list: people can only find you by your exact username or friend code.',
+    ],
+  },
+  {
     version: '1.24',
     title: 'Accounts',
     items: [
-      'Accounts: sign in with your email (Settings › Account & saves). You get a 6-digit code by email, no password, and your progress saves to your account and follows you to any device.',
+      'Accounts: sign in with your email (Settings › Account & saves). You get a sign-in code by email, no password, and your progress saves to your account and follows you to any device.',
       'The game still saves on your device, so it plays the same offline, and catches your account up when you’re back online.',
       'Already have progress on another device? Choose "Start from a save code" when you make your account, and it moves in.',
       'If this device and your account both have new progress, the game asks which to keep, and keeps the other as a backup you can restore.',

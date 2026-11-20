@@ -10,7 +10,17 @@ const fake = vi.hoisted(() => {
       verifyOtp: async ({ email }: { email: string }) => ({ data: { user: { id: 'u1', email } }, error: null }),
       signOut: async () => ({ error: null }),
     },
-    rpc: async () => ({ error: null }),
+    rpc: async (name: string) =>
+      name === 'my_friends'
+        ? {
+            error: null,
+            data: [
+              { user_id: 'b', username: 'zed', friend_code: 'HEX-BBBBB', look: null, title: null, last_seen: new Date(Date.now() - 10 * 60_000).toISOString(), activity: 'In a run', status: 'accepted', incoming: false },
+              { user_id: 'a', username: 'amy', friend_code: 'HEX-AAAAA', look: { hat: 2 }, title: 'Rookie', last_seen: new Date().toISOString(), activity: 'In a run', status: 'accepted', incoming: false },
+              { user_id: 'c', username: 'cam', friend_code: 'HEX-CCCCC', look: null, title: null, last_seen: null, activity: null, status: 'pending', incoming: true },
+            ],
+          }
+        : { error: null, data: null },
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.row, error: null }) }) }),
       upsert: (o: { meta: string; run: string | null }) => ({
@@ -122,5 +132,25 @@ describe('Accounts: keeping the device and the account in step', () => {
     expect(account.hasProgress(null)).toBe(false);
     expect(account.hasProgress(JSON.stringify({ runs: 0, dex: { caught: [] } }))).toBe(false);
     expect(account.hasProgress(meta(1))).toBe(true);
+  });
+});
+
+describe('Friends', async () => {
+  const friends = await import('../src/net/friends');
+  it('checks usernames', () => {
+    expect(friends.usernameProblem('ab')).toBeTruthy();
+    expect(friends.usernameProblem('has space')).toBeTruthy();
+    expect(friends.usernameProblem('Sam_99')).toBeNull();
+  });
+  it('lists friends online first, and says what they are up to', async () => {
+    await account.verifyCode('me@example.com', '123456');
+    const list = await friends.listFriends();
+    const accepted = list.filter((f) => f.status === 'accepted');
+    expect(accepted.map((f) => f.username)).toEqual(['amy', 'zed']);
+    expect(accepted[0].online).toBe(true);
+    expect(accepted[1].online).toBe(false);
+    expect(friends.statusLine(accepted[0])).toBe('Online · In a run');
+    expect(friends.statusLine(accepted[1])).toBe('Offline');
+    expect(friends.statusLine(list.find((f) => f.username === 'cam')!)).toBe('Wants to be friends');
   });
 });

@@ -24,7 +24,7 @@ const FONT = 'system-ui,-apple-system,sans-serif';
 // ---------------------------------------------------------------- a small DOM card (inputs need real fields)
 
 interface Field {
-  type: 'email' | 'code' | 'textarea';
+  type: 'email' | 'code' | 'textarea' | 'text';
   placeholder: string;
 }
 interface Card {
@@ -34,7 +34,7 @@ interface Card {
   close(): void;
 }
 
-function card(o: { title: string; body: string; field?: Field; buttons: { label: string; primary?: boolean; onClick: (c: Card) => void }[] }): Card {
+export function card(o: { title: string; body: string; field?: Field; buttons: { label: string; primary?: boolean; onClick: (c: Card) => void }[] }): Card {
   const shade = document.createElement('div');
   shade.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(10,8,16,.86);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
   const box = document.createElement('div');
@@ -57,11 +57,15 @@ function card(o: { title: string; body: string; field?: Field; buttons: { label:
         i.type = 'email';
         i.autocomplete = 'email';
         i.inputMode = 'email';
+      } else if (o.field.type === 'text') {
+        i.type = 'text';
+        i.autocomplete = 'off';
+        i.maxLength = 24;
       } else {
         i.type = 'text';
         i.autocomplete = 'one-time-code';
         i.inputMode = 'numeric';
-        i.maxLength = 10;
+        i.maxLength = 12;
         i.style.letterSpacing = '6px';
         i.style.textAlign = 'center';
       }
@@ -154,11 +158,11 @@ export async function accountAtBoot(): Promise<void> {
 
 // ---------------------------------------------------------------- signing in
 
-/** Email, then the 6-digit code; then sync. `after` runs once signed in (reloads if the save changed). */
+/** Email, then the code from it; then sync. `after` runs once signed in (reloads if the save changed). */
 function signIn(scene: Phaser.Scene, intro?: string) {
   card({
     title: 'Sign in or create an account',
-    body: `${intro ? `${intro}\n\n` : ''}Enter your email and we’ll send a 6-digit code. No password. New here? This makes your account.`,
+    body: `${intro ? `${intro}\n\n` : ''}Enter your email and we’ll send you a sign-in code. No password. New here? This makes your account.`,
     field: { type: 'email', placeholder: 'you@example.com' },
     buttons: [
       { label: 'Cancel', onClick: (c) => c.close() },
@@ -187,8 +191,8 @@ function signIn(scene: Phaser.Scene, intro?: string) {
 function enterCode(scene: Phaser.Scene, email: string) {
   card({
     title: 'Check your email',
-    body: `We sent a 6-digit code to ${email}. Type it here. (It can take a minute; check spam too.)`,
-    field: { type: 'code', placeholder: '123456' },
+    body: `We sent a sign-in code to ${email}. Type it here. (It can take a minute; check spam too.)`,
+    field: { type: 'code', placeholder: 'code' },
     buttons: [
       { label: 'Back', onClick: (c) => (c.close(), signIn(scene)) },
       {
@@ -202,6 +206,7 @@ function enterCode(scene: Phaser.Scene, email: string) {
             c.status('Signed in. Syncing your save…', 'ok');
             const changed = await syncNow();
             c.close();
+            void import('./friendsUi').then((m) => m.startFriends());
             if (changed) {
               showMessage(scene, 'Signed in', 'Your account’s save is on this device now. The game will reload.', () => window.location.reload());
             } else showMessage(scene, 'Signed in', `Signed in as ${email}. Your progress now saves to your account and follows you to any device.`, () => {});
@@ -256,7 +261,7 @@ export function openAccount(scene: Phaser.Scene, saveCodes: { copy: () => void; 
       title: 'Account & saves',
       subtitle: 'Sign in with your email to keep your progress in your account: it follows you to any device. Or move it by hand with a save code.',
       options: [
-        { label: 'Sign in or create an account', color: 0x3b6d4a, sub: 'A 6-digit code by email, no password' },
+        { label: 'Sign in or create an account', color: 0x3b6d4a, sub: 'A code by email, no password' },
         { label: 'Start from a save code', color: 0x2f5a4a, sub: 'New account on a new device? Bring your save' },
         { label: 'Copy my save code', color: 0x2f4a6b, sub: 'To move or back up your progress' },
         { label: 'Load a save code', color: 0x2f4a6b, sub: 'Replaces the progress on this device' },
@@ -302,6 +307,7 @@ export function openAccount(scene: Phaser.Scene, saveCodes: { copy: () => void; 
       if (restoreAt(i, 3)) return restoreBackup(scene);
       if (i === 3 + off) {
         await signOut();
+        void import('./friendsUi').then((m) => m.stopFriends());
         return showMessage(scene, 'Signed out', 'Your progress stays on this device. Sign in again any time.', () => {});
       }
       if (i === 4 + off) return confirmDelete(scene);

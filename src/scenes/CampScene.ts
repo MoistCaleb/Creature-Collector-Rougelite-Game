@@ -1,3 +1,4 @@
+import { friendsAvailable } from '../net/friends';
 import Phaser from 'phaser';
 import { LEGENDS } from '../data/legends';
 import { MAP_BY_ID } from '../data/maps';
@@ -238,6 +239,7 @@ export class CampScene extends Phaser.Scene {
       ['Battle Arena', () => this.scene.start('Arena', {}), 0x6a4a2a],
       ['Hexlidex', () => this.scene.start('Dex', { from: 'Camp' }), 0x6a4a2a],
       ['Records', () => this.scene.start('Records', {}), 0x6a4a2a],
+      ...(friendsAvailable() ? ([['Friends', () => this.scene.start('Friends', { from: 'Camp' }), 0x2f4a6b]] as [string, () => void, number][]) : []),
       ['Title screen', () => this.scene.start('Title', {}), 0x4a3a2a],
     ];
     if (LANDSCAPE) {
@@ -250,9 +252,9 @@ export class CampScene extends Phaser.Scene {
     // Upright: the main way out big, the rest in a row of four under it.
     const [first, ...rest] = go;
     button(this, W / 2, H - 98, 260, 52, first[0], () => (sfx.click(), first[1]()), { fontSize: 18, color: first[2] }).setDepth(3);
-    const bw = (W - 40) / 4;
+    const bw = (W - 40) / rest.length;
     rest.forEach(([label, fn, color], i) => {
-      button(this, 20 + bw / 2 + i * bw, H - 40, bw - 6, 44, label, () => (sfx.click(), fn()), { fontSize: 12, color }).setDepth(3);
+      button(this, 20 + bw / 2 + i * bw, H - 40, bw - 6, 44, label, () => (sfx.click(), fn()), { fontSize: rest.length > 4 ? 11 : 12, color }).setDepth(3);
     });
   }
 }

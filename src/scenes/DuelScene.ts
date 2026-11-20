@@ -12,6 +12,7 @@ import { MAPS, mapUnlocked } from '../data/maps';
 import { CODE_LENGTH, myPid, session } from '../net/session';
 import { hostStartRoyale, hostStartTourney } from '../net/royale';
 import { state } from '../state';
+import { friendsAvailable, pingPresence, sendInvite } from '../net/friends';
 import { openPicker, showMessage } from '../ui/picker';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -38,10 +39,16 @@ export class DuelScene extends Phaser.Scene {
     super('Duel');
   }
 
-  init(data: { typed?: string | null; busy?: string; pick?: boolean }) {
+  /** From an invite: the code to join. From the Friends screen: a game to host, and who to invite. */
+  private pendingJoin: string | null = null;
+  private pendingHost: { mode: GameMode; invite: { userId: string; username: string }[] } | null = null;
+
+  init(data: { typed?: string | null; busy?: string; pick?: boolean; joinCode?: string; hostFor?: { mode: GameMode; invite: { userId: string; username: string }[] } }) {
     this.typed = data.typed ?? null;
     this.busyText = data.busy ?? '';
     this.picking = !!data.pick;
+    this.pendingJoin = data.joinCode ?? null;
+    this.pendingHost = data.hostFor ?? null;
   }
 
   /** The saved teams we're bringing, as many as the session asks for. */
@@ -89,6 +96,21 @@ export class DuelScene extends Phaser.Scene {
           : 'Live battles, phone to phone';
     text(this, lx + 20, 54, codeLine, 13, session.role === 'host' && session.connected ? '#ffc94d' : COLORS.textDim).setOrigin(0.5, 0);
     if (this.picking && duel.series) return this.drawPick();
+    // Arrived from an invite (join) or from Friends (host, then invite).
+    if (this.pendingJoin && !session.role) {
+      const code = this.pendingJoin;
+      this.pendingJoin = null;
+      return void this.join(code);
+    }
+    if (this.pendingHost && !session.role) {
+      const h = this.pendingHost;
+      this.pendingHost = null;
+      return void this.hostAndInvite(h.mode, h.invite);
+    }
+    // Friends: invite them, or see who's online.
+    if (friendsAvailable() && !session.connected && !this.busyText) {
+      button(this, W - 70, 28, 112, 36, 'Friends', () => this.scene.start('Friends', { from: 'Duel' }), { fontSize: 14, color: 0x2f4a6b });
+    }
 
     // Your name and team.
     button(this, lx, 104, lw, 44, `Your trainer: ${duel.me.name}`, () => this.scene.start('Trainer', { from: 'Duel' }), { fontSize: 15, sub: 'Tap to change your name and look' });
@@ -122,7 +144,8 @@ export class DuelScene extends Phaser.Scene {
         align: 'center',
         wordWrap: { width: rw },
       }).setOrigin(0.5, 0);
-      button(this, rx, y + 250, 200, 44, 'Cancel', () => this.leave(true), { fontSize: 15 });
+      if (friendsAvailable()) button(this, rx, y + 250, 240, 44, 'Invite friends', () => this.scene.start('Friends', { from: 'Duel' }), { fontSize: 15, color: 0x3b6d4a });
+      button(this, rx, y + (friendsAvailable() ? 304 : 250), 200, 44, 'Cancel', () => this.leave(true), { fontSize: 15 });
     } else {
       if (s === 'error' && session.error) text(this, rx, y - 6, session.error, 13, '#ff8a7a', { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 1);
       button(this, rx, y + 40, rw, LANDSCAPE ? 64 : 70, 'Host a game', () => this.pickMode(), { color: 0x3b6d4a, fontSize: 20, sub: 'Choose what to play, then get a code to share' });
@@ -313,7 +336,9 @@ export class DuelScene extends Phaser.Scene {
       this.tweens.add({ targets: wait, alpha: 0.4, yoyo: true, repeat: -1, duration: 700 });
     }
     text(this, rx, by + 42, mode.desc, 12, COLORS.textDim, { align: 'center', wordWrap: { width: rw } }).setOrigin(0.5, 0);
-    button(this, rx, by + (LANDSCAPE ? 130 : 116), 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
+    const invite = host && friendsAvailable();
+    if (invite) button(this, rx - 102, by + (LANDSCAPE ? 130 : 116), 190, 40, 'Invite friends', () => this.scene.start('Friends', { from: 'Duel' }), { fontSize: 15, color: 0x3b6d4a });
+    button(this, invite ? rx + 102 : rx, by + (LANDSCAPE ? 130 : 116), invite ? 190 : 200, 40, 'Leave', () => this.leave(true), { fontSize: 15, color: 0x5a2a2a });
   }
 
   /** Host: start the online tournament with everyone's active Arena team. */
@@ -427,6 +452,25 @@ export class DuelScene extends Phaser.Scene {
     duel.mode = mode;
     this.scene.restart({ busy: 'Getting a code…' });
     await session.host();
+  }
+
+  /** Host a game and invite friends to it as soon as there's a code. */
+  private async hostAndInvite(mode: GameMode, invite: { userId: string; username: string }[]) {
+    duel.mode = mode;
+    this.scene.restart({ busy: 'Getting a code…' });
+    await session.host();
+    if (!session.code) return;
+    const sent: string[] = [];
+    for (const f of invite) {
+      try {
+        await sendInvite(f.userId, mode, session.code);
+        sent.push(f.username);
+      } catch {
+        /* they can still join with the code */
+      }
+    }
+    pingPresence();
+    if (sent.length && this.scene.isActive()) showMessage(this, 'Invite sent', `${sent.join(', ')} will get an invite to join your ${GAME_MODES[mode].name}. You can also share the code.`, () => {});
   }
 
   private async join(code: string) {

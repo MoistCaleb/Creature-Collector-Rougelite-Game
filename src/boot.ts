@@ -1,3 +1,4 @@
+import { FriendsScene } from './scenes/FriendsScene';
 import { CampScene } from './scenes/CampScene';
 import Phaser from 'phaser';
 import { installTapGuard } from './ui/tapGuard';
@@ -36,7 +37,7 @@ export function startGame() {
   state.meta = loadMeta();
   installMotionGuard();
   // Screens with a landscape layout (the rest stay upright, centered, when the phone is sideways).
-  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel', 'Bracket', 'Tournament', 'Records', 'Camp');
+  landscapeReady('Battle', 'Map', 'Title', 'MapSelect', 'Starter', 'Team', 'Bag', 'End', 'Daily', 'Trainer', 'Passives', 'Dex', 'Arena', 'Teams', 'ArenaEdit', 'ArenaPick', 'Duel', 'Bracket', 'Tournament', 'Records', 'Camp', 'Friends');
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
@@ -48,6 +49,7 @@ export function startGame() {
     scene: [
       TitleScene,
       CampScene,
+      FriendsScene,
       MapSelectScene,
       StarterScene,
       MapScene,
