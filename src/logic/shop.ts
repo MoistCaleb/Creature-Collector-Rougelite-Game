@@ -9,6 +9,8 @@ import {
   createCreature,
   healFraction,
   levelCap,
+  limitBreak,
+  LIMIT_BREAK,
   naturalMoves,
   relearnMove,
   restoreUses,
@@ -18,7 +20,7 @@ import {
 import { checkAchievements } from './achievements';
 import { allCreatures, maxPotions, placeRng, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
 
-export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held' | 'relearn';
+export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held' | 'relearn' | 'limit';
 
 /** What the buyer has to pick after paying. */
 export type Target = 'none' | 'creature' | 'move';
@@ -31,6 +33,10 @@ export interface ItemDef {
   target: Target;
 }
 
+/** Gilded Hunt floor from which every shop stocks a Limit Breaker. */
+export const LIMIT_BREAK_DEPTH = 6;
+const limitShop = (run: Run) => (run.hunt?.depth ?? 0) >= LIMIT_BREAK_DEPTH;
+
 export const ITEMS: Record<ItemId, ItemDef> = {
   potion: { name: 'Potion', desc: 'Carry it · heals 50% and cures status, even mid-battle', basePrice: 15, weight: 10, target: 'none' },
   restore: { name: 'Full Restore', desc: 'Heal every Hexling to full, cure statuses and restore move uses', basePrice: 70, weight: 6, target: 'none' },
@@ -40,6 +46,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sigil: { name: 'Prestige Sigil', desc: 'Prestige a Hexling, no sacrifice', basePrice: 150, weight: 3, target: 'creature' },
   recruit: { name: 'Recruit', desc: 'A Hexling joins your party', basePrice: 80, weight: 6, target: 'none' },
   held: { name: 'Held item', desc: 'Give it to a Hexling from the Team screen', basePrice: 60, weight: 7, target: 'none' },
+  limit: { name: 'Limit Breaker', desc: `+${LIMIT_BREAK} to one Hexling\u2019s level cap (stacks). Stored XP turns into levels. Gilded Hunt floor 6+ only`, basePrice: 140, weight: 0, target: 'creature' },
   relearn: { name: 'Move Relearn', desc: 'Swap one of a Hexling\u2019s moves for any move it would naturally know', basePrice: 50, weight: 6, target: 'creature' },
 };
 
@@ -51,7 +58,7 @@ export function slotName(slot: { item: ItemId; held?: HeldId }): string {
 /** Pixel icon for a slot, if it has one. */
 export function slotGlyph(slot: { item: ItemId; held?: HeldId }): import('../ui/icons').IconId | undefined {
   if (slot.item === 'held' && slot.held) return HELD[slot.held].icon;
-  const map: Partial<Record<ItemId, import('../ui/icons').IconId>> = { potion: 'potion', restore: 'cross', stone: 'gem', sigil: 'star', manual: 'arrowUp', scroll: 'sparkle', relearn: 'book' };
+  const map: Partial<Record<ItemId, import('../ui/icons').IconId>> = { potion: 'potion', restore: 'cross', stone: 'gem', sigil: 'star', manual: 'arrowUp', limit: 'arrowUp', scroll: 'sparkle', relearn: 'book' };
   return map[slot.item];
 }
 
@@ -92,9 +99,11 @@ export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop
   const rng = placeRng(run, `shop:${rerolls}`);
   const ids = Object.keys(ITEMS) as ItemId[];
   const chosen: ItemId[] = [...guaranteed];
+  // Deep in a Gilded Hunt, every shop has a Limit Breaker (and only there).
+  if (limitShop(run) && !chosen.includes('limit')) chosen.unshift('limit');
   while (chosen.length < 5) {
     const weights: Partial<Record<ItemId, number>> = {};
-    for (const id of ids) if (!chosen.includes(id)) weights[id] = ITEMS[id].weight;
+    for (const id of ids) if (!chosen.includes(id) && ITEMS[id].weight > 0) weights[id] = ITEMS[id].weight;
     chosen.push(rng.weighted(weights));
   }
   const slots: ShopSlot[] = chosen.map((item) => {
@@ -126,6 +135,8 @@ export function eligibleTargets(run: Run, item: ItemId): Creature[] {
       return all.filter(canPrestige);
     case 'relearn':
       return all.filter((c) => naturalMoves(c).length > 0);
+    case 'limit':
+      return all;
     default:
       return [];
   }
@@ -159,6 +170,10 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       const old = MOVES[target!.moves[moveIndex!].id].name;
       relearnMove(target!, moveIndex!, newMove!);
       return `Forgot ${old} and learned ${MOVES[newMove!].name}.`;
+    }
+    case 'limit': {
+      const n = limitBreak(target!);
+      return `Level cap raised to Lv ${levelCap(target!)}.${n ? `\nStored XP: +${n} lv (now Lv ${target!.level})` : ''}`;
     }
     case 'potion':
       run.potions = (run.potions ?? 0) + 1;

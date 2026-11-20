@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.40';
+export const APP_VERSION = '1.41';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.41',
+    title: 'Limit Breaker',
+    items: ['From Gilded Hunt floor 6, every shop stocks a Limit Breaker: +5 to one Hexling’s level cap, as many times as you can afford. XP your Hexling stored at its cap turns into levels right away, so a strong team can keep climbing.'],
+  },
   {
     version: '1.40',
     title: 'Host joins the fight',

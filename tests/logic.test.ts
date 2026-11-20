@@ -238,6 +238,32 @@ describe('shop', () => {
     clearedMaps: [],
     lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
   });
+  it('stocks a Limit Breaker in every shop from Gilded Hunt floor 6, and nowhere else', () => {
+    const run = startRun(mkMeta(), 'emberkit', 11);
+    for (let r = 0; r < 30; r++) expect(rollShop(run, r).slots.some((s) => s.item === 'limit')).toBe(false);
+    run.hunt = { depth: 5, shinies: 0 };
+    for (let r = 0; r < 30; r++) expect(rollShop(run, r).slots.some((s) => s.item === 'limit')).toBe(false);
+    run.hunt.depth = 6;
+    for (let r = 0; r < 30; r++) {
+      const shop = rollShop(run, r);
+      expect(shop.slots.filter((s) => s.item === 'limit').length).toBe(1);
+      expect(shop.slots.length).toBe(5);
+    }
+    // +5 cap each time (stacking), and stored XP pours in.
+    const c = run.team[0];
+    setFloorCeiling(Infinity);
+    c.stage = 2;
+    c.stars = 5;
+    c.level = levelCap(c);
+    expect(c.level).toBe(125);
+    c.banked = 10 ** 9;
+    const slot = rollShop(run).slots.find((s) => s.item === 'limit')!;
+    applyItem(run, slot, c);
+    expect(levelCap(c)).toBe(130);
+    expect(c.level).toBe(130);
+    applyItem(run, slot, c);
+    expect(levelCap(c)).toBe(135);
+  });
   it('stocks 5 distinct items with floor-scaled, haggler-discounted prices', () => {
     const run = startRun(mkMeta(), 'emberkit', 11);
     const shop = rollShop(run);
@@ -1903,7 +1929,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
