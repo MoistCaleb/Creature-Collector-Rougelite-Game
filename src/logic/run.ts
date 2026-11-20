@@ -4,6 +4,9 @@ import { BALANCE } from '../data/balance';
 import { HELD, HELD_IDS, type HeldId } from '../data/held';
 import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
+import { bondHearts, natureFor } from '../data/natures';
+import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
+import { NIGHT_SHARE, nightOut } from './ambience';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
 import { MOVES, teamMoveId } from '../data/moves';
 import { ELEMENTS, typeMultiplier, type Element, type TypePair } from '../data/types';
@@ -101,6 +104,8 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
 // ---------------------------------------------------------------- meta save
 
 export interface Meta {
+  /** Roaming legendaries: health left (a share) and whether caught. */
+  legends?: Record<string, { hp: number; caught?: boolean; met?: number }>;
   unlockedStarters: string[];
   unlockedPassives: PassiveId[];
   equippedPassive: PassiveId | null;
@@ -404,9 +409,13 @@ export interface Run {
   eventsSeen?: string[];
   /** The open treasure chest's contents, fixed once rolled. */
   treasure: import('./events').TreasureOffer | null;
+  /** A legendary roaming this floor, on a battle hex ahead (see data/legends). */
+  roamer?: { id: string; node: string; announced?: boolean } | null;
 }
 
 export interface ActiveBattle {
+  /** A roaming legendary's battle: its id. */
+  legend?: string;
   kind: EncounterKind;
   enemies: Creature[];
   /** Opponent's name for trainer battles, e.g. "Ace Trainer Rhea". */
@@ -710,6 +719,10 @@ export function startRun(meta: Meta, starterId: string, seed = Date.now(), mapId
     eventId: null,
     treasure: null,
   };
+  // The starter's nature comes from the run's seed (the same for everyone on a daily run).
+  const starter = run.team[0];
+  starter.nature = natureFor(`${seed}:starter`);
+  starter.hp = stats(starter).hp;
   applyFloorCap(run);
   return run;
 }
@@ -809,8 +822,79 @@ export function canMoveTo(run: Run, id: string): boolean {
 export function moveTo(run: Run, id: string): MapNode {
   run.currentId = id;
   run.visited.push(id);
+  // A roaming legendary wanders on as you move (unless you've just stepped onto its hex).
+  if (run.roamer && run.roamer.node !== id) moveRoamer(run);
   return run.map.nodes[id];
 }
+
+// ---------------------------------------------------------------- roaming legendaries
+
+/** Battle hexes still ahead of you (where a legendary can roam). */
+function roamSpots(run: Run): string[] {
+  const here = run.map.nodes[run.currentId];
+  return Object.values(run.map.nodes)
+    .filter((n) => n.kind === 'battle' && n.y < here.y - 1 && n.y > run.map.nodes[run.map.bossId].y + 1)
+    .map((n) => n.id);
+}
+
+const roamable = (run: Run) => !run.daily && !run.weekly && !run.race && !run.hunt;
+
+/** A new floor: now and then a legendary you haven't caught is roaming it (never the first floor). */
+export function placeRoamer(run: Run, force = false) {
+  run.roamer = null;
+  if (!roamable(run) || run.floor < 1) return;
+  if (!force && hashString(`${run.seed}:roam:${run.floor}`) % 1000 >= LEGEND_CHANCE * 1000) return;
+  const left = LEGENDS.filter((l) => !run.meta.legends?.[l.id]?.caught);
+  const spots = roamSpots(run);
+  if (!left.length || !spots.length) return;
+  const h = hashString(`${run.seed}:roamer:${run.floor}`);
+  run.roamer = { id: left[h % left.length].id, node: spots[h % spots.length] };
+}
+
+/** The legendary moves to another battle hex ahead, or leaves the floor when there's none. */
+export function moveRoamer(run: Run) {
+  if (!run.roamer) return;
+  const spots = roamSpots(run).filter((id) => id !== run.roamer!.node);
+  if (!spots.length) {
+    run.roamer = null;
+    return;
+  }
+  run.roamer.node = spots[hashString(`${run.seed}:roam:${run.floor}:${run.visited.length}`) % spots.length];
+}
+
+/**
+ * The legendary as you meet it: alone, at your strongest Hexling's level (its stats do the rest),
+ * with the health it had left. It's here to test you, not to finish you: it hits softer (see
+ * LEGEND_DAMAGE) and slips away after a few turns.
+ */
+export function legendFoe(run: Run, id: string): Creature {
+  const c = createCreature(id, highestLevel(run) + heatRules(run.heat ?? 0, run.floor).enemyLevels, 2);
+  const rec = (run.meta.legends ??= {})[id] ?? { hp: 1 };
+  run.meta.legends[id] = { ...rec, met: (rec.met ?? 0) + 1 };
+  c.hp = Math.max(1, Math.round(stats(c).hp * Math.max(0.1, Math.min(1, rec.hp))));
+  saveMeta(run.meta);
+  return c;
+}
+
+/** It fled (or you lost): it keeps the damage you did, and roams on. */
+export function legendFled(run: Run, foe: Creature) {
+  const rec = (run.meta.legends ??= {})[foe.speciesId] ?? { hp: 1 };
+  rec.hp = Math.max(0.1, foe.hp / stats(foe).hp);
+  run.meta.legends[foe.speciesId] = rec;
+  saveMeta(run.meta);
+  if (run.roamer?.id === foe.speciesId) moveRoamer(run);
+}
+
+/** Beaten: it leaves this run, and comes back another day only partly recovered (unless caught). */
+export function legendBeaten(run: Run, id: string) {
+  const rec = (run.meta.legends ??= {})[id] ?? { hp: 1 };
+  if (!rec.caught) rec.hp = LEGEND_RECOVER;
+  run.meta.legends[id] = rec;
+  if (run.roamer?.id === id) run.roamer = null;
+  saveMeta(run.meta);
+}
+
+export const legendsCaught = (meta: Meta): number => LEGENDS.filter((l) => meta.legends?.[l.id]?.caught).length;
 
 export function allCreatures(run: Run): Creature[] {
   return [...run.team, ...run.bench];
@@ -910,6 +994,10 @@ export function enemyStars(run: Run, kind: EncounterKind, rng: Rng): number {
 export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const kind = node.kind as EncounterKind;
   const rng = run.rng;
+  if (kind === 'battle' && run.roamer && run.roamer.node === node.id) {
+    run.log.fights += 1;
+    return [legendFoe(run, run.roamer.id)];
+  }
   const f = run.floor;
   const biome = run.biomes[f];
   const count =
@@ -929,6 +1017,10 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const heat = heatRules(run.heat ?? 0, f);
   for (let i = 0; i < count; i++) {
     let pool = rng.chance(0.7) ? speciesWithElement(biome) : (duoPool ?? SPECIES);
+    // At night (by your clock), Shadow and Spirit Hexlings come out in every land (unseeded runs).
+    if (kind === 'battle' && roamable(run) && run.log.fights > 0 && nightOut() && rng.chance(NIGHT_SHARE)) {
+      pool = SPECIES.filter((sp) => sp.types.includes('Shadow') || sp.types.includes('Spirit'));
+    }
     if (boss) {
       // Guardians field a themed team; their ace pairs the boss element with its partner.
       const own = speciesWithElement(biome);
@@ -954,6 +1046,8 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     }
     const c = createCreature(sp.id, Math.max(1, level), stage);
     c.stars = enemyStars(run, kind, rng);
+    // A hash, like shininess, so the run's random rolls are untouched.
+    c.nature = natureFor(`${run.seed}:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`);
     if (kind !== 'battle' && f > 0) {
       for (const m of c.moves) if (rng.chance(0.4)) m.tier = 2;
     }
@@ -1236,6 +1330,7 @@ export function catchCreature(
   c.learnIndex = enemy.learnIndex;
   c.pendingMoves = [];
   c.stars = catchStars(run, enemy);
+  c.nature = enemy.nature;
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
   if (enemy.shiny) {
     c.shiny = true;
@@ -1277,6 +1372,7 @@ export function claimGuardian(run: Run, boss: Creature, release?: Creature): Cre
   if (!canMakeRoom(run, release)) return null;
   const c = createCreature(boss.speciesId, guardianLevel(run, boss), boss.stage);
   c.stars = guardianStars(boss);
+  c.nature = boss.nature;
   c.hp = stats(c).hp;
   // A shiny guardian Hexling (Shiny Hunting) keeps its colours.
   if (boss.shiny) {
@@ -1287,6 +1383,22 @@ export function claimGuardian(run: Run, boss: Creature, release?: Creature): Cre
   return c;
 }
 
+/**
+ * After a win: each of your Hexlings that fought (and is still standing) wins one more battle with
+ * you. Returns a line for each one that gained a bond heart.
+ */
+export function growBond(run: Run, fought: number[]): string[] {
+  const out: string[] = [];
+  for (const c of run.team) {
+    if (!fought.includes(c.uid) || c.hp <= 0) continue;
+    const before = bondHearts(c.bond);
+    c.bond = (c.bond ?? 0) + 1;
+    const now = bondHearts(c.bond);
+    if (now > before) out.push(`${creatureName(c)} trusts you more! (bond ${'♥'.repeat(now)})`);
+  }
+  return out;
+}
+
 /** Mark a creature that joined some other way (shop recruit) as caught in the dex. */
 /**
  * A creature joined your party (caught, claimed, recruited or hatched): record it in the Dex and
@@ -1295,6 +1407,20 @@ export function claimGuardian(run: Run, boss: Creature, release?: Creature): Cre
  */
 export function registerJoin(run: Run, c: Creature): boolean {
   const meta = run.meta;
+  // A legendary: caught for good (it roams no more), but never a starter or a Hexlidex entry.
+  if (isLegend(c.speciesId)) {
+    (meta.legends ??= {})[c.speciesId] = { ...(meta.legends[c.speciesId] ?? { hp: 1 }), caught: true };
+    if (run.roamer?.id === c.speciesId) run.roamer = null;
+    run.unlockedThisRun.push(`Legendary: ${SPECIES_BY_ID[c.speciesId].names[2]}`);
+    saveMeta(meta);
+    return false;
+  }
+  // Anyone joining without a nature (a recruit, an egg...) gets one, keeping its share of health.
+  if (!c.nature) {
+    const frac = c.hp / stats(c).hp;
+    c.nature = natureFor(`${run.seed}:${c.uid}:${c.speciesId}`);
+    c.hp = Math.max(1, Math.round(stats(c).hp * frac));
+  }
   if (!meta.dex.caught.includes(c.speciesId)) meta.dex.caught.push(c.speciesId);
   let fresh = false;
   if (!meta.unlockedStarters.includes(c.speciesId)) {
@@ -1415,5 +1541,6 @@ export function clearFloor(run: Run): boolean {
   run.currentId = run.map.startId;
   run.visited = [run.map.startId];
   run.bossPending = false;
+  placeRoamer(run);
   return false;
 }

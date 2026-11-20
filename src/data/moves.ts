@@ -55,6 +55,8 @@ export interface MoveDef {
   warp?: boolean;
   /** Speed attacks: power grows the faster ('fast') or the slower ('slow') the user is than the foe. */
   speedPower?: 'fast' | 'slow';
+  /** Weather moves: change the battle's weather for a few turns (see WEATHER). */
+  weather?: WeatherId;
 }
 
 // ---------------------------------------------------------------- team moves
@@ -318,6 +320,65 @@ export const bulwarkRepeat = (tier: number) => [0, 0.25, 1 / 3, 0.5][tier] ?? 0.
 /** Turns Time Warp lasts (counting the turn it's used): 5, then +1 per skill tier. */
 export const warpTurns = (tier: number) => 5 + (tier - 1);
 
+// ---------------------------------------------------------------- weather
+
+/**
+ * Battle weather, only ever set by a move (a handful of lines learn one). It lasts a few turns and
+ * powers up one element's attacks; sun and rain also weaken the opposite element, and dust and hail
+ * wear down every Hexling not of a sheltered element at the end of each turn.
+ */
+export type WeatherId = 'sun' | 'rain' | 'dust' | 'hail';
+
+export interface WeatherDef {
+  name: string;
+  /** The move that calls it. */
+  move: string;
+  element: Element;
+  up: Element;
+  down?: Element;
+  /** Dust and hail: elements that don't take the end-of-turn chip. */
+  shelter?: Element[];
+  start: string;
+  end: string;
+  tag: string;
+  color: number;
+}
+
+export const WEATHER: Record<WeatherId, WeatherDef> = {
+  sun: { name: 'Scorching sun', move: 'Scorching Sky', element: 'Fire', up: 'Fire', down: 'Water', start: 'The sunlight turned scorching!', end: 'The sunlight faded.', tag: 'SUN', color: 0xffa83a },
+  rain: { name: 'Downpour', move: 'Downpour', element: 'Water', up: 'Water', down: 'Fire', start: 'Rain began to pour!', end: 'The rain stopped.', tag: 'RAIN', color: 0x5ab8ff },
+  dust: { name: 'Dust storm', move: 'Dust Storm', element: 'Earth', up: 'Earth', shelter: ['Earth', 'Metal'], start: 'A dust storm kicked up!', end: 'The dust settled.', tag: 'DUST', color: 0xd8b070 },
+  hail: { name: 'Hail', move: 'Hail Front', element: 'Frost', up: 'Frost', shelter: ['Frost'], start: 'It started to hail!', end: 'The hail stopped.', tag: 'HAIL', color: 0xbfe8ff },
+};
+export const WEATHER_IDS = Object.keys(WEATHER) as WeatherId[];
+export const WEATHER_UP = 1.3;
+export const WEATHER_DOWN = 0.7;
+/** Dust and hail: share of max HP lost at the end of each turn. */
+export const WEATHER_CHIP = 1 / 16;
+export const weatherId = (w: WeatherId) => `Weather:${w}`;
+/** Turns weather lasts: 5, then +1 per skill tier. */
+export const weatherTurns = (tier: number) => 5 + (tier - 1);
+for (const w of WEATHER_IDS) {
+  const d = WEATHER[w];
+  MOVES[weatherId(w)] = { id: weatherId(w), name: d.move, element: d.element, kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: [], weather: w };
+}
+
+/** Damage multiplier the weather gives an attack of this element. */
+export function weatherMult(w: WeatherId | null | undefined, el: Element): number {
+  if (!w) return 1;
+  const d = WEATHER[w];
+  return el === d.up ? WEATHER_UP : el === d.down ? WEATHER_DOWN : 1;
+}
+
+/** "Fire +30%, Water −30%" / "Earth +30%, chips non-Earth/Metal". */
+export function weatherShort(w: WeatherId): string {
+  const d = WEATHER[w];
+  const parts = [`${d.up} +30%`];
+  if (d.down) parts.push(`${d.down} −30%`);
+  if (d.shelter) parts.push(`hurts non-${d.shelter.join('/')}`);
+  return parts.join(', ');
+}
+
 /** Speed attacks: power by how much faster (or slower) the user is than its foe. */
 export function speedPower(ratio: number): number {
   return ratio >= 2 ? 130 : ratio >= 1.5 ? 110 : ratio >= 1.2 ? 90 : ratio >= 1 ? 70 : ratio >= 0.75 ? 50 : 40;
@@ -461,6 +522,7 @@ export const accText = (m: MoveDef) => `${m.accuracy}% acc`;
 export function moveSummary(m: MoveDef, tier: number): string {
   if (m.protect) return `First · blocks hits · reuse ${Math.round(bulwarkRepeat(tier) * 100)}%`;
   if (m.warp) return `${warpTurns(tier)} turns: slower goes first`;
+  if (m.weather) return `${weatherTurns(tier)}t ${WEATHER[m.weather].tag}: ${weatherShort(m.weather)}`;
   if (m.team === 'mend') return `Team: heal ${Math.round(mendHeal(tier) * 100)}% + cure`;
   if (m.team) return `Team ${teamFxTurns(tier)}t: ${TEAM_FX[m.team].short}`;
   if (m.kind === 'heal') {
@@ -491,7 +553,7 @@ export function moveSummary(m: MoveDef, tier: number): string {
 
 /** What a skill-tier upgrade does to this move. */
 export function tierUpgradeText(m: MoveDef, toTier: number): string {
-  if (m.protect || m.warp) return `Stronger: ${moveSummary(m, toTier)}`;
+  if (m.protect || m.warp || m.weather) return `Stronger: ${moveSummary(m, toTier)}`;
   if (m.kind === 'attack') return toTier === 3 ? `+50% power total, ${TIER3_EFFECT[attackEl(m)]}` : '+25% power';
   if (m.kind === 'heal' || m.team) return `Stronger: ${moveSummary(m, toTier)}`;
   return `Stronger: ${describeEffects(m, toTier)}`;
@@ -512,7 +574,7 @@ export function attackValue(m: MoveDef, tier = 1): number {
  */
 export function maxUses(d: MoveDef): number | null {
   if (d.protect) return 4;
-  if (d.warp) return 5;
+  if (d.warp || d.weather) return 5;
   if (d.team) return 8;
   if (d.kind === 'heal') return 10;
   if (d.kind === 'buff' || d.kind === 'debuff') return 20;

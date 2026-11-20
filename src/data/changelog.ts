@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.21';
+export const APP_VERSION = '1.22';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,21 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.22',
+    title: 'A living world',
+    items: [
+      'The map comes alive: wild Hexlings of the land wander the gaps between hexes, nap, look around, and run off when your trainer lands close by. Tap one and it squeaks.',
+      'Birds and cloud shadows cross the map, and rest and treasure hexes glimmer.',
+      'Day and night follow your clock: dawn, dusk and a starry night with fireflies. At night, Shadow and Spirit Hexlings come out in every land.',
+      'Holidays dress up the map for the day itself: New Year fireworks, Valentine’s hearts, St Patrick’s clovers, Halloween bats and jack-o’-lanterns, and winter snow with lights. Turn it all off in Settings (Day, night & holidays).',
+      'Natures: every Hexling you meet on a run has one (Brave, Timid, Hearty...), a small lean of +10% to one stat and −10% to another. See it on the Team screen and in battle stats.',
+      'Bond: each battle a Hexling wins with you brings you closer. At 3, 8 and 15 wins it earns a heart (♥), and each heart gives it a better chance to hang on at 1 HP from a knockout blow, once a battle.',
+      'Your lead Hexling reacts on the map: a happy hop after a win, worn out when hurt, uneasy with the guardian a step away. Tap it for a cry and its hearts.',
+      'Weather: four rare moves change the battle’s weather for 5 turns. Scorching Sky (sun: Fire +30%, Water −30%), Downpour (rain: Water +30%, Fire −30%), Dust Storm (Earth +30%, wears down all but Earth and Metal) and Hail Front (Frost +30%, wears down all but Frost). Only two lines learn each one, at Lv 28.',
+      'Roaming legendaries: Solmane, Tidecrown and Umbrawyrm wander floors 2 and 3 now and then. Their silhouette shows on a battle hex ahead and moves as you do. Meet one and it flees after 4 turns, but keeps the damage you did. Wear it down to catch it for that run. Not in daily, weekly or online runs.',
+    ],
+  },
   {
     version: '1.21',
     title: 'Potions everywhere, pick your mode',

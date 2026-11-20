@@ -1,7 +1,9 @@
+import { natureMult } from '../data/natures';
 import { BALANCE } from '../data/balance';
+import { weatherId, type WeatherId } from '../data/moves';
 import { attackEl, attackId, attackValue, BULWARK_ID, fastId, slowId, WARP_ID, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, teamMoveId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
-import { SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
+import { SPECIES, SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
 import { stabMultiplier, type Element, type TypePair } from '../data/types';
 
 export interface MoveSlot {
@@ -43,6 +45,10 @@ export interface Creature {
   landMoves?: string[];
   /** Land moves learned since they were last announced. */
   landNews?: string[];
+  /** Its nature: a small stat lean (runs only; Arena teams have none). */
+  nature?: import('../data/natures').NatureId;
+  /** Battles won with you this run (bond hearts, see data/natures). */
+  bond?: number;
 }
 
 export type Stats = BaseStats;
@@ -213,12 +219,13 @@ export function landMoveFor(c: Creature, entry: LearnEntry, index: number): stri
  * Moves only some lines learn, on top of their learnset, by what suits them: the fastest third
  * get a Blitz (stronger the faster they are) and the slowest third a Crush (stronger the slower);
  * slow Metal, Light, Shadow and Spirit lines (and bulky Spirit ones) learn Time Warp, and the
- * bulkiest of the rest learn Bulwark.
+ * bulkiest of the rest learn Bulwark. Eight lines (WEATHER_LINES) learn a weather move.
  */
 export function extraMoves(sp: Species): LearnEntry[] {
   const cached = EXTRA_CACHE.get(sp.id);
   if (cached) return cached;
-  const all = Object.values(SPECIES_BY_ID);
+  // The regular lines only (roaming legendaries don't shift who learns what).
+  const all = SPECIES;
   const at = (xs: number[], f: number) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length * f)];
   const fast = at(all.map((x) => x.base.spd), 0.7);
   const slow = at(all.map((x) => x.base.spd), 0.3);
@@ -232,10 +239,24 @@ export function extraMoves(sp: Species): LearnEntry[] {
   const warp = (sp.base.spd <= slow && sp.types.some((t) => warpTypes.includes(t))) || (sp.types.includes('Spirit') && sp.base.def >= spiritTank);
   if (warp) out.push({ id: WARP_ID, level: 34 });
   else if (sp.base.def >= bulky) out.push({ id: BULWARK_ID, level: 30 });
+  const w = WEATHER_LINES[sp.id];
+  if (w) out.push({ id: weatherId(w), level: 28 });
   EXTRA_CACHE.set(sp.id, out);
   return out;
 }
 const EXTRA_CACHE = new Map<string, LearnEntry[]>();
+
+/** The only lines that call up the weather: two for each kind. */
+export const WEATHER_LINES: Record<string, WeatherId> = {
+  flicklet: 'sun',
+  pyrling: 'sun',
+  jellet: 'rain',
+  mistlet: 'rain',
+  dustbun: 'dust',
+  dunedrake: 'dust',
+  snowmote: 'hail',
+  rimehawk: 'hail',
+};
 
 export function learnMoves(c: Creature, auto = false): string[] {
   const learned: string[] = [];
@@ -415,11 +436,12 @@ export function stats(c: Creature): Stats {
   const b = species(c).base;
   const mult = STAGE_MULT[c.stage] * (1 + STAR_MULT * c.stars);
   const lv = levelFactor(c.level);
+  const n = (k: keyof Stats) => natureMult(c.nature, k);
   return {
-    hp: Math.round((b.hp * 1.2 + 20) * lv * mult),
-    atk: Math.round(b.atk * lv * mult),
-    def: Math.round(b.def * lv * mult),
-    spd: Math.round(b.spd * lv * mult),
+    hp: Math.round((b.hp * 1.2 + 20) * lv * mult * n('hp')),
+    atk: Math.round(b.atk * lv * mult * n('atk')),
+    def: Math.round(b.def * lv * mult * n('def')),
+    spd: Math.round(b.spd * lv * mult * n('spd')),
   };
 }
 

@@ -200,6 +200,8 @@ export interface Snap {
   fx?: { player: Battle['teamFx']['player']; enemy: Battle['teamFx']['enemy'] };
   /** Time Warp turns left. */
   warp?: number;
+  /** The weather and its turns left. */
+  wx?: [string, number] | null;
   /** Potions left on each side. */
   pots?: { player: number; enemy: number };
 }
@@ -215,7 +217,7 @@ export function snapshot(b: Battle): Snap {
       spd: x.spdStage,
       sash: x.sash ?? null,
     }));
-  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } }, warp: b.warp };
+  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } }, warp: b.warp, wx: b.weather ? [b.weather, b.weatherLeft] : null };
 }
 
 /** A snapshot with each side's potions left (from the runner's side). */
@@ -223,7 +225,7 @@ const withPots = (snap: Snap, pots: { host: number; guest: number }): Snap => ({
 
 /** The same state seen from the other side of the field. */
 export function flipSnap(s: Snap): Snap {
-  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp, pots: s.pots ? { player: s.pots.enemy, enemy: s.pots.player } : undefined };
+  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp, wx: s.wx, pots: s.pots ? { player: s.pots.enemy, enemy: s.pots.player } : undefined };
 }
 
 export function applySnap(b: Battle, s: Snap) {
@@ -245,6 +247,7 @@ export function applySnap(b: Battle, s: Snap) {
   b.eActive = s.eActive;
   b.teamFx = { player: { ...(s.fx?.player ?? {}) }, enemy: { ...(s.fx?.enemy ?? {}) } };
   b.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
+  b.setWeather(Array.isArray(s.wx) ? s.wx[0] : null, Array.isArray(s.wx) ? s.wx[1] : 0);
 }
 
 /** Battle events seen from the other side of the field. */
@@ -257,6 +260,7 @@ export function flipEvents(events: BattleEvent[]): BattleEvent[] {
       case 'enemySend':
         return { kind: 'swap', side: 'player', index: e.index, hp: e.hp };
       case 'text':
+      case 'weather':
         return e;
       default:
         return { ...e, side: other(e.side) } as BattleEvent;

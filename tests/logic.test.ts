@@ -1903,7 +1903,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2441,5 +2441,238 @@ describe('Arena tournament', () => {
     a[0].hp = 0;
     expect(teamFor(t, 'cpu1')[0].hp).toBeGreaterThan(0);
     expect(teamFor(t, YOU)).toHaveLength(1);
+  });
+});
+
+import { WEATHER, weatherId, WEATHER_UP, WEATHER_DOWN } from '../src/data/moves';
+import { WEATHER_LINES } from '../src/logic/creature';
+import { applySnap, flipSnap, snapshot } from '../src/net/duel';
+describe('Battle weather', () => {
+  const duo = (pId: string, pMoves: string[], eId: string, eMoves: string[], seed = 5) => {
+    const p = createCreature(pId, 30);
+    p.moves = pMoves.map((id) => ({ id, tier: 1 }));
+    const e = createCreature(eId, 30);
+    e.moves = eMoves.map((id) => ({ id, tier: 1 }));
+    return new Battle([p], [e], new Rng(seed));
+  };
+  it('only eight lines learn a weather move, two for each kind', () => {
+    const learners = SPECIES.filter((sp) => extraMoves(sp).some((m) => MOVES[m.id].weather));
+    expect(learners.map((s) => s.id).sort()).toEqual(Object.keys(WEATHER_LINES).sort());
+    for (const w of Object.keys(WEATHER) as (keyof typeof WEATHER)[]) expect(Object.values(WEATHER_LINES).filter((x) => x === w)).toHaveLength(2);
+  });
+  it('sun powers up Fire, weakens Water, and wears off after its turns', () => {
+    const b = duo('flicklet', [weatherId('sun'), 'Fire:0'], 'pebblin', ['Earth:0']);
+    b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+    expect(b.weather).toBe('sun');
+    expect(b.weatherLeft).toBe(4);
+    // Fire hits harder in the sun than without it (same seed, same roll).
+    const hit = (sun: boolean) => {
+      const x = duo('flicklet', ['Fire:0'], 'golemite', ['Earth:0'], 9);
+      x.e.c.level = 70;
+      x.e.c.hp = stats(x.e.c).hp;
+      if (sun) x.setWeather('sun', 3);
+      const before = x.e.c.hp;
+      x.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      return before - x.e.c.hp;
+    };
+    expect(hit(true) / hit(false)).toBeGreaterThan(WEATHER_UP - 0.1);
+    for (let i = 0; i < 4; i++) b.takeDuelTurn({ kind: 'move', index: 1 }, { kind: 'move', index: 0 });
+    expect(b.weather).toBeNull();
+    expect(WEATHER_DOWN).toBeLessThan(1);
+  });
+  it('hail chips Hexlings that are not Frost, survives a save and a duel snapshot', () => {
+    const b = duo('snowmote', [weatherId('hail')], 'pebblin', ['Earth:buff' in MOVES ? 'Earth:buff' : 'Earth:0']);
+    const p0 = b.p.c.hp;
+    const e0 = b.e.c.hp;
+    b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+    expect(b.weather).toBe('hail');
+    expect(b.e.c.hp).toBeLessThan(e0);
+    // The snow Hexling is sheltered (and the foe's buff did no damage).
+    expect(b.p.c.hp).toBe(p0);
+    const saved = b.saveState();
+    const c = duo('snowmote', [weatherId('hail')], 'pebblin', ['Earth:0']);
+    c.restoreState(saved);
+    expect([c.weather, c.weatherLeft]).toEqual(['hail', b.weatherLeft]);
+    const d = duo('snowmote', [weatherId('hail')], 'pebblin', ['Earth:0']);
+    applySnap(d, flipSnap(flipSnap(snapshot(b))));
+    expect([d.weather, d.weatherLeft]).toEqual(['hail', b.weatherLeft]);
+  });
+});
+
+import { bondHearts, natureFor, natureMult, NATURES } from '../src/data/natures';
+import { growBond } from '../src/logic/run';
+describe('Natures and bond', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  it('a nature leans one stat up 10% and another down 10%', () => {
+    const c = createCreature('emberkit', 30);
+    const plain = stats(c);
+    c.nature = 'brave';
+    const s = stats(c);
+    expect(s.atk / plain.atk).toBeCloseTo(1.1, 1);
+    expect(s.spd / plain.spd).toBeCloseTo(0.9, 1);
+    expect(s.def).toBe(plain.def);
+    expect(natureMult('steady', 'atk')).toBe(1);
+    expect(Object.keys(NATURES)).toContain(natureFor('x'));
+  });
+  it('run Hexlings get natures from the seed; Arena ones have none', () => {
+    const meta = mkMeta();
+    const a = startRun(meta, 'emberkit', 77);
+    const b = startRun(mkMeta(), 'emberkit', 77);
+    expect(a.team[0].nature).toBeDefined();
+    expect(a.team[0].nature).toBe(b.team[0].nature);
+    const node = Object.values(a.map.nodes).find((n) => n.kind === 'battle')!;
+    const e = makeEncounter(a, node);
+    expect(e.every((c) => !!c.nature)).toBe(true);
+    expect(mkArena({ speciesId: 'emberkit', stage: 0, moves: [] }).nature).toBeUndefined();
+  });
+  it('bond grows with wins and can let a Hexling hang on at 1 HP', () => {
+    const run = startRun(mkMeta(), 'emberkit', 5);
+    const c = run.team[0];
+    const lines: string[] = [];
+    for (let i = 0; i < 8; i++) lines.push(...growBond(run, [c.uid]));
+    expect(bondHearts(c.bond)).toBe(2);
+    expect(lines).toHaveLength(2);
+    // Not fighting: no bond.
+    growBond(run, []);
+    expect(c.bond).toBe(8);
+    let held = 0;
+    for (let seed = 1; seed < 300; seed++) {
+      const p = createCreature('emberkit', 10);
+      p.bond = 15;
+      p.moves = [{ id: 'Fire:0', tier: 1 }];
+      const e = createCreature('golemite', 60);
+      e.moves = [{ id: 'Earth:2', tier: 3 }];
+      const b = new Battle([p], [e], new Rng(seed), { bond: true });
+      const ev = b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      if (p.hp === 1 && ev.some((x) => x.kind === 'text' && /hung on for you/.test(x.text))) held++;
+    }
+    expect(held).toBeGreaterThan(30);
+    expect(held).toBeLessThan(120);
+  });
+});
+
+import { dayPhase, holidayOn } from '../src/logic/ambience';
+describe('Time of day and holidays', () => {
+  it('reads the phase of the day and only short holiday windows', () => {
+    expect(dayPhase(new Date(2026, 10, 20, 13))).toBe('day');
+    expect(dayPhase(new Date(2026, 10, 20, 23))).toBe('night');
+    expect(dayPhase(new Date(2026, 10, 20, 6))).toBe('dawn');
+    expect(dayPhase(new Date(2026, 10, 20, 19))).toBe('dusk');
+    expect(holidayOn(new Date(2026, 9, 31))?.id).toBe('halloween');
+    expect(holidayOn(new Date(2026, 11, 25))?.id).toBe('winter');
+    expect(holidayOn(new Date(2026, 11, 10))).toBeNull();
+    expect(holidayOn(new Date(2026, 11, 31))?.id).toBe('newyear');
+    expect(holidayOn(new Date(2026, 1, 14))?.id).toBe('valentine');
+  });
+});
+
+import { setWorldClock } from '../src/logic/ambience';
+import { LEGENDS, isLegend } from '../src/data/legends';
+import { legendBeaten, legendFled, legendsCaught, placeRoamer, moveRoamer } from '../src/logic/run';
+import { vi } from 'vitest';
+// Tests shouldn't depend on the time of day they run at.
+setWorldClock(false);
+describe('Roaming legendaries and night Hexlings', () => {
+  const mkMeta = (): Meta => ({
+    unlockedStarters: [...DEFAULT_STARTERS],
+    unlockedPassives: [],
+    equippedPassive: null,
+    runs: 0,
+    wins: 0,
+    dex: emptyDex(),
+    coinsSpent: 0,
+    bossesDefeated: 0,
+    clearedMaps: [],
+    lastMap: 'wildlands', stats: emptyStats(), achievements: [], newAchievements: [],
+  });
+  const floor2 = (seed = 21) => {
+    const run = startRun(mkMeta(), 'emberkit', seed);
+    run.floor = 1;
+    run.map = generateFloor(1, run.biomes[1], seed);
+    run.currentId = run.map.startId;
+    run.visited = [run.map.startId];
+    return run;
+  };
+  it('stay out of every pool, the Hexlidex and the extra-move thresholds', () => {
+    for (const l of LEGENDS) {
+      expect(SPECIES.some((s) => s.id === l.id)).toBe(false);
+      expect(SPECIES_BY_ID[l.id]).toBe(l);
+      expect(isLegend(l.id)).toBe(true);
+    }
+  });
+  it('roam battle hexes ahead, move as you do, and only in unseeded runs after floor 1', () => {
+    const run = floor2();
+    placeRoamer(run, true);
+    expect(run.roamer).toBeTruthy();
+    expect(run.map.nodes[run.roamer!.node].kind).toBe('battle');
+    const first = run.roamer!.node;
+    let moved = false;
+    for (let i = 0; i < 6 && run.roamer; i++) {
+      moveRoamer(run);
+      if (run.roamer && run.roamer.node !== first) moved = true;
+    }
+    expect(moved).toBe(true);
+    const daily = floor2();
+    daily.daily = '2026-11-20';
+    placeRoamer(daily, true);
+    expect(daily.roamer).toBeNull();
+    const f1 = startRun(mkMeta(), 'emberkit', 3);
+    placeRoamer(f1, true);
+    expect(f1.roamer).toBeNull();
+  });
+  it('a meeting is the legendary alone; it keeps its damage, and once caught it roams no more', () => {
+    const run = floor2();
+    placeRoamer(run, true);
+    const id = run.roamer!.id;
+    const foe = makeEncounter(run, run.map.nodes[run.roamer!.node]);
+    expect(foe).toHaveLength(1);
+    expect(foe[0].speciesId).toBe(id);
+    foe[0].hp = Math.round(stats(foe[0]).hp * 0.5);
+    legendFled(run, foe[0]);
+    expect(run.meta.legends![id].hp).toBeCloseTo(0.5, 1);
+    placeRoamer(run, true);
+    const again = makeEncounter(run, run.map.nodes[run.roamer!.node]);
+    if (again[0].speciesId === id) expect(again[0].hp / stats(again[0]).hp).toBeCloseTo(0.5, 1);
+    legendBeaten(run, id);
+    const caught = catchCreature(run, again[0]);
+    expect(caught).toBeTruthy();
+    expect(run.meta.dex.caught).not.toContain(again[0].speciesId);
+    expect(run.meta.unlockedStarters).not.toContain(again[0].speciesId);
+    expect(legendsCaught(run.meta)).toBe(1);
+    for (let s = 0; s < 20; s++) {
+      placeRoamer(run, true);
+      expect(run.roamer?.id).not.toBe(again[0].speciesId);
+    }
+  });
+  it('at night, Shadow and Spirit Hexlings show up in any land', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const count = (hour: number) => {
+      vi.setSystemTime(new Date(2026, 10, 20, hour));
+      let n = 0;
+      for (let seed = 1; seed < 60; seed++) {
+        const run = startRun(mkMeta(), 'emberkit', seed);
+        run.log.fights = 1;
+        const node = Object.values(run.map.nodes).find((x) => x.kind === 'battle')!;
+        for (const c of makeEncounter(run, node)) if (SPECIES_BY_ID[c.speciesId].types.some((t) => t === 'Shadow' || t === 'Spirit')) n++;
+      }
+      return n;
+    };
+    setWorldClock(true);
+    const night = count(23);
+    const day = count(13);
+    setWorldClock(false);
+    vi.useRealTimers();
+    expect(night).toBeGreaterThan(day);
   });
 });

@@ -1,3 +1,5 @@
+import { LEGENDS } from '../data/legends';
+import { legendsCaught } from '../logic/run';
 import Phaser from 'phaser';
 import { gildedCount } from '../logic/gilded';
 import { earnedTitles, TITLES } from '../logic/titles';
@@ -88,6 +90,7 @@ export class RecordsScene extends Phaser.Scene {
       ['Gilded Hexlings', `${meta.shinyCaught ?? 0} caught`],
       ['Arena best', `${meta.arenaBest ?? 0}/5`],
       ['Tournaments won', `${meta.tourneyWins ?? 0}`],
+      ['Legendaries caught', `${legendsCaught(meta)}/${LEGENDS.length}`],
       ['Maps won', `${meta.clearedMaps.length}/${Object.keys(MAP_BY_ID).length}`],
       ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}` : '—'],
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],

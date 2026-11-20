@@ -1,4 +1,6 @@
+import { BOND_ENDURE, bondHearts } from '../data/natures';
 import { BALANCE } from '../data/balance';
+import { WEATHER, WEATHER_CHIP, WEATHER_IDS, weatherMult, weatherShort, weatherTurns, type WeatherId } from '../data/moves';
 import { attackEl, attackValue, bulwarkRepeat, effectsAtTier, speedPower, warpTurns, healAtTier, MAX_STAGE, mendHeal, STAT_LABEL, TEAM_FX, teamFxTurns, TIER_POWER, type MoveDef, type StatKey, type TeamFxId } from '../data/moves';
 import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
@@ -23,6 +25,8 @@ export interface Combatant {
   sash?: 'fired' | 'spent';
   /** Bulwark is up this turn. */
   guarded?: boolean;
+  /** Bond: 'fired' right after it hung on at 1 HP for you, then 'spent' (once a battle). */
+  bonded?: 'fired' | 'spent';
   /** Bulwarks that held in a row (each one after the first is much less likely to). */
   guardStreak?: number;
 }
@@ -45,6 +49,10 @@ export interface BattleState {
   lastEnemySwitch: number;
   /** Time Warp turns left. */
   warp?: number;
+  /** uids that already hung on through their bond this battle. */
+  bonded?: number[];
+  weather?: WeatherId | null;
+  weatherLeft?: number;
 }
 
 export type PlayerAction =
@@ -67,7 +75,9 @@ export type BattleEvent =
   /** A status condition was gained (or cleared, when null). */
   | { kind: 'status'; side: Side; status: StatusId | null }
   /** A team effect went up (or wore off) on a side. */
-  | { kind: 'team'; side: Side; fx: TeamFxId; on: boolean };
+  | { kind: 'team'; side: Side; fx: TeamFxId; on: boolean }
+  /** The weather changed (null: it cleared). */
+  | { kind: 'weather'; id: WeatherId | null };
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
@@ -97,12 +107,19 @@ export class Battle {
   /** When auto-battle last switched your Hexling (so it doesn't switch back and forth). */
   private lastAutoSwitch = -10;
   private turnNo = 0;
+  /** Turns played so far. */
+  get turns(): number {
+    return this.turnNo;
+  }
   /** Set for duels between two people (see the constructor option). */
   readonly duel: { player: string; enemy: string } | null;
   /** Team effects up on each side, with turns left (see TEAM_FX). */
   teamFx: Record<Side, Partial<Record<TeamFxId, number>>> = { player: {}, enemy: {} };
   /** Time Warp: turns left in which the slower Hexling moves first (0: off). */
   warp = 0;
+  /** The weather (set by a weather move) and its turns left. */
+  weather: WeatherId | null = null;
+  weatherLeft = 0;
 
   hasFx(side: Side, fx: TeamFxId): boolean {
     return (this.teamFx[side][fx] ?? 0) > 0;
@@ -164,6 +181,8 @@ export class Battle {
   private ruleNames: Partial<Record<BossRule, string>> = {};
   /** Second Wind: enemy creatures that have already used it. */
   private winded = new Set<number>();
+  /** Bond hearts can save your Hexlings (runs only). */
+  private bonds = false;
   /** Wild battles: the last enemy is left at 1 HP instead of fainting, so it can be caught. */
   private spareLast: boolean;
   /** The last enemy has been worn down to 1 HP: the battle is won and it awaits catch or finish. */
@@ -206,6 +225,8 @@ export class Battle {
       playerStatusImmune?: StatusId[];
       /** The player's bench: not in this battle, but their status timers still run. */
       reserve?: Creature[];
+      /** Runs: your Hexlings' bond hearts can let them hang on at 1 HP. */
+      bond?: boolean;
     } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
@@ -224,6 +245,7 @@ export class Battle {
     this.playerStatusMult = opts.playerStatusMult ?? 1;
     this.playerImmune = opts.playerStatusImmune ?? [];
     this.reserve = opts.reserve ?? [];
+    this.bonds = opts.bond ?? false;
     this.enemy = enemyTeam.map(fresh);
     if (opts.enemySynergy) for (const x of this.enemy) x.syn = opts.enemySynergy;
     this.pActive = Math.max(0, this.player.findIndex((p) => isAlive(p.c)));
@@ -247,6 +269,9 @@ export class Battle {
       turnNo: this.turnNo,
       lastEnemySwitch: this.lastEnemySwitch,
       warp: this.warp,
+      weather: this.weather,
+      weatherLeft: this.weatherLeft,
+      bonded: this.player.filter((x) => x.bonded).map((x) => x.c.uid),
     };
   }
 
@@ -270,6 +295,8 @@ export class Battle {
     this.turnNo = s.turnNo ?? this.turnNo;
     this.lastEnemySwitch = s.lastEnemySwitch ?? this.lastEnemySwitch;
     this.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
+    this.setWeather(s.weather, s.weatherLeft);
+    if (Array.isArray(s.bonded)) for (const x of this.player) if (s.bonded.includes(x.c.uid)) x.bonded = 'spent';
   }
 
   /**
@@ -748,6 +775,51 @@ export class Battle {
     }
   }
 
+  /** Put the weather back (a reload or a duel snapshot), ignoring anything malformed. */
+  setWeather(w: unknown, left: unknown) {
+    const ok = typeof w === 'string' && (WEATHER_IDS as string[]).includes(w);
+    this.weather = ok ? (w as WeatherId) : null;
+    this.weatherLeft = ok ? Math.max(0, Math.min(9, Number(left) || 0)) : 0;
+    if (!this.weatherLeft) this.weather = null;
+  }
+
+  private useWeather(w: WeatherId, tier: number, ev: BattleEvent[]) {
+    const d = WEATHER[w];
+    // Counting this turn's end, so it lasts the turns it says.
+    this.weatherLeft = weatherTurns(tier);
+    if (this.weather === w) {
+      ev.push({ kind: 'text', text: `The ${d.name.toLowerCase()} goes on! (${this.weatherLeft} turns)` });
+      return;
+    }
+    this.weather = w;
+    ev.push({ kind: 'weather', id: w });
+    ev.push({ kind: 'text', text: `${d.start} ${weatherShort(w)} for ${this.weatherLeft} turns.` });
+  }
+
+  /** End of turn: dust and hail wear down the unsheltered, then the weather counts down. */
+  private tickWeather(ev: BattleEvent[]) {
+    if (!this.weather) return;
+    const d = WEATHER[this.weather];
+    if (d.shelter && !this.spared) {
+      for (const side of ['player', 'enemy'] as const) {
+        const x = side === 'player' ? this.p : this.e;
+        if (!isAlive(x.c) || creatureTypes(x.c).some((t) => d.shelter!.includes(t))) continue;
+        const max = stats(x.c).hp;
+        const dmg = this.hurt(x, Math.max(1, Math.floor(max * WEATHER_CHIP)));
+        ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
+        ev.push({ kind: 'text', text: `${this.label(x)} is battered by the ${d.name.toLowerCase()}!` });
+        this.sashNote(x, ev);
+        if (!isAlive(x.c)) this.handleFaint(side, ev);
+      }
+    }
+    if (--this.weatherLeft <= 0) {
+      this.weather = null;
+      this.weatherLeft = 0;
+      ev.push({ kind: 'weather', id: null });
+      ev.push({ kind: 'text', text: d.end });
+    }
+  }
+
   private useWarp(tier: number, ev: BattleEvent[]) {
     if (this.warp > 0) {
       this.warp = 0;
@@ -768,7 +840,7 @@ export class Battle {
     if (d.execute && targetFrac < 0.5) v *= 2;
     if (d.priority && targetFrac < 0.25) v *= 1.5;
     if (d.speedPower) v *= this.speedFactor(d, user, target);
-    return v;
+    return v * weatherMult(this.weather, el);
   }
 
   /** How attractive a status move is to the AI right now (comparable to attack power). */
@@ -777,6 +849,14 @@ export class Battle {
     const hpFrac = user.c.hp / stats(user.c).hp;
     // Bulwark: now and then, mostly when hurt, never twice in a row.
     if (d.protect) return (user.guardStreak ?? 0) > 0 ? 0 : hpFrac < 0.5 ? 45 : 12;
+    // Weather: call it when it powers up your own element (and isn't already up).
+    if (d.weather) {
+      if (this.weather === d.weather && this.weatherLeft > 1) return 0;
+      const mine = creatureTypes(user.c);
+      const w = WEATHER[d.weather];
+      if (!mine.includes(w.up)) return 0;
+      return hpFrac < 0.35 ? 0 : creatureTypes(foe.c).includes(w.up) ? 20 : 55;
+    }
     // Time Warp: set it up when slower, cancel the foe's when faster.
     if (d.warp) {
       const slower = this.speedOf(user) < this.speedOf(foe);
@@ -926,6 +1006,7 @@ export class Battle {
       return;
     }
     if (def.warp) return this.useWarp(slot.tier, ev);
+    if (def.weather) return this.useWeather(def.weather, slot.tier, ev);
 
     const targetSideOf: Side = side === 'player' ? 'enemy' : 'player';
     const acc =
@@ -966,10 +1047,11 @@ export class Battle {
       const fxMult =
         (this.hasFx(side, 'rally') ? 1.25 : 1) *
         (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
+        weatherMult(this.weather, el) *
         // Ironhide: each super-effective element only counts x1.25 against their Hexlings.
         (side === 'player' && this.has('ironhide') ? Math.pow(1.25 / 1.5, r.mult >= 2 ? 2 : r.mult > 1.01 ? 1 : 0) : 1);
       const raw = Math.max(1, Math.round(r.dmg * (side === 'player' ? this.playerDamageMult : this.enemyDamageMult) * fxMult));
-      const dmg = this.hurt(target, raw);
+      const dmg = this.hurt(target, raw, true);
       total += dmg;
       if (side === 'player') {
         user.c.dealt = (user.c.dealt ?? 0) + dmg;
@@ -1149,7 +1231,7 @@ export class Battle {
    * Applies damage to a combatant and returns what was dealt. In wild battles the last enemy
    * standing stops at 1 HP and is marked spared (ready to catch) instead of fainting.
    */
-  private hurt(x: Combatant, dmg: number): number {
+  private hurt(x: Combatant, dmg: number, foeHit = false): number {
     const isLastEnemy =
       this.spareLast && this.enemy.includes(x) && this.enemy.every((o) => o === x || !isAlive(o.c));
     const floor = isLastEnemy ? 1 : 0;
@@ -1159,6 +1241,15 @@ export class Battle {
       x.sash = 'fired';
       x.c.hp = 1;
       return before - 1;
+    }
+    // Bond: your Hexling hangs on at 1 HP for you, now and then (once a battle).
+    if (this.bonds && foeHit && !x.bonded && dmg >= before && before > 1 && this.player.includes(x)) {
+      const hearts = bondHearts(x.c.bond);
+      if (hearts && this.rng.chance(BOND_ENDURE[hearts])) {
+        x.bonded = 'fired';
+        x.c.hp = 1;
+        return before - 1;
+      }
     }
     x.c.hp = Math.max(floor, x.c.hp - dmg);
     if (isLastEnemy && x.c.hp === 1 && before - dmg <= 0) this.spared = true;
@@ -1173,6 +1264,8 @@ export class Battle {
       ev.push({ kind: 'text', text: `The wild ${creatureName(this.e.c)} is too weak to fight on!` });
       return;
     }
+    this.tickWeather(ev);
+    if (this.outcome() !== 'ongoing' && this.outcome() !== 'needSwitch') return;
     this.ruleEndOfTurn(ev);
     this.tickTeamFx(ev);
     if (this.outcome() === 'ongoing' || this.outcome() === 'needSwitch') this.berries(ev);
@@ -1217,6 +1310,10 @@ export class Battle {
   }
 
   private sashNote(x: Combatant, ev: BattleEvent[]) {
+    if (x.bonded === 'fired') {
+      x.bonded = 'spent';
+      ev.push({ kind: 'text', text: `${creatureName(x.c)} hung on for you! ${'♥'.repeat(bondHearts(x.c.bond))}` });
+    }
     if (x.sash !== 'fired') return;
     x.sash = 'spent';
     ev.push({ kind: 'text', text: `${creatureName(x.c)} hung on with its Last Stand Sash!` });

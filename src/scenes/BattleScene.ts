@@ -1,3 +1,5 @@
+import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
+import { bondHearts, natureShort, NATURES } from '../data/natures';
 import { titleBadge } from '../ui/titleBadge';
 import { addOnlineWin} from '../logic/titles';
 import { titleNews } from '../logic/cosmetics';
@@ -9,11 +11,11 @@ import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
-import { battleBackdrop, battlePad, onField, pickStage } from '../ui/backdrops';
+import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
-import { accText, attackEl, MAX_STAGE, maxUses, moveColor, MOVES, moveSummary, TEAM_FX, type TeamFxId } from '../data/moves';
+import { accText, attackEl, MAX_STAGE, maxUses, moveColor, MOVES, moveSummary, TEAM_FX, WEATHER, type TeamFxId } from '../data/moves';
 import { BOSSES, guardianRules, trainerName } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
@@ -80,6 +82,9 @@ import {
   prestigeTracked,
   releaseNote,
   trackStat,
+  growBond,
+  legendBeaten,
+  legendFled,
   isUnlockedStarter,
   catchBonus,
   catchStars,
@@ -252,6 +257,7 @@ export class BattleScene extends Phaser.Scene {
     } else {
       this.enemies = makeEncounter(run, run.map.nodes[run.currentId]);
       run.activeBattle = { kind: this.kind, enemies: this.enemies, settled: false, summary: '' };
+      if (this.enemies[0] && isLegend(this.enemies[0].speciesId)) run.activeBattle.legend = this.enemies[0].speciesId;
       if (this.kind === 'elite') run.activeBattle.trainer = trainerName((xs) => run.rng.pick(xs));
       persist();
     }
@@ -261,12 +267,13 @@ export class BattleScene extends Phaser.Scene {
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? GLASS_MULT : 1),
-      enemyDamageMult: run.twist === 'glass' ? GLASS_MULT : 1,
+      enemyDamageMult: (run.twist === 'glass' ? GLASS_MULT : 1) * (run.activeBattle.legend ? LEGEND_DAMAGE : 1),
       enemyRandomness: BALANCE.enemyRandomness[this.kind],
       rules: rules.map((r) => ({ rule: r.rule, name: r.name })),
       // Wild creatures are left at 1 HP at the end so you can choose to catch them.
       spareLast: this.kind === 'battle',
       spared: run.activeBattle.spared,
+      bond: true,
       synergy: synergyMults(run.team, run.passive === 'harmonist' ? 2 : 1),
       // Guardians' themed teams get synergy too.
       enemySynergy: boss ? synergyMults(this.enemies) : undefined,
@@ -345,9 +352,12 @@ export class BattleScene extends Phaser.Scene {
     this.refreshEnemy();
     this.refreshPlayer();
     this.drawTeamFx();
+    const legend = run.activeBattle?.legend;
     const intro = resuming
       ? 'The battle resumes!'
-      : this.kind === 'battle'
+      : legend
+        ? `The legendary ${creatureName(this.enemies[0])} appeared! It won't stay long...`
+        : this.kind === 'battle'
         ? `A ${this.enemies.map((e) => `${e.shiny ? '✦GILDED✦' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
         : this.kind === 'elite'
           ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
@@ -545,6 +555,27 @@ export class BattleScene extends Phaser.Scene {
     this.msg.setText(msg);
     const side = this.aboutSide(msg, events, idx);
     if (side) this.hop(side);
+  }
+
+  /** The weather's look over the field, matching the battle's weather (none when it clears). */
+  private weatherFx: Phaser.GameObjects.GameObject[] = [];
+  private weatherShown: string | null = null;
+  private showWeather() {
+    const w = this.battle.weather;
+    if (w === this.weatherShown) return;
+    this.weatherShown = w;
+    const old = this.weatherFx;
+    this.weatherFx = [];
+    for (const o of old) {
+      if (o instanceof Phaser.GameObjects.Particles.ParticleEmitter) o.stop();
+      this.tweens.add({ targets: o, alpha: 0, duration: 600, onComplete: () => o.destroy() });
+    }
+    if (!w) return;
+    const right = L.field.w >= W ? FW - OX : L.field.w;
+    const bottom = L.field.h >= H ? FH - OY : L.field.h;
+    const area = new Phaser.Geom.Rectangle(-OX, -OY, right + OX, bottom + OY);
+    this.weatherFx = fieldWeather(this, w, area);
+    if (w === 'sun') this.cameras.main.flash(250, 255, 200, 120);
   }
 
   /** The element's environment behind the field, and a pad under each side. */
@@ -929,8 +960,10 @@ export class BattleScene extends Phaser.Scene {
     y += LANDSCAPE ? 34 : 46;
 
     // Held item.
-    r.add(text(this, x0, y, c.held ? `Held: ${HELD[c.held].name} · ${HELD[c.held].desc}` : 'Held: nothing', 13, c.held ? COLORS.text : COLORS.textDim, { wordWrap: { width: w } }));
-    y += 24;
+    const nat = c.nature ? `${NATURES[c.nature].name} (${natureShort(c.nature)})${bondHearts(c.bond) ? ` ${'♥'.repeat(bondHearts(c.bond))}` : ''}  ·  ` : '';
+    const held = text(this, x0, y, `${nat}${c.held ? `Held: ${HELD[c.held].name} · ${HELD[c.held].desc}` : 'Held: nothing'}`, 13, c.held || nat ? COLORS.text : COLORS.textDim, { wordWrap: { width: w } });
+    r.add(held);
+    y += Math.max(24, held.height + 8);
 
     // Moves (a foe's only once it has used them in this battle).
     const cols = LANDSCAPE ? 2 : 1;
@@ -1408,6 +1441,10 @@ export class BattleScene extends Phaser.Scene {
           this.drawTeamFx();
           if (ev.on) sfx.statUp();
           break;
+        case 'weather':
+          this.showWeather();
+          this.drawTeamFx();
+          break;
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
           if (ev.side === 'enemy' && ev.status && !this.match) trackStat(state.run!, 'statusInflicted');
@@ -1455,6 +1492,7 @@ export class BattleScene extends Phaser.Scene {
   /** Team effects up on each side: a colored tag with turns left, by each side's panel. */
   private fxChips: Phaser.GameObjects.Container | null = null;
   private drawTeamFx() {
+    this.showWeather();
     this.fxChips?.destroy();
     this.fxChips = this.add.container(0, 0).setDepth(5);
     // Enemy chips go left to right under its panel (clear of the HP numbers and the menu button);
@@ -1472,11 +1510,19 @@ export class BattleScene extends Phaser.Scene {
         this.fxChips.add(t.setPosition(x + 5, y + 2));
         x += side === 'player' ? -4 : w + 4;
       }
-      // Time Warp is on the whole field: one chip, with the enemy's.
+      // Time Warp and the weather are on the whole field: chips with the enemy's.
       if (side === 'enemy' && this.battle.warp > 0) {
         const t = text(this, 0, 0, `TIME WARP · ${this.battle.warp}`, 11, '#1a1426', { fontStyle: 'bold' });
         const w = t.width + 10;
         this.fxChips.add(this.add.rectangle(x, y, w, 16, 0xb4b0c8).setOrigin(0));
+        this.fxChips.add(t.setPosition(x + 5, y + 2));
+        x += w + 4;
+      }
+      if (side === 'enemy' && this.battle.weather) {
+        const d = WEATHER[this.battle.weather];
+        const t = text(this, 0, 0, `${d.tag} · ${this.battle.weatherLeft}`, 11, '#1a1426', { fontStyle: 'bold' });
+        const w = t.width + 10;
+        this.fxChips.add(this.add.rectangle(x, y, w, 16, d.color).setOrigin(0));
         this.fxChips.add(t.setPosition(x + 5, y + 2));
       }
     }
@@ -1496,6 +1542,8 @@ export class BattleScene extends Phaser.Scene {
       this.duelNext = null;
       return this.duelProceed(next);
     }
+    // A roaming legendary only stays a few turns.
+    if (ab?.legend && this.battle.outcome() === 'ongoing' && this.battle.turns >= LEGEND_FLEE_TURNS) return this.legendFlees();
     switch (this.battle.outcome()) {
       case 'ongoing':
         this.msg.setText(`What will ${creatureName(this.battle.p.c)} do?`);
@@ -1637,10 +1685,13 @@ export class BattleScene extends Phaser.Scene {
     playMusic(null);
     // Bookkeeping happens once, even if the page reloads before the reward choice.
     if (!ab.settled) {
+      if (ab.legend) legendBeaten(run, ab.legend);
       run.log.battlesWon += 1;
       trackStat(run, 'battlesWon');
       if (teamSynergy(run.team).length) trackStat(run, 'synergyWins');
-      const fallen = this.fallenNote();
+      // Hexlings that fought and are still standing grow closer to you.
+      const hearts = growBond(run, ab.fought ?? []);
+      const fallen = this.fallenNote() + (hearts.length ? `\n\n${hearts.map((h) => `♥ ${h}`).join('\n')}` : '');
       postBattleRecover(run);
       ab.summary = fallen;
       // Wild creatures sometimes leave an Evolution Stone behind.
@@ -1805,7 +1856,7 @@ export class BattleScene extends Phaser.Scene {
       kind === 'species' || kind === 'type',
       () => {
         cry(c.speciesId, c.stage);
-        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${bonus}${starterNote}${fallen}`, () => this.toMap());
+        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${c.nature ? ` It's ${NATURES[c.nature].name}: it ${NATURES[c.nature].blurb}` : ''}${bonus}${starterNote}${fallen}`, () => this.toMap());
       },
     );
   }
@@ -1969,8 +2020,34 @@ export class BattleScene extends Phaser.Scene {
     );
   }
 
+  /** The legendary leaves: it keeps the damage you did and roams on. */
+  private legendFlees() {
+    const run = state.run!;
+    this.cancelAuto();
+    this.controls.setVisible(false);
+    this.actions.setVisible(false);
+    const foe = this.battle.e.c;
+    legendFled(run, foe);
+    const fallen = this.fallenNote();
+    postBattleRecover(run);
+    persist();
+    const s = this.spriteOf('enemy');
+    sfx.hop();
+    this.tweens.add({ targets: s, y: s.y - 30, alpha: 0, duration: 700, ease: 'Quad.easeIn' });
+    const left = Math.round((foe.hp / stats(foe).hp) * 100);
+    this.time.delayedCall(800, () =>
+      showMessage(
+        this,
+        `${creatureName(foe)} fled!`,
+        `It vanished as quickly as it came, with ${left}% of its health left. Wear it down and it stays worn down: it's still out there.${fallen}`,
+        () => this.toMap(),
+      ),
+    );
+  }
+
   private onLose() {
     const run = state.run!;
+    if (run.activeBattle?.legend) legendFled(run, this.battle.e.c);
     this.cancelAuto();
     this.controls.setVisible(false);
     const fallen = run.team.filter((c) => !isAlive(c)).map(creatureName);

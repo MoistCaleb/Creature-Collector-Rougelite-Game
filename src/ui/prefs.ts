@@ -1,3 +1,4 @@
+import { setWorldClock } from '../logic/ambience';
 /** Small per-device preferences (volumes, battle speed, auto-battle, tips). Never part of a save. */
 
 function read(key: string): string | null {
@@ -77,6 +78,14 @@ export const prefs = {
   set reduceMotion(v: boolean) {
     set('ccr-reduce-motion', v ? '1' : '0');
   },
+  /** Day and night, and holiday themes, on the map (from the device's clock). */
+  get worldClock(): boolean {
+    return get('ccr-world-clock', '1') === '1';
+  },
+  set worldClock(v: boolean) {
+    set('ccr-world-clock', v ? '1' : '0');
+    setWorldClock(v);
+  },
   /** The last game version whose What's new you've seen. */
   get lastVersion(): string | null {
     return get('ccr-last-version', '') || null;
@@ -90,3 +99,5 @@ function vol(s: string): number {
   const n = Math.round(Number(s));
   return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : 10;
 }
+
+setWorldClock(prefs.worldClock);
