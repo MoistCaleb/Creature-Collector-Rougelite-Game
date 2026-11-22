@@ -1,5 +1,8 @@
-import { hasBoon, openOffer, runBoons } from '../logic/boons';
-import { openBoonList, openBoonOffer } from '../ui/boonPick';
+import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
+import { findSurprise, floorSurprise } from '../logic/surprises';
+import { SURPRISES } from '../data/surprises';
+import { BOON_COLOR, BOONS } from '../data/boons';
+import { boonCardText, openBoonList, openBoonOffer } from '../ui/boonPick';
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
@@ -26,14 +29,14 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { placeRng, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
+import { fillTeamFromBench, placeRng, unequipHeld, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
 import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, encounterKind, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
-import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
+import { applyItem, canAfford, eligibleTargets, ITEMS, pay, priceFor, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
 import { announceGilded } from '../ui/gildedUi';
@@ -216,6 +219,13 @@ export class MapScene extends Phaser.Scene {
       const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), fogged ? '?' : n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       if (fogged) hex.setFillStyle(0x3a3650);
       this.layer.add([hex, icon, label]);
+      // A rare encounter or hidden hex: a twinkle in the corner.
+      const fsx = floorSurprise(run);
+      if ((fsx.encNode === n.id || fsx.hexNode === n.id) && !visited) {
+        const tw = pixelIcon(this, p.x - hw * 0.36, p.y - hh * 0.34, 'sparkle', 14);
+        this.layer.add(tw);
+        this.tweens.add({ targets: tw, alpha: 0.35, yoyo: true, repeat: -1, duration: 700 });
+      }
       const peek = scouted.has(n.id) ? peekEncounter(run, n) : null;
       if (peek) {
         const img = this.add.image(p.x + hw * 0.36, p.y - hh * 0.34, ensureCreatureTexture(this, peek.speciesId, run.hunt ? 2 : Math.min(2, run.floor))).setScale(0.75 * SPRITE_FIT);
@@ -309,7 +319,9 @@ export class MapScene extends Phaser.Scene {
       });
       showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', () => announceGilded(this, meta, after));
     };
-    const afterBanner = () => (data.banner ? showMessage(this, run.race?.done ? (run.race.done.won ? 'Stage cleared!' : 'Stage over') : run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
+    const afterFloorBanner = () => (data.banner ? showMessage(this, run.race?.done ? (run.race.done.won ? 'Stage cleared!' : 'Stage over') : run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
+    // Rare surprises announce themselves once: the run's omen, then this floor's.
+    const afterBanner = () => this.announceSurprises(afterFloorBanner);
     // New held items and Evolution Stones since the map was last shown get their own moments.
     const items = run.newItems ?? [];
     run.newItems = [];
@@ -1005,7 +1017,10 @@ export class MapScene extends Phaser.Scene {
     this.drawRoamer();
     // The other player sees you hop there.
     this.shareProgress();
-    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive', 'boon'].includes(n.kind)) {
+    // A rare encounter on this hex: it's found now.
+    const fsur = floorSurprise(run);
+    if (fsur.enc && fsur.encNode === n.id && findSurprise(state.meta, fsur.enc)) persist();
+    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive', 'boon', 'hidden'].includes(n.kind)) {
       // Remember the unresolved choice so a reload offers it again.
       run.pendingNode = n.kind;
       persist();
@@ -1060,7 +1075,130 @@ export class MapScene extends Phaser.Scene {
         return this.doRevive();
       case 'boon':
         return this.doBoonHex();
+      case 'hidden':
+        return this.doHidden();
     }
+  }
+
+  /** Banners for the run's omen (once a run) and this floor's rare floor and Elder (once a floor). */
+  private announceSurprises(then: () => void) {
+    const run = state.run!;
+    const rs = run.surprises;
+    if (!rs) return then();
+    const fs = floorSurprise(run);
+    const lines: string[] = [];
+    if (rs.omen && !rs.omenAnnounced) {
+      rs.omenAnnounced = true;
+      findSurprise(state.meta, rs.omen);
+      lines.push(`Omen: ${SURPRISES[rs.omen].name}\n${SURPRISES[rs.omen].desc}`);
+    }
+    if (!fs.announced && (fs.floor || fs.elder || fs.hex)) {
+      fs.announced = true;
+      if (fs.floor) {
+        findSurprise(state.meta, fs.floor);
+        lines.push(`${SURPRISES[fs.floor].name}!\n${SURPRISES[fs.floor].desc}${fs.floor === 'shattered' && fs.second ? ` (${run.map.biome} and ${fs.second})` : ''}`);
+      }
+      if (fs.elder) {
+        findSurprise(state.meta, 'elder');
+        lines.push(`An Elder guardian waits at the top of this floor.\n${SURPRISES.elder.desc}`);
+      }
+      if (fs.hex) lines.push('Something glitters on a hex ahead (???).');
+    }
+    if (!lines.length) return then();
+    persist();
+    sfx.shinyReveal();
+    showMessage(this, 'A rare surprise!', lines.join('\n\n'), then);
+  }
+
+  /** Hidden hexes (surprises): a wishing well, a cursed altar or a hidden shop. */
+  private doHidden() {
+    const run = state.run!;
+    const fs = floorSurprise(run);
+    const id = fs.hex ?? 'well';
+    if (findSurprise(state.meta, id)) persist();
+    // A boon gained here: open it as an offer of one (or a mythic offer), then move on.
+    const offerAndGo = (mode: 'normal' | 'mythic') => {
+      openOffer(run, `hidden${run.floor}:${id}:${mode}`, mode);
+      persist();
+      openBoonOffer(this, run, this.done);
+    };
+    if (id === 'well') {
+      const toss = (amount: number) => {
+        pay(run, amount);
+        const r = placeRng(run, `well:${amount}`).next() + (amount >= 60 ? 0.15 : 0);
+        if (r < 0.3) return showMessage(this, 'Wishing Well', 'Plink... nothing happens. The coins are gone.', this.done);
+        if (r < 0.55) {
+          earnCoins(run, amount * 2);
+          return showMessage(this, 'Wishing Well', `The well coughs up ◉ ${amount * 2}!`, this.done);
+        }
+        if (r < 0.92) return showMessage(this, 'Wishing Well', 'Your wish is heard: a boon!', () => offerAndGo('normal'));
+        return showMessage(this, 'Wishing Well', 'The water glows gold: a mythic boon!', () => offerAndGo('mythic'));
+      };
+      return openPicker(this, {
+        title: 'Wishing Well',
+        subtitle: 'Toss in coins and make a wish. Anything could happen, including nothing. Bigger wishes are luckier.',
+        options: [
+          { label: 'Toss ◉ 25', disabled: run.coins < 25, color: 0x2f4a6b },
+          { label: 'Toss ◉ 60', sub: 'Better odds', disabled: run.coins < 60, color: 0x4a3a7a },
+          { label: 'Walk away', color: 0x3a3450 },
+        ],
+        onPick: (i) => (i === 0 ? toss(25) : i === 1 ? toss(60) : this.done()),
+      });
+    }
+    if (id === 'altar') {
+      const list = allCreatures(run);
+      return openPicker(this, {
+        title: 'Cursed Altar',
+        subtitle: 'The altar wants something precious. Give it, and it gives back a mythic boon.',
+        options: [
+          { label: 'Offer a Hexling', sub: 'It leaves your team for good', disabled: list.length < 2, color: 0x6a2a3a },
+          { label: `Offer half your coins (◉ ${Math.floor(run.coins / 2)})`, disabled: run.coins < 20, color: 0x6b5a1c },
+          { label: 'Walk away', color: 0x3a3450 },
+        ],
+        onPick: (i) => {
+          if (i === 2) return this.done();
+          if (i === 1) {
+            run.coins -= Math.floor(run.coins / 2);
+            return offerAndGo('mythic');
+          }
+          openPicker(this, {
+            title: 'Offer which Hexling?',
+            options: list.map((c) => ({ creature: c })),
+            onPick: (k) => {
+              const c = list[k];
+              unequipHeld(run, c);
+              run.team = run.team.filter((x) => x !== c);
+              run.bench = run.bench.filter((x) => x !== c);
+              fillTeamFromBench(run);
+              offerAndGo('mythic');
+            },
+            onCancel: () => this.doHidden(),
+            cancelLabel: 'Back',
+          });
+        },
+      });
+    }
+    // The hidden shop: three boons for coins.
+    const ids = rollOffer(run, `hiddenshop${run.floor}`).filter((b) => BOONS[b].rarity !== 'curse' && !hasBoon(run, b));
+    const price = priceFor(run, 120);
+    return openPicker(this, {
+      title: `Hidden Shop   ◉ ${run.coins}`,
+      subtitle: 'A cloaked stranger sells boons, not items.',
+      options: [
+        ...ids.map((b) => ({ ...boonCardText(b), label: `${BOONS[b].name}   ◉ ${price}`, disabled: run.coins < price, color: BOON_COLOR[BOONS[b].rarity] })),
+        { label: 'Leave', color: 0x3a3450 },
+      ],
+      rowHeight: 86,
+      onPick: (i) => {
+        if (i >= ids.length) return this.done();
+        pay(run, price);
+        runBoons(run).offer = { ids: [ids[i]], picks: 1, mode: 'normal', tag: 'hiddenshop' };
+        takeBoon(run, ids[i]);
+        sfx.boonPick(BOONS[ids[i]].rarity);
+        persist();
+        showMessage(this, `${BOONS[ids[i]].name}!`, BOONS[ids[i]].desc, this.done);
+      },
+    });
   }
 
   /** Boon hex: an offer of boons (the same one after a reload). */
