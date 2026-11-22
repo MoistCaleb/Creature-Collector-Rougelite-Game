@@ -1,3 +1,5 @@
+import { rollTrait, traitsOf, type TraitId } from '../data/traits';
+import { traitsFound } from './dex';
 import { DEX_SPECIES, isLegend } from '../data/legends';
 import { attackEl, attackId, elementPool, MOVES, teamMoveId } from '../data/moves';
 import { ELEMENTS } from '../data/types';
@@ -25,6 +27,14 @@ export interface ArenaPick {
   moves: string[];
   /** Bring it in its shiny colours (only for species you've caught shiny). */
   shiny?: boolean;
+  /** Its trait: any of the line's traits you've found (2.0). */
+  trait?: TraitId;
+}
+
+/** The trait a pick fights with: its own if the line has it, else the line's first. */
+export function arenaTrait(p: ArenaPick): TraitId | undefined {
+  const set = traitsOf(p.speciesId);
+  return p.trait && set.includes(p.trait) ? p.trait : set[0];
 }
 
 /** Have you caught (or claimed) this species shiny? Then it can be brought shiny. */
@@ -114,6 +124,7 @@ export function makeArenaCreature(p: ArenaPick, opts: { level?: number } = {}): 
   c.pendingMoves = [];
   c.learnIndex = learnset(SPECIES_BY_ID[p.speciesId]).length;
   if (p.shiny) c.shiny = true;
+  c.trait = arenaTrait(p);
   return c;
 }
 
@@ -127,7 +138,16 @@ export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): Aren
       const moves = (p.moves ?? []).filter((id) => legal.includes(id)).slice(0, MAX_MOVES);
       // No legal moves left: fall back to the ones it would naturally know.
       const shiny = p.shiny && ownsShiny(meta, p.speciesId) ? true : undefined;
-      return { speciesId: p.speciesId, stage: p.stage, moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage), ...(shiny ? { shiny } : {}) };
+      // Only traits you've found for the line (the first found, or the line's first, by default).
+      const found = traitsFound(meta.dex, p.speciesId);
+      const trait = p.trait && found.includes(p.trait) ? p.trait : (found[0] ?? traitsOf(p.speciesId)[0]);
+      return {
+        speciesId: p.speciesId,
+        stage: p.stage,
+        moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage),
+        ...(shiny ? { shiny } : {}),
+        ...(trait ? { trait } : {}),
+      };
     })
     .slice(0, ARENA_TEAM);
 }
@@ -152,6 +172,7 @@ export function arenaOpponent(round: number, seed: number): ArenaOpponent {
   for (let i = 0; i < count; i++) {
     const sp = pool.splice(rng.int(0, pool.length - 1), 1)[0];
     const c = createCreature(sp.id, ARENA_LEVEL, stage);
+    c.trait = rollTrait(sp.id, `arena:${round}:${i}:${rng.int(0, 1e6)}`);
     if (round >= 3) for (const m of c.moves) m.tier = round >= 4 ? 3 : 2;
     team.push(c);
   }

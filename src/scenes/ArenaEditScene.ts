@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { traitsOf } from '../data/traits';
+import { traitsFound } from '../logic/dex';
+import { traitDescOf, traitName } from '../ui/traitText';
 import { Scroller } from '../ui/scroll';
 import { accText, maxUses, MOVES, moveSummary, moveColor } from '../data/moves';
 import { SPECIES_BY_ID } from '../data/species';
@@ -13,7 +16,7 @@ import {
   validArenaTeam,
   applyLoadout,
   loadoutsFor,
-  type ArenaPick, ownsShiny } from '../logic/arena';
+  type ArenaPick, arenaTrait, ownsShiny } from '../logic/arena';
 import { createCreature, creatureTypes, getFloorCeiling, MAX_MOVES, setFloorCeiling, stats } from '../logic/creature';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
@@ -163,13 +166,39 @@ export class ArenaEditScene extends Phaser.Scene {
         if (!this.scroller?.moved) f();
       });
 
+    // Its trait: any of the line's traits you've found.
+    const found = traitsFound(state.meta.dex, p.speciesId);
+    const all = traitsOf(p.speciesId);
+    const trait = arenaTrait(p);
+    if (trait) {
+      addTo(text(this, LX + 16, top, `Trait (${found.length}/${all.length} found)`, 15, COLORS.text, { fontStyle: 'bold' }));
+      if (found.length > 1) addTo(text(this, LX + LW - 16, top + 2, 'Tap to change', 11, COLORS.textDim).setOrigin(1, 0));
+      const tbg = addTo(this.add.rectangle(LX + 12, top + 24, LW - 24, ROW - 4, 0x2a2440).setOrigin(0).setStrokeStyle(2, COLORS.stroke));
+      tap(tbg, () => {
+        if (found.length < 2) return;
+        openPicker(this, {
+          title: 'Trait',
+          subtitle: 'Any trait you have found on this line. Find more by catching more of it on runs.',
+          options: found.map((t) => ({ label: traitName(p.speciesId, t), sub: traitDescOf(t, p.stage >= 2), color: t === trait ? 0x5b3c8a : 0x2a2440 })),
+          onPick: (i) => {
+            picks[this.slot] = { ...p, trait: found[i] };
+            this.save(picks);
+          },
+        });
+      });
+      addTo(text(this, LX + 26, top + 28, traitName(p.speciesId, trait), 13, '#ffe9a8', { fontStyle: 'bold' }));
+      const td = addTo(text(this, LX + 26, top + 45, traitDescOf(trait, p.stage >= 2), 11, COLORS.textDim));
+      if (td.width > LW - 52) td.setScale((LW - 52) / td.width, 1);
+    }
+    const mtop = trait ? top + 24 + ROW + 8 : top;
+
     // The four move slots.
     const sel = this.sel;
     const fromLoadouts = loadoutOnlyMoves(state.meta, p.speciesId, p.stage);
-    addTo(text(this, LX + 16, top, `Moves (${p.moves.length}/${MAX_MOVES})`, 15, COLORS.text, { fontStyle: 'bold' }));
-    addTo(text(this, LX + LW - 16, top + 2, sel !== null ? 'Tap a move below to swap it in · tap again to remove' : 'Tap a slot to swap or remove it', 11, sel !== null ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
+    addTo(text(this, LX + 16, mtop, `Moves (${p.moves.length}/${MAX_MOVES})`, 15, COLORS.text, { fontStyle: 'bold' }));
+    addTo(text(this, LX + LW - 16, mtop + 2, sel !== null ? 'Tap a move below to swap it in · tap again to remove' : 'Tap a slot to swap or remove it', 11, sel !== null ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0));
     for (let k = 0; k < MAX_MOVES; k++) {
-      const y = top + 24 + k * ROW;
+      const y = mtop + 24 + k * ROW;
       const id = p.moves[k];
       const isSel = sel === k;
       const bg = addTo(
@@ -195,7 +224,7 @@ export class ArenaEditScene extends Phaser.Scene {
     // Everything else it can learn.
     // Its learnset, then moves only your saved loadouts have (picked up from the land on a run).
     const pool = legalArenaMoves(state.meta, p.speciesId, p.stage).filter((id) => !p.moves.includes(id));
-    const ly = top + 24 + MAX_MOVES * ROW + 10;
+    const ly = mtop + 24 + MAX_MOVES * ROW + 10;
     addTo(text(this, LX + 16, ly, `Can learn (${pool.length})`, 15, COLORS.text, { fontStyle: 'bold' }));
     pool.forEach((id, k) => {
       const y = ly + 24 + k * ROW;

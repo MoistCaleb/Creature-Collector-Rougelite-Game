@@ -4,10 +4,12 @@ import { WEATHER, WEATHER_CHIP, WEATHER_IDS, weatherMult, weatherShort, weatherT
 import { attackEl, attackValue, bulwarkRepeat, effectsAtTier, speedPower, warpTurns, healAtTier, MAX_STAGE, mendHeal, STAT_LABEL, TEAM_FX, teamFxTurns, TIER_POWER, type MoveDef, type StatKey, type TeamFxId } from '../data/moves';
 import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
-import { effectivenessLabel, stabMultiplier, typeMultiplier } from '../data/types';
+import { effectivenessLabel, RESIST, stabMultiplier, typeMultiplier } from '../data/types';
 import { creatureName, creatureTypes, fallbackMove, hasUses, isAlive, levelFactor, moveDef, spendUse, stats, usesLeft, type Creature, type MoveSlot } from './creature';
 import { Rng } from './rng';
 import { STATUS, type StatusId } from '../data/status';
+import { TRAITS, traitOf, traitValue, type TraitId } from '../data/traits';
+import { ELEMENTS } from '../data/types';
 
 export type Side = 'player' | 'enemy';
 
@@ -29,7 +31,20 @@ export interface Combatant {
   bonded?: 'fired' | 'spent';
   /** Bulwarks that held in a row (each one after the first is much less likely to). */
   guardStreak?: number;
+  /** Traits: turns since it entered, whether its first move is used, Steadfast / Second Skin, Iron Will. */
+  turnsIn?: number;
+  eagerUsed?: boolean;
+  endured?: 'fired' | 'spent';
+  willUsed?: boolean;
+  /** Avenger: the turn it's fired up for (the one after an ally fainted). */
+  avenge?: number;
 }
+
+/** Element Touch: the status each element's hits can cause. */
+const TOUCH_STATUS: Record<Element, StatusId> = {
+  Fire: 'burn', Dragon: 'burn', Frost: 'freeze', Storm: 'para', Earth: 'para', Metal: 'para', Toxic: 'poison', Nature: 'poison',
+  Spirit: 'sleep', Shadow: 'sleep', Light: 'confuse', Water: 'confuse',
+};
 
 /** Thornwall: your hits on their Hexlings cut you for this share of the damage. */
 export const THORNS_RECOIL = 0.1;
@@ -47,6 +62,7 @@ export interface BattleState {
   winded: number[];
   turnNo: number;
   lastEnemySwitch: number;
+  night?: boolean;
   /** Time Warp turns left. */
   warp?: number;
   /** uids that already hung on through their bond this battle. */
@@ -120,6 +136,10 @@ export class Battle {
   /** The weather (set by a weather move) and its turns left. */
   weather: WeatherId | null = null;
   weatherLeft = 0;
+  /** Night falls (Night Stalker, Eclipse): it lasts the battle. */
+  night = false;
+  /** Who moved first this turn (Patient). */
+  private firstSide: Side | null = null;
 
   hasFx(side: Side, fx: TeamFxId): boolean {
     return (this.teamFx[side][fx] ?? 0) > 0;
@@ -271,6 +291,7 @@ export class Battle {
       warp: this.warp,
       weather: this.weather,
       weatherLeft: this.weatherLeft,
+      night: this.night,
       bonded: this.player.filter((x) => x.bonded).map((x) => x.c.uid),
     };
   }
@@ -296,6 +317,7 @@ export class Battle {
     this.lastEnemySwitch = s.lastEnemySwitch ?? this.lastEnemySwitch;
     this.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
     this.setWeather(s.weather, s.weatherLeft);
+    this.night = !!s.night;
     if (Array.isArray(s.bonded)) for (const x of this.player) if (s.bonded.includes(x.c.uid)) x.bonded = 'spent';
   }
 
@@ -312,6 +334,7 @@ export class Battle {
 
   /** Boss rules that trigger when a creature enters battle. */
   private onEnter(side: Side, ev: BattleEvent[], skipHpCost = false) {
+    this.traitsOnEnter(side, ev, skipHpCost);
     if (!this.rules.length) return;
     const x = side === 'player' ? this.p : this.e;
     if (!isAlive(x.c)) return;
@@ -395,6 +418,7 @@ export class Battle {
   takeTurn(action: PlayerAction): BattleEvent[] {
     const ev: BattleEvent[] = [];
     this.turnNo++;
+    this.firstSide = null;
     // Trainers may switch or drink a potion instead of attacking; that happens first.
     const plan = this.enemyPlan();
     if (plan) this.doEnemyPlan(plan, ev);
@@ -421,6 +445,7 @@ export class Battle {
     } else if (action.kind === 'swap') {
       if (!this.canSwapTo(action.index)) return ev;
       ev.push({ kind: 'text', text: `${creatureName(this.p.c)}, come back!` });
+      this.leaving(this.p, 'player', ev);
       this.pActive = action.index;
       this.fought.add(this.p.c.uid);
       resetStages(this.p);
@@ -433,10 +458,11 @@ export class Battle {
       // A move with no uses left (or index -1) falls back to the creature's basic attack.
       const chosen = this.p.c.moves[action.index];
       const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
-      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p);
-      const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e));
+      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p);
+      const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e) || this.slipping(this.e));
       const playerFirst = pPri !== ePri ? pPri : this.has('tailwind') ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
+      this.firstSide = order[0];
       for (const side of order) {
         // A spared creature is too weak to act; the battle is over.
         if (this.spared) break;
@@ -481,6 +507,7 @@ export class Battle {
   }
 
   private sendEnemy(index: number, ev: BattleEvent[]) {
+    this.leaving(this.e, 'enemy', ev);
     this.eActive = index;
     resetStages(this.e);
     ev.push({ kind: 'enemySend', index, hp: this.e.c.hp });
@@ -494,9 +521,12 @@ export class Battle {
    */
   takeDuelTurn(pAct: PlayerAction, eAct: PlayerAction): BattleEvent[] {
     const ev: BattleEvent[] = [];
+    this.turnNo++;
+    this.firstSide = null;
     const names = this.duel ?? { player: 'You', enemy: 'The enemy' };
     if (pAct.kind === 'swap' && this.canSwapTo(pAct.index)) {
       ev.push({ kind: 'text', text: `${names.player} calls back ${creatureName(this.p.c)}.` });
+      this.leaving(this.p, 'player', ev);
       this.pActive = pAct.index;
       this.fought.add(this.p.c.uid);
       resetStages(this.p);
@@ -541,9 +571,10 @@ export class Battle {
     const eAt = this.e;
     let order: Side[] = [];
     if (pSlot && eSlot) {
-      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p);
-      const ePri = !!moveDef(eSlot).priority || this.clawProc(this.e);
+      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p);
+      const ePri = !!moveDef(eSlot).priority || this.clawProc(this.e) || this.slipping(this.e);
       order = (pPri !== ePri ? pPri : this.playerGoesFirst()) ? ['player', 'enemy'] : ['enemy', 'player'];
+      this.firstSide = order[0];
     } else if (pSlot) order = ['player'];
     else if (eSlot) order = ['enemy'];
     for (const side of order) {
@@ -556,6 +587,296 @@ export class Battle {
     }
     this.endOfTurn(ev);
     return ev;
+  }
+
+  // ------------------------------------------------------------ traits (2.0)
+
+  private is(x: Combatant, id: TraitId): boolean {
+    return traitOf(x.c) === id;
+  }
+
+  private tv(x: Combatant, id: TraitId): number {
+    return traitValue(x.c, id);
+  }
+
+  /** "Enemy Magmite's Magma Skin" */
+  private traitName(x: Combatant, side: Side): string {
+    const t = traitOf(x.c);
+    return `${this.nameOf(side, x.c)}'s ${t ? TRAITS[t].name : 'trait'}`;
+  }
+
+  private traitsOnEnter(side: Side, ev: BattleEvent[], resuming: boolean) {
+    const x = side === 'player' ? this.p : this.e;
+    if (!x || !isAlive(x.c)) return;
+    x.turnsIn = 0;
+    x.eagerUsed = false;
+    if (resuming) return;
+    const t = traitOf(x.c);
+    if (!t) return;
+    const who = this.traitName(x, side);
+    const foeSide: Side = side === 'player' ? 'enemy' : 'player';
+    const foe = foeSide === 'player' ? this.p : this.e;
+    const turns = x.c.stage >= 2 ? 3 : 2;
+    switch (t) {
+      case 'sunseeker':
+        return this.traitWeather('sun', turns, who, ev);
+      case 'rainrider':
+        return this.traitWeather('rain', turns, who, ev);
+      case 'sandshroud':
+        return this.traitWeather('dust', turns, who, ev);
+      case 'daybreak':
+        return this.traitWeather('sun', this.tv(x, t), who, ev);
+      case 'tidalcrown':
+        return this.traitWeather('rain', this.tv(x, t), who, ev);
+      case 'whiteoutveil':
+        return this.traitWeather('hail', this.tv(x, t), who, ev);
+      case 'nightstalker':
+        return this.fallNight(who, ev);
+      case 'eclipse':
+        this.fallNight(who, ev);
+        if (foe && isAlive(foe.c)) {
+          this.bump(foe, foeSide, 'spd', -1, ev, true);
+          if (this.tv(x, t) >= 2) this.bump(foe, foeSide, 'atk', -1, ev, true);
+        }
+        return;
+      case 'quickstart':
+        ev.push({ kind: 'text', text: `${who}: it's off to a quick start!` });
+        return;
+    }
+  }
+
+  /** A trait brings its weather (or keeps it going). */
+  private traitWeather(w: WeatherId, turns: number, who: string, ev: BattleEvent[]) {
+    const d = WEATHER[w];
+    if (this.weather === w) {
+      this.weatherLeft = Math.max(this.weatherLeft, turns);
+      ev.push({ kind: 'text', text: `${who} keeps the ${d.name.toLowerCase()} going! (${this.weatherLeft} turns)` });
+      return;
+    }
+    this.weather = w;
+    this.weatherLeft = turns;
+    ev.push({ kind: 'weather', id: w });
+    ev.push({ kind: 'text', text: `${who}: ${d.start} ${weatherShort(w)} for ${turns} turns.` });
+  }
+
+  private fallNight(who: string, ev: BattleEvent[]) {
+    if (this.night) return;
+    this.night = true;
+    ev.push({ kind: 'text', text: `${who}: night falls over the battle.` });
+  }
+
+  /** Speed from traits: Quick Start's first turns, Night Stalker at night, Rain Rider in rain. */
+  private traitSpeed(x: Combatant): number {
+    const t = traitOf(x.c);
+    if (t === 'quickstart' && (x.turnsIn ?? 0) < 2) return stageMult(this.tv(x, t));
+    if (t === 'nightstalker' && this.night) return stageMult(1);
+    if (t === 'rainrider' && this.weather === 'rain') return stageMult(this.tv(x, t));
+    return 1;
+  }
+
+  /** Slipstream: moves first while low. */
+  private slipping(x: Combatant): boolean {
+    return this.is(x, 'slipstream') && isAlive(x.c) && x.c.hp < stats(x.c).hp * this.tv(x, 'slipstream');
+  }
+
+  /** Regenerator: heals as it leaves the field. */
+  private leaving(x: Combatant, side: Side, ev: BattleEvent[]) {
+    if (!x || !isAlive(x.c) || !this.is(x, 'regenerator')) return;
+    const max = stats(x.c).hp;
+    if (x.c.hp >= max) return;
+    x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * this.tv(x, 'regenerator')));
+    ev.push({ kind: 'text', text: `${this.traitName(x, side)}: it recovers as it pulls back.` });
+  }
+
+  /** Unshakable: foes can't lower its Attack (final form: any stat). */
+  private unshaken(x: Combatant, side: Side, stat: StatKey, ev: BattleEvent[]): boolean {
+    if (!this.is(x, 'unshakable') || (this.tv(x, 'unshakable') < 2 && stat !== 'atk')) return false;
+    ev.push({ kind: 'text', text: `${this.traitName(x, side)}: its ${STAT_LABEL[stat]} won't drop!` });
+    return true;
+  }
+
+  /** Absorbers: a hit of their element heals them instead. */
+  private absorbs(x: Combatant, side: Side, el: Element, ev: BattleEvent[]): boolean {
+    const t = traitOf(x.c);
+    if (!t || TRAITS[t].absorb !== el || !isAlive(x.c)) return false;
+    const max = stats(x.c).hp;
+    x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * this.tv(x, t)));
+    ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
+    ev.push({ kind: 'text', text: `${this.traitName(x, side)} soaks up the ${el} hit!` });
+    return true;
+  }
+
+  /** Ethereal: now and then a hit passes straight through. */
+  private slipsThrough(x: Combatant, side: Side, ev: BattleEvent[]): boolean {
+    if (!this.is(x, 'ethereal') || !this.rng.chance(this.tv(x, 'ethereal'))) return false;
+    ev.push({ kind: 'text', text: `${this.traitName(x, side)}: the hit passes straight through it!` });
+    return true;
+  }
+
+  /** Damage from the attacker's and the defender's traits (and benched Cheerleaders). */
+  private traitMult(user: Combatant, target: Combatant, def: MoveDef, el: Element, powerMult: number, side: Side, rmult: number): number {
+    let m = 1;
+    const t = traitOf(user.c);
+    const v = t ? this.tv(user, t) : 0;
+    switch (t) {
+      case 'heavy':
+        if (def.power * powerMult >= 70) m *= 1 + v;
+        break;
+      case 'technician':
+        if (def.power <= 45) m *= 1 + v;
+        break;
+      case 'adaptable':
+        if (creatureTypes(user.c).includes(el)) m *= 1 + v;
+        break;
+      case 'berserk':
+        if (user.c.hp < stats(user.c).hp / 2) m *= 1 + v;
+        break;
+      case 'predator':
+        if (target.c.hp < stats(target.c).hp / 2) m *= 1 + v;
+        break;
+      case 'eager':
+        if (!user.eagerUsed) m *= 1 + v;
+        break;
+      case 'overload':
+        m *= 1 + v * Math.min(3, user.turnsIn ?? 0);
+        break;
+      case 'piercing':
+        if (rmult < 0.99) m *= Math.min(1 / rmult, Math.pow(v / RESIST, rmult < 0.5 ? 2 : 1));
+        break;
+      case 'patient':
+        if (this.firstSide && this.firstSide !== side) m *= 1 + v;
+        break;
+      case 'nightstalker':
+        if (this.night) m *= 1 + v;
+        break;
+      case 'sunseeker':
+        if (this.weather === 'sun') m *= 1 + v;
+        break;
+      case 'guts':
+        if (user.status) m *= 1 + v;
+        break;
+      case 'avenger':
+        if (user.avenge === this.turnNo) m *= 1 + v;
+        break;
+    }
+    const cheer = (side === 'player' ? this.player : this.enemy).filter((x) => x !== user && isAlive(x.c) && this.is(x, 'cheer'));
+    if (cheer.length) m *= 1 + Math.max(...cheer.map((x) => this.tv(x, 'cheer')));
+    const d = traitOf(target.c);
+    const dv = d ? this.tv(target, d) : 0;
+    switch (d) {
+      case 'thickhide':
+        if (rmult > 1.01) m *= 1 - dv;
+        break;
+      case 'scaled':
+        if (this.speedOf(user) > this.speedOf(target)) m *= 1 - dv;
+        break;
+      case 'sandshroud':
+        if (this.weather === 'dust') m *= 1 - dv;
+        break;
+      case 'bulwarkcore':
+        if ((target.turnsIn ?? 0) < dv) m *= 0.8;
+        break;
+    }
+    return m;
+  }
+
+  /** After a move lands: the user's traits, then the target's traits striking back. */
+  private traitsAfterHit(user: Combatant, side: Side, target: Combatant, targetSide: Side, el: Element, total: number, superHit: boolean, ev: BattleEvent[]) {
+    const ut = traitOf(user.c);
+    const umax = stats(user.c).hp;
+    const uname = this.traitName(user, side);
+    if (ut && isAlive(user.c)) {
+      const v = this.tv(user, ut);
+      if (ut === 'leech' && total > 0 && user.c.hp < umax) {
+        user.c.hp = Math.min(umax, user.c.hp + Math.ceil(total * v));
+        ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
+        ev.push({ kind: 'text', text: `${uname}: it drinks in the damage.` });
+      }
+      if (ut === 'tidalgrace' && el === 'Water' && user.c.hp < umax) {
+        user.c.hp = Math.min(umax, user.c.hp + Math.ceil(umax * v));
+        ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
+        ev.push({ kind: 'text', text: `${uname}: the water refreshes it.` });
+      }
+      if (ut === 'hitandrun' && superHit) {
+        this.bump(user, side, 'spd', 1, ev);
+        if (v >= 2) this.bump(user, side, 'atk', 1, ev);
+      }
+      if (ut === 'touch' && isAlive(target.c) && !target.status && this.rng.chance(v))
+        this.inflict(target, targetSide, TOUCH_STATUS[creatureTypes(user.c)[0]], ev, `${uname}: `, { x: user, side });
+    }
+    const tt = traitOf(target.c);
+    if (tt && total > 0 && isAlive(user.c)) {
+      const tv = this.tv(target, tt);
+      const tn = this.traitName(target, targetSide);
+      const onHit = (id: StatusId) => this.rng.chance(tv) && this.inflict(user, side, id, ev, `${tn}: `);
+      switch (tt) {
+        case 'roughskin': {
+          const dmg = this.hurt(user, Math.max(1, Math.floor(umax * tv)));
+          ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: umax, amount: dmg });
+          ev.push({ kind: 'text', text: `${tn} cuts ${this.label(user)}!` });
+          break;
+        }
+        case 'magmaskin':
+          onHit('burn');
+          break;
+        case 'staticcoat':
+          onHit('para');
+          break;
+        case 'toxicspines':
+          onHit('poison');
+          break;
+        case 'frostaura':
+          if (this.rng.chance(tv)) {
+            ev.push({ kind: 'text', text: `${tn} chills ${this.label(user)}!` });
+            this.bump(user, side, 'spd', -1, ev, true);
+          }
+          break;
+      }
+    }
+    if (tt === 'ironwill' && isAlive(target.c) && !target.willUsed && target.c.hp < stats(target.c).hp / 2) {
+      target.willUsed = true;
+      ev.push({ kind: 'text', text: `${this.traitName(target, targetSide)}: it steels itself!` });
+      this.bump(target, targetSide, 'def', this.tv(target, 'ironwill'), ev);
+    }
+    if (!isAlive(target.c) && isAlive(user.c) && ut) {
+      const v = this.tv(user, ut);
+      if (ut === 'momentum') {
+        this.bump(user, side, 'spd', 1, ev);
+        if (v >= 2) this.bump(user, side, 'atk', 1, ev);
+      }
+      if (ut === 'carnivore' && user.c.hp < umax) {
+        user.c.hp = Math.min(umax, user.c.hp + Math.ceil(umax * v));
+        ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
+        ev.push({ kind: 'text', text: `${uname}: it feeds on its fallen foe.` });
+      }
+    }
+  }
+
+  /** End of turn: Rooted heals, Late Bloomer grows, Purifier shakes off its status. */
+  private traitsEndOfTurn(ev: BattleEvent[]) {
+    const out = this.outcome();
+    if (out === 'win' || out === 'lose' || this.spared) return;
+    for (const side of ['player', 'enemy'] as const) {
+      const x = side === 'player' ? this.p : this.e;
+      if (!x || !isAlive(x.c)) continue;
+      x.turnsIn = (x.turnsIn ?? 0) + 1;
+      const t = traitOf(x.c);
+      if (!t) continue;
+      const v = this.tv(x, t);
+      const max = stats(x.c).hp;
+      const who = this.traitName(x, side);
+      if (t === 'rooted' && x.c.hp < max) {
+        x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * v));
+        ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
+        ev.push({ kind: 'text', text: `${who}: it draws strength from its roots.` });
+      }
+      if (t === 'latebloomer' && x.turnsIn % v === 0) {
+        ev.push({ kind: 'text', text: `${who}: it's coming into its own!` });
+        this.bump(x, side, 'atk', 1, ev);
+        if (x.c.stage >= 2) this.bump(x, side, 'def', 1, ev);
+      }
+      if (t === 'purifier' && x.status && this.rng.chance(v)) this.cure(x, side, ev);
+    }
   }
 
   // ------------------------------------------------------------ trainer tactics
@@ -692,6 +1013,7 @@ export class Battle {
     }
     this.lastEnemySwitch = this.turnNo;
     ev.push({ kind: 'text', text: `${who} calls back ${creatureName(this.e.c)}!` });
+    this.leaving(this.e, 'enemy', ev);
     this.eActive = plan.index;
     resetStages(this.e);
     ev.push({ kind: 'enemySend', index: plan.index, hp: this.e.c.hp });
@@ -707,7 +1029,7 @@ export class Battle {
   /** A combatant's speed right now: stages, synergy, Swift Scarf, paralysis and Speed Boost. */
   speedOf(x: Combatant): number {
     const wind = this.hasFx(this.sideOf(x), 'tailwind') ? 1.5 : 1;
-    return stats(x.c).spd * (x.syn?.spd ?? 1) * stageMult(x.spdStage) * (x.c.held === 'scarf' ? 1.25 : 1) * (x.status === 'para' ? 0.5 : 1) * wind;
+    return stats(x.c).spd * (x.syn?.spd ?? 1) * stageMult(x.spdStage) * (x.c.held === 'scarf' ? 1.25 : 1) * (x.status === 'para' ? 0.5 : 1) * wind * this.traitSpeed(x);
   }
 
   private playerGoesFirst(): boolean {
@@ -896,6 +1218,7 @@ export class Battle {
     const holderSide: Side = self ? side : side === 'player' ? 'enemy' : 'player';
     const name = this.nameOf(holderSide, holder.c);
     for (const e of effectsAtTier(def, slot.tier)) {
+      if (!self && e.stages < 0 && this.unshaken(holder, holderSide, e.stat, ev)) continue;
       const key = stageKey(e.stat);
       const before = holder[key];
       holder[key] = Math.max(-MAX_STAGE, Math.min(MAX_STAGE, before + e.stages));
@@ -923,7 +1246,7 @@ export class Battle {
   }
 
   /** Give a combatant a status. Fails if it already has one, has fainted, or its type is immune. */
-  private inflict(x: Combatant, side: Side, id: StatusId, ev: BattleEvent[], prefix = ''): boolean {
+  private inflict(x: Combatant, side: Side, id: StatusId, ev: BattleEvent[], prefix = '', from?: { x: Combatant; side: Side }): boolean {
     if (!isAlive(x.c) || x.status) return false;
     if (this.hasFx(this.sideOf(x), 'ward')) return false;
     const def = STATUS[id];
@@ -931,8 +1254,13 @@ export class Battle {
     if (side === 'player' && this.playerImmune.includes(id)) return false;
     x.status = id;
     x.statusTurns = this.rng.int(def.turns[0], def.turns[1]);
+    // Resilient: statuses on it don't last as long.
+    if (this.is(x, 'resilient')) x.statusTurns = Math.max(1, Math.round(x.statusTurns * this.tv(x, 'resilient')));
     ev.push({ kind: 'status', side, status: id });
     ev.push({ kind: 'text', text: `${prefix}${this.label(x)} ${def.verb}!` });
+    // Mirror: the one who gave it the status may get the same.
+    if (from && this.is(x, 'mirror') && isAlive(from.x.c) && this.rng.chance(this.tv(x, 'mirror')))
+      this.inflict(from.x, from.side, id, ev, `${this.label(x)}'s Mirror: `);
     return true;
   }
 
@@ -1013,7 +1341,9 @@ export class Battle {
       user.c.held === 'lens' || (side === 'enemy' && this.has('keeneye'))
         ? 100
         : def.accuracy * (def.kind === 'attack' && this.hasFx(targetSideOf, 'shroud') ? 0.8 : 1) * (side === 'player' && this.has('fog') ? 0.85 : 1);
-    if (this.rng.next() * 100 >= acc) {
+    const steady = this.is(user, 'steady') && user.c.hp >= stats(user.c).hp * this.tv(user, 'steady');
+    const veil = this.weather === 'hail' && this.is(target, 'whiteoutveil') ? 0.85 : 1;
+    if (!steady && this.rng.next() * 100 >= acc * veil) {
       ev.push({ kind: 'text', text: 'It missed!' });
       return;
     }
@@ -1029,22 +1359,36 @@ export class Battle {
     if (def.kind !== 'attack') {
       this.applyStatus(side, slot, ev);
       if (def.status && def.kind === 'debuff' && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
-        this.inflict(target, targetSide, def.status.id, ev);
+        this.inflict(target, targetSide, def.status.id, ev, '', { x: user, side });
       }
       return;
     }
 
-    const el = attackElement(def, user, target);
+    let el = attackElement(def, user, target);
+    // Wildcard: its signature move takes whichever element hits the target hardest.
+    if (def.signature && this.is(user, 'wildcard')) {
+      const tt = creatureTypes(target.c);
+      for (const e of ELEMENTS) if (typeMultiplier(e, tt) > typeMultiplier(el, tt)) el = e;
+    }
+    // Absorbers turn a hit of their element into healing; Ethereal slips through a hit.
+    if (this.absorbs(target, targetSide, el, ev) || this.slipsThrough(target, targetSide, ev)) {
+      user.eagerUsed = true;
+      return;
+    }
     let powerMult = def.execute && target.c.hp < stats(target.c).hp / 2 ? 2 : 1;
+    if (def.signature && this.is(user, 'wildcard')) powerMult *= 1 + this.tv(user, 'wildcard');
     // Speed attacks: their power depends on who's faster.
     if (def.speedPower) powerMult *= this.speedFactor(def, user, target);
     let hits = def.hits ?? 1;
     if (slot.tier >= 3 && def.element === 'Storm' && this.rng.chance(0.35)) hits += 1;
     let total = 0;
     let landed = 0;
+    let superHit = false;
     for (let h = 0; h < hits && isAlive(target.c) && !this.spared; h++) {
       const r = computeDamage(user, target, def, slot.tier, this.rng, el, powerMult);
+      if (h === 0) superHit = r.mult > 1.01;
       const fxMult =
+        this.traitMult(user, target, def, el, powerMult, side, r.mult) *
         (this.hasFx(side, 'rally') ? 1.25 : 1) *
         (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
         weatherMult(this.weather, el) *
@@ -1062,7 +1406,7 @@ export class Battle {
       this.sashNote(target, ev);
       // Moves named for a condition can inflict it: every hit rolls (a 3-hit move gets three chances).
       if (def.status && isAlive(target.c) && !target.status && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
-        this.inflict(target, targetSide, def.status.id, ev);
+        this.inflict(target, targetSide, def.status.id, ev, '', { x: user, side });
       }
       if (h === 0) {
         const label = effectivenessLabel(r.mult);
@@ -1071,6 +1415,8 @@ export class Battle {
       }
     }
     if (landed > 1) ev.push({ kind: 'text', text: `Hit ${landed} times!` });
+    user.eagerUsed = true;
+    if (landed > 0) this.traitsAfterHit(user, side, target, targetSide, el, total, superHit, ev);
 
     const userMax = stats(user.c).hp;
     // Second Wind: a guardian's Hexling dropping below a third heals once.
@@ -1109,7 +1455,7 @@ export class Battle {
       ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: rc });
       ev.push({ kind: 'text', text: `${who} is hurt by recoil!` });
     }
-    if (def.targetAfter && isAlive(target.c)) for (const e of def.targetAfter) this.bump(target, targetSide, e.stat, e.stages, ev);
+    if (def.targetAfter && isAlive(target.c)) for (const e of def.targetAfter) this.bump(target, targetSide, e.stat, e.stages, ev, true);
     if (def.selfAfter && isAlive(user.c)) for (const e of def.selfAfter) this.bump(user, side, e.stat, e.stages, ev);
 
     if (slot.tier >= 3) this.applyTier3(def, user, target, side, total, ev);
@@ -1135,10 +1481,10 @@ export class Battle {
     const userMax = stats(user.c).hp;
     switch (def.element) {
       case 'Fire':
-        this.inflict(target, side === 'player' ? 'enemy' : 'player', 'burn', ev);
+        this.inflict(target, side === 'player' ? 'enemy' : 'player', 'burn', ev, '', { x: user, side });
         break;
       case 'Frost':
-        if (isAlive(target.c) && target.spdStage > -MAX_STAGE) {
+        if (isAlive(target.c) && target.spdStage > -MAX_STAGE && !this.unshaken(target, side === 'player' ? 'enemy' : 'player', 'spd', ev)) {
           target.spdStage -= 1;
           ev.push({ kind: 'text', text: `${creatureName(target.c)}'s Speed fell!` });
         }
@@ -1169,7 +1515,7 @@ export class Battle {
       case 'Dragon':
         break; // handled in damage (double strike / bonus damage)
       case 'Toxic':
-        this.inflict(target, side === 'player' ? 'enemy' : 'player', 'poison', ev);
+        this.inflict(target, side === 'player' ? 'enemy' : 'player', 'poison', ev, '', { x: user, side });
         break;
       case 'Metal':
         this.bump(user, side, 'atk', 1, ev);
@@ -1178,16 +1524,17 @@ export class Battle {
         this.bump(user, side, 'spd', 1, ev);
         break;
       case 'Shadow':
-        if (isAlive(target.c)) this.bump(target, side === 'player' ? 'enemy' : 'player', 'atk', -1, ev);
+        if (isAlive(target.c)) this.bump(target, side === 'player' ? 'enemy' : 'player', 'atk', -1, ev, true);
         break;
       case 'Spirit':
-        if (isAlive(target.c)) this.bump(target, side === 'player' ? 'enemy' : 'player', 'def', -1, ev);
+        if (isAlive(target.c)) this.bump(target, side === 'player' ? 'enemy' : 'player', 'def', -1, ev, true);
         break;
     }
   }
 
   /** Change one stat stage on a combatant, with messaging. */
-  private bump(x: Combatant, side: Side, stat: StatKey, by: number, ev: BattleEvent[]) {
+  private bump(x: Combatant, side: Side, stat: StatKey, by: number, ev: BattleEvent[], fromFoe = false) {
+    if (fromFoe && by < 0 && this.unshaken(x, side, stat, ev)) return;
     const key = stageKey(stat);
     const before = x[key];
     x[key] = Math.max(-MAX_STAGE, Math.min(MAX_STAGE, before + by));
@@ -1199,6 +1546,8 @@ export class Battle {
   private handleFaint(side: Side, ev: BattleEvent[]) {
     const idx = side === 'player' ? this.pActive : this.eActive;
     const c = side === 'player' ? this.p.c : this.e.c;
+    // Avenger: its teammates are fired up next turn.
+    for (const x of side === 'player' ? this.player : this.enemy) x.avenge = this.turnNo + 1;
     c.status = undefined;
     ev.push({ kind: 'faint', side, index: idx });
     ev.push({
@@ -1241,6 +1590,16 @@ export class Battle {
       x.sash = 'fired';
       x.c.hp = 1;
       return before - 1;
+    }
+    // Steadfast and Second Skin: once a battle, a knockout blow leaves 1 HP.
+    if (foeHit && !x.endured && dmg >= before && before > 1) {
+      const max = stats(x.c).hp;
+      const t = traitOf(x.c);
+      if ((t === 'steadfast' && before >= max * this.tv(x, 'steadfast')) || t === 'secondskin') {
+        x.endured = 'fired';
+        x.c.hp = 1 + (t === 'secondskin' ? Math.floor(max * this.tv(x, 'secondskin')) : 0);
+        return Math.max(0, before - x.c.hp);
+      }
     }
     // Bond: your Hexling hangs on at 1 HP for you, now and then (once a battle).
     if (this.bonds && foeHit && !x.bonded && dmg >= before && before > 1 && this.player.includes(x)) {
@@ -1286,6 +1645,7 @@ export class Battle {
       // Burn, poison and paralysis wear off with time (the others count down when it tries to act).
       if ((x.status === 'burn' || x.status === 'poison' || x.status === 'para') && --x.statusTurns <= 0) this.cure(x, side, ev);
     }
+    this.traitsEndOfTurn(ev);
     this.sidelines(ev);
   }
 
@@ -1310,6 +1670,10 @@ export class Battle {
   }
 
   private sashNote(x: Combatant, ev: BattleEvent[]) {
+    if (x.endured === 'fired') {
+      x.endured = 'spent';
+      ev.push({ kind: 'text', text: `${this.label(x)} hung on with its ${TRAITS[traitOf(x.c)!].name}!` });
+    }
     if (x.bonded === 'fired') {
       x.bonded = 'spent';
       ev.push({ kind: 'text', text: `${creatureName(x.c)} hung on for you! ${'♥'.repeat(bondHearts(x.c.bond))}` });

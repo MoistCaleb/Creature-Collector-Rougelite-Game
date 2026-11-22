@@ -1,3 +1,4 @@
+import { rollTrait } from '../data/traits';
 import { BALANCE } from '../data/balance';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { heatRules } from '../data/heat';
@@ -112,6 +113,7 @@ export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop
       const pool = speciesWithElement(run.biomes[run.floor]);
       const level = Math.max(1, Math.round(highestLevel(run) * 0.6));
       slot.recruit = createCreature(rng.pick(pool).id, level);
+      slot.recruit.trait = rollTrait(slot.recruit.speciesId, `${run.seed}:shop:${run.floor}:${slot.recruit.speciesId}`);
     }
     if (item === 'held') slot.held = rollHeld(rng);
     return slot;

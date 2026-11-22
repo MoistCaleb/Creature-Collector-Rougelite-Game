@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { rollTrait, TRAITS, type TraitId } from '../data/traits';
+import { traitDescOf, traitName } from '../ui/traitText';
 import { prepsAvailable } from '../logic/camp';
 import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
@@ -16,9 +18,12 @@ import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { icon as pixelIcon } from '../ui/icons';
 import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
+import { showMessage } from '../ui/picker';
 
 /** This visit's three random starters. */
 let rolled: string[] | null = null;
+/** The starters' traits come from this (shared seeds: the same for everyone; otherwise rolled per visit). */
+let traitKey: string | null = null;
 
 export class StarterScene extends Phaser.Scene {
   constructor() {
@@ -64,8 +69,11 @@ export class StarterScene extends Phaser.Scene {
     const choices = this.race ? this.race.starters : week ? week.starters : this.daily ? dailyStarters(this.daily) : rolled;
     // Daily runs and weekly challenges: each starter comes with a passive that suits it.
     const passives = this.race ? racePassives(this.race.seed, this.race.starters) : week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
+    traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : (traitKey ?? `free:${Math.random()}`);
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
+      const trait = rollTrait(id, traitKey!);
+      const tName = trait ? `Trait: ${traitName(id, trait)}` : '';
       dex.form(id, 0);
       const preview = createCreature(id, BALANCE.starterLevel);
       const s = stats(preview);
@@ -84,15 +92,16 @@ export class StarterScene extends Phaser.Scene {
           pixelIcon(this, x + 18, y + 16, 'star', 16);
           text(this, x + 30, y + 9, 'Favorite', 11, '#ffc94d', { fontStyle: 'bold' });
         }
-        text(this, mid, y + 122, sp.names[0], 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0);
+        text(this, mid, y + 120, sp.names[0], 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0);
+        if (tName) traitHint(text(this, mid, y + 147, tName, 11, '#ffe9a8').setOrigin(0.5, 0), trait!);
         const chipsW = sp.types[0] === sp.types[1] ? 104 : 128;
-        typeChips(this, mid - chipsW / 2, y + 162, sp.types);
-        text(this, mid, y + 180, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
-        text(this, mid, y + 226, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
-        text(this, mid, y + 262, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        typeChips(this, mid - chipsW / 2, y + 166, sp.types);
+        text(this, mid, y + 184, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
+        text(this, mid, y + 228, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        text(this, mid, y + 264, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
         if (passives?.[id]) {
           const pv = PASSIVES[passives[id]];
-          text(this, mid, y + 280, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
+          text(this, mid, y + 282, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
         }
         button(this, mid, y + 328, cw - 40, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
         return;
@@ -105,7 +114,8 @@ export class StarterScene extends Phaser.Scene {
       const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id))).setScale(4 * SPRITE_FIT);
       this.shinyToggle(id, 82, y + 20, 100);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
-      text(this, 175, y + 16, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
+      text(this, 175, y + 12, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
+      if (tName) traitHint(text(this, 175, y + 40, tName, 12, '#ffe9a8'), trait!);
       if (!this.daily && !week && state.meta.favorite === id) {
         pixelIcon(this, W - 48, y + 22, 'star', 18);
         text(this, W - 60, y + 14, 'Favorite', 12, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);
@@ -128,6 +138,7 @@ export class StarterScene extends Phaser.Scene {
     if (!this.race) {
       button(this, 40, 28, 64, 36, '', () => {
         rolled = null;
+        traitKey = null;
         this.scene.start(this.daily || this.weekly ? 'Daily' : 'MapSelect', {});
       }, { fontSize: 15, glyph: 'back' });
     }
@@ -146,6 +157,8 @@ export class StarterScene extends Phaser.Scene {
 
   private pick(id: string) {
     rolled = null;
+    const trait = traitKey ? rollTrait(id, traitKey) : undefined;
+    traitKey = null;
     if (this.race) {
       // Same map and seed as the other racer; Heat 0 and no passive so it's even.
       const run = startRun(state.meta, id, this.race.seed, this.mapId, undefined, true, undefined, racePassives(this.race.seed, this.race.starters)[id] ?? null);
@@ -161,8 +174,18 @@ export class StarterScene extends Phaser.Scene {
         ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
         : startRun(state.meta, id, Date.now(), this.mapId);
     }
+    // The starter keeps the trait it showed on its card.
+    if (trait && state.run.team[0]) state.run.team[0].trait = trait;
     // Every run but dailies and weeklies stops at camp first: one thing for the road, and the news.
     if (prepsAvailable(state.run)) this.scene.start('Camp', { prep: true });
     else this.scene.start('Map', {});
   }
+}
+
+/** Tap a trait to see what it does. */
+function traitHint(t: Phaser.GameObjects.Text, id: TraitId) {
+  t.setInteractive({ useHandCursor: true }).on('pointerup', (_p: unknown, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+    e?.stopPropagation?.();
+    showMessage(t.scene, TRAITS[id].name, traitDescOf(id, false));
+  });
 }

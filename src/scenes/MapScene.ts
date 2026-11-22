@@ -28,7 +28,7 @@ import { placeRng, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrai
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
-import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
+import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
@@ -187,6 +187,11 @@ export class MapScene extends Phaser.Scene {
     }
 
     // nodes
+    // Scout: see who's waiting on the battle hexes ahead (final form: two hexes ahead).
+    const scouted = new Set<string>();
+    const range = scoutRange(run);
+    if (range >= 1) for (const id of reachableIds) scouted.add(id);
+    if (range >= 2) for (const id of [...reachableIds]) for (const nx of map.nodes[id]?.next ?? []) scouted.add(nx);
     for (const n of nodes) {
       const p = pos(n);
       const info = NODE_INFO[n.kind];
@@ -205,6 +210,12 @@ export class MapScene extends Phaser.Scene {
       const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
       const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       this.layer.add([hex, icon, label]);
+      const peek = scouted.has(n.id) ? peekEncounter(run, n) : null;
+      if (peek) {
+        const img = this.add.image(p.x + hw * 0.36, p.y - hh * 0.34, ensureCreatureTexture(this, peek.speciesId, run.hunt ? 2 : Math.min(2, run.floor))).setScale(0.75 * SPRITE_FIT);
+        this.layer.add(img);
+        if (peek.count > 1) this.layer.add(text(this, p.x + hw * 0.36 + 12, p.y - hh * 0.34 + 8, `+${peek.count - 1}`, 10, '#ffe9a8', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5));
+      }
       // Your token stands on the current hex: fade what's under it (it comes back as you hop away).
       if (isCurrent) {
         icon.setAlpha(0.15);
@@ -1063,14 +1074,18 @@ export class MapScene extends Phaser.Scene {
       persist();
     }
     const offer = run.treasure;
-    const slot: ShopSlot = { item: offer.item, price: 0, sold: false, held: offer.held };
-    const reason = unusableReason(run, slot);
+    const slots: ShopSlot[] = [{ item: offer.item, price: 0, sold: false, held: offer.held }];
+    // Treasure Nose sniffed out a third thing.
+    if (offer.extra) slots.push({ item: offer.extra.item, price: 0, sold: false, held: offer.extra.held });
     openPicker(this, {
       title: 'Treasure',
-      subtitle: 'The chest holds two things. You can only carry one.',
+      subtitle: offer.extra ? 'Treasure Nose found a third thing! You can only carry one.' : 'The chest holds two things. You can only carry one.',
       options: [
         { label: `${offer.coins} coins`, color: 0x6b5a1c, glyph: 'coin' },
-        { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c, glyph: slotGlyph(slot) },
+        ...slots.map((slot) => {
+          const reason = unusableReason(run, slot);
+          return { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c, glyph: slotGlyph(slot) };
+        }),
       ],
       onPick: (i) => {
         if (i === 0) {
@@ -1079,7 +1094,7 @@ export class MapScene extends Phaser.Scene {
           return showMessage(this, 'Treasure', `You take ◉ ${offer.coins}.`, this.done);
         }
         trackStat(run, 'treasures');
-        this.buy(slot, () => this.doTreasure());
+        this.buy(slots[i - 1], () => this.doTreasure());
       },
     });
   }

@@ -1,4 +1,5 @@
 import { MOVES } from '../data/moves';
+import { traitOf, traitsOf, type TraitId } from '../data/traits';
 import { SPECIES_BY_ID } from '../data/species';
 import type { Element } from '../data/types';
 import { creatureTypes, type Creature } from './creature';
@@ -9,9 +10,26 @@ export interface Dex {
   moves: string[]; // move ids
   elements: Element[];
   caught: string[]; // species ids you've ever caught
+  /** Traits you've had on a Hexling of each line: `${speciesId}:${traitId}` (2.0). */
+  traits?: string[];
 }
 
-export const emptyDex = (): Dex => ({ forms: [], moves: [], elements: [], caught: [] });
+export const emptyDex = (): Dex => ({ forms: [], moves: [], elements: [], caught: [], traits: [] });
+
+/** Note a trait you've had on a Hexling of this line; true if it's new. */
+export function seeTrait(dex: Dex, speciesId: string, id: TraitId | undefined): boolean {
+  if (!id) return false;
+  const k = `${speciesId}:${id}`;
+  const list = (dex.traits ??= []);
+  if (list.includes(k)) return false;
+  list.push(k);
+  return true;
+}
+
+/** The traits of this line you've found (in the line's order). */
+export function traitsFound(dex: Dex, speciesId: string): TraitId[] {
+  return traitsOf(speciesId).filter((t) => (dex.traits ?? []).includes(`${speciesId}:${t}`));
+}
 
 export const formKey = (speciesId: string, stage: number) => `${speciesId}:${stage}`;
 
@@ -48,6 +66,8 @@ export function seeCreature(dex: Dex, c: Creature, includeMoves: boolean): boole
   let changed = seeForm(dex, c.speciesId, c.stage);
   for (const t of creatureTypes(c)) changed = seeElement(dex, t) || changed;
   if (includeMoves) for (const m of c.moves) changed = seeMove(dex, m.id) || changed;
+  // Your own Hexlings: their trait counts as found for the line.
+  if (includeMoves) changed = seeTrait(dex, c.speciesId, traitOf(c)) || changed;
   return changed;
 }
 

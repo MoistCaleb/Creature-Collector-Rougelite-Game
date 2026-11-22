@@ -51,6 +51,8 @@ export interface Creature {
   nature?: import('../data/natures').NatureId;
   /** Battles won with you this run (bond hearts, see data/natures). */
   bond?: number;
+  /** Its trait (2.0): rolled when it's created and kept through evolution (see data/traits). */
+  trait?: import('../data/traits').TraitId;
 }
 
 export type Stats = BaseStats;

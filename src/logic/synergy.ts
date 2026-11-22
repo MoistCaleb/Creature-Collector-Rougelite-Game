@@ -1,3 +1,4 @@
+import { traitOf, traitValue } from '../data/traits';
 import { ELEMENTS, type Element } from '../data/types';
 import { creatureTypes, type Creature } from './creature';
 
@@ -41,7 +42,9 @@ export function teamSynergy(team: Creature[], scale = 1): SynergyLine[] {
   const counts = new Map<Element, number>();
   for (const c of team) {
     const [a, b] = creatureTypes(c);
-    for (const el of a === b ? [a] : [a, b]) counts.set(el, (counts.get(el) ?? 0) + 1);
+    // Kindred: counts two (final form: three) times.
+    const n = traitOf(c) === 'kindred' ? traitValue(c, 'kindred') : 1;
+    for (const el of a === b ? [a] : [a, b]) counts.set(el, (counts.get(el) ?? 0) + n);
   }
   return ELEMENTS.filter((el) => (counts.get(el) ?? 0) >= 2)
     .map((el) => ({ element: el, count: counts.get(el)!, stat: SYNERGY_STAT[el], bonus: synergyBonus(counts.get(el)!) * scale }))

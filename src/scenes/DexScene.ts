@@ -1,3 +1,6 @@
+import { isRareTrait, traitsOf } from '../data/traits';
+import { traitsFound } from '../logic/dex';
+import { traitDescOf, traitName } from '../ui/traitText';
 import { DEX_FORMS, DEX_SPECIES, dexStages, isLegend } from '../data/legends';
 import Phaser from 'phaser';
 import { camp, campCrew, campHearts, CREW_MAX } from '../logic/camp';
@@ -31,6 +34,8 @@ const ROW_H = 124;
 const STAGE_LABEL = ['Base form', 'First evolution', 'Final form'];
 /** Card extras: the signature line, where it lives, a row of matchup chips, your record, shortcuts. */
 const SIG_H = 34;
+/** The traits line under the signature. */
+const TRAIT_H = 34;
 const INFO_HAB = 70;
 const CHIP_ROW = 22;
 const INFO_REC = 52;
@@ -399,7 +404,19 @@ export class DexScene extends Phaser.Scene {
         wordWrap: { width: W - 50 },
       }),
     );
-    this.drawInfo(row, sp, sigY + SIG_H);
+    // Traits: the ones you've had on this line, the rest hidden (◆ marks the rare one).
+    const found = traitsFound(dex, sp.id);
+    const all = traitsOf(sp.id);
+    if (all.length) {
+      const names = all.map((t) => (found.includes(t) ? traitName(sp.id, t) : isRareTrait(sp.id, t) ? '◆ ???' : '???')).join(' · ');
+      const tl = text(this, 22, sigY + SIG_H - 6, `Traits (${found.length}/${all.length} found): ${names}`, 12, found.length ? '#ffe9a8' : '#4a4068', { wordWrap: { width: W - 50 } });
+      row.add(tl);
+      if (found.length)
+        tl.setInteractive({ useHandCursor: true }).on('pointerup', () =>
+          showMessage(this, `${sp.names[2]}'s traits`, found.map((t) => `${traitName(sp.id, t)}: ${traitDescOf(t, false)}`).join('\n\n')),
+        );
+    }
+    this.drawInfo(row, sp, sigY + SIG_H + TRAIT_H);
   }
 
   // ---------------------------------------------------------------- card extras
@@ -429,7 +446,7 @@ export class DexScene extends Phaser.Scene {
   }
 
   private cardH(sp: (typeof SPECIES)[number]): number {
-    return 38 + dexStages(sp.id).length * 136 + SIG_H + this.infoH(sp) + 8;
+    return 38 + dexStages(sp.id).length * 136 + SIG_H + TRAIT_H + this.infoH(sp) + 8;
   }
 
   /** Where it lives, what hurts it, your record with it, and shortcuts. */

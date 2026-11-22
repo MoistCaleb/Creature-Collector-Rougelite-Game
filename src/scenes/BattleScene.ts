@@ -1,3 +1,4 @@
+import { traitLine } from '../ui/traitText';
 import { GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
@@ -103,8 +104,7 @@ import {
   noteShiny,
   GLASS_MULT,
   placeRng,
-  saveMeta,
-} from '../logic/run';
+  saveMeta, teamTrait } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
@@ -1033,6 +1033,13 @@ export class BattleScene extends Phaser.Scene {
     const held = text(this, x0, y, `${nat}${c.held ? `Held: ${HELD[c.held].name} · ${HELD[c.held].desc}` : 'Held: nothing'}`, 13, c.held || nat ? COLORS.text : COLORS.textDim, { wordWrap: { width: w } });
     r.add(held);
     y += Math.max(24, held.height + 8);
+    // Its trait (both sides: a foe's shows too).
+    const tl = traitLine(c);
+    if (tl) {
+      const tt = text(this, x0, y - 4, tl, 13, '#ffe9a8', { wordWrap: { width: w } });
+      r.add(tt);
+      y += Math.max(22, tt.height + 6);
+    }
 
     // Moves (a foe's only once it has used them in this battle).
     const cols = LANDSCAPE ? 2 : 1;
@@ -1758,7 +1765,9 @@ export class BattleScene extends Phaser.Scene {
     // Stage races pay double.
     const raceMult = run.race ? 2 : 1;
     const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult);
-    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult;
+    // Lucky: battles it fought in pay more.
+    const lucky = teamTrait(run.team.filter((c) => (ab.fought ?? []).includes(c.uid)), 'lucky');
+    const coins = Math.round(battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult * (1 + lucky));
     sfx.victory();
     this.cheer('player');
     playMusic(null);
@@ -1940,7 +1949,7 @@ export class BattleScene extends Phaser.Scene {
       kind === 'species' || kind === 'type',
       () => {
         cry(c.speciesId, c.stage);
-        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${c.nature ? ` It's ${NATURES[c.nature].name}: it ${NATURES[c.nature].blurb}` : ''}${bonus}${starterNote}${fallen}`, () => this.toMap());
+        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${c.nature ? ` It's ${NATURES[c.nature].name}: it ${NATURES[c.nature].blurb}` : ''}${traitLine(c) ? `\n${traitLine(c)}` : ''}${bonus}${starterNote}${fallen}`, () => this.toMap());
       },
     );
   }

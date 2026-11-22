@@ -7,6 +7,7 @@ import { HELD, HELD_IDS, type HeldId } from '../data/held';
 import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
+import { rollTrait, traitOf, traitValue, type TraitId } from '../data/traits';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
 import { NIGHT_SHARE, nightOut } from './ambience';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
@@ -841,6 +842,7 @@ export function startRun(
   // The starter's nature comes from the run's seed (the same for everyone on a daily run).
   const starter = run.team[0];
   starter.nature = natureFor(`${seed}:starter`);
+  starter.trait ??= rollTrait(starter.speciesId, `${seed}:starter`);
   starter.hp = stats(starter).hp;
   if (!daily && !weekly) meta.lastStarter = starterId;
   camp(meta);
@@ -1068,10 +1070,23 @@ export function runMvp(run: Run): { speciesId: string; stage: number; level: num
 }
 
 /** Survivors catch their breath after a win. */
+/** The strongest value of a trait among these Hexlings (0 if none has it). */
+export function teamTrait(list: Creature[], id: TraitId): number {
+  let v = 0;
+  for (const c of list) if (isAlive(c) && traitOf(c) === id) v = Math.max(v, traitValue(c, id));
+  return v;
+}
+
 export function postBattleRecover(run: Run) {
   const frac =
     (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult * (run.twist === 'lean' ? 0.5 : 1);
-  for (const c of run.team) if (isAlive(c)) c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * frac));
+  // Healer's Touch: the whole team heals a little more; Forager: it heals itself a little more.
+  const touch = teamTrait(run.team, 'healtouch');
+  for (const c of run.team) {
+    if (!isAlive(c)) continue;
+    const forage = traitOf(c) === 'forager' ? traitValue(c, 'forager') : 0;
+    c.hp = Math.min(stats(c).hp, c.hp + Math.ceil(stats(c).hp * (frac + touch + forage)));
+  }
   // Resting on the bench restores some move uses.
   for (const c of run.bench) restoreUses(c, BALANCE.benchUseRestore);
 }
@@ -1191,6 +1206,49 @@ export function eventRng(run: Run): Rng {
 /** A floor's layout, from the seed alone. */
 const floorSeed = (run: Run) => hashString(`${run.seed}:floor:${run.floor}`);
 
+/** Which Hexlings the i-th foe of an encounter is picked from (uses the encounter's random stream). */
+function encounterPool(run: Run, kind: EncounterKind, i: number, count: number, rng: Rng, duoPool: Species[] | null): Species[] {
+  const biome = run.biomes[run.floor];
+  const boss = kind === 'boss' ? BOSSES[biome] : null;
+  let pool = rng.chance(0.7) ? speciesWithElement(biome) : (duoPool ?? SPECIES);
+  // At night (by your clock), Shadow and Spirit Hexlings come out in every land (unseeded runs).
+  if (kind === 'battle' && roamable(run) && run.log.fights > 0 && nightOut() && rng.chance(NIGHT_SHARE)) {
+    pool = SPECIES.filter((sp) => sp.types.includes('Shadow') || sp.types.includes('Spirit'));
+  }
+  if (boss) {
+    // Guardians field a themed team; their ace pairs the boss element with its partner.
+    const own = speciesWithElement(biome);
+    const ace = own.filter((sp) => sp.types.includes(boss.partner));
+    pool = i === count - 1 && ace.length ? ace : own;
+  }
+  // The run's first battle is always a neutral matchup with your starter.
+  if (!boss && run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup, duoPool ?? SPECIES);
+  return pool;
+}
+
+function encounterCount(run: Run, kind: EncounterKind, rng: Rng): number {
+  const f = run.floor;
+  return kind === 'boss' || kind === 'elite' ? (f === 0 ? 2 : 3) : run.twist === 'swarm' ? 2 : f === 0 ? 1 : rng.chance(0.5) ? 2 : 1;
+}
+
+/**
+ * Scout: who's waiting on a battle hex (its first Hexling, and how many in all), without
+ * touching the run. Matches makeEncounter for the next fight.
+ */
+export function peekEncounter(run: Run, node: MapNode): { speciesId: string; count: number } | null {
+  if (node.kind !== 'battle' && node.kind !== 'elite') return null;
+  if (node.kind === 'battle' && run.roamer && run.roamer.node === node.id) return { speciesId: run.roamer.id, count: 1 };
+  const kind = node.kind as EncounterKind;
+  const rng = placeRng(run, 'encounter', node.id);
+  const count = encounterCount(run, kind, rng);
+  const duo = run.twist === 'duo' && run.weekly ? weeklyInfo(run.weekly).duo : undefined;
+  const duoPool = duo ? SPECIES.filter((sp) => sp.types.some((t) => duo.includes(t))) : null;
+  return { speciesId: rng.pick(encounterPool(run, kind, 0, count, rng, duoPool)).id, count };
+}
+
+/** Scout: how far ahead its owner can see (0: no Scout on the team). */
+export const scoutRange = (run: Run): number => teamTrait(run.team, 'scout');
+
 export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const kind = node.kind as EncounterKind;
   const rng = placeRng(run, 'encounter', node.id);
@@ -1200,14 +1258,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   }
   const f = run.floor;
   const biome = run.biomes[f];
-  const count =
-    kind === 'boss'
-      ? f === 0 ? 2 : 3
-      : kind === 'elite'
-        ? f === 0 ? 2 : 3
-        : run.twist === 'swarm'
-          ? 2
-          : f === 0 ? 1 : rng.chance(0.5) ? 2 : 1;
+  const count = encounterCount(run, kind, rng);
   // Element Duo (weekly): everything is one of the week's two elements.
   const duo = run.twist === 'duo' && run.weekly ? weeklyInfo(run.weekly).duo : undefined;
   const duoPool = duo ? SPECIES.filter((sp) => sp.types.some((t) => duo.includes(t))) : null;
@@ -1216,20 +1267,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const boss = kind === 'boss' ? BOSSES[biome] : null;
   const heat = heatRules(run.heat ?? 0, f);
   for (let i = 0; i < count; i++) {
-    let pool = rng.chance(0.7) ? speciesWithElement(biome) : (duoPool ?? SPECIES);
-    // At night (by your clock), Shadow and Spirit Hexlings come out in every land (unseeded runs).
-    if (kind === 'battle' && roamable(run) && run.log.fights > 0 && nightOut() && rng.chance(NIGHT_SHARE)) {
-      pool = SPECIES.filter((sp) => sp.types.includes('Shadow') || sp.types.includes('Spirit'));
-    }
-    if (boss) {
-      // Guardians field a themed team; their ace pairs the boss element with its partner.
-      const own = speciesWithElement(biome);
-      const ace = own.filter((sp) => sp.types.includes(boss.partner));
-      pool = i === count - 1 && ace.length ? ace : own;
-    }
-    // The run's first battle is always a neutral matchup with your starter.
-    if (!boss && run.log.fights === 0 && run.team[0]) pool = fairPool(pool, creatureTypes(run.team[0]), neutralMatchup, duoPool ?? SPECIES);
-    const sp = rng.pick(pool);
+    const sp = rng.pick(encounterPool(run, kind, i, count, rng, duoPool));
     let level = BALANCE.floorBaseLevel[f] + Math.round(Math.pow(node.progress, BALANCE.rampCurve) * BALANCE.floorRamp[f]) + rng.int(-1, f === 0 ? 0 : 1);
     let stage = f;
     level += heat.enemyLevels;
@@ -1248,6 +1286,7 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     c.stars = enemyStars(run, kind, rng);
     // A hash, like shininess, so the run's random rolls are untouched.
     c.nature = natureFor(`${run.seed}:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`);
+    c.trait = rollTrait(c.speciesId, `${run.seed}:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`);
     if (kind !== 'battle' && f > 0) {
       for (const m of c.moves) if (rng.chance(0.4)) m.tier = 2;
     }
@@ -1264,7 +1303,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
       : kind === 'battle' ? (run.twist === 'gilded' ? GILDED_WEEK_IN : SHINY_IN) : 0;
     const roll = hashString(`${run.seed}:shiny:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`);
     // (Hunt odds can be fractional with Heat: 1 in 10.5 and so on.)
-    if (odds && (run.hunt ? roll % 100000 < 100000 / odds : roll % odds === 0)) c.shiny = true;
+    // Gilded Charm: Gilded Hexlings turn up more often (x1.5, final form x2).
+    const charm = 1 + teamTrait(run.team, 'gilded') * 0.5;
+    if (odds && (run.hunt ? roll % 100000 < (100000 * charm) / odds : roll % Math.max(1, Math.round(odds / charm)) === 0)) c.shiny = true;
     c.hp = stats(c).hp;
     enemies.push(c);
   }
@@ -1410,7 +1451,8 @@ export function battleXp(enemies: Creature[], kind: EncounterKind, floor = 0): n
  */
 export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[] {
   const top = highestLevel(run);
-  const benchShare = run.passive === 'mentor' ? 1 : BALANCE.benchXpShare;
+  // Mentor's Aura: the bench learns more from watching.
+  const benchShare = (run.passive === 'mentor' ? 1 : BALANCE.benchXpShare) * (1 + teamTrait(run.team, 'mentor'));
   const out: XpResult[] = [];
   for (const c of run.team) {
     const share = !fought || fought.includes(c.uid) ? 1 : BALANCE.sideXpShare;
@@ -1546,7 +1588,10 @@ export const SCOUT_BONUS_LEVELS = 3;
 export function catchLevel(run: Run, enemy: Creature): number {
   const stars = catchStars(run, enemy);
   const bonus = run.passive === 'scout' ? SCOUT_BONUS_LEVELS : 0;
-  return Math.min(stageCap({ stage: enemy.stage, stars }), enemy.level + bonus);
+  // Catcher: catches made while it leads join a level or two higher.
+  const lead = run.team.find(isAlive);
+  const catcher = lead && traitOf(lead) === 'catcher' ? traitValue(lead, 'catcher') : 0;
+  return Math.min(stageCap({ stage: enemy.stage, stars }), enemy.level + bonus + catcher);
 }
 
 /** Stars a catch joins with: the ones it had in battle, +1 for a first-catch or type bonus (max 5). */
@@ -1569,6 +1614,7 @@ export function catchCreature(
   c.pendingMoves = [];
   c.stars = catchStars(run, enemy);
   c.nature = enemy.nature;
+  c.trait = enemy.trait;
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
   if (enemy.shiny) {
     c.shiny = true;
@@ -1612,6 +1658,7 @@ export function claimGuardian(run: Run, boss: Creature, release?: Creature): Cre
   const c = createCreature(boss.speciesId, guardianLevel(run, boss), boss.stage);
   c.stars = guardianStars(boss);
   c.nature = boss.nature;
+  c.trait = boss.trait;
   c.hp = stats(c).hp;
   // A shiny guardian Hexling (Shiny Hunting) keeps its colours.
   if (boss.shiny) {
@@ -1659,6 +1706,7 @@ export function registerJoin(run: Run, c: Creature): boolean {
   if (!c.nature) {
     const frac = c.hp / stats(c).hp;
     c.nature = natureFor(`${run.seed}:${c.uid}:${c.speciesId}`);
+    c.trait ??= rollTrait(c.speciesId, `${run.seed}:${c.uid}`);
     c.hp = Math.max(1, Math.round(stats(c).hp * frac));
   }
   applyCampBond(run, c);
@@ -1832,6 +1880,7 @@ function rivalTeam(run: Run, team: Creature[]): Creature[] {
   const top = Math.max(...team.map((c) => c.level));
   const ace = createCreature(r.ace, top + 2, Math.min(2, f));
   ace.nature = natureFor(`${run.seed}:rival:ace`);
+  ace.trait = rollTrait(ace.speciesId, `${run.seed}:rival:ace`);
   ace.stars = Math.max(...team.map((c) => c.stars));
   for (const m of ace.moves) m.tier = Math.max(m.tier, f > 0 ? 2 : 1);
   ace.hp = stats(ace).hp;
