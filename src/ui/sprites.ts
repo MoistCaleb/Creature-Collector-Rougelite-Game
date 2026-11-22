@@ -42,6 +42,8 @@ interface StagePlan {
   mouth: Mouth;
 }
 
+export { familyPlan, paletteFor };
+
 const pickW = <T extends string>(rng: Rng, w: Partial<Record<T, number>>): T => rng.weighted<T>(w);
 
 const LOCO_BIAS: Partial<Record<Element, Partial<Record<Loco, number>>>> = {
@@ -191,42 +193,87 @@ interface Draw {
   tri: (ax: number, ay: number, bx: number, by: number, qx: number, qy: number, v: Px) => void;
 }
 
-function makeDraw(g: Px[][], S: number, cx: number): Draw {
+/**
+ * Drawing in design units (a 40-pixel grid). `k` > 1 draws the same shapes on a finer grid
+ * (S × k pixels): smoother curves and room for detail, same silhouette.
+ */
+function makeDraw(g: Px[][], S: number, cx: number, k = 1): Draw {
+  const N = g.length;
+  const setPx = (ox: number, oy: number, v: Px, onlyOver?: Px[], mirror = true) => {
+    if (ox < 0 || oy < 0 || ox >= N || oy >= N) return;
+    if (onlyOver && !onlyOver.includes(g[oy][ox])) return;
+    g[oy][ox] = v;
+    if (mirror) g[oy][N - 1 - ox] = v;
+  };
   const put: Draw['put'] = (x, y, v, onlyOver, mirror = true) => {
     const xi = Math.round(x);
     const yi = Math.round(y);
     if (xi < 0 || yi < 0 || xi >= S || yi >= S) return;
-    if (onlyOver && !onlyOver.includes(g[yi][xi])) return;
-    g[yi][xi] = v;
-    if (mirror) g[yi][S - 1 - xi] = v;
+    if (k === 1) return setPx(xi, yi, v, onlyOver, mirror);
+    for (let oy = Math.floor(yi * k); oy < Math.floor((yi + 1) * k); oy++)
+      for (let ox = Math.floor(xi * k); ox < Math.floor((xi + 1) * k); ox++) setPx(ox, oy, v, onlyOver, mirror);
   };
+  const toD = (o: number) => (o + 0.5) / k - 0.5;
   const blob: Draw['blob'] = (ex, ey, rx, ry, v, o = {}) => {
     const p = o.p ?? 2;
     const taper = o.taper ?? 0;
-    for (let y = Math.floor(ey - ry); y <= Math.ceil(ey + ry); y++) {
-      const dy = (y - ey) / ry;
+    if (k === 1) {
+      for (let y = Math.floor(ey - ry); y <= Math.ceil(ey + ry); y++) {
+        const dy = (y - ey) / ry;
+        if (Math.abs(dy) > 1) continue;
+        const hw = rx * Math.pow(1 - Math.pow(Math.abs(dy), p), 1 / p) * (1 - taper * dy);
+        for (let x = Math.floor(ex - hw); x <= Math.max(ex, cx); x++) if (x >= ex - hw - 0.01 && x <= ex + hw) put(x, y, v, o.over);
+      }
+      return;
+    }
+    const half = Math.max(ex, cx);
+    for (let oy = Math.floor((ey - ry) * k); oy <= Math.ceil((ey + ry + 1) * k); oy++) {
+      const dy = (toD(oy) - ey) / ry;
       if (Math.abs(dy) > 1) continue;
       const hw = rx * Math.pow(1 - Math.pow(Math.abs(dy), p), 1 / p) * (1 - taper * dy);
-      for (let x = Math.floor(ex - hw); x <= Math.max(ex, cx); x++) if (x >= ex - hw - 0.01 && x <= ex + hw) put(x, y, v, o.over);
+      for (let ox = Math.floor((ex - hw) * k); ox <= Math.ceil((half + 1) * k); ox++) {
+        const X = toD(ox);
+        if (X >= ex - hw - 0.2 && X <= ex + hw + 0.2 && X <= half + 0.5) setPx(ox, oy, v, o.over);
+      }
     }
   };
   const line: Draw['line'] = (x0, y0, x1, y1, v, thick = 1, mirror = true) => {
-    const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2);
+    if (k === 1) {
+      const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2);
+      for (let i = 0; i <= n; i++) {
+        const x = x0 + ((x1 - x0) * i) / n;
+        const y = y0 + ((y1 - y0) * i) / n;
+        for (let t = 0; t < thick; t++) put(x - t, y, v, undefined, mirror);
+      }
+      return;
+    }
+    const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 3 * k);
+    const r = (thick * k) / 2;
     for (let i = 0; i <= n; i++) {
-      const x = x0 + ((x1 - x0) * i) / n;
+      const x = x0 + ((x1 - x0) * i) / n - (thick - 1) / 2;
       const y = y0 + ((y1 - y0) * i) / n;
-      for (let t = 0; t < thick; t++) put(x - t, y, v, undefined, mirror);
+      const ox = (x + 0.5) * k - 0.5;
+      const oy = (y + 0.5) * k - 0.5;
+      for (let py = Math.round(oy - r + 0.5); py <= Math.round(oy + r - 0.5); py++)
+        for (let px = Math.round(ox - r + 0.5); px <= Math.round(ox + r - 0.5); px++) setPx(px, py, v, undefined, mirror);
     }
   };
   const tri: Draw['tri'] = (ax, ay, bx, by, qx, qy, v) => {
     const sign = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => (x1 - x3) * (y2 - y3) - (x2 - x3) * (y1 - y3);
-    for (let y = Math.floor(Math.min(ay, by, qy)); y <= Math.ceil(Math.max(ay, by, qy)); y++)
-      for (let x = Math.floor(Math.min(ax, bx, qx)); x <= Math.ceil(Math.max(ax, bx, qx)); x++) {
-        const d1 = sign(x, y, ax, ay, bx, by);
-        const d2 = sign(x, y, bx, by, qx, qy);
-        const d3 = sign(x, y, qx, qy, ax, ay);
-        if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) put(x, y, v);
-      }
+    const inside = (x: number, y: number) => {
+      const d1 = sign(x, y, ax, ay, bx, by);
+      const d2 = sign(x, y, bx, by, qx, qy);
+      const d3 = sign(x, y, qx, qy, ax, ay);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    };
+    if (k === 1) {
+      for (let y = Math.floor(Math.min(ay, by, qy)); y <= Math.ceil(Math.max(ay, by, qy)); y++)
+        for (let x = Math.floor(Math.min(ax, bx, qx)); x <= Math.ceil(Math.max(ax, bx, qx)); x++) if (inside(x, y)) put(x, y, v);
+      return;
+    }
+    for (let oy = Math.floor(Math.min(ay, by, qy) * k); oy <= Math.ceil((Math.max(ay, by, qy) + 1) * k); oy++)
+      for (let ox = Math.floor(Math.min(ax, bx, qx) * k); ox <= Math.ceil((Math.max(ax, bx, qx) + 1) * k); ox++)
+        if (inside(toD(ox), toD(oy))) setPx(ox, oy, v);
   };
   return { put, blob, line, tri };
 }
@@ -244,16 +291,43 @@ const SHAPES: Record<BodyShape, { rx: number; ry: number; taper: number; p: numb
   hulk: { rx: 10, ry: 8.5, taper: 0.55, p: 2.6 },
 };
 
-export function buildGrid(speciesId: string, stage: number): Px[][] {
+/** Where the face goes, for painters that draw it themselves (the hi-res remaster). */
+export interface FaceInfo {
+  cx: number;
+  eyeY: number;
+  spread: number;
+  faceR: number;
+  my: number;
+  eyes: 1 | 2 | 3 | 4;
+  visor: boolean;
+  hollow: boolean;
+  mouth: Mouth;
+  stage: number;
+  headTop: number;
+  hy: number;
+  by: number;
+  rx: number;
+  ry: number;
+  shoulderX: number;
+  shoulderY: number;
+  hrx: number;
+  loco: Loco;
+  back: Back;
+  ground: number;
+}
+
+/** The design grid is 40 pixels; `k` > 1 draws it finer (k = 1.4: 56 pixels). `face`: filled in, and with k > 1 the face is left out for the caller to draw. */
+export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>): Px[][] {
   const types = SPECIES_BY_ID[speciesId].types;
   const fam = familyPlan(speciesId, types);
   const P = stagePlan(speciesId, stage, fam, types);
-  const S = SPRITE_SIZE;
-  const g: Px[][] = Array.from({ length: S }, () => Array<Px>(S).fill(0));
+  const S = 40;
+  const N = Math.round(S * k);
+  const g: Px[][] = Array.from({ length: N }, () => Array<Px>(N).fill(0));
   const cx = S / 2 - 0.5;
   const ground = S - 2;
   const r = new Rng(hashString(`${speciesId}:detail${stage}`));
-  const D = makeDraw(g, S, cx);
+  const D = makeDraw(g, S, cx, k);
   const { put, blob, line, tri } = D;
 
   // ---------------------------------------------------------------- body metrics
@@ -549,6 +623,13 @@ export function buildGrid(speciesId: string, stage: number): Px[][] {
   const hollow = (types[0] === 'Spirit' || types[0] === 'Shadow') && stage > 0;
   const eyeY = Math.round(faceY - faceR * (stage === 0 ? 0 : 0.15));
   const spread = Math.max(1.5, faceR * 0.42);
+  if (face) {
+    Object.assign(face, {
+      cx, eyeY, spread, faceR, my: Math.round(faceY + faceR * 0.55), eyes: fam.eyes, visor, hollow, mouth: P.mouth, stage,
+      headTop, hy, by, rx, ry, shoulderX, shoulderY, hrx: merged ? rx : H.rx, loco: L, back: P.back, ground,
+    } satisfies FaceInfo);
+    if (k > 1) return g;
+  }
   const eyeAt = (x: number, y: number) => {
     if (hollow) {
       put(x, y, 9);
