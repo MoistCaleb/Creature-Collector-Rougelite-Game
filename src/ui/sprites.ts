@@ -42,7 +42,7 @@ interface StagePlan {
   mouth: Mouth;
 }
 
-export { familyPlan, stagePlan, paletteFor };
+export { familyPlan, stagePlan, paletteFor, hueShift };
 export type { Loco, BodyShape, HeadShape, Arms, Back, Top, Mouth, Pattern, Tail, Family, StagePlan };
 
 const pickW = <T extends string>(rng: Rng, w: Partial<Record<T, number>>): T => rng.weighted<T>(w);
@@ -332,7 +332,8 @@ export interface FaceInfo {
 }
 
 /** The design grid is 40 pixels; `k` > 1 draws it finer (k = 1.4: 56 pixels). `face`: filled in, and with k > 1 the face is left out for the caller to draw. */
-export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false): Px[][] {
+/** `back`: the 2.0 back view (for the player's side in battle): no face, and wings, shells, capes and tails in front of the body. */
+export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false): Px[][] {
   const types = SPECIES_BY_ID[speciesId].types;
   const fam = familyPlan(speciesId, types);
   const P = { ...stagePlan(speciesId, stage, fam, types) };
@@ -410,9 +411,10 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   const faceY = merged ? by - ry * 0.35 : hy;
   const faceR = merged ? Math.min(rx, ry) * 0.7 : Math.min(H.rx, H.ry);
 
-  // ---------------------------------------------------------------- back parts (behind the body)
+  // ---------------------------------------------------------------- back parts (behind the body; in front of it in the back view)
+  const backLayer = () => {
   const wingY = shoulderY - 1;
-  const wingX = shoulderX + 1;
+  const wingX = back ? cx - 1.5 : shoulderX + 1;
   const ws = [5, 8, 11][stage];
   switch (P.back) {
     case 'batwings':
@@ -432,10 +434,18 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       break;
     }
     case 'bugwings':
-      blob(wingX - ws * 0.55, wingY - ws * 0.35, ws * 0.55, ws * 0.38, 2, { over: [0] });
-      blob(wingX - ws * 0.45, wingY + ws * 0.35, ws * 0.42, ws * 0.28, 11, { over: [0] });
+      blob(wingX - ws * 0.55, wingY - ws * 0.35, ws * 0.55, ws * 0.38, 2, back ? {} : { over: [0] });
+      blob(wingX - ws * 0.45, wingY + ws * 0.35, ws * 0.42, ws * 0.28, 11, back ? {} : { over: [0] });
       break;
     case 'spines':
+      if (back) {
+        // A ridge of spines down the middle of the back.
+        for (let k = 0; k < 3 + stage; k++) {
+          const sy = bodyTop + 1.5 + k * ((ry * 1.4) / (3 + stage));
+          tri(cx - 1.3, sy + 1.2, cx + 0.3, sy + 1.2, cx - 0.5, sy - 1.5 - stage * 0.6, 6);
+        }
+        break;
+      }
       for (let k = 0; k < 2 + stage; k++) {
         const sy = shoulderY - 1 + k * 2.5;
         const sx = cx - hw(sy) + 1;
@@ -445,10 +455,22 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     case 'shell':
       blob(cx, by - ry * 0.1, rx + 2.5, ry + 1.5, 3, { p: 2.5 });
       for (let k = -1; k <= 1; k++) line(cx - rx - 2, by + k * 3, cx - rx + 1, by + k * 3, 9);
+      if (back) {
+        // The shell seen from behind: a ridge down the middle and plate seams.
+        D.clip([3]);
+        line(cx - 0.5, by - ry - 1, cx - 0.5, by + ry + 1, 9, 0.5);
+        for (let k = -1; k <= 1; k++) line(cx - rx - 2, by + k * ry * 0.5 + Math.abs(k) * 0.5, cx - 0.5, by + k * ry * 0.5 - 0.6, 9, 0.5);
+        D.clip(undefined);
+      }
       break;
     case 'mane':
       blob(cx, hy + 1, (merged ? rx : H.rx) + 3, (merged ? ry * 0.6 : H.ry) + 3, 10);
       for (let k = 0; k < 5; k++) put(cx - (merged ? rx : H.rx) - 3 + k * 0.3, hy - 2 + k * 2, 11);
+      if (back) {
+        // Fur strands sweeping down the back of the mane.
+        const mr = (merged ? rx : H.rx) + 2;
+        for (let i = 0; i < 4; i++) line(cx - 0.5 - i * mr * 0.25, hy - mr * 0.7 + i * 0.4, cx - 0.8 - i * mr * 0.3, hy + mr * 0.7, 11, 0.45);
+      }
       break;
     case 'fins':
       tri(shoulderX + 1, shoulderY, shoulderX - 3 - stage * 2, shoulderY - 3 - stage, shoulderX - 1, shoulderY + 4, 2);
@@ -503,7 +525,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
 
   // tail: asymmetric, sticks out to one side
   if (v2 && L !== 'slime') {
-    drawTail2(D, types[0], fam, fr2, stage, cx + fam.tailSide * (rx * 0.55), by + ry * 0.55, sigVariant === 2);
+    drawTail2(D, types[0], back ? { ...fam, tailSide: -fam.tailSide as 1 | -1 } : fam, fr2, stage, back ? cx - fam.tailSide * 0.5 : cx + fam.tailSide * (rx * 0.55), by + ry * (back ? 0.45 : 0.55), sigVariant === 2);
   } else if (fam.tail !== 'none' && L !== 'slime') {
     const side = fam.tailSide;
     const tx0 = cx + side * (rx * 0.6);
@@ -521,6 +543,8 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       put(tipX - side, tipY - 1, 10, undefined, false);
     }
   }
+  };
+  if (!back) backLayer();
 
   // ---------------------------------------------------------------- locomotion
   if (L === 'biped' || L === 'quad') {
@@ -563,6 +587,15 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       const len = lift + 1 - (k % 2) * 2;
       for (let y = 0; y < len; y++) put(wx + Math.sin(y * 0.9 + k) * 0.8, by + ry - 1 + y, 1);
     }
+  } else if (L === 'serpent' && v2) {
+    // Stacked coils instead of a flat base.
+    const h = lift + 1.5;
+    blob(cx, ground - h * 0.3, rx + 2.5 + stage, h * 0.38, 1, { p: 2.3 });
+    blob(cx, ground - h * 0.78, rx + 1 + stage * 0.6, h * 0.32, 1, { p: 2.3 });
+    D.clip([1]);
+    line(cx - rx - 3 - stage, ground - h * 0.52, cx, ground - h * 0.6, 3, 0.55);
+    line(cx - rx - 3 - stage, ground - h * 0.05, cx, ground - h * 0.1, 3, 0.55);
+    D.clip(undefined);
   } else if (L === 'serpent') {
     blob(cx, ground - lift / 2, rx + 3 + stage, lift / 2 + 1.2, 1);
     blob(cx, ground - lift / 2, (rx + 3 + stage) * 0.55, lift / 4 + 0.4, 3, { over: [1] });
@@ -578,7 +611,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   if (L === 'slime') for (let k = 0; k < 2 + stage; k++) for (let y = 0; y < 2 + (k % 2); y++) put(cx - rx * (0.25 + 0.22 * k), by + ry + y, 1);
 
   const over: Px[] = [1];
-  if (v2) drawPattern2(D, fam.pattern, r, stage, cx, by, rx, ry);
+  if (v2) drawPattern2(D, back && (fam.pattern === 'belly' || fam.pattern === 'core') ? 'none' : fam.pattern, r, stage, cx, by, rx, ry);
   else switch (fam.pattern) {
     case 'spots':
       for (let i = 0; i < 3 + stage * 2; i++) put(cx - rx * (0.25 + r.next() * 0.6), by - ry * 0.6 + r.next() * ry * 1.2, 2, over);
@@ -628,6 +661,15 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       put(ax - reach - 2, ay + reach * 0.5 + 2, 9);
       break;
     case 'blades':
+      if (v2) {
+        // Forearm ending in a broad curved blade with a bright edge.
+        const ex = ax - reach * 0.7, ey = ay + reach * 0.2;
+        line(ax, ay, ex, ey, 1, 2);
+        tri(ex + 0.8, ey - 0.8, ex - 1.6, ey + 0.4, ex - 2.2 - stage * 0.5, ey + reach * 1.5, 6);
+        tri(ex + 0.8, ey - 0.8, ex - 0.2, ey + 0.8, ex - 2.2 - stage * 0.5, ey + reach * 1.5, 6);
+        line(ex - 1.5, ey + 0.4, ex - 2.2 - stage * 0.5, ey + reach * 1.5 - 0.5, 11, 0.45);
+        break;
+      }
       line(ax, ay, ax - reach * 0.7, ay - reach * 0.3, 1, 2);
       tri(ax - reach * 0.7, ay - reach * 0.3, ax - reach * 0.7 + 1, ay - reach * 0.3 + 1, ax - reach * 0.7 - 2, ay + reach * 1.6, 8);
       break;
@@ -651,7 +693,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
 
   // ---------------------------------------------------------------- head
   if (!merged) blob(cx, hy, H.rx, H.ry, 1, { taper: H.taper, p: H.p });
-  if (P.head === 'long') blob(cx, hy + H.ry * 0.45, H.rx * 0.55, H.ry * 0.4, 3, { over: [1] });
+  if (P.head === 'long' && !back) blob(cx, hy + H.ry * 0.45, H.rx * 0.55, H.ry * 0.4, 3, { over: [1] });
 
   const tY = headTop + 0.5;
   const tX = cx - (merged ? rx : H.rx) * 0.6;
@@ -726,7 +768,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   }
 
   // 2.0: a lighter muzzle on furred, snouted heads gives the face depth.
-  if (v2 && stage > 0 && !merged && P.head !== 'beak' && P.mouth !== 'jaw' && (L === 'biped' || L === 'quad') && fr2.chance(0.6))
+  if (v2 && !back && stage > 0 && !merged && P.head !== 'beak' && P.mouth !== 'jaw' && (L === 'biped' || L === 'quad') && fr2.chance(0.6))
     blob(cx, hy + H.ry * 0.5, H.rx * 0.36, H.ry * 0.3, 3, { over: [1] });
 
   const anchors: Anchors = { cx, headTop, hy, shoulderX, shoulderY, by, rx, ry, stage, hrx: merged ? rx : H.rx, v2 };
@@ -738,6 +780,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     else Object.assign(anchors, { cx: shoulderX + 2.2, headTop: shoulderY + 0.5, hrx: 2 });
   }
   if (sigVariant !== 2) drawSignature(types[0], D, anchors);
+  if (back) backLayer();
 
   // ---------------------------------------------------------------- face
   const visor = types[0] === 'Metal' && stage > 0;
@@ -944,7 +987,7 @@ function drawTail2(d: Draw, el: Element, fam: Family, r: Rng, stage: number, x0:
 }
 
 /** 2.0 body markings, drawn at full resolution so they read as fur, scales or plating instead of blocks. */
-function drawPattern2(d: Draw, pattern: Pattern, r: Rng, stage: number, cx: number, by: number, rx: number, ry: number) {
+function drawPattern2(d: Draw, pattern: Pattern | 'none', r: Rng, stage: number, cx: number, by: number, rx: number, ry: number) {
   const over: Px[] = [1];
   d.clip(over);
   switch (pattern) {
@@ -988,7 +1031,11 @@ function drawPattern2(d: Draw, pattern: Pattern, r: Rng, stage: number, cx: numb
       d.blob(cx, by - ry * 0.1, 0.8 + stage * 0.4, 0.8 + stage * 0.4, 11, { over: [7] });
       break;
     case 'rings':
-      for (let k2 = 0; k2 < 3 + stage; k2++) d.line(cx - rx, by - ry + 1.2 + k2 * 3.2, cx, by - ry + 1.6 + k2 * 3.2, 3, 0.8);
+      // Belly plates down the middle.
+      for (let k2 = 0; k2 < 3 + stage; k2++) {
+        const y = by - ry * 0.5 + k2 * ((ry * 1.3) / (3 + stage));
+        d.line(cx - rx * (0.42 - 0.04 * Math.abs(k2 - 1.5)), y, cx, y + 0.2, 3, 0.9);
+      }
       break;
   }
   d.clip(undefined);

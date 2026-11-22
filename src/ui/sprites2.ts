@@ -1,7 +1,7 @@
 import { SPECIES_BY_ID } from '../data/species';
 import type { Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
-import { buildGrid, paletteFor, type FaceInfo } from './sprites';
+import { buildGrid, hueShift, paletteFor, type FaceInfo } from './sprites';
 
 /**
  * Hexbound 2.0 art (style test): the same part plans as today, drawn on a finer grid (56 px) and
@@ -55,10 +55,11 @@ function fitScale(speciesId: string, stage: number): number {
   return Math.max(1.2, Math.min(2.8, STAGE_H[stage] / h, (SPRITE2_SIZE - 4) / w));
 }
 
-export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny = false) {
+/** `back`: the view from behind (the player's side in battle). */
+export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny = false, back = false) {
   const k = fitScale(speciesId, stage);
   const face: Partial<FaceInfo> = {};
-  const g = buildGrid(speciesId, stage, k, face, true) as number[][];
+  const g = buildGrid(speciesId, stage, k, face, true, back) as number[][];
   const f = face as FaceInfo;
   const N = g.length;
   // Centre the creature and stand it on the bottom of the frame.
@@ -70,6 +71,19 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   ctx.rect(ox0, oy0, SPRITE2_SIZE, SPRITE2_SIZE);
   ctx.clip();
   const { pal } = paletteFor(speciesId, stage, shiny);
+  // Each line gets its own hue and depth within its element, so an element's lines don't all share one colour.
+  const tone = hashString(speciesId + ':tone');
+  const deg = ((tone % 7) - 3) * 7;
+  const val = ((tone >> 3) % 5) * 0.06 - 0.12;
+  for (const key of [1, 3, 9]) {
+    const c = hueShift(pal[key], deg);
+    pal[key] = val < 0 ? dark(c, -val) : light(c, val);
+  }
+  // Light lines were washed-out beige: warm them toward gold.
+  if (SPECIES_BY_ID[speciesId].types[0] === 'Light') {
+    pal[1] = mix(pal[1], 0xf0bd4f, 0.42);
+    pal[3] = mix(pal[3], 0xfff0c4, 0.3);
+  }
   // A near-black belly (from a dark accent) swallows the shading: lift it toward the body colour.
   const lum = (c: number) => 0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255);
   if (lum(pal[3]) < 70) pal[3] = light(pal[1], 0.35);
@@ -91,7 +105,7 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   const cxo = O(f.cx);
   const bodyMid = O(f.by);
   const neckY = O(f.headTop) + (O(f.hy) - O(f.headTop)) * 2 + 1;
-  switch (part) {
+  switch (back && ['gem', 'emblem', 'cheeks', 'facemark'].includes(part) ? 'none' : part) {
     case 'gem': {
       const gy = O(f.headTop) + 2;
       for (let dy = 0; dy < 5; dy++) for (let dx = 0; dx <= 2 - Math.abs(dy - 2); dx++) set(cxo - dx, gy + dy, dy < 2 && dx === 0 ? 11 : 10);
@@ -239,7 +253,7 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
         }
   }
 
-  drawFace(ctx, f, pal, ox, oy, O, el, N);
+  if (!back) drawFace(ctx, f, pal, ox, oy, O, el, N, hashString(speciesId + ':mouth') % 4);
   ctx.restore();
 }
 
@@ -271,7 +285,7 @@ function texture(el: Element, c: number, x: number, y: number, d: number, pal: R
 }
 
 /** Eyes and mouth, drawn at full resolution. */
-function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number, number>, ox: number, oy: number, O: (d: number) => number, el: Element, N: number) {
+function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number, number>, ox: number, oy: number, O: (d: number) => number, el: Element, N: number, mouthVariant = 0) {
   const p = (x: number, y: number, c: number, mirror = true) => {
     x = Math.round(x);
     y = Math.round(y);
@@ -332,7 +346,18 @@ function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number
       pat(['t.....t', '.t...t.', '.tt.tt.', '..t.t..'], mx, my, false);
       break;
     case 'jaw':
-      pat(['kkkkkkkkk', 'kfmfmfmfk', 'kmmnnnmmk', 'kfmfmfmfk', '.kkkkkkk.'], mx, my, false);
+      // Four kinds of big mouth, so finals don't all share the same toothy box.
+      pat(
+        [
+          ['kkkkkkkkk', 'kfmfmfmfk', 'kmmnnnmmk', 'kfmfmfmfk', '.kkkkkkk.'],
+          ['k.......k', '.kkkkkkk.', '.kfmmmfk.', '..f...f..'],
+          ['.t.....t.', '.tkkkkkt.', '..kmnmk..', '...kkk...'],
+          ['kkkkkkkkk', 'kfkfkfkfk', '.kmmnmmk.', '..kkkkk..'],
+        ][mouthVariant],
+        mx,
+        my,
+        false,
+      );
       break;
     case 'beak':
       pat(['.ttttt.', 'tttttkk', '.ttttt.', '..ttt..', '...t...'], mx, my - 1, false);
