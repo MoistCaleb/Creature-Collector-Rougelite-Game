@@ -1,3 +1,5 @@
+import { floorCurse, hasBoon, openOffer, runBoons } from '../logic/boons';
+import { openBoonOffer } from '../ui/boonPick';
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
@@ -190,6 +192,7 @@ export class MapScene extends Phaser.Scene {
     // Scout: see who's waiting on the battle hexes ahead (final form: two hexes ahead).
     const scouted = new Set<string>();
     const range = scoutRange(run);
+    const fog = hasBoon(run, 'fogofwar');
     if (range >= 1) for (const id of reachableIds) scouted.add(id);
     if (range >= 2) for (const id of [...reachableIds]) for (const nx of map.nodes[id]?.next ?? []) scouted.add(nx);
     for (const n of nodes) {
@@ -207,8 +210,11 @@ export class MapScene extends Phaser.Scene {
         isCurrent || canGo ? 1 : 0.5,
       );
       const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
-      const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
-      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      // Fog of War (a curse): only the hexes next to you (and the guardian's) show what they are.
+      const fogged = fog && !canGo && !isCurrent && !visited && n.kind !== 'boss';
+      const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), fogged ? 'question' : (NODE_ICONS[n.kind] ?? 'question'), Math.round(iconSize * 1.05));
+      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), fogged ? '?' : n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      if (fogged) hex.setFillStyle(0x3a3650);
       this.layer.add([hex, icon, label]);
       const peek = scouted.has(n.id) ? peekEncounter(run, n) : null;
       if (peek) {
@@ -285,8 +291,10 @@ export class MapScene extends Phaser.Scene {
 
     for (const c of allCreatures(run)) dex.creature(c, true);
     persist();
-    const resume = () =>
+    const resumeNode = () =>
       run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
+    // A boon on offer (after a guardian, or from a curse) comes first; then a redraw shows its effects.
+    const resume = () => (run.boons?.offer ? openBoonOffer(this, run, () => this.scene.restart({})) : resumeNode());
     // First-time tips come before anything that's waiting.
     const after = () => tip(this, 'map', () => (run.bench.length ? tip(this, 'bench', resume) : resume()));
     // Announce any achievements earned since the last time the map was shown.
@@ -985,7 +993,7 @@ export class MapScene extends Phaser.Scene {
     this.drawRoamer();
     // The other player sees you hop there.
     this.shareProgress();
-    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive'].includes(n.kind)) {
+    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive', 'boon'].includes(n.kind)) {
       // Remember the unresolved choice so a reload offers it again.
       run.pendingNode = n.kind;
       persist();
@@ -1002,7 +1010,8 @@ export class MapScene extends Phaser.Scene {
         return;
       case 'battle':
       case 'elite':
-        this.scene.start('Battle', { kind: n.kind });
+        // Haunted Floor (a curse): every battle on this floor is a trainer.
+        this.scene.start('Battle', { kind: n.kind === 'battle' && floorCurse(run, 'hauntedfloor') ? 'elite' : n.kind });
         return;
       case 'heal':
         return this.doHeal();
@@ -1037,7 +1046,24 @@ export class MapScene extends Phaser.Scene {
         return this.doEvent();
       case 'revive':
         return this.doRevive();
+      case 'boon':
+        return this.doBoonHex();
     }
+  }
+
+  /** Boon hex: an offer of boons (the same one after a reload). */
+  private doBoonHex() {
+    const run = state.run!;
+    const key = `${run.floor}:${run.currentId}`;
+    const rb = runBoons(run);
+    // Each Boon hex offers once (a reload brings back the same offer, then moves on).
+    if (rb.hexDone === key && !rb.offer) return this.done();
+    if (rb.hexDone !== key) {
+      rb.hexDone = key;
+      openOffer(run, `hex${key}`);
+    }
+    persist();
+    openBoonOffer(this, run, this.done);
   }
 
   /** Revival hex: bring back one fallen Hexling at 60% of the level it fell at. */
@@ -1168,15 +1194,23 @@ export class MapScene extends Phaser.Scene {
 
   private doHeal() {
     const run = state.run!;
-    const frac = run.passive === 'medic' ? 1 : 0.5;
+    // Boons: Bloom heals everyone to full; Blood Price (a curse) stops rests healing.
+    const frac = hasBoon(run, 'bloodprice') ? 0 : run.passive === 'medic' || hasBoon(run, 'bloom') ? 1 : 0.5;
     trackStat(run, 'rests');
     for (const c of allCreatures(run)) {
-      healFraction(c, frac);
+      if (frac) healFraction(c, frac);
       c.status = undefined;
       restoreUses(c);
     }
     sfx.heal();
-    showMessage(this, 'Rest', `Your Hexlings recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`, this.done);
+    showMessage(
+      this,
+      'Rest',
+      frac
+        ? `Your Hexlings recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`
+        : "Blood Price: no healing here. Your Hexlings shake off any status conditions and get every move's uses back.",
+      this.done,
+    );
   }
 
   private doLevelUp() {

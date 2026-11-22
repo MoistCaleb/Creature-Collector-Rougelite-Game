@@ -8,6 +8,7 @@ import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitValue, type TraitId } from '../data/traits';
+import { cleanBoons, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
 import { NIGHT_SHARE, nightOut } from './ambience';
 import { DEFAULT_STARTERS, SPECIES, SPECIES_BY_ID, speciesWithElement, type Species } from '../data/species';
@@ -505,6 +506,8 @@ export interface Run {
   endedAt?: number;
   /** Shops visited this run (the shopkeeper remembers you). */
   shopVisits?: number;
+  /** Boons (2.0): held, the offer on screen, curse flags (see logic/boons). */
+  boons?: RunBoons;
 }
 
 export interface Rival {
@@ -904,6 +907,7 @@ export function loadRun(meta: Meta): Run | null {
     const all = [...run.team, ...run.bench, ...(run.activeBattle?.enemies ?? [])];
     setNextUid(Math.max(0, ...all.map((c) => c.uid)) + 1);
     applyFloorCap(run);
+    cleanBoons(run);
     // Any shiny already in your party counts as owned (runs saved before that was tracked).
     for (const c of allCreatures(run)) if (c.shiny && !(meta.shinyOwned ?? []).includes(c.speciesId)) noteShinyOwned(meta, c.speciesId);
     return run;
@@ -1077,7 +1081,8 @@ export function teamTrait(list: Creature[], id: TraitId): number {
   return v;
 }
 
-export function postBattleRecover(run: Run) {
+export function postBattleRecover(run: Run, opts: { won?: boolean; sun?: boolean } = {}) {
+  if (opts.won) afterWinBoons(run, !!opts.sun);
   const frac =
     (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult * (run.twist === 'lean' ? 0.5 : 1);
   // Healer's Touch: the whole team heals a little more; Forager: it heals itself a little more.
@@ -1089,6 +1094,25 @@ export function postBattleRecover(run: Run) {
   }
   // Resting on the bench restores some move uses.
   for (const c of run.bench) restoreUses(c, BALANCE.benchUseRestore);
+}
+
+/** Boons that help after a win: Heat Wave, Tidecall, Radiance. */
+function afterWinBoons(run: Run, sun: boolean) {
+  for (const c of run.team) {
+    if (!isAlive(c)) continue;
+    const t = creatureTypes(c);
+    const max = stats(c).hp;
+    if (hasBoon(run, 'heatwave') && t.includes('Fire')) c.hp = Math.min(max, c.hp + Math.ceil(max * (sun ? 0.3 : 0.15)));
+    if (hasBoon(run, 'radiance')) {
+      c.hp = Math.min(max, c.hp + Math.ceil(max * 0.1));
+      c.status = undefined;
+    }
+    if (hasBoon(run, 'tidecall') && t.includes('Water')) {
+      // Its strongest attack gets its uses back.
+      const best = [...c.moves].filter((m) => MOVES[m.id]?.kind === 'attack').sort((a, b) => MOVES[b.id].power - MOVES[a.id].power)[0];
+      if (best) restoreUses(c, 1, best.id);
+    }
+  }
 }
 
 /** Remove fainted creatures (permadeath). Returns their names. */
@@ -1135,7 +1159,7 @@ export function reviveFallen(run: Run, uid: number): Creature | null {
   // It's no longer among the fallen in the run summary.
   const f = (run.log.fallen ?? []).findIndex((x) => x.uid === uid);
   if (f >= 0) run.log.fallen!.splice(f, 1);
-  if (run.team.length < TEAM_MAX) run.team.push(c);
+  if (run.team.length < teamMax(run)) run.team.push(c);
   else run.bench.push(c);
   return c;
 }
@@ -1143,7 +1167,7 @@ export function reviveFallen(run: Run, uid: number): Creature | null {
 /** Fill empty main-team slots from the front of the bench. Returns who stepped up. */
 export function fillTeamFromBench(run: Run): Creature[] {
   const moved: Creature[] = [];
-  while (run.team.length < TEAM_MAX && run.bench.length) {
+  while (run.team.length < teamMax(run) && run.bench.length) {
     const c = run.bench.shift()!;
     run.team.push(c);
     moved.push(c);
@@ -1155,7 +1179,7 @@ export function fillTeamFromBench(run: Run): Creature[] {
 export function promoteBench(run: Run): boolean {
   buryFallen(run);
   if (run.bench.length === 0) return false;
-  run.team = run.bench.splice(0, TEAM_MAX);
+  run.team = run.bench.splice(0, teamMax(run));
   if (run.passive === 'bodyguard') for (const c of run.team) c.hp = stats(c).hp;
   trackStat(run, 'wipes');
   return true;
@@ -1247,7 +1271,7 @@ export function peekEncounter(run: Run, node: MapNode): { speciesId: string; cou
 }
 
 /** Scout: how far ahead its owner can see (0: no Scout on the team). */
-export const scoutRange = (run: Run): number => teamTrait(run.team, 'scout');
+export const scoutRange = (run: Run): number => Math.max(teamTrait(run.team, 'scout'), hasBoon(run, 'pathfinder') ? 1 : 0);
 
 export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const kind = node.kind as EncounterKind;
@@ -1274,12 +1298,13 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     if (kind === 'elite') level += BALANCE.eliteLevelBonus + heat.eliteLevels;
     if (kind === 'boss') {
       // Extra rules at Heat 4+ come with a few levels off, to keep the fight fair.
-      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0) + heat.enemyLevels + heat.bossLevels - extraRuleCount(run.heat ?? 0) * EXTRA_RULE_LEVELS;
+      // Boons: +1 guardian level per boon held (+5 when Marked).
+      level = BALANCE.bossLevel[f] + (i === count - 1 ? 2 : 0) + heat.enemyLevels + heat.bossLevels - extraRuleCount(run.heat ?? 0) * EXTRA_RULE_LEVELS + guardianBoonLevels(run);
       stage = Math.min(2, f + (i === count - 1 && BALANCE.bossLeadEvolves[f] ? 1 : 0));
     }
     if (run.hunt) {
       // Shiny Hunting: final forms from the start, and levels that climb past yours.
-      level = huntLevel(run.hunt.depth, node.progress, kind) + (kind === 'boss' && i === count - 1 ? 2 : 0) + rng.int(-1, 1);
+      level = huntLevel(run.hunt.depth, node.progress, kind) + (kind === 'boss' && i === count - 1 ? 2 : 0) + rng.int(-1, 1) + (kind === 'boss' ? guardianBoonLevels(run) : 0);
       stage = 2;
     }
     const c = createCreature(sp.id, Math.max(1, level), stage);
@@ -1452,7 +1477,7 @@ export function battleXp(enemies: Creature[], kind: EncounterKind, floor = 0): n
 export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[] {
   const top = highestLevel(run);
   // Mentor's Aura: the bench learns more from watching.
-  const benchShare = (run.passive === 'mentor' ? 1 : BALANCE.benchXpShare) * (1 + teamTrait(run.team, 'mentor'));
+  const benchShare = (run.passive === 'mentor' || hasBoon(run, 'benchpress') ? 1 : BALANCE.benchXpShare) * (1 + teamTrait(run.team, 'mentor'));
   const out: XpResult[] = [];
   for (const c of run.team) {
     const share = !fought || fought.includes(c.uid) ? 1 : BALANCE.sideXpShare;
@@ -1483,7 +1508,10 @@ export function applyPrep(run: Run, id: PrepId | 'skip') {
   if (id === 'charm' && run.team[0]) run.team[0].bond = Math.max(run.team[0].bond ?? 0, CAMP_START_BOND);
   saveRun(run);
 }
-export const potionHeal = (run: Run) => (run.passive === 'apothecary' ? 0.75 : 0.5);
+export const potionHeal = (run: Run) => (run.passive === 'apothecary' || hasBoon(run, 'fieldmedic') ? 0.75 : 0.5);
+
+/** Short Fuse (a curse): no potions for the rest of the run. */
+export const potionsBlocked = (run: Run) => hasBoon(run, 'shortfuse');
 
 /** A potion helps a living creature that's hurt or has a status condition. */
 export const needsPotion = (c: Creature) => isAlive(c) && (c.hp < stats(c).hp || !!c.status);
@@ -1495,7 +1523,7 @@ export function notePotion(run: Run) {
 
 /** Drink a carried potion. Returns false if there's none or it wouldn't help. */
 export function usePotion(run: Run, c: Creature): boolean {
-  if ((run.potions ?? 0) < 1 || !needsPotion(c)) return false;
+  if ((run.potions ?? 0) < 1 || !needsPotion(c) || potionsBlocked(run)) return false;
   run.potions! -= 1;
   healFraction(c, potionHeal(run));
   c.status = undefined;
@@ -1537,7 +1565,7 @@ export function unequipHeld(run: Run, c: Creature) {
 }
 
 export function rosterFull(run: Run): boolean {
-  return run.team.length >= TEAM_MAX && run.bench.length >= BENCH_MAX;
+  return run.team.length >= teamMax(run) && run.bench.length >= BENCH_MAX;
 }
 
 /**
@@ -1549,7 +1577,7 @@ function addToParty(run: Run, c: Creature, release?: Creature) {
   if (release && list) {
     unequipHeld(run, release);
     list[list.indexOf(release)] = c;
-  } else if (run.team.length < TEAM_MAX) run.team.push(c);
+  } else if (run.team.length < teamMax(run)) run.team.push(c);
   else run.bench.push(c);
   registerJoin(run, c);
 }
@@ -1630,6 +1658,8 @@ export function catchCreature(
         newlyClaimed.push(t);
       }
   addToParty(run, c, release);
+  // Scavenger (a boon): each catch heals the team a little.
+  if (hasBoon(run, 'scavenger')) for (const x of run.team) if (isAlive(x)) x.hp = Math.min(stats(x).hp, x.hp + Math.ceil(stats(x).hp * 0.15));
   run.log.caught += 1;
   track(run.meta, 'caught');
   noteCatch(run.meta, c.speciesId);
@@ -1693,6 +1723,13 @@ export function growBond(run: Run, fought: number[]): string[] {
  */
 export function registerJoin(run: Run, c: Creature): boolean {
   const meta = run.meta;
+  // Pact / Fragile: newcomers share the team's max HP cut.
+  const cut = runHpCut(run);
+  if (cut && (c.hpCut ?? 0) < cut) {
+    const frac = c.hp / stats(c).hp;
+    c.hpCut = cut;
+    c.hp = Math.max(1, Math.round(stats(c).hp * frac));
+  }
   // A legendary: caught for good (it roams no more) and in the Hexlidex, but never a starter.
   if (isLegend(c.speciesId)) {
     (meta.legends ??= {})[c.speciesId] = { ...(meta.legends[c.speciesId] ?? { hp: 1 }), caught: true };
@@ -1794,6 +1831,9 @@ export function clearFloor(run: Run): boolean {
     saveMeta(meta);
     for (const c of allCreatures(run)) restoreUses(c);
     nextHuntFloor(run);
+    floorBoons(run);
+    // The Gilded Hunt: a boon offer every second floor.
+    if (run.hunt.depth % 2 === 0) openOffer(run, `hunt${run.hunt.depth}`);
     return false;
   }
   if (run.floor === FLOORS - 1) {
@@ -1832,7 +1872,23 @@ export function clearFloor(run: Run): boolean {
   run.bossPending = false;
   placeRoamer(run);
   placeRival(run);
+  floorBoons(run);
+  // A boon after each guardian, before the next floor.
+  openOffer(run, `guardian${run.floor}`);
   return false;
+}
+
+/** Pathfinder: an extra treasure hex on each floor (picked by a hash, like Revival). */
+export function floorBoons(run: Run) {
+  if (!hasBoon(run, 'pathfinder')) return;
+  const spots = Object.values(run.map.nodes)
+    .filter((n) => n.kind === 'battle' && !run.visited.includes(n.id) && n.id !== run.roamer?.node && n.id !== run.rival?.node)
+    .map((n) => n.id)
+    .sort();
+  if (!spots.length || Object.values(run.map.nodes).some((n) => n.pathfinder)) return;
+  const node = run.map.nodes[spots[hashString(`${run.seed}:${run.floor}:pathfinder`) % spots.length]];
+  node.kind = 'treasure';
+  node.pathfinder = true;
 }
 
 // ---------------------------------------------------------------- your rival

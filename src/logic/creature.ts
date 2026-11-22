@@ -51,6 +51,8 @@ export interface Creature {
   nature?: import('../data/natures').NatureId;
   /** Battles won with you this run (bond hearts, see data/natures). */
   bond?: number;
+  /** Max HP lost to boons (Pact, Fragile): a share, 0..0.6. */
+  hpCut?: number;
   /** Its trait (2.0): rolled when it's created and kept through evolution (see data/traits). */
   trait?: import('../data/traits').TraitId;
 }
@@ -445,7 +447,8 @@ export function stats(c: Creature): Stats {
   const lv = levelFactor(c.level);
   const n = (k: keyof Stats) => natureMult(c.nature, k);
   return {
-    hp: Math.round((b.hp * 1.2 + 20) * lv * mult * n('hp')),
+    // Pact and Fragile (boons) cut max HP for the rest of the run.
+    hp: Math.max(1, Math.round((b.hp * 1.2 + 20) * lv * mult * n('hp') * (1 - (c.hpCut ?? 0)))),
     atk: Math.round(b.atk * lv * mult * n('atk')),
     def: Math.round(b.def * lv * mult * n('def')),
     spd: Math.round(b.spd * lv * mult * n('spd')),
@@ -471,8 +474,9 @@ export function spendUse(slot: MoveSlot) {
 }
 
 /** Restore move uses: all of them, or `frac` of each move's maximum (rounded up). */
-export function restoreUses(c: Creature, frac = 1) {
+export function restoreUses(c: Creature, frac = 1, only?: string) {
   for (const m of c.moves) {
+    if (only && m.id !== only) continue;
     const max = maxUses(MOVES[m.id]);
     if (max === null || !m.used) continue;
     m.used = frac >= 1 ? 0 : Math.max(0, m.used - Math.ceil(max * frac));

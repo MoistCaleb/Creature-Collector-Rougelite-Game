@@ -38,6 +38,11 @@ export interface Combatant {
   willUsed?: boolean;
   /** Avenger: the turn it's fired up for (the one after an ally fainted). */
   avenge?: number;
+  /** Boons: Bedrock's first hit taken, Phantom Step used, Rampage knockouts, Forged's Defense gained. */
+  bedrock?: boolean;
+  phantom?: boolean;
+  rampage?: number;
+  forged?: number;
 }
 
 /** Element Touch: the status each element's hits can cause. */
@@ -93,7 +98,9 @@ export type BattleEvent =
   /** A team effect went up (or wore off) on a side. */
   | { kind: 'team'; side: Side; fx: TeamFxId; on: boolean }
   /** The weather changed (null: it cleared). */
-  | { kind: 'weather'; id: WeatherId | null };
+  | { kind: 'weather'; id: WeatherId | null }
+  /** A boon kicked in (2.0): the screen shows a callout. */
+  | { kind: 'boon'; side: Side; id: string };
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
@@ -247,6 +254,12 @@ export class Battle {
       reserve?: Creature[];
       /** Runs: your Hexlings' bond hearts can let them hang on at 1 HP. */
       bond?: boolean;
+      /** Boons (2.0) on each side (runs: yours; duels: both people's). */
+      boons?: { player: string[]; enemy: string[] };
+      /** Coins you hold (Hoard). */
+      coins?: number;
+      /** Second Wind: asked when one of yours would faint; true if it's still unused this floor. */
+      secondWind?: () => boolean;
     } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
@@ -272,7 +285,18 @@ export class Battle {
     this.eActive = Math.max(0, this.enemy.findIndex((e) => isAlive(e.c)));
     if (this.player[this.pActive]) this.fought.add(this.player[this.pActive].c.uid);
     this.rng = rng;
+    this.boonSets = { player: new Set(opts.boons?.player ?? []), enemy: new Set(opts.boons?.enemy ?? []) };
+    this.coins = opts.coins ?? 0;
+    this.windAsk = opts.secondWind ?? null;
   }
+
+  // Boons (2.0).
+  private boonSets: Record<Side, Set<string>>;
+  private coins: number;
+  private windAsk: (() => boolean) | null;
+  private windUsed: Record<Side, boolean> = { player: false, enemy: false };
+  private firstMoved: Record<Side, boolean> = { player: false, enemy: false };
+  private nightfallNext: Record<Side, boolean> = { player: false, enemy: false };
 
   /** The battle's in-progress state (stat stages, who's out, potions left...), for saving. */
   saveState(): BattleState {
@@ -329,12 +353,22 @@ export class Battle {
     const ev: BattleEvent[] = [];
     if (this.enemy[this.eActive]) this.onEnter('enemy', ev);
     if (this.player[this.pActive]) this.onEnter('player', ev, resuming);
+    // Plague Bearer: the foe's first Hexling starts poisoned.
+    if (!resuming)
+      for (const side of ['player', 'enemy'] as const) {
+        const foe = side === 'player' ? this.e : this.p;
+        if (this.hb(side, 'plaguebearer') && foe && isAlive(foe.c) && !foe.status) {
+          this.boonCall(side, 'plaguebearer', ev);
+          this.inflict(foe, side === 'player' ? 'enemy' : 'player', 'poison', ev, 'Plague Bearer: ', { x: side === 'player' ? this.p : this.e, side });
+        }
+      }
     return ev;
   }
 
   /** Boss rules that trigger when a creature enters battle. */
   private onEnter(side: Side, ev: BattleEvent[], skipHpCost = false) {
     this.traitsOnEnter(side, ev, skipHpCost);
+    this.boonsOnEnter(side, ev, skipHpCost);
     if (!this.rules.length) return;
     const x = side === 'player' ? this.p : this.e;
     if (!isAlive(x.c)) return;
@@ -452,14 +486,15 @@ export class Battle {
       ev.push({ kind: 'swap', side: 'player', index: action.index, hp: this.p.c.hp });
       ev.push({ kind: 'text', text: `Go, ${creatureName(this.p.c)}!` });
       this.onEnter('player', ev);
+      this.benchPress('player', ev);
       if (isAlive(this.p.c) && enemyMove) this.useMove('enemy', enemyMove, ev);
     } else {
       const enemyAtStart = this.e;
       // A move with no uses left (or index -1) falls back to the creature's basic attack.
       const chosen = this.p.c.moves[action.index];
       const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
-      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p);
-      const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e) || this.slipping(this.e));
+      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p) || this.firstStrike('player');
+      const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e) || this.slipping(this.e) || this.firstStrike('enemy'));
       const playerFirst = pPri !== ePri ? pPri : this.has('tailwind') ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       this.firstSide = order[0];
@@ -533,10 +568,12 @@ export class Battle {
       ev.push({ kind: 'swap', side: 'player', index: pAct.index, hp: this.p.c.hp });
       ev.push({ kind: 'text', text: `${names.player} sends out ${creatureName(this.p.c)}!` });
       this.onEnter('player', ev);
+      this.benchPress('player', ev);
     }
     if (eAct.kind === 'swap' && this.canEnemySwapTo(eAct.index)) {
       ev.push({ kind: 'text', text: `${names.enemy} calls back ${creatureName(this.e.c)}.` });
       this.sendEnemy(eAct.index, ev);
+      this.benchPress('enemy', ev);
     }
     // Potions next (the caller has checked each side still has one).
     const potion = (side: Side, act: PlayerAction) => {
@@ -571,8 +608,8 @@ export class Battle {
     const eAt = this.e;
     let order: Side[] = [];
     if (pSlot && eSlot) {
-      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p);
-      const ePri = !!moveDef(eSlot).priority || this.clawProc(this.e) || this.slipping(this.e);
+      const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p) || this.firstStrike('player');
+      const ePri = !!moveDef(eSlot).priority || this.clawProc(this.e) || this.slipping(this.e) || this.firstStrike('enemy');
       order = (pPri !== ePri ? pPri : this.playerGoesFirst()) ? ['player', 'enemy'] : ['enemy', 'player'];
       this.firstSide = order[0];
     } else if (pSlot) order = ['player'];
@@ -690,6 +727,14 @@ export class Battle {
 
   /** Unshakable: foes can't lower its Attack (final form: any stat). */
   private unshaken(x: Combatant, side: Side, stat: StatKey, ev: BattleEvent[]): boolean {
+    // Rootbound and Halo (boons): Nature / Light Hexlings' stats can't be lowered.
+    const t = creatureTypes(x.c);
+    for (const [id, el] of [['rootbound', 'Nature'], ['halo', 'Light']] as const)
+      if (this.hb(side, id) && t.includes(el)) {
+        this.boonCall(side, id, ev);
+        ev.push({ kind: 'text', text: `${this.label(x)}'s ${STAT_LABEL[stat]} won't drop!` });
+        return true;
+      }
     if (!this.is(x, 'unshakable') || (this.tv(x, 'unshakable') < 2 && stat !== 'atk')) return false;
     ev.push({ kind: 'text', text: `${this.traitName(x, side)}: its ${STAT_LABEL[stat]} won't drop!` });
     return true;
@@ -787,7 +832,7 @@ export class Battle {
     const uname = this.traitName(user, side);
     if (ut && isAlive(user.c)) {
       const v = this.tv(user, ut);
-      if (ut === 'leech' && total > 0 && user.c.hp < umax) {
+      if (ut === 'leech' && total > 0 && user.c.hp < umax && !this.scorched(user)) {
         user.c.hp = Math.min(umax, user.c.hp + Math.ceil(total * v));
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: it drinks in the damage.` });
@@ -865,7 +910,7 @@ export class Battle {
       const v = this.tv(x, t);
       const max = stats(x.c).hp;
       const who = this.traitName(x, side);
-      if (t === 'rooted' && x.c.hp < max) {
+      if (t === 'rooted' && x.c.hp < max && !this.scorched(x)) {
         x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * v));
         ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
         ev.push({ kind: 'text', text: `${who}: it draws strength from its roots.` });
@@ -876,6 +921,213 @@ export class Battle {
         if (x.c.stage >= 2) this.bump(x, side, 'def', 1, ev);
       }
       if (t === 'purifier' && x.status && this.rng.chance(v)) this.cure(x, side, ev);
+    }
+  }
+
+  // ------------------------------------------------------------ boons (2.0)
+
+  /** Does this side hold the boon? */
+  private hb(side: Side, id: string): boolean {
+    return this.boonSets[side].has(id);
+  }
+
+  /** A boon kicked in: the screen shows a callout. */
+  private boonCall(side: Side, id: string, ev: BattleEvent[]) {
+    ev.push({ kind: 'boon', side, id });
+  }
+
+  private sideOfC(x: Combatant): Side {
+    return this.player.includes(x) ? 'player' : 'enemy';
+  }
+
+  /** Wildfire: burned foes can't heal. */
+  private scorched(x: Combatant): boolean {
+    return x.status === 'burn' && this.hb(this.sideOfC(x) === 'player' ? 'enemy' : 'player', 'wildfire');
+  }
+
+  /** First Strike: you move first on the first turn. */
+  private firstStrike(side: Side): boolean {
+    return this.turnNo === 1 && this.hb(side, 'firststrike');
+  }
+
+  /** Stat multipliers from boons (Attack goes into damage, Defense out of it, Speed into speedOf). */
+  private boonStat(x: Combatant, stat: 'atk' | 'def' | 'spd'): number {
+    const side = this.sideOfC(x);
+    if (!this.boonSets[side].size) return 1;
+    const t = creatureTypes(x.c);
+    const team = side === 'player' ? this.player : this.enemy;
+    const active = side === 'player' ? this.p : this.e;
+    let m = 1;
+    if (stat === 'spd' && this.hb(side, 'tailwind') && t.includes('Storm')) m *= 1.2;
+    if (stat === 'atk' && this.hb(side, 'glassmenagerie')) m *= 1.4;
+    if (stat === 'atk' && this.hb(side, 'shortfuse')) m *= 1.25;
+    if (this.hb(side, 'dragonpride') && creatureTypes(active.c).includes('Dragon')) m *= 1.15;
+    if (this.hb(side, 'rainbowsquad')) {
+      const els = new Set(team.map((y) => creatureTypes(y.c)[0]));
+      if (els.size >= 4) m *= 1.2;
+    }
+    if (this.hb(side, 'lonechampion') && x === active) {
+      const slots = this.hb(side, 'glassmenagerie') ? 3 : 4;
+      const down = slots - team.filter((y) => isAlive(y.c)).length;
+      m *= 1 + 0.1 * Math.max(0, down);
+    }
+    return m;
+  }
+
+  /** Damage from boons, the attacker's side's and the defender's. */
+  private boonMult(user: Combatant, target: Combatant, el: Element, side: Side, rmult: number, firstMove: boolean): number {
+    const ts: Side = side === 'player' ? 'enemy' : 'player';
+    if (!this.boonSets[side].size && !this.boonSets[ts].size) return 1;
+    let m = this.boonStat(user, 'atk') / this.boonStat(target, 'def');
+    const ut = creatureTypes(user.c);
+    const tt = creatureTypes(target.c);
+    if (this.hb(side, 'kindling') && el === 'Fire' && target.status === 'burn') m *= 1.2;
+    if (this.hb(side, 'permafrost') && target.status === 'freeze') m *= 1.25;
+    if (this.hb(side, 'venomsac') && ut.includes('Toxic') && target.status === 'poison') m *= 1.25;
+    if (this.hb(side, 'ambush') && firstMove) m *= 1.5;
+    if (this.hb(side, 'hoard') && el === 'Dragon' && side === 'player') m *= 1 + Math.min(0.25, 0.05 * Math.floor(this.coins / 100));
+    if (this.hb(side, 'riptide') && el === 'Water' && this.speedOf(target) > this.speedOf(user)) m *= 1.3;
+    if (this.hb(side, 'packtactics')) {
+      const mates = (side === 'player' ? this.player : this.enemy).filter((y) => y !== user && creatureTypes(y.c).some((e) => ut.includes(e))).length;
+      m *= 1 + 0.08 * mates;
+    }
+    if (this.hb(side, 'opportunist') && target.status) m *= 1.3;
+    if (this.hb(side, 'rampage')) m *= 1 + 0.15 * (user.rampage ?? 0);
+    // Fault Line: Earth moves ignore the foe's Defense boosts.
+    if (this.hb(side, 'quake') && el === 'Earth' && target.defStage > 0) m *= stageMult(target.defStage);
+    if (this.hb(ts, 'emberheart') && tt.includes('Fire') && el === 'Water') m *= 0.75;
+    if (this.hb(ts, 'hailguard') && tt.includes('Frost') && this.speedOf(user) < this.speedOf(target)) m *= 0.8;
+    if (this.hb(ts, 'dread') && tt.includes('Shadow')) m *= 0.85;
+    if (this.hb(ts, 'halo') && tt.includes('Light')) m *= 0.85;
+    if (this.hb(ts, 'bedrock') && !target.bedrock) {
+      target.bedrock = true;
+      m *= 0.5;
+    }
+    void rmult;
+    return m;
+  }
+
+  /** Phantom Step: your Spirit Hexlings dodge the first attack aimed at each of them. */
+  private phantomStep(x: Combatant, side: Side, ev: BattleEvent[]): boolean {
+    if (!this.hb(side, 'phantomstep') || x.phantom || !creatureTypes(x.c).includes('Spirit')) return false;
+    x.phantom = true;
+    this.boonCall(side, 'phantomstep', ev);
+    ev.push({ kind: 'text', text: `${this.label(x)} steps aside like a ghost!` });
+    return true;
+  }
+
+  private boonsOnEnter(side: Side, ev: BattleEvent[], resuming: boolean) {
+    const x = side === 'player' ? this.p : this.e;
+    if (!x || !isAlive(x.c) || resuming) return;
+    if (this.hb(side, 'glacier') && creatureTypes(x.c).includes('Frost')) {
+      this.boonCall(side, 'glacier', ev);
+      this.bump(x, side, 'def', 2, ev);
+    }
+    if (this.nightfallNext[side]) {
+      this.nightfallNext[side] = false;
+      this.boonCall(side, 'nightfall', ev);
+      this.bump(x, side, 'spd', 1, ev);
+    }
+  }
+
+  /** Bench Press: Hexlings you switch in enter at +1 Attack. */
+  private benchPress(side: Side, ev: BattleEvent[]) {
+    const x = side === 'player' ? this.p : this.e;
+    if (!this.hb(side, 'benchpress') || !isAlive(x.c)) return;
+    this.boonCall(side, 'benchpress', ev);
+    this.bump(x, side, 'atk', 1, ev);
+  }
+
+  private boonsAfterHit(user: Combatant, side: Side, target: Combatant, targetSide: Side, el: Element, total: number, slot: MoveSlot, ev: BattleEvent[]) {
+    // Extra statuses from boons (one roll per move).
+    if (isAlive(target.c) && !target.status) {
+      const extra: [string, Element, StatusId, number][] = [
+        ['kindling', 'Fire', 'burn', 0.2],
+        ['contagion', 'Toxic', 'poison', 0.25],
+        ['possession', 'Spirit', 'confuse', 0.25],
+      ];
+      for (const [id, e, st, ch] of extra)
+        if (this.hb(side, id) && el === e && !target.status && this.rng.chance(ch) && this.inflict(target, targetSide, st, ev, '', { x: user, side })) this.boonCall(side, id, ev);
+    }
+    if (isAlive(target.c)) {
+      if (this.hb(side, 'brittle') && el === 'Frost' && this.rng.chance(0.3)) {
+        this.boonCall(side, 'brittle', ev);
+        this.bump(target, targetSide, 'def', -1, ev, true);
+      }
+      if (this.hb(side, 'undertow') && el === 'Water') this.bump(target, targetSide, 'spd', -1, ev, true);
+    }
+    const tt = creatureTypes(target.c);
+    if (isAlive(user.c) && total > 0) {
+      if (this.hb(targetSide, 'staticfield') && tt.includes('Storm') && !user.status && this.rng.chance(0.2) && this.inflict(user, side, 'para', ev, 'Static Field: ')) this.boonCall(targetSide, 'staticfield', ev);
+      if (this.hb(targetSide, 'ironclad') && tt.includes('Metal')) {
+        const umax = stats(user.c).hp;
+        const back = this.hurt(user, Math.max(1, Math.round(total * 0.15)));
+        this.boonCall(targetSide, 'ironclad', ev);
+        ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: umax, amount: back });
+        ev.push({ kind: 'text', text: `Ironclad sends some of it back at ${this.label(user)}!` });
+      }
+    }
+    // A knockout.
+    if (!isAlive(target.c) && isAlive(user.c)) {
+      user.rampage = (user.rampage ?? 0) + (this.hb(side, 'rampage') ? 1 : 0);
+      if (this.hb(side, 'overflow')) {
+        if (slot.used) slot.used = Math.max(0, slot.used - 1);
+        this.boonCall(side, 'overflow', ev);
+        this.bump(user, side, 'atk', 1, ev);
+      }
+      if (this.hb(side, 'nightfall') && creatureTypes(user.c).includes('Shadow')) {
+        this.boonCall(side, 'nightfall', ev);
+        this.bump(user, side, 'spd', 1, ev);
+      }
+      if (this.hb(side, 'soullink') && creatureTypes(user.c).includes('Spirit')) {
+        this.boonCall(side, 'soullink', ev);
+        for (const y of side === 'player' ? this.player : this.enemy) {
+          if (!isAlive(y.c)) continue;
+          const max = stats(y.c).hp;
+          y.c.hp = Math.min(max, y.c.hp + Math.ceil(max * 0.1));
+          if (y === user) ev.push({ kind: 'heal', side, hp: y.c.hp, maxHp: max });
+        }
+        ev.push({ kind: 'text', text: 'Soul Link: the team is restored a little!' });
+      }
+    }
+  }
+
+  /** One of this side's Hexlings fainted: Haunting strikes back, Nightfall readies the next one. */
+  private boonsOnFaint(side: Side, ev: BattleEvent[]) {
+    if (this.hb(side, 'nightfall')) this.nightfallNext[side] = true;
+    if (this.hb(side, 'haunting')) {
+      const foeSide: Side = side === 'player' ? 'enemy' : 'player';
+      const foe = foeSide === 'player' ? this.p : this.e;
+      if (foe && isAlive(foe.c)) {
+        const max = stats(foe.c).hp;
+        const dmg = this.hurt(foe, Math.max(1, Math.floor(max * 0.2)));
+        this.boonCall(side, 'haunting', ev);
+        ev.push({ kind: 'damage', side: foeSide, hp: foe.c.hp, maxHp: max, amount: dmg });
+        ev.push({ kind: 'text', text: `Haunting: its spirit strikes ${this.label(foe)}!` });
+        if (!isAlive(foe.c)) this.handleFaint(foeSide, ev);
+      }
+    }
+  }
+
+  /** End of turn: Overgrowth heals Nature Hexlings; Forged hardens Metal ones. */
+  private boonsEndOfTurn(ev: BattleEvent[]) {
+    const out = this.outcome();
+    if (out === 'win' || out === 'lose' || this.spared) return;
+    for (const side of ['player', 'enemy'] as const) {
+      const x = side === 'player' ? this.p : this.e;
+      if (!x || !isAlive(x.c)) continue;
+      const t = creatureTypes(x.c);
+      const max = stats(x.c).hp;
+      if (this.hb(side, 'overgrowth') && t.includes('Nature') && x.c.hp < max && !this.scorched(x)) {
+        x.c.hp = Math.min(max, x.c.hp + Math.ceil(max / 16));
+        ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
+        ev.push({ kind: 'text', text: `Overgrowth: ${this.label(x)} grows back a little.` });
+      }
+      if (this.hb(side, 'forged') && t.includes('Metal') && (x.forged ?? 0) < 3 && x.defStage < MAX_STAGE) {
+        x.forged = (x.forged ?? 0) + 1;
+        this.boonCall(side, 'forged', ev);
+        this.bump(x, side, 'def', 1, ev);
+      }
     }
   }
 
@@ -1003,6 +1255,10 @@ export class Battle {
     if (plan.kind === 'potion') {
       const x = this.e;
       this.tactics!.potions--;
+      if (this.scorched(x)) {
+        ev.push({ kind: 'text', text: `${who} uses a Potion, but Wildfire's burn won't let ${creatureName(x.c)} heal!` });
+        return;
+      }
       const max = stats(x.c).hp;
       const hurt = x.c.hp < max;
       x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * 0.5));
@@ -1029,7 +1285,7 @@ export class Battle {
   /** A combatant's speed right now: stages, synergy, Swift Scarf, paralysis and Speed Boost. */
   speedOf(x: Combatant): number {
     const wind = this.hasFx(this.sideOf(x), 'tailwind') ? 1.5 : 1;
-    return stats(x.c).spd * (x.syn?.spd ?? 1) * stageMult(x.spdStage) * (x.c.held === 'scarf' ? 1.25 : 1) * (x.status === 'para' ? 0.5 : 1) * wind * this.traitSpeed(x);
+    return stats(x.c).spd * (x.syn?.spd ?? 1) * stageMult(x.spdStage) * (x.c.held === 'scarf' ? 1.25 : 1) * (x.status === 'para' ? 0.5 : 1) * wind * this.traitSpeed(x) * this.boonStat(x, 'spd');
   }
 
   private playerGoesFirst(): boolean {
@@ -1250,10 +1506,19 @@ export class Battle {
     if (!isAlive(x.c) || x.status) return false;
     if (this.hasFx(this.sideOf(x), 'ward')) return false;
     const def = STATUS[id];
-    if (creatureTypes(x.c).some((t) => def.immune.includes(t))) return false;
+    // Contagion (a boon): your poison reaches Metal Hexlings too.
+    const contagion = id === 'poison' && from && this.hb(from.side, 'contagion');
+    if (creatureTypes(x.c).some((t) => def.immune.includes(t) && !(contagion && t === 'Metal'))) return false;
     if (side === 'player' && this.playerImmune.includes(id)) return false;
+    // Ember Heart: your Fire Hexlings can't be frozen.
+    if (id === 'freeze' && this.hb(side, 'emberheart') && creatureTypes(x.c).includes('Fire')) return false;
     x.status = id;
     x.statusTurns = this.rng.int(def.turns[0], def.turns[1]);
+    // Boons that make the statuses you cause last longer.
+    if (from) {
+      const fs = from.side;
+      x.statusTurns += (this.hb(fs, 'lingering') ? 2 : 0) + (id === 'burn' && this.hb(fs, 'wildfire') ? 2 : 0) + (id === 'freeze' && this.hb(fs, 'permafrost') ? 1 : 0);
+    }
     // Resilient: statuses on it don't last as long.
     if (this.is(x, 'resilient')) x.statusTurns = Math.max(1, Math.round(x.statusTurns * this.tv(x, 'resilient')));
     ev.push({ kind: 'status', side, status: id });
@@ -1329,7 +1594,7 @@ export class Battle {
     if (def.protect) return this.useBulwark(side, user, slot.tier, ev);
     user.guardStreak = 0;
     // The foe's Bulwark stops attacks and stat-lowering moves cold.
-    if (target.guarded && (def.kind === 'attack' || def.kind === 'debuff')) {
+    if (target.guarded && (def.kind === 'attack' || def.kind === 'debuff') && !(def.element === 'Earth' && this.hb(side, 'quake'))) {
       ev.push({ kind: 'text', text: `${this.nameOf(targetSide, target.c)} blocked it behind its Bulwark!` });
       return;
     }
@@ -1357,6 +1622,7 @@ export class Battle {
     }
     if (def.team) return this.useTeamMove(side, def, slot.tier, ev);
     if (def.kind !== 'attack') {
+      this.firstMoved[side] = true;
       this.applyStatus(side, slot, ev);
       if (def.status && def.kind === 'debuff' && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
         this.inflict(target, targetSide, def.status.id, ev, '', { x: user, side });
@@ -1370,9 +1636,15 @@ export class Battle {
       const tt = creatureTypes(target.c);
       for (const e of ELEMENTS) if (typeMultiplier(e, tt) > typeMultiplier(el, tt)) el = e;
     }
-    // Absorbers turn a hit of their element into healing; Ethereal slips through a hit.
-    if (this.absorbs(target, targetSide, el, ev) || this.slipsThrough(target, targetSide, ev)) {
+    // Elemental Fusion: the best of the move's element and the user's own.
+    if (this.hb(side, 'fusion')) {
+      const tt = creatureTypes(target.c);
+      for (const e of creatureTypes(user.c)) if (typeMultiplier(e, tt) > typeMultiplier(el, tt)) el = e;
+    }
+    // Absorbers turn a hit of their element into healing; Ethereal and Phantom Step slip a hit.
+    if (this.absorbs(target, targetSide, el, ev) || this.slipsThrough(target, targetSide, ev) || this.phantomStep(target, targetSide, ev)) {
       user.eagerUsed = true;
+      this.firstMoved[side] = true;
       return;
     }
     let powerMult = def.execute && target.c.hp < stats(target.c).hp / 2 ? 2 : 1;
@@ -1381,6 +1653,16 @@ export class Battle {
     if (def.speedPower) powerMult *= this.speedFactor(def, user, target);
     let hits = def.hits ?? 1;
     if (slot.tier >= 3 && def.element === 'Storm' && this.rng.chance(0.35)) hits += 1;
+    // Echo: your first move each battle hits twice. Chain Lightning: Storm moves now and then too.
+    if (this.hb(side, 'echo') && !this.firstMoved[side]) {
+      hits += 1;
+      this.boonCall(side, 'echo', ev);
+    }
+    if (this.hb(side, 'chainlightning') && el === 'Storm' && this.rng.chance(0.2)) {
+      hits += 1;
+      this.boonCall(side, 'chainlightning', ev);
+    }
+    const firstMove = !this.firstMoved[side];
     let total = 0;
     let landed = 0;
     let superHit = false;
@@ -1389,6 +1671,7 @@ export class Battle {
       if (h === 0) superHit = r.mult > 1.01;
       const fxMult =
         this.traitMult(user, target, def, el, powerMult, side, r.mult) *
+        this.boonMult(user, target, el, side, r.mult, firstMove) *
         (this.hasFx(side, 'rally') ? 1.25 : 1) *
         (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
         weatherMult(this.weather, el) *
@@ -1416,7 +1699,10 @@ export class Battle {
     }
     if (landed > 1) ev.push({ kind: 'text', text: `Hit ${landed} times!` });
     user.eagerUsed = true;
+    if (firstMove && this.hb(side, 'ambush') && landed > 0) this.boonCall(side, 'ambush', ev);
+    this.firstMoved[side] = true;
     if (landed > 0) this.traitsAfterHit(user, side, target, targetSide, el, total, superHit, ev);
+    if (landed > 0) this.boonsAfterHit(user, side, target, targetSide, el, total, slot, ev);
 
     const userMax = stats(user.c).hp;
     // Second Wind: a guardian's Hexling dropping below a third heals once.
@@ -1445,7 +1731,7 @@ export class Battle {
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
       ev.push({ kind: 'text', text: `${who}'s Vampire Fang drinks deep.` });
     }
-    if (def.drain && isAlive(user.c)) {
+    if (def.drain && isAlive(user.c) && !this.scorched(user)) {
       user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * def.drain));
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
       ev.push({ kind: 'text', text: `${who} drained energy!` });
@@ -1548,6 +1834,7 @@ export class Battle {
     const c = side === 'player' ? this.p.c : this.e.c;
     // Avenger: its teammates are fired up next turn.
     for (const x of side === 'player' ? this.player : this.enemy) x.avenge = this.turnNo + 1;
+    this.boonsOnFaint(side, ev);
     c.status = undefined;
     ev.push({ kind: 'faint', side, index: idx });
     ev.push({
@@ -1610,6 +1897,16 @@ export class Battle {
         return before - 1;
       }
     }
+    // Second Wind (a mythic boon): once a floor, a Hexling that would faint comes back at 30%.
+    if (foeHit && dmg >= before && floor === 0) {
+      const side: Side = this.player.includes(x) ? 'player' : 'enemy';
+      if (this.hb(side, 'secondwind') && !this.windUsed[side] && (side !== 'player' || !this.windAsk || this.windAsk())) {
+        this.windUsed[side] = true;
+        x.c.hp = Math.max(1, Math.round(stats(x.c).hp * 0.3));
+        this.pendingWind = side;
+        return Math.max(0, before - x.c.hp);
+      }
+    }
     x.c.hp = Math.max(floor, x.c.hp - dmg);
     if (isLastEnemy && x.c.hp === 1 && before - dmg <= 0) this.spared = true;
     return before - x.c.hp;
@@ -1633,7 +1930,9 @@ export class Battle {
       if (!isAlive(x.c) || !x.status) continue;
       if (x.status === 'burn' || x.status === 'poison') {
         const max = stats(x.c).hp;
-        const dmg = this.hurt(x, Math.max(1, Math.floor(max / (x.status === 'burn' ? 12 : 8))));
+        // Virulence (a boon): the other side's poison hurts twice as much.
+        const vir = x.status === 'poison' && this.hb(side === 'player' ? 'enemy' : 'player', 'virulence') ? 2 : 1;
+        const dmg = this.hurt(x, Math.max(1, Math.floor((max / (x.status === 'burn' ? 12 : 8)) * vir)));
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
         ev.push({ kind: 'text', text: `${this.label(x)} is hurt by its ${x.status === 'burn' ? 'burn' : 'poison'}!` });
         this.sashNote(x, ev);
@@ -1646,6 +1945,7 @@ export class Battle {
       if ((x.status === 'burn' || x.status === 'poison' || x.status === 'para') && --x.statusTurns <= 0) this.cure(x, side, ev);
     }
     this.traitsEndOfTurn(ev);
+    this.boonsEndOfTurn(ev);
     this.sidelines(ev);
   }
 
@@ -1669,7 +1969,15 @@ export class Battle {
     }
   }
 
+  private pendingWind: Side | null = null;
+
   private sashNote(x: Combatant, ev: BattleEvent[]) {
+    if (this.pendingWind) {
+      const side = this.pendingWind;
+      this.pendingWind = null;
+      this.boonCall(side, 'secondwind', ev);
+      ev.push({ kind: 'text', text: `Second Wind! ${this.label(x)} gets back up!` });
+    }
     if (x.endured === 'fired') {
       x.endured = 'spent';
       ev.push({ kind: 'text', text: `${this.label(x)} hung on with its ${TRAITS[traitOf(x.c)!].name}!` });
@@ -1688,7 +1996,7 @@ export class Battle {
     for (const side of ['player', 'enemy'] as const) {
       const x = side === 'player' ? this.p : this.e;
       const max = stats(x.c).hp;
-      if (x.c.held !== 'berry' || !isAlive(x.c) || x.c.hp >= max) continue;
+      if (x.c.held !== 'berry' || !isAlive(x.c) || x.c.hp >= max || this.scorched(x)) continue;
       x.c.hp = Math.min(max, x.c.hp + Math.ceil(max / 12));
       ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
       ev.push({ kind: 'text', text: `${this.nameOf(side, x.c)} snacks on a berry.` });
@@ -1761,6 +2069,7 @@ function fresh(c: Creature): Combatant {
 }
 
 function resetStages(x: Combatant) {
+  x.rampage = 0;
   x.atkStage = 0;
   x.defStage = 0;
   x.spdStage = 0;

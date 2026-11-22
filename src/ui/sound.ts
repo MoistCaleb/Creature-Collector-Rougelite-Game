@@ -452,6 +452,28 @@ export const sfx = {
     tone(1568, 0.18, { type: 'triangle', vol: 0.09, slide: 3136 });
     tone(2093, 0.14, { type: 'sine', vol: 0.06, delay: 0.05 });
   },
+  /** Boons (2.0): an offer appears, a soft rising shimmer. */
+  boonOffer() {
+    [0, 7, 12, 16].forEach((st, i) => tone(note(st, 659), 0.22, { type: 'triangle', vol: 0.09, delay: i * 0.07 }));
+    noise(0.6, { freq: 7000, to: 2500, vol: 0.05, type: 'highpass', delay: 0.05 });
+  },
+  /** A boon is taken: brighter and longer for rare and mythic ones. */
+  boonPick(rarity: 'common' | 'rare' | 'mythic' | 'curse') {
+    if (rarity === 'curse') {
+      [0, -1, -5, -6].forEach((st, i) => tone(note(st, 220), 0.35, { type: 'sawtooth', vol: 0.07, delay: i * 0.09 }));
+      noise(0.7, { freq: 400, to: 120, vol: 0.12, delay: 0.1 });
+      return;
+    }
+    const steps = rarity === 'mythic' ? [0, 4, 7, 12, 16, 19, 24] : rarity === 'rare' ? [0, 4, 7, 12, 16] : [0, 4, 7, 12];
+    steps.forEach((st, i) => tone(note(st, 523), 0.16, { type: 'triangle', vol: 0.12, delay: i * 0.05 }));
+    tone(note(steps[steps.length - 1] + 12, 523), rarity === 'mythic' ? 1 : 0.5, { type: 'sine', vol: 0.07, delay: steps.length * 0.05, attack: 0.02 });
+    if (rarity !== 'common') noise(0.8, { freq: 9000, to: 3500, vol: 0.08, type: 'highpass', delay: 0.1 });
+  },
+  /** A boon kicks in during battle: a quick bright chime under its callout. */
+  boonFire() {
+    tone(1319, 0.12, { type: 'triangle', vol: 0.08 });
+    tone(1976, 0.16, { type: 'sine', vol: 0.06, delay: 0.05 });
+  },
   /** A shiny's hit lands: a bright ping on top of the normal hit. */
   shinyHit() {
     tone(2637, 0.22, { type: 'sine', vol: 0.08 });

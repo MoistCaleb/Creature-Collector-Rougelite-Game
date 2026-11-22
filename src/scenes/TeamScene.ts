@@ -1,3 +1,4 @@
+import { teamMax } from '../logic/boons';
 import { traitTag } from '../ui/traitText';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
 import Phaser from 'phaser';
@@ -8,7 +9,7 @@ import { usesLeft, evolveLevel, readyToEvolve, BANK_LEVELS, bankedLevels, floorC
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { allCreatures, BENCH_MAX, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, releaseNote, TEAM_MAX, unclaimedTypes, unequipHeld } from '../logic/run';
+import { allCreatures, BENCH_MAX, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, releaseNote, unclaimedTypes, unequipHeld } from '../logic/run';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
 import { dex, persist, state } from '../state';
@@ -68,10 +69,10 @@ export class TeamScene extends Phaser.Scene {
     // Upright: team then bench, details at the bottom. Sideways: team, bench and details in three columns.
     const rowW = LANDSCAPE ? 256 : W - 32;
     const benchX = LANDSCAPE ? 280 : 16;
-    text(this, 16, 70, `Main team  ${run.team.length}/${TEAM_MAX}`, 15, COLORS.text);
+    text(this, 16, 70, `Main team  ${run.team.length}/${teamMax(run)}`, 15, COLORS.text);
     if (Number.isFinite(getFloorCeiling())) text(this, LANDSCAPE ? 530 : W - 16, 72, `Floor level cap: ${getFloorCeiling()}`, 12, '#c9a3dd').setOrigin(1, 0);
     run.team.forEach((c, i) => this.row(16, 90 + i * 68, rowW, c, { list: 'team', i }));
-    const benchY = LANDSCAPE ? 70 : 90 + TEAM_MAX * 68 + 6;
+    const benchY = LANDSCAPE ? 70 : 90 + teamMax(run) * 68 + 6;
     text(this, benchX, benchY, LANDSCAPE ? `Bench  ${run.bench.length}/${BENCH_MAX}` : `Bench  ${run.bench.length}/${BENCH_MAX}  (second life + prestige fuel)`, 15, COLORS.text);
     run.bench.forEach((c, i) => this.row(benchX, benchY + 20 + i * 68, rowW, c, { list: 'bench', i }));
     if (this.ordering) {
@@ -81,7 +82,7 @@ export class TeamScene extends Phaser.Scene {
         : 'Tap a Hexling, then tap another to swap their places (team \u2194 bench too).';
       if (LANDSCAPE) text(this, 552, 90, `Ordering\n\n${msg}\n\nTap Done ordering when finished.`, 13, '#ffc94d', { wordWrap: { width: 232 }, lineSpacing: 3 });
       else {
-        const y = 90 + TEAM_MAX * 68 + 26 + BENCH_MAX * 68 + 8;
+        const y = 90 + teamMax(run) * 68 + 26 + BENCH_MAX * 68 + 8;
         text(this, W / 2, Math.min(y, H - 40), msg, 14, '#ffc94d', { wordWrap: { width: W - 40 }, align: 'center' }).setOrigin(0.5, 0);
       }
       return;
@@ -223,7 +224,7 @@ export class TeamScene extends Phaser.Scene {
       { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a, glyph: 'stone' },
     );
     const ref = this.selected!;
-    const canMove = ref.list === 'team' ? run.bench.length < BENCH_MAX && run.team.length > 1 : run.team.length < TEAM_MAX;
+    const canMove = ref.list === 'team' ? run.bench.length < BENCH_MAX && run.team.length > 1 : run.team.length < teamMax(run);
     const b1 = slot(1, 166, 104);
     button(
       this,

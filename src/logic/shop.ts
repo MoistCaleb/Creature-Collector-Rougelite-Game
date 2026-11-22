@@ -1,3 +1,4 @@
+import { hasBoon, teamMax } from './boons';
 import { rollTrait } from '../data/traits';
 import { BALANCE } from '../data/balance';
 import { HELD, heldName, type HeldId } from '../data/held';
@@ -19,7 +20,7 @@ import {
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, maxPotions, placeRng, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, maxPotions, placeRng, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held' | 'relearn' | 'limit';
 
@@ -92,6 +93,8 @@ export function priceFor(run: Run, base: number): number {
 }
 
 export function rerollPrice(run: Run, shop: Shop): number {
+  // Haggler's Mark (a boon): the first reroll in every shop is free.
+  if (shop.rerolls === 0 && hasBoon(run, 'haggler')) return 0;
   return priceFor(run, 10 + shop.rerolls * 10);
 }
 
@@ -206,7 +209,7 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       return 'Added to your bag. Give it to a Hexling from the Team screen.';
     case 'recruit': {
       const c = slot.recruit!;
-      if (run.team.length < TEAM_MAX) run.team.push(c);
+      if (run.team.length < teamMax(run)) run.team.push(c);
       else if (run.bench.length < BENCH_MAX) run.bench.push(c);
       return `Joined your ${run.team.includes(c) ? 'team' : 'bench'}.`;
     }

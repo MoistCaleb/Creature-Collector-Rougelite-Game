@@ -557,6 +557,7 @@ export const NODE_ICONS: Record<string, IconId> = {
   treasure: 'chest',
   event: 'question',
   revive: 'heart',
+  boon: 'sparkle',
   boss: 'skull',
 };
 

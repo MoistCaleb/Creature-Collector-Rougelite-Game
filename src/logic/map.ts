@@ -1,7 +1,7 @@
 import type { Element } from '../data/types';
 import { Rng } from './rng';
 
-export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boss';
+export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boon' | 'boss';
 
 export interface MapNode {
   id: string;
@@ -13,6 +13,8 @@ export interface MapNode {
   next: string[];
   /** 0 at start, 1 at boss. */
   progress: number;
+  /** A treasure hex added by the Pathfinder boon. */
+  pathfinder?: boolean;
 }
 
 export interface FloorMap {
@@ -179,6 +181,24 @@ function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: num
     if (mid.length) rng.pick(mid).kind = 'shop';
   }
   placeRevival(nodes, floor);
+  placeBoonHex(nodes, floor);
+}
+
+/**
+ * A Boon hex on about one floor in two (2.0), in place of a battle. Like Revival, picked by a hash of
+ * the floor's layout, so the rest of the map is exactly as before.
+ */
+function placeBoonHex(nodes: Record<string, MapNode>, floor: number) {
+  const spots = Object.values(nodes)
+    .filter((n) => n.kind === 'battle' && n.progress > 0.2 && n.progress < 0.9)
+    .map((n) => n.id)
+    .sort();
+  if (!spots.length) return;
+  let h = 2166136261 + floor * 31 + 7;
+  for (const ch of spots.join('|')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  h >>>= 0;
+  if ((h >>> 9) % 2 === 1) return;
+  nodes[spots[h % spots.length]].kind = 'boon';
 }
 
 /**
@@ -224,5 +244,6 @@ export const NODE_INFO: Record<NodeKind, { label: string; color: number; desc: s
   treasure: { label: 'Treasure', color: 0x9c6b2f, desc: 'A chest: coins or an item.' },
   event: { label: 'Event', color: 0x2f6b9c, desc: 'Something unexpected.' },
   revive: { label: 'Revival', color: 0xc0466e, desc: 'Bring back one fallen Hexling at 60% of the level it fell at. One per floor.' },
+  boon: { label: 'Boon', color: 0xa8842a, desc: 'Choose a boon for the rest of the run.' },
   boss: { label: 'Boss', color: 0x5b2c6f, desc: 'Defeat it to clear the floor.' },
 };

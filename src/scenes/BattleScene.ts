@@ -1,3 +1,5 @@
+import { BOON_COLOR, BOONS } from '../data/boons';
+import { floorCurse, hasBoon } from '../logic/boons';
 import { traitLine } from '../ui/traitText';
 import { GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
@@ -80,6 +82,7 @@ import {
   rollHeld,
   stash,
   potionHeal,
+  potionsBlocked,
   notePotion,
   needsPotion,
   earnCoins,
@@ -296,6 +299,16 @@ export class BattleScene extends Phaser.Scene {
       playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
       playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
       reserve: run.bench,
+      // Boons (2.0): yours apply on your side.
+      boons: { player: run.boons?.held ?? [], enemy: [] },
+      coins: run.coins,
+      // Second Wind: once per floor.
+      secondWind: () => {
+        const rb = run.boons;
+        if (!rb || rb.windFloor === run.floor) return false;
+        rb.windFloor = run.floor;
+        return true;
+      },
       // Trainers and guardians switch and use potions (guardians carry more).
       enemyTactics:
         this.kind === 'battle'
@@ -1064,6 +1077,23 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  /** A boon kicked in: a ribbon with its name slides in by that side's panel, with a chime. */
+  private async boonCallout(side: 'player' | 'enemy', id: string) {
+    const b = BOONS[id];
+    if (!b) return;
+    sfx.boonFire();
+    const at = side === 'player' ? L.playerPanel : L.enemyPanel;
+    const y = side === 'player' ? at.y - 30 : at.y + 82;
+    const c = this.add.container(at.x + 135, y).setDepth(40);
+    const label = text(this, 0, 0, `✦ ${b.name}`, 14, '#ffffff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, label.width + 26, 26, BOON_COLOR[b.rarity], 0.95).setStrokeStyle(2, 0xffe9a8);
+    c.add([bg, label]);
+    c.setScale(0.6).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: c, alpha: 0, y: y - 14, delay: 900, duration: 300, onComplete: () => c.destroy() });
+    await this.wait(380);
+  }
+
   private makePanel(x: number, y: number, side: 'player' | 'enemy'): SidePanel {
     const root = this.add.container(x, y);
     // Tap the panel to see this Hexling's stats, stat changes, condition, item and moves.
@@ -1302,7 +1332,8 @@ export class BattleScene extends Phaser.Scene {
     if (!m) {
       const run = state.run!;
       return {
-        left: run.potions ?? 0,
+        // Short Fuse (a curse): no potions this run.
+        left: potionsBlocked(run) ? 0 : (run.potions ?? 0),
         heal: potionHeal(run),
         use: () => {
           run.potions = Math.max(0, (run.potions ?? 0) - 1);
@@ -1522,6 +1553,9 @@ export class BattleScene extends Phaser.Scene {
         case 'weather':
           this.showWeather();
           this.drawTeamFx();
+          break;
+        case 'boon':
+          await this.boonCallout(ev.side, ev.id);
           break;
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
@@ -1764,10 +1798,12 @@ export class BattleScene extends Phaser.Scene {
     const ab = run.activeBattle!;
     // Stage races pay double.
     const raceMult = run.race ? 2 : 1;
-    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult);
+    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult * (floorCurse(run, 'hauntedfloor') ? 1.5 : 1));
     // Lucky: battles it fought in pay more.
     const lucky = teamTrait(run.team.filter((c) => (ab.fought ?? []).includes(c.uid)), 'lucky');
-    const coins = Math.round(battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult * (1 + lucky));
+    // Boons: Prospector pays more; Haunted Floor (a curse) pays and teaches more on its floor.
+    const haunted = floorCurse(run, 'hauntedfloor') ? 1.5 : 1;
+    const coins = Math.round(battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult * (1 + lucky) * (hasBoon(run, 'prospector') ? 1.4 : 1) * haunted);
     sfx.victory();
     this.cheer('player');
     playMusic(null);
@@ -1780,7 +1816,7 @@ export class BattleScene extends Phaser.Scene {
       // Hexlings that fought and are still standing grow closer to you.
       const hearts = growBond(run, ab.fought ?? []);
       const fallen = this.fallenNote() + (hearts.length ? `\n\n${hearts.map((h) => `♥ ${h}`).join('\n')}` : '');
-      postBattleRecover(run);
+      postBattleRecover(run, { won: true, sun: this.battle.weather === 'sun' });
       ab.summary = fallen;
       // Wild creatures sometimes leave an Evolution Stone behind.
       // Drops come from the hex (the same for everyone on a shared seed).
@@ -1847,6 +1883,8 @@ export class BattleScene extends Phaser.Scene {
       this.enemySprite.setAlpha(0.85);
     }
     const full = rosterFull(run);
+    // Exiled (a curse): no catching on this floor.
+    const exiled = floorCurse(run, 'exiled');
     const bonusTag = wild ? { species: ' · +★ first catch!', type: ' · +★ type bonus!', none: '' }[catchBonus(run, wild.speciesId) ?? 'none'] : '';
     // Catches keep their prestige stars (plus the bonus).
     const starTag = wild && catchStars(run, wild) > 0 ? ` · ${'★'.repeat(catchStars(run, wild))}` : '';
@@ -1870,7 +1908,7 @@ export class BattleScene extends Phaser.Scene {
         chosen = true;
         if (!full) return this.doCatch(shinyFirst, fallen);
         this.pickRelease(`Catch ${creatureName(shinyFirst)}`, (out) => this.doCatch(shinyFirst, fallen, out), () => (chosen = false));
-      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'GILDED', sub: `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}` });
+      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'GILDED', sub: exiled ? 'Exiled: no catching this floor' : `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}`, enabled: !exiled });
       this.actions.add(btn);
     }
     if (wild) {
@@ -1888,7 +1926,10 @@ export class BattleScene extends Phaser.Scene {
           color: 0x3a4f7a,
           fontSize: shinyFirst ? 15 : 20,
           glyph: 'crystal',
-          sub: shinyFirst
+          enabled: !exiled,
+          sub: exiled
+            ? 'Exiled: no catching this floor'
+            : shinyFirst
             ? `Lv ${level}${starTag}`
             : full
               ? `Party full: release one to make room · Lv ${level}${starTag}${bonusTag}`
