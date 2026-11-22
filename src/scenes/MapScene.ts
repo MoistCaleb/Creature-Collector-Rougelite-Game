@@ -1,5 +1,5 @@
 import { floorCurse, hasBoon, openOffer, runBoons } from '../logic/boons';
-import { openBoonOffer } from '../ui/boonPick';
+import { openBoonList, openBoonOffer } from '../ui/boonPick';
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
@@ -410,6 +410,7 @@ export class MapScene extends Phaser.Scene {
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 158, 45, 'stone', 16);
     text(this, 170, 36, `${run.evoStones}`, 14, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
+    this.boonChip(204, 45);
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 67, 'skull', 14);
@@ -422,6 +423,16 @@ export class MapScene extends Phaser.Scene {
     const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });
     if ((run.bag ?? []).length) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
     button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
+  }
+
+  /** Boons held: a sparkle and a count; tap for the list. */
+  private boonChip(x: number, y: number) {
+    const run = state.run!;
+    const n = run.boons?.held.length ?? 0;
+    if (!n) return;
+    const ic = pixelIcon(this, x, y, 'sparkle', 16);
+    const t = text(this, x + 11, y - 9, String(n), 14, '#ffe9a8', { fontStyle: 'bold' });
+    for (const o of [ic, t]) o.setInteractive({ useHandCursor: true }).on('pointerup', () => openBoonList(this, run));
   }
 
   /** Sideways: floor, land, coins, stones, steps to the boss and the buttons, in a left column. */
@@ -447,6 +458,7 @@ export class MapScene extends Phaser.Scene {
     text(this, 14, 70, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 100, 80, 'stone', 16);
     text(this, 112, 70, `${run.evoStones}`, 16, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
+    this.boonChip(150, 80);
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 109, 'skull', 14);

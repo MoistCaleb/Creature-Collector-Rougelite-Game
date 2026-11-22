@@ -5,6 +5,7 @@ import type { Run } from '../logic/run';
 import { persist } from '../state';
 import { openPicker, showMessage } from './picker';
 import { sfx } from './sound';
+import { tip, tipDone } from './tips';
 
 const RARITY_LABEL = { common: 'Boon', rare: '◆ Rare boon', mythic: '✦ Mythic boon', curse: '☠ Curse' } as const;
 
@@ -24,6 +25,8 @@ export function openBoonOffer(scene: Phaser.Scene, run: Run, onDone: () => void)
   const rb = runBoons(run);
   const offer = rb.offer;
   if (!offer || !offer.ids.length) return onDone();
+  // The first time: what boons are.
+  if (!tipDone('boon')) return void tip(scene, 'boon', () => openBoonOffer(scene, run, onDone));
   sfx.boonOffer();
   const many = offer.picks > 1;
   const title = offer.mode === 'mythic' ? 'Mythic boon' : offer.mode === 'rare' ? 'Rare boons' : 'Choose a boon';
@@ -47,5 +50,19 @@ export function openBoonOffer(scene: Phaser.Scene, run: Run, onDone: () => void)
       const next = () => openBoonOffer(scene, run, onDone);
       showMessage(scene, b.rarity === 'curse' ? `Cursed: ${b.name}` : `${b.name}!`, `${b.rarity === 'curse' ? `${b.drawback}\n${b.reward}` : b.desc}${res.note ? `\n\n${res.note}` : ''}`, next);
     },
+  });
+}
+
+/** Your boons this run (and curses), from the map bar or the menu. */
+export function openBoonList(scene: Phaser.Scene, run: Run, onClose: () => void = () => {}) {
+  const held = run.boons?.held ?? [];
+  openPicker(scene, {
+    title: `Boons (${held.length})`,
+    subtitle: held.length ? 'They last for the rest of this run.' : 'No boons yet. Beat a guardian or find a Boon hex to choose one.',
+    options: held.map((id) => ({ ...boonCardText(id), color: BOON_COLOR[BOONS[id].rarity] })),
+    rowHeight: 86,
+    onPick: () => onClose(),
+    onCancel: onClose,
+    cancelLabel: 'Close',
   });
 }

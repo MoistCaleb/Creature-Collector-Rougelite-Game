@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BOONS } from '../data/boons';
 import { takeNewMilestones } from '../logic/gilded';
 import { takeNewTitles } from '../logic/titles';
 import { unlocksOf } from '../logic/cosmetics';
@@ -206,6 +207,9 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Gilded milestone: ${milestones.map((m) => m.title ?? `${m.count} Gilded`).join(', ')} (new outfit pieces)`);
     }
+    // The boons this run was built on.
+    const held = run.boons?.held ?? [];
+    if (held.length) extra.unshift(`Boons: ${held.map((id) => `${BOONS[id].rarity === 'curse' ? '☠ ' : BOONS[id].rarity === 'mythic' ? '✦ ' : ''}${BOONS[id].name}`).join(', ')}`);
     const titles = takeNewTitles(state.meta);
     if (titles.length || milestones.length) saveMeta(state.meta);
     if (titles.length) {

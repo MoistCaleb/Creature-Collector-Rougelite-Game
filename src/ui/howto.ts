@@ -65,6 +65,17 @@ export const HOW_TO_PLAY: Page[] = [
     ],
   },
   {
+    title: 'Boons',
+    glyph: 'sparkle',
+    lines: [
+      'After each guardian (and on Boon hexes ✦), choose a boon: a perk that bends the rules for the rest of the run.',
+      'The first card helps an element on your team; the second is general (now and then a golden mythic); the third is sometimes a curse.',
+      'Curses cost something (no healing at rests, less HP…) but pay you back with more or better boons.',
+      'Guardians gain a level for each boon you hold. See yours from the ✦ on the map bar or the menu.',
+      'Online, your boons come with you into the stage battle duel and the royale bracket.',
+    ],
+  },
+  {
     title: 'Elements',
     glyph: 'sparkle',
     lines: [

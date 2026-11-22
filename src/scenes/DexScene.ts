@@ -1,3 +1,5 @@
+import { BOON_COLOR, BOON_LIST } from '../data/boons';
+import { boonCardText } from '../ui/boonPick';
 import { isRareTrait, traitsOf } from '../data/traits';
 import { traitsFound } from '../logic/dex';
 import { traitDescOf, traitName } from '../ui/traitText';
@@ -25,7 +27,7 @@ import { openElementChart } from '../ui/elementChart';
 import { shinySparkle } from '../ui/shiny';
 import { searchBox } from '../ui/searchBox';
 
-type Tab = 'creatures' | 'moves' | 'elements';
+type Tab = 'creatures' | 'moves' | 'elements' | 'boons';
 /** Content starts below the header, tabs and the jump-to-element bar. */
 /** Where the list starts, under the header (a shorter header on the wide board). */
 let TOP = 196;
@@ -112,6 +114,7 @@ export class DexScene extends Phaser.Scene {
 
     if (this.tab === 'creatures') this.drawCreatures();
     else if (this.tab === 'moves') this.drawMoves();
+    else if (this.tab === 'boons') this.drawBoons();
     else this.drawElements();
     this.refreshRows();
 
@@ -142,11 +145,12 @@ export class DexScene extends Phaser.Scene {
       ['creatures', 'Hexlings'],
       ['moves', 'Moves'],
       ['elements', 'Elements'],
+      ['boons', 'Boons'],
     ];
     // Sideways on the Hexlings tab, the tabs take the left half and the search the right half.
     const tabsW = LANDSCAPE && L.search ? W / 2 - 24 : W - 32;
     tabs.forEach(([t, label], i) => {
-      const bw = (tabsW - 8) / 3;
+      const bw = (tabsW - 4 * (tabs.length - 1)) / tabs.length;
       button(this, 16 + bw / 2 + i * (bw + 4), L.tabsY, bw, L.tabsH, label, () => this.scene.restart({ from: this.from, tab: t }), {
         color: this.tab === t ? 0x5b4a8a : COLORS.panelLight,
         fontSize: 16,
@@ -759,6 +763,43 @@ export class DexScene extends Phaser.Scene {
       y = 96;
     }
     this.contentH = y;
+  }
+
+  /** Boons (2.0): every boon you've been offered; the rest are ???. Element boons by element. */
+  private drawBoons() {
+    const seen = state.meta.boonsSeen ?? [];
+    const picks = state.meta.boonPicks ?? {};
+    const order = [...ELEMENTS.flatMap((el) => BOON_LIST.filter((b) => b.element === el)), ...BOON_LIST.filter((b) => !b.element)];
+    const head = (b: (typeof BOON_LIST)[number]) => (b.element ? b.element : b.rarity === 'mythic' ? 'Mythic' : b.rarity === 'curse' ? 'Curses' : 'General');
+    let y = 8;
+    let last = '';
+    for (const b of order) {
+      const h = head(b);
+      if (h !== last) {
+        last = h;
+        if (b.element) this.anchor(b.element, y);
+        const hy = y;
+        this.addRow(hy, 28, (row) => row.add(text(this, 16, hy + 6, `${h}  ·  ${BOON_LIST.filter((x) => head(x) === h && seen.includes(x.id)).length}/${BOON_LIST.filter((x) => head(x) === h).length}`, 15, '#ffc94d', { fontStyle: 'bold' })));
+        y += 30;
+      }
+      const ry = y;
+      const known = seen.includes(b.id);
+      this.addRow(ry, 74, (row) => {
+        row.add(this.add.rectangle(12, ry, W - 24, 68, known ? COLORS.panel : 0x15111f).setOrigin(0).setStrokeStyle(2, known ? BOON_COLOR[b.rarity] : COLORS.stroke));
+        if (!known) {
+          row.add(text(this, 24, ry + 24, '??? Not yet offered', 14, '#4a4068'));
+          return;
+        }
+        const { label, sub } = boonCardText(b.id);
+        row.add(text(this, 24, ry + 8, label, 14, COLORS.text, { fontStyle: 'bold' }));
+        if (picks[b.id]) row.add(text(this, W - 24, ry + 8, `taken ${picks[b.id]}×`, 11, COLORS.textDim).setOrigin(1, 0));
+        const d = text(this, 24, ry + 28, sub.replace('\n', '  '), 12, COLORS.textDim, { wordWrap: { width: W - 60 } });
+        if (d.height > 36) d.setScale(Math.max(0.75, 36 / d.height));
+        row.add(d);
+      });
+      y += 74;
+    }
+    this.contentH = y + 8;
   }
 
   private drawElements() {

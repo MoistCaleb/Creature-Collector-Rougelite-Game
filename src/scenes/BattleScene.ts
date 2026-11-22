@@ -1053,6 +1053,14 @@ export class BattleScene extends Phaser.Scene {
       r.add(tt);
       y += Math.max(22, tt.height + 6);
     }
+    // Boons that help this Hexling (its elements' ones, and the general ones).
+    const sideBoons = side === 'player' ? (this.match ? (this.battle as unknown as { boonSets?: Record<string, Set<string>> }).boonSets?.player : new Set(state.run?.boons?.held ?? [])) : undefined;
+    const mine = [...(sideBoons ?? [])].filter((id) => BOONS[id] && BOONS[id].rarity !== 'curse' && (!BOONS[id].element || creatureTypes(c).includes(BOONS[id].element!)));
+    if (mine.length) {
+      const bt = text(this, x0, y - 4, `Boons: ${mine.map((id) => BOONS[id].name).join(', ')}`, 12, '#c9b8ff', { wordWrap: { width: w } });
+      r.add(bt);
+      y += Math.max(20, bt.height + 6);
+    }
 
     // Moves (a foe's only once it has used them in this battle).
     const cols = LANDSCAPE ? 2 : 1;

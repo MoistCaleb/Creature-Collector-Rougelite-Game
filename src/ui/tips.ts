@@ -37,6 +37,10 @@ export const TIPS = {
     title: 'Trainer titles',
     body: 'You’ve earned a trainer title! Titles show under your name, to your opponent online too, and many unlock gear with special effects.\n\nSee them all in Edit trainer (top-left) › your name › Titles.',
   },
+  boon: {
+    title: 'Boons',
+    body: 'Boons bend the rules for the rest of this run, and they stack. The first card always helps an element on your team.\n\nCurses (red) cost you something but pay you back: read both lines before you take one. Guardians get a little stronger for each boon you hold.',
+  },
   bench: {
     title: 'The bench',
     body: 'Up to 4 Hexlings fight and up to 3 wait on the bench. Bench Hexlings still earn XP, and if your whole team falls, the bench steps in as your second life.',

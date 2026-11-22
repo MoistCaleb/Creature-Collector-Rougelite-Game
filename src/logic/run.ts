@@ -110,6 +110,9 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
 // ---------------------------------------------------------------- meta save
 
 export interface Meta {
+  /** Boons (2.0): every boon you've been offered (Hexlidex), and how often you took each (Records). */
+  boonsSeen?: string[];
+  boonPicks?: Record<string, number>;
   /** Roaming legendaries: health left (a share) and whether caught. */
   legends?: Record<string, { hp: number; caught?: boolean; met?: number }>;
   unlockedStarters: string[];

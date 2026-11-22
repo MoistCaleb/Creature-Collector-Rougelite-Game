@@ -1,7 +1,7 @@
 import { BOON_LIST, BOONS, isBoon, type BoonDef, type BoonId } from '../data/boons';
 import type { Element } from '../data/types';
 import { canPrestige, creatureTypes, prestige, stats, type Creature } from './creature';
-import { allCreatures, floorBoons, placeRng, type Run } from './run';
+import { allCreatures, floorBoons, placeRng, saveMeta, type Run } from './run';
 
 /**
  * Boons on a run (2.0): what you hold, the offer on screen, and the curse flags. Offers come from
@@ -115,6 +115,13 @@ export function openOffer(run: Run, source: string, mode: OfferMode = 'normal', 
   const ids = rollOffer(run, tag, m);
   if (!ids.length) return (rb.offer = null);
   rb.offer = { ids, picks: Math.min(picks, ids.length), mode: m, tag };
+  // The Hexlidex's Boons tab shows every boon you've been offered.
+  const seen = (run.meta.boonsSeen ??= []);
+  const fresh = ids.filter((id) => !seen.includes(id));
+  if (fresh.length) {
+    seen.push(...fresh);
+    saveMeta(run.meta);
+  }
   return rb.offer;
 }
 
@@ -129,6 +136,9 @@ export function takeBoon(run: Run, id: BoonId): PickResult {
   const offer = rb.offer;
   if (!offer || !offer.ids.includes(id) || !isBoon(id)) return {};
   rb.held.push(id);
+  const picks = (run.meta.boonPicks ??= {});
+  picks[id] = (picks[id] ?? 0) + 1;
+  saveMeta(run.meta);
   offer.ids = offer.ids.filter((x) => x !== id);
   offer.picks -= 1;
   const res = applyBoon(run, id);
