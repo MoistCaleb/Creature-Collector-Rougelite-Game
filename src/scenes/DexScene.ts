@@ -1,4 +1,5 @@
 import { BOON_COLOR, BOON_LIST } from '../data/boons';
+import { SURPRISE_LIST } from '../data/surprises';
 import { boonCardText } from '../ui/boonPick';
 import { isRareTrait, traitsOf } from '../data/traits';
 import { traitsFound } from '../logic/dex';
@@ -798,6 +799,23 @@ export class DexScene extends Phaser.Scene {
         row.add(d);
       });
       y += 74;
+    }
+    // Rare surprises (2.0): found ones, and a vague hint for the rest.
+    const found = state.meta.surprisesFound ?? [];
+    const sy = y + 10;
+    this.addRow(sy, 30, (row) => row.add(text(this, 16, sy + 6, `Rare surprises  ·  ${found.length}/${SURPRISE_LIST.length}`, 15, '#ffc94d', { fontStyle: 'bold' })));
+    y += 42;
+    for (const sp of SURPRISE_LIST) {
+      const ry = y;
+      const known = found.includes(sp.id);
+      this.addRow(ry, 64, (row) => {
+        row.add(this.add.rectangle(12, ry, W - 24, 58, known ? COLORS.panel : 0x15111f).setOrigin(0).setStrokeStyle(2, known ? 0x8a6ac8 : COLORS.stroke));
+        row.add(text(this, 24, ry + 7, known ? sp.name : '???', 14, known ? COLORS.text : '#6d6588', { fontStyle: 'bold' }));
+        const d = text(this, 24, ry + 27, known ? sp.desc : sp.hint, 12, known ? COLORS.textDim : '#5a5278', { wordWrap: { width: W - 60 } });
+        if (d.height > 28) d.setScale(Math.max(0.75, 28 / d.height));
+        row.add(d);
+      });
+      y += 64;
     }
     this.contentH = y + 8;
   }
