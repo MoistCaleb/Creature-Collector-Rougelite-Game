@@ -251,10 +251,22 @@ export class EndScene extends Phaser.Scene {
         sub: 'Keep its form and moves for the team builder',
       });
     }
-    button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 410 : 756, 260, 52, 'Back to camp', () => {
+    // Run again (2.0): straight back to the starter pick on the same map (normal runs only).
+    const again = !run.race && !run.daily && !run.weekly && !hunt;
+    const bx = LANDSCAPE ? cx0 + colW / 2 : W / 2;
+    const by = LANDSCAPE ? 410 : 756;
+    const bw = again ? 150 : 260;
+    button(this, again ? bx - 80 : bx, by, bw, 52, 'Back to camp', () => {
       state.run = null;
       this.scene.start('Camp', {});
-    }, { color: 0x3b6d4a, fontSize: 20 });
+    }, { color: 0x3b6d4a, fontSize: again ? 16 : 20 });
+    if (again) {
+      const mapId = run.mapId;
+      button(this, bx + 80, by, bw, 52, 'Run again', () => {
+        state.run = null;
+        this.scene.start('Starter', { mapId });
+      }, { color: 0x5b3c8a, fontSize: 16, glyph: 'play' });
+    }
   }
 
   /** Explain Shiny Hunting, then start it: the run continues on endless floors. */
