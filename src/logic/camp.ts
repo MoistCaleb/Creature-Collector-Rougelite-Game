@@ -322,3 +322,43 @@ export function myBuddy(m: Meta): { id: string; stage: number; shiny: boolean } 
   const stage = Math.max(0, ...m.dex.forms.filter((f) => f.startsWith(`${id}:`)).map((f) => Number(f.split(':')[1]) || 0));
   return { id, stage, shiny: (m.shinyOwned ?? []).includes(id) && !(m.shinyOff ?? []).includes(id) };
 }
+
+/**
+ * Embers from a finished run (2.0), win or lose: 5 per floor cleared, +3 per guardian beaten, +1 per
+ * battle won (up to 10), +15
+ * for winning, +2 per Gilded caught, +3 per Gilded Hunt floor; +10% per Heat level. About 8-15 for
+ * a loss and 35-50 for a win.
+ */
+export function runEmbers(run: import('./run').Run, won: boolean): { total: number; lines: string[] } {
+  const floors = won ? 3 : run.floor;
+  const lines: string[] = [];
+  let n = 0;
+  const add = (amount: number, label: string) => {
+    if (amount <= 0) return;
+    n += amount;
+    lines.push(`+${amount} ${label}`);
+  };
+  add(5 * floors, `${floors} floor${floors === 1 ? '' : 's'} cleared`);
+  add(3 * floors, `${floors} guardian${floors === 1 ? '' : 's'} beaten`);
+  // Even a quick loss pays: 1 per battle won (up to 10).
+  add(Math.min(10, run.log.battlesWon), 'battles won');
+  if (won) add(15, 'victory');
+  const gilded = [...run.team, ...run.bench].filter((c) => c.shiny).length;
+  add(2 * gilded, 'Gilded on your team');
+  if (run.hunt) add(3 * Math.max(0, run.hunt.depth - 1), 'Gilded Hunt floors');
+  const heat = run.heat ?? 0;
+  if (heat) {
+    const extra = Math.round(n * 0.1 * heat);
+    add(extra, `Heat ${heat}`);
+  }
+  return { total: n, lines };
+}
+
+/** Pay a run's embers once (the end screen can be laid out more than once). */
+export function payRunEmbers(meta: Meta, run: import('./run').Run, won: boolean): { total: number; lines: string[] } {
+  const res = runEmbers(run, won);
+  if (run.embersPaid) return res;
+  run.embersPaid = true;
+  camp(meta).embers += res.total;
+  return res;
+}

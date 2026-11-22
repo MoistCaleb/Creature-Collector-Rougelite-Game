@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { camp, payRunEmbers } from '../logic/camp';
 import { BOONS } from '../data/boons';
 import { takeNewMilestones } from '../logic/gilded';
 import { takeNewTitles } from '../logic/titles';
@@ -206,6 +207,12 @@ export class EndScene extends Phaser.Scene {
     if (milestones.length) {
       saveMeta(state.meta);
       extra.push(`Gilded milestone: ${milestones.map((m) => m.title ?? `${m.count} Gilded`).join(', ')} (new outfit pieces)`);
+    }
+    // Embers (2.0): every run pays some, win or lose (races and dailies too).
+    if (!race || !data.won) {
+      const em = payRunEmbers(state.meta, run, data.won);
+      saveMeta(state.meta);
+      if (em.total) extra.unshift(`Embers +${em.total} (${em.lines.join(', ')}) · ${camp(state.meta).embers} at camp`);
     }
     // The boons this run was built on.
     const held = run.boons?.held ?? [];

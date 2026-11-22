@@ -96,3 +96,21 @@ describe('rare surprises', () => {
     expect(priceFor(run, 100)).toBeGreaterThan(before);
   });
 });
+
+describe('embers from every run (2.0)', () => {
+  it('a quick loss pays a little, a win pays a lot more, once', async () => {
+    const { payRunEmbers, runEmbers, camp } = await import('../src/logic/camp');
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', 3);
+    run.log.battlesWon = 6;
+    const loss = runEmbers(run, false).total;
+    expect(loss).toBeGreaterThanOrEqual(5);
+    expect(loss).toBeLessThan(20);
+    const win = runEmbers(run, true).total;
+    expect(win).toBeGreaterThan(35);
+    const before = camp(meta).embers;
+    payRunEmbers(meta, run, true);
+    payRunEmbers(meta, run, true);
+    expect(camp(meta).embers - before).toBe(win);
+  });
+});

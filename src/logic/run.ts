@@ -516,6 +516,8 @@ export interface Run {
   shopVisits?: number;
   /** Boons (2.0): held, the offer on screen, curse flags (see logic/boons). */
   boons?: RunBoons;
+  /** Embers for this run have been paid (2.0). */
+  embersPaid?: boolean;
   /** Rare surprises (2.0): the omen and each floor's (see logic/surprises). */
   surprises?: import('./surprises').RunSurprises;
 }
