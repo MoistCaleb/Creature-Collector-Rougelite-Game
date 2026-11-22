@@ -35,8 +35,20 @@ interface Holder {
   trait?: TraitId;
 }
 
+let enabled = true;
+const silenced = new WeakSet<object>();
+/** The balance bot: this Hexling fights without its trait (to measure one side's traits alone). */
+export function silenceTrait(c: object) {
+  silenced.add(c);
+}
+/** Turn every trait off (the balance bot compares runs with and without them). */
+export function setTraitsEnabled(on: boolean) {
+  enabled = on;
+}
+
 /** A Hexling's trait: its own, or (older saves, Arena teams) one rolled from its id. */
 export function traitOf(c: Holder): TraitId | undefined {
+  if (!enabled || silenced.has(c)) return undefined;
   if (c.trait && traitsOf(c.speciesId).includes(c.trait)) return c.trait;
   return rollTrait(c.speciesId, `uid${c.uid}`);
 }

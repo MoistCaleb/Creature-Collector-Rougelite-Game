@@ -2493,6 +2493,10 @@ describe('Bulwark, Time Warp and speed attacks', () => {
   it('speed attacks hit harder the bigger the speed gap their way', () => {
     expect(speedPower(2)).toBeGreaterThan(speedPower(1.2));
     expect(speedPower(0.5)).toBe(40);
+    // 2.0: a gentler curve, never above 90 however big the gap.
+    expect(speedPower(1)).toBe(60);
+    expect(speedPower(1.5)).toBeLessThanOrEqual(80);
+    expect(speedPower(10)).toBe(90);
     const b = pair([fastId('Earth'), slowId('Earth')], ['Fire:0']);
     const fast = b.speedFactor(MOVES[fastId('Earth')], b.p, b.e);
     const slow = b.speedFactor(MOVES[slowId('Earth')], b.p, b.e);
