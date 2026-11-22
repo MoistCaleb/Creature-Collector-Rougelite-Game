@@ -1,5 +1,6 @@
 import * as storage from '../storage';
 import { hashString } from './rng';
+import { fromNewerVersion, savedBy, updateMessage } from './saveVersion';
 
 /**
  * Save transfer: your whole save (progress, plus the run in progress) as one text code you can
@@ -91,6 +92,7 @@ export async function decodeSave(code: string): Promise<SaveBundle> {
     throw new Error('That code is damaged. Make sure you copied all of it.');
   }
   if (data.v !== 1 || typeof data.meta !== 'string') throw new Error('That code is from a newer version of Hexbound. Update the game and try again.');
+  if (fromNewerVersion(data.meta)) throw new Error(updateMessage(savedBy(data.meta)));
   try {
     const meta = JSON.parse(data.meta);
     if (!meta || typeof meta !== 'object' || !Array.isArray(meta.unlockedStarters)) throw new Error();

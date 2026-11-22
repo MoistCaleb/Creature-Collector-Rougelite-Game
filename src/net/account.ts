@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import * as storage from '../storage';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './accountConfig';
+import { fromNewerVersion, GAME_VERSION_CODE, savedBy } from '../logic/saveVersion';
 
 /**
  * Accounts: sign in with your email (a 6-digit code, no password) and your save follows you to
@@ -40,6 +41,15 @@ interface SyncState {
   /** When this device last matched the account (for "Last synced"). */
   syncedAt: number;
 }
+
+/**
+ * The account holds a save from a newer version of the game: this device neither pulls it nor
+ * uploads over it until the game is updated. Holds the newer version (or '' if unknown).
+ */
+let newerOnAccount: string | null = null;
+export const accountNeedsUpdate = (): string | null => newerOnAccount;
+/** The server has the game_version column (supabase/save-version.sql); until then, saves go without it. */
+let versionColumn = true;
 
 let client: SupabaseClient | null = null;
 let user: AccountUser | null = null;
@@ -161,12 +171,21 @@ async function uploadNow(): Promise<void> {
   const run = storage.getItem(RUN_KEY);
   const before = readSync();
   const upTo = before?.uid === user.id ? before.changes : 0;
-  const { data, error } = await sb()
-    .from('saves')
-    .upsert({ user_id: user.id, meta, run, saved_at: new Date().toISOString() })
-    .select('saved_at')
-    .single();
-  if (error) throw new Error(friendly(error.message));
+  const row = { user_id: user.id, meta, run, saved_at: new Date().toISOString(), ...(versionColumn ? { game_version: GAME_VERSION_CODE } : {}) };
+  let { data, error } = await sb().from('saves').upsert(row).select('saved_at').single();
+  if (error && versionColumn && /game_version/.test(error.message)) {
+    // The server isn't set up for versions yet: save without one.
+    versionColumn = false;
+    const { game_version: _v, ...plain } = row as typeof row & { game_version?: number };
+    void _v;
+    ({ data, error } = await sb().from('saves').upsert(plain).select('saved_at').single());
+  }
+  if (error && /newer version/i.test(error.message)) {
+    // The server refused: the account has progress from a newer version of the game.
+    newerOnAccount = '';
+    throw new Error(error.message);
+  }
+  if (error || !data) throw new Error(friendly(error?.message ?? 'Couldn’t save.'));
   const prev = readSync();
   // Changes made while uploading still count as unsynced.
   const changes = prev?.uid === user.id ? prev.changes : upTo;
@@ -195,6 +214,7 @@ export async function flushAccount(force = false): Promise<void> {
   timer = null;
   if (uploading) await uploading.catch(() => {});
   if (!pending || !user) return;
+  if (newerOnAccount !== null) return;
   if (!force && readSync()?.uid !== user.id) return;
   pending = false;
   uploading = uploadNow().catch((e) => {
@@ -230,7 +250,9 @@ export type SyncOutcome =
   /** The account's save replaced the device's: reload (or start) the game to use it. */
   | { kind: 'pulled' }
   /** Both have progress the other hasn't seen: the player picks. */
-  | { kind: 'conflict'; device: CloudSave; account: CloudSave };
+  | { kind: 'conflict'; device: CloudSave; account: CloudSave }
+  /** The account's save is from a newer version of the game: update before syncing. */
+  | { kind: 'update'; version: string | null };
 
 /** Does this save hold any progress worth keeping? */
 export function hasProgress(meta: string | null): boolean {
@@ -250,6 +272,13 @@ export async function reconcile(): Promise<SyncOutcome> {
   const device: CloudSave = { meta: storage.getItem(META_KEY), run: storage.getItem(RUN_KEY), savedAt: Date.now() };
   const sync = readSync();
   const linked = sync?.uid === user.id ? sync : null;
+  // A newer version saved to this account: don't take it (this version may not understand it) and
+  // don't overwrite it. Syncing resumes once the game is updated.
+  if (fromNewerVersion(account?.meta)) {
+    newerOnAccount = savedBy(account?.meta) ?? '';
+    return { kind: 'update', version: newerOnAccount || null };
+  }
+  newerOnAccount = null;
   if (!account?.meta) {
     pending = true;
     await flushAccount(true);

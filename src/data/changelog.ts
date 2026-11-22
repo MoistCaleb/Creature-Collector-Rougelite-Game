@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.51';
+export const APP_VERSION = '1.52';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,11 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.52',
+    title: 'Safer saves',
+    items: ['Your save now remembers which version of the game made it. A device that hasn’t updated yet can no longer overwrite progress made on a newer version: it asks you to update instead. Save codes from a newer version say so too.'],
+  },
   {
     version: '1.51',
     title: 'Know the matchup',
