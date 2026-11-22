@@ -2504,9 +2504,10 @@ describe('Bulwark, Time Warp and speed attacks', () => {
     const warp = all.filter((a) => a.x.includes(WARP_ID));
     const bulwark = all.filter((a) => a.x.includes(BULWARK_ID));
     expect(warp.length).toBeGreaterThan(4);
-    expect(warp.length).toBeLessThan(20);
+    // A small share of lines (the count grows with the roster).
+    expect(warp.length).toBeLessThan(SPECIES.length * 0.16);
     expect(bulwark.length).toBeGreaterThan(10);
-    expect(bulwark.length).toBeLessThan(40);
+    expect(bulwark.length).toBeLessThan(SPECIES.length / 3);
     for (const a of warp) expect(a.s.types.some((t) => ['Spirit', 'Shadow', 'Light', 'Metal'].includes(t))).toBe(true);
     // Names are unique.
     const names = Object.values(MOVES).map((m) => m.name);

@@ -2,7 +2,7 @@ import { fastId } from './moves';
 import { SPECIES, SPECIES_BY_ID, type Species } from './species';
 
 /**
- * Roaming legendaries: three one-of-a-kind Hexlings that wander the later floors of a run. They
+ * Roaming legendaries: six one-of-a-kind Hexlings that wander the later floors of a run. They
  * flee after a few turns, keeping the damage you did for the next time you meet. Catch one and it
  * joins that run, gets its Hexlidex entry and can be brought to the Arena; caught, it roams no
  * more. They are never starters, and they only have one form (their final one).
@@ -10,6 +10,9 @@ import { SPECIES, SPECIES_BY_ID, type Species } from './species';
 export const LEGENDS: Species[] = [
   { id: 'solmane', names: ['Solmane', 'Solmane', 'Solmane'], types: ['Light', 'Fire'], base: { hp: 92, atk: 90, def: 78, spd: 84 }, signature: fastId('Light') },
   { id: 'tidecrown', names: ['Tidecrown', 'Tidecrown', 'Tidecrown'], types: ['Water', 'Storm'], base: { hp: 98, atk: 84, def: 86, spd: 76 }, signature: fastId('Water') },
+  { id: 'ironvault', names: ['Ironvault', 'Ironvault', 'Ironvault'], types: ['Metal', 'Earth'], base: { hp: 100, atk: 82, def: 92, spd: 70 }, signature: fastId('Metal') },
+  { id: 'thornmaw', names: ['Thornmaw', 'Thornmaw', 'Thornmaw'], types: ['Nature', 'Toxic'], base: { hp: 92, atk: 92, def: 76, spd: 84 }, signature: fastId('Nature') },
+  { id: 'rimeveil', names: ['Rimeveil', 'Rimeveil', 'Rimeveil'], types: ['Frost', 'Spirit'], base: { hp: 88, atk: 86, def: 82, spd: 88 }, signature: fastId('Frost') },
   { id: 'umbrawyrm', names: ['Umbrawyrm', 'Umbrawyrm', 'Umbrawyrm'], types: ['Shadow', 'Dragon'], base: { hp: 88, atk: 96, def: 74, spd: 88 }, signature: fastId('Shadow') },
 ];
 

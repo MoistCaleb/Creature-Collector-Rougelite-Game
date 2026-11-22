@@ -35,7 +35,7 @@ export const signaturePart = (speciesId: string): SigPart => SIG_PARTS[hashStrin
 /** How tall each stage stands in the 64-pixel frame (so every line fills it the same way). */
 const STAGE_H = [40, 51, 60];
 /** The legendaries fill the whole frame and shimmer. */
-const LEGEND_IDS = ['solmane', 'tidecrown', 'umbrawyrm'];
+const LEGEND_IDS = ['solmane', 'tidecrown', 'umbrawyrm', 'ironvault', 'thornmaw', 'rimeveil'];
 
 const bbox = (g: number[][]) => {
   let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;

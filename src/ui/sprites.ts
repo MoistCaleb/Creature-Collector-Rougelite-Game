@@ -84,6 +84,8 @@ const LOCO_OVERRIDE: Record<string, Loco> = {
   wailet: 'floater', grimlet: 'floater', belladot: 'slime', plaguerat: 'quad', cherublet: 'floater', lumenwisp: 'floater',
   aurorabit: 'quad', flashkit: 'avian', glintmite: 'insect', squirelet: 'biped', yukilet: 'floater', rimeghost: 'floater',
   woollet: 'quad', slablet: 'biped', gildwing: 'avian',
+  // 2.0 lines
+  forgepup: 'quad', rivetfin: 'serpent', gearbud: 'biped', coldcog: 'biped', rustbug: 'insect', nightcog: 'biped', alloylet: 'quad', smoglet: 'quad', tarlet: 'slime', fizzlet: 'floater', gelicle: 'slime', neonewt: 'quad', spooklet: 'floater', hisslet: 'serpent', inklet: 'floater', nightbud: 'biped', gravelet: 'quad', crowlet: 'avian', chilkit: 'quad', twilit: 'floater', duskhatch: 'biped', flickghost: 'floater', siplet: 'serpent', sprigghost: 'biped', totemkin: 'biped', breezeling: 'floater', helmlet: 'biped', bonelet: 'serpent', sunpup: 'quad', shinefin: 'floater', sunsprout: 'biped', quartzlet: 'quad', twinklet: 'floater', shinepup: 'quad', vinelet: 'serpent', sparkhatch: 'avian', rimehatch: 'quad', hornling: 'biped', glidelet: 'avian', jadelet: 'serpent', thawlet: 'floater', snowlet: 'avian', yetling: 'biped', icemite: 'insect', shardlet: 'serpent', sallet: 'quad', emberchick: 'avian', smithlet: 'biped', brimlet: 'slime', torchlet: 'biped', squalllet: 'serpent', ottlet: 'quad', pinchlet: 'insect', bubblit: 'floater', divebot: 'biped', acornet: 'biped', larvlet: 'insect', fernling: 'quad', gnarlet: 'biped', cloudlet: 'floater', ramlet: 'quad', zapeel: 'serpent', waspark: 'insect', dillokin: 'quad', rhinlet: 'quad', stalaglet: 'biped',
 };
 
 /** Position of a pure-type family among the families of its element (0..3), for accent variety. */
@@ -194,6 +196,12 @@ const LEGEND_PLANS: Record<string, { fam: Partial<Family>; plan: Partial<StagePl
   // A sea serpent wearing a crown, with fins and storm-charged whiskers.
   tidecrown: { fam: { loco: 'serpent', eyes: 2, tail: 'none', pattern: 'rings' }, plan: { body: 'tall', head: 'long', arms: 'none', back: 'fins', top: 'crown', mouth: 'jaw' } },
   // A winged shadow wyrm: bat wings, swept horns, clawed arms, spiked tail.
+  // 2.0: a walking iron fortress with cannon fists and a crown of spikes.
+  ironvault: { fam: { loco: 'biped', eyes: 1, tail: 'none', pattern: 'rings' }, plan: { body: 'hulk', head: 'flat', arms: 'fists', back: 'plates', top: 'spikerow', mouth: 'jaw' } },
+  // 2.0: a man-eating flower beast: petal mane, vine tentacles, toothy jaw.
+  thornmaw: { fam: { loco: 'quad', eyes: 2, tail: 'thin', pattern: 'spots' }, plan: { body: 'pear', head: 'wide', arms: 'claws', back: 'mane', top: 'none', mouth: 'jaw' } },
+  // 2.0: a veiled ice phantom: floating, frost cape, crystal crown.
+  rimeveil: { fam: { loco: 'floater', eyes: 2, tail: 'none', pattern: 'core' }, plan: { body: 'tall', head: 'round', arms: 'long', back: 'cape', top: 'crown', mouth: 'none' } },
   umbrawyrm: { fam: { loco: 'biped', eyes: 2, tail: 'spiked', pattern: 'belly' }, plan: { body: 'vtorso', head: 'long', arms: 'claws', back: 'batwings', top: 'horns-swept', mouth: 'jaw' } },
 };
 
