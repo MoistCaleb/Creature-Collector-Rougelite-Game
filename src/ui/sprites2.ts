@@ -34,6 +34,8 @@ export const signaturePart = (speciesId: string): SigPart => SIG_PARTS[hashStrin
 
 /** How tall each stage stands in the 64-pixel frame (so every line fills it the same way). */
 const STAGE_H = [40, 51, 60];
+/** The legendaries fill the whole frame and shimmer. */
+const LEGEND_IDS = ['solmane', 'tidecrown', 'umbrawyrm'];
 
 const bbox = (g: number[][]) => {
   let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
@@ -52,7 +54,8 @@ function fitScale(speciesId: string, stage: number): number {
   const b = bbox(buildGrid(speciesId, stage, 1, {}, true) as number[][]);
   const h = b.y1 - b.y0 + 1;
   const w = b.x1 - b.x0 + 1;
-  return Math.max(1.2, Math.min(2.8, STAGE_H[stage] / h, (SPRITE2_SIZE - 4) / w));
+  const target = LEGEND_IDS.includes(speciesId) ? 62 : STAGE_H[stage];
+  return Math.max(1.2, Math.min(2.8, target / h, (SPRITE2_SIZE - 2) / w));
 }
 
 /** `back`: the view from behind (the player's side in battle). */
@@ -185,8 +188,8 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   };
 
   // Spirit wisps and Light sparkles float behind/around (drawn first, faint).
-  if (el === 'Spirit' || el === 'Light') {
-    for (let i = 0; i < 4 + stage * 2; i++) {
+  if (el === 'Spirit' || el === 'Light' || LEGEND_IDS.includes(speciesId)) {
+    for (let i = 0; i < 4 + stage * 2 + (LEGEND_IDS.includes(speciesId) ? 8 : 0); i++) {
       const wx = Math.round(rnd.next() * N);
       const wy = Math.round(rnd.next() * N * 0.8);
       if (filled(wx, wy)) continue;

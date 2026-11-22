@@ -187,6 +187,16 @@ function stagePlan(id: string, stage: number, fam: Family, types: readonly Eleme
   };
 }
 
+/** 2.0: the legendaries are designed by hand to match their names, not rolled. */
+const LEGEND_PLANS: Record<string, { fam: Partial<Family>; plan: Partial<StagePlan> }> = {
+  // A sun lion: blazing mane, swept horns, a flame-tipped tail.
+  solmane: { fam: { loco: 'quad', eyes: 2, tail: 'thin', pattern: 'chevrons' }, plan: { body: 'wide', head: 'round', arms: 'none', back: 'mane', top: 'horns-swept', mouth: 'fangs' } },
+  // A sea serpent wearing a crown, with fins and storm-charged whiskers.
+  tidecrown: { fam: { loco: 'serpent', eyes: 2, tail: 'none', pattern: 'rings' }, plan: { body: 'tall', head: 'long', arms: 'none', back: 'fins', top: 'crown', mouth: 'jaw' } },
+  // A winged shadow wyrm: bat wings, swept horns, clawed arms, spiked tail.
+  umbrawyrm: { fam: { loco: 'biped', eyes: 2, tail: 'spiked', pattern: 'belly' }, plan: { body: 'vtorso', head: 'long', arms: 'claws', back: 'batwings', top: 'horns-swept', mouth: 'jaw' } },
+};
+
 interface Draw {
   put: (x: number, y: number, v: Px, onlyOver?: Px[], mirror?: boolean) => void;
   blob: (ex: number, ey: number, rx: number, ry: number, v: Px, o?: { taper?: number; p?: number; over?: Px[] }) => void;
@@ -335,14 +345,15 @@ export interface FaceInfo {
 /** `back`: the 2.0 back view (for the player's side in battle): no face, and wings, shells, capes and tails in front of the body. */
 export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false): Px[][] {
   const types = SPECIES_BY_ID[speciesId].types;
-  const fam = familyPlan(speciesId, types);
-  const P = { ...stagePlan(speciesId, stage, fam, types) };
+  const legend = v2 ? LEGEND_PLANS[speciesId] : undefined;
+  const fam = legend ? { ...familyPlan(speciesId, types), ...legend.fam } : familyPlan(speciesId, types);
+  const P = { ...stagePlan(speciesId, stage, fam, types), ...(legend?.plan ?? {}) };
   /** 2.0 art: extra parts rolled from their own seed, so the original rolls stay as they are. */
   const r2 = new Rng(hashString(`${speciesId}:v2:${stage}`));
   const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
   /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
   const sigVariant = v2 ? hashString(`${speciesId}:sigv`) % 3 : 0;
-  if (v2) {
+  if (v2 && !legend) {
     const has = (e: Element) => types.includes(e);
     if (stage > 0 && r2.chance(0.45))
       P.top = r2.weighted<Top>({
@@ -411,8 +422,34 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   const faceY = merged ? by - ry * 0.35 : hy;
   const faceR = merged ? Math.min(rx, ry) * 0.7 : Math.min(H.rx, H.ry);
 
+  const tailPart = () => {
+  // tail: asymmetric, sticks out to one side
+  if (v2 && L !== 'slime') {
+    drawTail2(D, types[0], back ? { ...fam, tailSide: -fam.tailSide as 1 | -1 } : fam, fr2, stage, back ? cx - fam.tailSide * 0.5 : cx + fam.tailSide * (rx * 0.55), by + ry * (back ? 0.45 : 0.55), sigVariant === 2);
+  } else if (fam.tail !== 'none' && L !== 'slime') {
+    const side = fam.tailSide;
+    const tx0 = cx + side * (rx * 0.6);
+    const ty0 = by + ry * 0.6;
+    const len = [4, 6, 8][stage];
+    const tipX = tx0 + side * len;
+    const tipY = ty0 - len * 0.6;
+    line(tx0, ty0, tipX, tipY, 1, stage === 2 ? 2 : 1, false);
+    if (fam.tail === 'spiked') for (let k = 1; k < len; k += 2) put(tx0 + side * k, ty0 - k * 0.6 - 1, 6, [0], false);
+    if (fam.tail === 'club') for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) put(tipX + dx, tipY + dy, 6, undefined, false);
+    if (fam.tail === 'flame') {
+      put(tipX, tipY - 1, 10, undefined, false);
+      put(tipX + side, tipY - 2, 11, undefined, false);
+      put(tipX, tipY - 2, 10, undefined, false);
+      put(tipX - side, tipY - 1, 10, undefined, false);
+    }
+  }
+  };
+
   // ---------------------------------------------------------------- back parts (behind the body; in front of it in the back view)
   const backLayer = () => {
+  // From the front, a tail comes out from under the shell, so the shell goes over it.
+  const tailUnder = !back && P.back === 'shell';
+  if (tailUnder) tailPart();
   const wingY = shoulderY - 1;
   const wingX = back ? cx - 1.5 : shoulderX + 1;
   const ws = [5, 8, 11][stage];
@@ -523,26 +560,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     }
   }
 
-  // tail: asymmetric, sticks out to one side
-  if (v2 && L !== 'slime') {
-    drawTail2(D, types[0], back ? { ...fam, tailSide: -fam.tailSide as 1 | -1 } : fam, fr2, stage, back ? cx - fam.tailSide * 0.5 : cx + fam.tailSide * (rx * 0.55), by + ry * (back ? 0.45 : 0.55), sigVariant === 2);
-  } else if (fam.tail !== 'none' && L !== 'slime') {
-    const side = fam.tailSide;
-    const tx0 = cx + side * (rx * 0.6);
-    const ty0 = by + ry * 0.6;
-    const len = [4, 6, 8][stage];
-    const tipX = tx0 + side * len;
-    const tipY = ty0 - len * 0.6;
-    line(tx0, ty0, tipX, tipY, 1, stage === 2 ? 2 : 1, false);
-    if (fam.tail === 'spiked') for (let k = 1; k < len; k += 2) put(tx0 + side * k, ty0 - k * 0.6 - 1, 6, [0], false);
-    if (fam.tail === 'club') for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) put(tipX + dx, tipY + dy, 6, undefined, false);
-    if (fam.tail === 'flame') {
-      put(tipX, tipY - 1, 10, undefined, false);
-      put(tipX + side, tipY - 2, 11, undefined, false);
-      put(tipX, tipY - 2, 10, undefined, false);
-      put(tipX - side, tipY - 1, 10, undefined, false);
-    }
-  }
+  if (!tailUnder) tailPart();
   };
   if (!back) backLayer();
 
@@ -761,7 +779,12 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       }
       break;
     case 'crown':
-      for (let k = 0; k < 3; k++) tri(cx - k * 2.2 - 1, tY + 1, cx - k * 2.2 + 0.5, tY + 1, cx - k * 2.2 - 0.3, tY - 3 - (k === 0 ? 2 : 0), 6);
+      for (let k = 0; k < 3; k++) tri(cx - k * 2.2 - 1, tY + 1, cx - k * 2.2 + 0.5, tY + 1, cx - k * 2.2 - 0.3, tY - 3 - (k === 0 ? 2 : 0), v2 ? 7 : 6);
+      if (v2) {
+        // A gold band with a gem.
+        line(cx - 5.5, tY + 1, cx, tY + 1, 7, 1);
+        D.disc(cx - 0.5, tY + 0.6, 0.7, 11);
+      }
       break;
     case 'none':
       break;
