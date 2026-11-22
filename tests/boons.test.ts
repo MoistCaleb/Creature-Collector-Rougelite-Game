@@ -193,3 +193,29 @@ describe('boons in battle', () => {
     expect(weak.hp).toBe(Math.round(stats(weak).hp * 0.3));
   });
 });
+
+describe('boons online', () => {
+  it('both phones compute the same duel with each side\'s boons', async () => {
+    const { duelBattle } = await import('../src/net/duel');
+    const team = (ids: string[]) => ids.map((id) => {
+      const c = createCreature(id, 40, 1);
+      c.trait = undefined;
+      return c;
+    });
+    const info = {
+      seed: 99, hostName: 'A', guestName: 'B', hostTeam: [], guestTeam: [],
+      hostCreatures: team(['emberkit', 'wispling']), guestCreatures: team(['puddlet', 'frostling']),
+      hostBoons: ['ambush', 'haunting', 'kindling'], guestBoons: ['bedrock', 'phantomstep', 'undertow', 'not-a-boon'],
+    };
+    const h = duelBattle(info, 'host');
+    const g = duelBattle(info, 'guest');
+    h.start();
+    g.start();
+    for (let t = 0; t < 6 && h.outcome() === 'ongoing'; t++) {
+      h.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      g.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      expect(h.player.map((x) => x.c.hp)).toEqual(g.enemy.map((x) => x.c.hp));
+      expect(h.enemy.map((x) => x.c.hp)).toEqual(g.player.map((x) => x.c.hp));
+    }
+  });
+});

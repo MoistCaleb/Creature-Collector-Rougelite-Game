@@ -26,7 +26,7 @@ function handIn(run: Run, won: boolean) {
   if (handedIn.has(run)) return;
   handedIn.add(run);
   const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
-  sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run) });
+  sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run), boons: run.boons?.held ?? [] });
 }
 
 /** Stage battles whose result (win or loss) is already counted. */

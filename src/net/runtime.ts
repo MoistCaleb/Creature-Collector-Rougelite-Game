@@ -1,3 +1,4 @@
+import { cleanBoonIds } from './duel';
 import type Phaser from 'phaser';
 import { cleanLook, type TrainerLook } from '../data/trainerLook';
 import { cleanTitle } from '../logic/titles';
@@ -186,6 +187,8 @@ function checkRaceEnd() {
     guestTeam: [],
     hostCreatures: r.mine.team,
     guestCreatures: r.theirs.team,
+    hostBoons: r.mine.boons ?? [],
+    guestBoons: cleanBoonIds(r.theirs.boons),
     // Whatever potions each of you finished the stage with.
     potions: { host: r.mine.potions ?? 0, guest: r.theirs.potions ?? 0, hostHeal: r.mine.heal, guestHeal: r.theirs.heal },
   };
@@ -431,6 +434,8 @@ session.onMessage((msg: DuelMsg, from: string) => {
         const info = { ...msg.info, hostTeam: cleanTeam(msg.info.hostTeam), guestTeam: cleanTeam(msg.info.guestTeam) };
         if (msg.info.hostCreatures) info.hostCreatures = cleanCreatures(msg.info.hostCreatures);
         if (msg.info.guestCreatures) info.guestCreatures = cleanCreatures(msg.info.guestCreatures);
+        info.hostBoons = cleanBoonIds(msg.info.hostBoons);
+        info.guestBoons = cleanBoonIds(msg.info.guestBoons);
         if (duel.race) duel.race.duelStarted = true;
         beginDuel(new DuelController('guest', info, session));
       }

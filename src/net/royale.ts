@@ -1,3 +1,4 @@
+import { cleanBoonIds } from './duel';
 import { champion, cleanBracket, makeBracket, readyMatches, setWinner, type Bracket } from '../logic/bracket';
 import type { Creature } from '../logic/creature';
 import { Rng } from '../logic/rng';
@@ -28,6 +29,8 @@ interface HostRacer {
   /** Potions left for the bracket, and how much one heals. */
   potions: number;
   heal: number;
+  /** Boons from their climb (2.0). */
+  boons?: string[];
   timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -164,6 +167,7 @@ function onProgress(pid: string | undefined, p: RaceProgress) {
   };
   if (p.finished) {
     r.team = pid === myPid ? (p.team ?? []) : cleanCreatures(p.team);
+    r.boons = royale.tourney ? [] : cleanBoonIds(p.boons);
     // Battle royale: the potions you finished the stage with. Tournament: a set supply.
     r.potions = royale.tourney ? ARENA_POTIONS : Math.max(0, Math.min(99, Math.round(Number(p.potions) || 0)));
     const heal = Number(p.heal);
@@ -238,6 +242,8 @@ function schedule() {
         guestTeam: [],
         hostCreatures: ra.team ?? [],
         guestCreatures: rb.team ?? [],
+        hostBoons: ra.boons ?? [],
+        guestBoons: rb.boons ?? [],
         potions: { host: ra.potions, guest: rb.potions, hostHeal: ra.heal, guestHeal: rb.heal },
       };
       royale.infos.set(id, info);
@@ -395,7 +401,7 @@ let watchCtl: DuelController | null = null;
 
 function onWatchStart(msg: Extract<DuelMsg, { t: 'wstart' }>) {
   if (royale.watching !== msg.match || royale.match) return;
-  const info = { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures) };
+  const info = { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures), hostBoons: cleanBoonIds(msg.info.hostBoons), guestBoons: cleanBoonIds(msg.info.guestBoons) };
   // The runner's side is "yours" on screen; the other player is the opponent.
   const battle = duelBattle(info, 'host');
   if (msg.snap) applySnap(battle, msg.snap);
@@ -516,7 +522,7 @@ function onMessage(msg: DuelMsg, from: string) {
       if (!royale.active || (host && from)) return;
       startMatch(
         String(msg.match),
-        { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures) },
+        { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures), hostBoons: cleanBoonIds(msg.info.hostBoons), guestBoons: cleanBoonIds(msg.info.guestBoons) },
         msg.role === 'host' ? 'host' : 'guest',
         String(msg.opp),
       );
