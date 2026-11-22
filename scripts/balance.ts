@@ -34,6 +34,8 @@ import {
 import { Rng } from '../src/logic/rng';
 import { applyItem, eligibleTargets, pay, rollShop, unusableReason, type ItemId } from '../src/logic/shop';
 import { emptyDex } from '../src/logic/dex';
+import { BOONS } from '../src/data/boons';
+import { floorCurse, hasBoon, openOffer, skipOffer, takeBoon } from '../src/logic/boons';
 import { isRareTrait, setTraitsEnabled, silenceTrait, traitOf, TRAITS, type TraitId } from '../src/data/traits';
 
 (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -103,6 +105,14 @@ function fight(run: Run, kind: Kind): FightResult {
     playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
     playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
     enemyTactics: kind === 'battle' ? undefined : { potions: kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss?.name ?? 'Trainer' },
+    boons: { player: run.boons?.held ?? [], enemy: [] },
+    coins: run.coins,
+    secondWind: () => {
+      const rb = run.boons;
+      if (!rb || rb.windFloor === run.floor) return false;
+      rb.windFloor = run.floor;
+      return true;
+    },
   });
   b.start();
   for (let t = 0; t < 500; t++) {
@@ -113,7 +123,7 @@ function fight(run: Run, kind: Kind): FightResult {
       continue;
     }
     // Drink a potion when the active Hexling is low and the potion would matter.
-    if ((run.potions ?? 0) > 0 && b.p.c.hp / stats(b.p.c).hp < 0.3 && matchup(b.p.c, b.e.c) > 0.6) {
+    if ((run.potions ?? 0) > 0 && !hasBoon(run, 'shortfuse') && b.p.c.hp / stats(b.p.c).hp < 0.3 && matchup(b.p.c, b.e.c) > 0.6) {
       run.potions = (run.potions ?? 0) - 1;
       b.takeTurn({ kind: 'potion', index: b.pActive, heal: potionHeal(run) });
       continue;
@@ -129,7 +139,7 @@ function fight(run: Run, kind: Kind): FightResult {
   const res: FightResult = { won, boss: boss ? run.map.biome : undefined, rules: rules.map((r) => r.rule) };
   if (!won) return res;
   if (buryFallen(run).length) fillTeamFromBench(run);
-  postBattleRecover(run);
+  postBattleRecover(run, { won: true, sun: b.weather === 'sun' });
   for (;;) {
     const low = run.team.find((c) => c.hp > 0 && c.hp / stats(c).hp < 0.5);
     if (!low || !usePotion(run, low)) break;
@@ -138,7 +148,7 @@ function fight(run: Run, kind: Kind): FightResult {
   if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
   else {
     grantXp(run, xp, [...b.fought]);
-    run.coins += battleCoins(enemies, kind, run.heat ?? 0, run.twist ?? null);
+    run.coins += Math.round(battleCoins(enemies, kind, run.heat ?? 0, run.twist ?? null) * (hasBoon(run, 'prospector') ? 1.4 : 1));
   }
   if (kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) run.evoStones++;
   if (kind === 'elite') {
@@ -155,6 +165,8 @@ interface RunResult {
   won: boolean;
   /** The starter's trait (2.0). */
   trait?: string;
+  /** Boons it ended with (2.0). */
+  boons?: string[];
   /** Floor index the run ended on (0-2; 3 for a win). */
   floor: number;
   endedBy?: string;
@@ -190,7 +202,14 @@ function play(opts: { seed: number; starter: string; heat?: number; hunt?: boole
   if (!opts.weekly) run.heat = opts.heat ?? 0;
   const bossFights: FightResult[] = [];
   const trait = traitOf(run.team[0]);
-  const done = (r: Omit<RunResult, 'bossFights'>): RunResult => ({ ...r, bossFights, trait });
+  const done = (r: Omit<RunResult, 'bossFights'>): RunResult => {
+    for (const id of run.boons?.held ?? []) {
+      const t = (boonTally[id] ??= { runs: 0, wins: 0 });
+      t.runs++;
+      if (r.won) t.wins++;
+    }
+    return { ...r, bossFights, trait, boons: [...(run.boons?.held ?? [])] };
+  };
   const maxSteps = opts.hunt ? 4000 : 600;
   for (let step = 0; step < maxSteps; step++) {
     const node = currentNode(run);
@@ -209,11 +228,16 @@ function play(opts: { seed: number; starter: string; heat?: number; hunt?: boole
       run.evoStones--;
       evolve(c);
     }
+    botBoons(run);
     switch (n.kind) {
+      case 'boon':
+        openOffer(run, `hex${run.floor}:${n.id}`);
+        botBoons(run);
+        break;
       case 'battle':
       case 'elite':
       case 'boss': {
-        const r = fight(run, n.kind);
+        const r = fight(run, n.kind === 'battle' && floorCurse(run, 'hauntedfloor') ? 'elite' : n.kind);
         if (n.kind === 'boss') bossFights.push(r);
         if (!r.won) {
           if (!promoteBench(run)) {
@@ -286,6 +310,32 @@ function play(opts: { seed: number; starter: string; heat?: number; hunt?: boole
   return done({ won: !!run.hunt, floor: run.floor, endedBy: 'Out of steps', huntDepth: run.hunt?.depth });
 }
 
+/**
+ * The bot's boon picks: boons for its team's elements first, then general ones, then mythics;
+ * curses only when they pay a mythic or two boons. BOONS=off skips every offer (for comparison).
+ */
+const boonTally: Record<string, { runs: number; wins: number }> = {};
+function botBoons(run: Run) {
+  for (let guard = 0; guard < 8 && run.boons?.offer; guard++) {
+    const offer = run.boons.offer;
+    if (process.env.BOONS === 'off') {
+      skipOffer(run);
+      continue;
+    }
+    const els = new Set(allCreatures(run).flatMap((c) => creatureTypes(c)));
+    const score = (id: string) => {
+      const b = BOONS[id];
+      if (b.rarity === 'curse') return id === 'bankrupt' || id === 'bloodprice' ? 1 : -1;
+      if (b.rarity === 'mythic') return id === 'pact' ? 0.5 : 3;
+      if (b.element) return els.has(b.element) ? 2.5 : 0.2;
+      return 2;
+    };
+    const best = [...offer.ids].sort((a, b) => score(b) - score(a))[0];
+    if (!best || score(best) < 0) skipOffer(run);
+    else takeBoon(run, best);
+  }
+}
+
 // ---------------------------------------------------------------- the report
 
 const scale = Number(process.argv[2] ?? 1);
@@ -338,6 +388,34 @@ if (process.env.RULES_ONLY) {
   };
   show('Extra rules (Heat 4-8):', ruleTally);
   show("Guardians' own rules (Heat 4-8):", own);
+  process.exit(0);
+}
+
+// Boons (2.0): the same Heat 0 seeds played with boons skipped, then taken.
+if (process.env.BOONS_ONLY) {
+  const n = N(3000);
+  const seeds = Array.from({ length: n }, () => nextSeed());
+  process.env.BOONS = 'off';
+  const off = seeds.map((seed) => play({ seed, starter: pickStarter(seed), heat: 0 }));
+  process.env.BOONS = 'on';
+  for (const k of Object.keys(boonTally)) delete boonTally[k];
+  const on = seeds.map((seed) => play({ seed, starter: pickStarter(seed), heat: 0 }));
+  const wr = (xs: RunResult[]) => xs.filter((r) => r.won).length / Math.max(1, xs.length);
+  const o: string[] = [];
+  o.push('# Boons balance report', '', `Generated by \`BOONS_ONLY=1 npx vite-node scripts/balance.ts\` on ${new Date().toISOString().slice(0, 10)}: ${n} Heat 0 runs skipping every boon, then the same seeds taking them (traits on both times; ${Math.round((Date.now() - t0) / 1000)} s). The bot takes boons for its elements first, then general ones and mythics; curses only for a mythic or two boons.`, '');
+  o.push(`**Overall:** ${pct(off.filter((r) => r.won).length, n)} without boons → **${pct(on.filter((r) => r.won).length, n)}** with boons. Average boons held at the end: ${(on.reduce((t, r) => t + (r.boons?.length ?? 0), 0) / n).toFixed(1)}.`, '');
+  o.push('## By starter element', '', '| Element | Runs | Without | With | Change |', '|---|---|---|---|---|');
+  const els = [...new Set(SPECIES.map((sp) => sp.types[0]))];
+  const rows = els.map((el) => {
+    const idx = seeds.map((_, i) => i).filter((i) => SPECIES_BY_ID[pickStarter(seeds[i])].types[0] === el);
+    return { el, runs: idx.length, a: wr(idx.map((i) => off[i])), b: wr(idx.map((i) => on[i])) };
+  }).sort((x, y) => y.b - x.b);
+  for (const r of rows) o.push(`| ${r.el} | ${r.runs} | ${Math.round(r.a * 100)}% | ${Math.round(r.b * 100)}% | ${r.b >= r.a ? '+' : '−'}${Math.abs(Math.round((r.b - r.a) * 100))} |`);
+  o.push('', '## By boon', '', 'Win rate of runs that ended holding each boon (15+ runs). Boons picked late (after floor 2) only count for the last floor, so read these loosely.', '', '| Boon | Kind | Runs | Win rate |', '|---|---|---|---|');
+  Object.entries(boonTally).filter(([, t]) => t.runs >= 15).sort((a, b) => b[1].wins / b[1].runs - a[1].wins / a[1].runs)
+    .forEach(([id, t]) => o.push(`| ${BOONS[id].name} | ${BOONS[id].element ?? BOONS[id].rarity} | ${t.runs} | ${pct(t.wins, t.runs)} |`));
+  writeFileSync('docs/BOONS_REPORT.md', o.join('\n'));
+  console.log(o.slice(0, 24).join('\n'));
   process.exit(0);
 }
 
