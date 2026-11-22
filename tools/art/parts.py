@@ -94,9 +94,17 @@ def components(fg, gap=14):
                         q.append((ny, nx))
             if len(ys) > 2000:
                 boxes.append((max(0, min(ys) + gap), max(0, min(xs) + gap), min(h, max(ys) - gap + 1), min(w, max(xs) - gap + 1)))
-    # Reading order: rows, then left to right.
-    boxes.sort(key=lambda b: (round(b[0] / (h / 4)), b[1]))
-    return boxes
+    # Reading order: group into rows by vertical centre (a new row starts below the previous row's middle), then left to right.
+    boxes.sort(key=lambda b: (b[0] + b[2]) / 2)
+    rows, cur = [], []
+    for bx in boxes:
+        if cur and (bx[0] + bx[2]) / 2 > max(c[2] for c in cur):
+            rows.append(cur)
+            cur = []
+        cur.append(bx)
+    if cur:
+        rows.append(cur)
+    return [bx for row in rows for bx in sorted(row, key=lambda b: b[1])]
 
 
 def retone(img, cls, bg, box):
@@ -114,9 +122,10 @@ def retone(img, cls, bg, box):
     c[gray] = new[gray]
 
 
-def downsample(cls, bg, box, target_h):
+def downsample(cls, bg, box, target_h, ph=None):
     y0, x0, y1, x1 = box
-    ph = (y1 - y0) / target_h
+    ph = ph or (y1 - y0) / target_h
+    target_h = max(1, round((y1 - y0) / ph))
     tw = max(1, round((x1 - x0) / ph))
     out = np.full((target_h, tw), BG, dtype=np.int8)
     for ty in range(target_h):
@@ -193,9 +202,24 @@ def main():
     bg = background_mask(cls)
     boxes = components(~bg)
     parts = []
+    # Drop text labels: short, wide, mostly-dark blobs under the parts.
+    def is_label(box):
+        y0, x0, y1, x1 = box
+        sub = cls[y0:y1, x0:x1]
+        ink = (sub == INK).mean()
+        return (y1 - y0) < 70 and (x1 - x0) > 2.2 * (y1 - y0) and ink > 0.08
+    boxes = [b for b in boxes if not is_label(b)]
+    # Captions that survived (or other small debris): much shorter than a typical part.
+    if len(boxes) > 2 and not (len(sys.argv) > 4 and sys.argv[4] == 'common'):
+        hs = sorted(b[2] - b[0] for b in boxes)
+        med = hs[len(hs) // 2]
+        boxes = [b for b in boxes if (b[2] - b[0]) > 0.35 * med]
+    # 'common': one scale for the whole sheet (the tallest part gets target_h), so sizes stay relative.
+    common = len(sys.argv) > 4 and sys.argv[4] == 'common'
+    ph = max(b[2] - b[0] for b in boxes) / target_h if common else None
     for box in boxes:
         retone(im, cls, bg, box)
-        g = tidy(downsample(cls, bg, box, target_h))
+        g = tidy(downsample(cls, bg, box, target_h, ph))
         parts.append({'box': [int(v) for v in box], 'rows': [''.join(CH[int(v)] for v in row) for row in g]})
     json.dump(parts, open(prefix + '.json', 'w'), indent=1)
     print(len(parts), 'parts', [len(p['rows'][0]) for p in parts])
