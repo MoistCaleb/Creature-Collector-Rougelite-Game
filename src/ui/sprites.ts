@@ -42,7 +42,8 @@ interface StagePlan {
   mouth: Mouth;
 }
 
-export { familyPlan, paletteFor };
+export { familyPlan, stagePlan, paletteFor };
+export type { Loco, BodyShape, HeadShape, Arms, Back, Top, Mouth, Pattern, Tail, Family, StagePlan };
 
 const pickW = <T extends string>(rng: Rng, w: Partial<Record<T, number>>): T => rng.weighted<T>(w);
 
