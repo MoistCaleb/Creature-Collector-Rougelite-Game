@@ -92,17 +92,17 @@ export class StarterScene extends Phaser.Scene {
           pixelIcon(this, x + 18, y + 16, 'star', 16);
           text(this, x + 30, y + 9, 'Favorite', 11, '#ffc94d', { fontStyle: 'bold' });
         }
-        text(this, mid, y + 120, sp.names[0], 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0);
-        if (tName) traitHint(text(this, mid, y + 147, tName, 11, '#ffe9a8').setOrigin(0.5, 0), trait!);
+        text(this, mid, y + 122, sp.names[0], 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0);
         const chipsW = sp.types[0] === sp.types[1] ? 104 : 128;
-        typeChips(this, mid - chipsW / 2, y + 166, sp.types);
-        text(this, mid, y + 184, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
-        text(this, mid, y + 228, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
-        text(this, mid, y + 264, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        typeChips(this, mid - chipsW / 2, y + 162, sp.types);
+        text(this, mid, y + 180, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
+        text(this, mid, y + 224, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        if (tName) traitHint(text(this, mid, y + 252, `${tName}  ⓘ`, 12, '#ffe9a8', { fontStyle: 'bold' }).setOrigin(0.5, 0), trait!);
+        // (With a passive to show, the card has no room for the evolution line.)
         if (passives?.[id]) {
           const pv = PASSIVES[passives[id]];
-          text(this, mid, y + 282, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
-        }
+          text(this, mid, y + 272, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
+        } else text(this, mid, y + 274, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
         button(this, mid, y + 328, cw - 40, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
         return;
       }
@@ -114,8 +114,7 @@ export class StarterScene extends Phaser.Scene {
       const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id))).setScale(4 * SPRITE_FIT);
       this.shinyToggle(id, 82, y + 20, 100);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
-      text(this, 175, y + 12, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
-      if (tName) traitHint(text(this, 175, y + 40, tName, 12, '#ffe9a8'), trait!);
+      text(this, 175, y + 16, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
       if (!this.daily && !week && state.meta.favorite === id) {
         pixelIcon(this, W - 48, y + 22, 'star', 18);
         text(this, W - 60, y + 14, 'Favorite', 12, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);
@@ -125,7 +124,13 @@ export class StarterScene extends Phaser.Scene {
       text(this, 175, y + 122, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 13, COLORS.textDim, {
         wordWrap: { width: W - 215 },
       });
-      text(this, 175, y + 146, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 12, '#8e86ad', { wordWrap: { width: W - 215 } });
+      if (tName) traitHint(text(this, 175, y + 146, `${tName}  ⓘ`, 13, '#ffe9a8', { fontStyle: 'bold' }), trait!);
+      // (With a passive to show, the card has no room for the evolution line.)
+      if (!passives?.[id]) {
+        const evo = text(this, 175, y + 168, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 12, '#8e86ad');
+        // Keep it clear of the Pick button.
+        if (evo.width > W - 320) evo.setScale((W - 320) / evo.width, 1);
+      }
       if (passives?.[id]) {
         const pv = PASSIVES[passives[id]];
         pixelIcon(this, 42, y + 177, 'star', 14);
