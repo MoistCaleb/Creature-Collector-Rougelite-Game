@@ -16,6 +16,7 @@ import {
   verifyCode,
   type CloudSave,
 } from '../net/account';
+import { updateMessage } from '../logic/saveVersion';
 import { decodeSave, encodeSave, importSave, summarize, type SaveBundle } from '../logic/saveCode';
 import { openPicker, showMessage } from './picker';
 import { shieldInput } from './domShield';
@@ -141,6 +142,14 @@ function chooseSave(device: CloudSave, account: CloudSave): Promise<'device' | '
 async function syncNow(): Promise<boolean> {
   const out = await reconcile();
   if (out.kind === 'pulled') return true;
+  if (out.kind === 'update') {
+    card({
+      title: 'Update to keep syncing',
+      body: `${updateMessage(out.version)}\n\nUntil then you can keep playing on this device, but its progress won’t sync with your account (so it can’t overwrite the newer save).`,
+      buttons: [{ label: 'OK', primary: true, onClick: (c) => c.close() }],
+    });
+    return false;
+  }
   if (out.kind !== 'conflict') return false;
   const pick = await chooseSave(out.device, out.account);
   await resolveConflict(pick, out.device, out.account, encode);

@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../data/changelog';
 import { BOSSES, EXTRA_RULE_LEVELS, extraRuleCount, TRAINER_NAMES } from '../data/trainers';
 import { pickLine, RIVAL_HELLO, RIVAL_LOST, RIVAL_SKIPPED } from '../data/dialogue';
 import * as storage from '../storage';
@@ -180,6 +181,8 @@ export interface Meta {
    * every run that ends, abandoned runs as losses). Separate from `wins`, which unlocks things.
    */
   runRecord?: { wins: number; losses: number };
+  /** The game version that last saved this (from v1.52). */
+  savedBy?: string;
   /** Online games won: duels (series), stage battles, battle royales and online tournaments. */
   onlineWins?: number;
   /** Online games lost (counted from v1.46), and online wins in a row (now and best). */
@@ -399,6 +402,8 @@ export function abandonSavedRun(meta: Meta) {
 
 export function saveMeta(meta: Meta) {
   try {
+    // Which version wrote this save (see saveVersion: older versions won't overwrite it).
+    meta.savedBy = APP_VERSION;
     storage.setItem(META_KEY, JSON.stringify(meta));
   } catch {
     /* storage unavailable: progress just won't persist */

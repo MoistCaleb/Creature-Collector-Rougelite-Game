@@ -940,6 +940,29 @@ describe('wild creatures are left at 1 HP to catch', () => {
   });
 });
 
+describe('save versions', () => {
+  it('saves record their version; newer saves are recognised and save codes from them refused', async () => {
+    const { versionCode, fromNewerVersion, savedBy } = await import('../src/logic/saveVersion');
+    const { APP_VERSION } = await import('../src/data/changelog');
+    const { saveMeta } = await import('../src/logic/run');
+    const { encodeSave, decodeSave } = await import('../src/logic/saveCode');
+    expect(versionCode('1.9')).toBeLessThan(versionCode('1.10'));
+    expect(versionCode('1.52')).toBeLessThan(versionCode('2.0'));
+    const m = (await import('../src/logic/run')).loadMeta();
+    saveMeta(m);
+    expect(m.savedBy).toBe(APP_VERSION);
+    const json = JSON.stringify(m);
+    expect(savedBy(json)).toBe(APP_VERSION);
+    expect(fromNewerVersion(json)).toBe(false);
+    expect(fromNewerVersion(JSON.stringify({ ...m, savedBy: '99.0' }))).toBe(true);
+    expect(fromNewerVersion(JSON.stringify({ ...m, savedBy: undefined }))).toBe(false);
+    const code = await encodeSave({ at: 1, meta: JSON.stringify({ ...m, savedBy: '99.0' }), run: null });
+    await expect(decodeSave(code)).rejects.toThrow(/newer version/);
+    const ok = await encodeSave({ at: 1, meta: json, run: null });
+    await expect(decodeSave(ok)).resolves.toBeTruthy();
+  });
+});
+
 describe('caught creatures keep their level and evolution', () => {
   const meta = (): Meta => ({
     unlockedStarters: [], unlockedPassives: [], equippedPassive: null, runs: 0, wins: 0,
@@ -2013,7 +2036,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
