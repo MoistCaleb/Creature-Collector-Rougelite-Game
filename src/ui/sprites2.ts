@@ -9,7 +9,7 @@ import { buildGrid, paletteFor, type FaceInfo } from './sprites';
  * per line. Not used by the game yet.
  */
 
-export const SPRITE2_K = 1.4;
+export const SPRITE2_K = 1.6;
 export const SPRITE2_SIZE = Math.round(40 * SPRITE2_K);
 
 type Rgb = [number, number, number];
@@ -98,19 +98,17 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   // ---- fur: furry lines (mammal-like body plans, by line) get tufts along their upper edges
   const furry = (f.loco === 'biped' || f.loco === 'quad') && ['Fire', 'Frost', 'Nature', 'Earth', 'Storm', 'Light', 'Shadow'].includes(el) && hashString(speciesId + ':fur') % 3 !== 0;
   if (furry) {
-    const tuft: [number, number][] = [];
-    for (let x = 0; x < N / 2; x++)
-      for (let y = 1; y < N - 1; y++)
-        if (g[y][x] === 1 && !g[y - 1][x]) {
-          if (y < O(f.by) + O(f.ry) * 0.6 && (x + y) % 3 === 0) tuft.push([x, y - 1]);
-          break;
-        }
-    for (const [x, y] of tuft) set(x, y, 1);
-    // and along the outer sides
-    for (let y = 2; y < N - 2; y += 3)
+    // A few chunky tufts (3 pixels, pointing out) on the shoulders and sides: reads as fur, keeps edges clean.
+    let placed = 0;
+    for (let y = Math.round(O(f.shoulderY)); y < N - 6 && placed < 3; y += 6)
       for (let x = 1; x < N / 2; x++)
         if (g[y][x] === 1) {
-          if (!g[y][x - 1] && y > O(f.headTop) + 4) set(x - 1, y, 1);
+          if (!g[y][x - 1] && !g[y][x - 2]) {
+            set(x - 1, y, 1);
+            set(x - 2, y - 1, 1);
+            set(x - 1, y - 1, 1);
+            placed++;
+          }
           break;
         }
   }
@@ -254,93 +252,59 @@ function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number
   const pupil = 0x1a1428;
   const glow = pal[7];
   const brow = pal[9];
+  const iris = pal[10];
+  const irisD = dark(iris, 0.45);
+  const lineC = dark(pal[1], 0.75);
+  const C: Record<string, number> = { o: lineC, l: brow, w: white, i: iris, I: irisD, p: pupil, g: white, s: 0xdfe8ff, G: glow, h: light(glow, 0.5), t: pal[6], f: 0xffffff, m: 0x5a1a2e, n: 0xe0708a, k: brow };
+  /** Draw a pixel pattern centred on (cx, cy); mirrored for the other eye. */
+  const pat = (rows: string[], cx: number, cy: number, mirror = true) => {
+    const x0 = Math.round(cx - rows[0].length / 2);
+    const y0 = Math.round(cy - rows.length / 2);
+    rows.forEach((row, y) => [...row].forEach((ch, x) => ch !== '.' && p(x0 + x, y0 + y, C[ch], mirror)));
+  };
+  // Eyes, left eye as drawn (the right eye is its mirror, so pupils look inward).
+  const BABY = ['.lll...', '.ooooo.', 'owgwiio', 'owwiIpo', 'owiIppo', 'owiIIgo', '.owiio.', '..ooo..'];
+  const MID = ['llll...', '..llll.', '.ooooo.', 'owgwiIo', 'owwiIpo', '.owiIo.', '..ooo..'];
+  const FIERCE = ['ll.....', '.lll...', '..lllll', 'oGhGGpo', '.oGGGpo', '..oooo.'];
+  const SMALL = ['.ooo.', 'owiIo', '.ooo.'];
+  const HOLLOW = ['.lll..', 'lllll.', 'llGhl.', 'llhGl.', '.lll..'];
   const ey = O(f.eyeY);
   const eye = (ex: number, eyY: number, small = false) => {
-    if (f.hollow) {
-      for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if (Math.abs(dx - 0.5) + Math.abs(dy - 0.5) < 2.6) p(ex + dx, eyY + dy, brow);
-      p(ex + 1, eyY, glow);
-      p(ex, eyY + 1, glow);
-      p(ex + 1, eyY + 1, 0xffffff);
-      return;
-    }
-    if (f.stage === 0 && !small) {
-      // Big round baby eye: white, a large pupil looking inward, a bright glint.
-      for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if (!((dy === -2 || dy === 2) && (dx === -1 || dx === 2))) p(ex + dx, eyY + dy, white);
-      for (let dy = -1; dy <= 2; dy++) for (let dx = 1; dx <= 2; dx++) if (!(dy === 2 && dx === 2)) p(ex + dx, eyY + dy, pupil);
-      p(ex + 1, eyY - 1, white);
-      p(ex, eyY - 2, 0xdfe8ff);
-    } else if (f.stage === 1 || small) {
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 2; dx++) if (!(dy === 1 && dx === -1)) p(ex + dx, eyY + dy, white);
-      for (let dy = -1; dy <= 1; dy++) p(ex + 2, eyY + dy, pupil);
-      p(ex + 1, eyY, pupil);
-      p(ex + 1, eyY + 1, pupil);
-      p(ex + 2, eyY - 1, white);
-      if (!small) for (let dx = -2; dx <= 2; dx++) p(ex + dx, eyY - 2 - (dx < 0 ? 1 : 0), brow);
-    } else {
-      // Fierce final-form eye: a glowing slit under a heavy, angled brow.
-      for (let dx = -2; dx <= 2; dx++) p(ex + dx, eyY, glow);
-      for (let dx = -1; dx <= 2; dx++) p(ex + dx, eyY + 1, glow);
-      p(ex + 1, eyY, pupil);
-      p(ex + 1, eyY + 1, pupil);
-      p(ex - 1, eyY, 0xffffff);
-      for (let dx = -3; dx <= 3; dx++) p(ex + dx, eyY - 1 - Math.max(0, -dx) * 0.5, brow);
-    }
+    if (f.hollow) return pat(HOLLOW, ex, eyY);
+    if (small) return pat(SMALL, ex, eyY);
+    pat(f.stage === 0 ? BABY : f.stage === 1 ? MID : FIERCE, ex, eyY);
   };
-  const left = O(f.cx - f.spread - 1);
+  const left = O(f.cx - f.spread - 1) - 0.5;
   if (f.visor) {
-    for (let x = O(f.cx - f.faceR * 0.85); x <= O(f.cx); x++) {
-      p(x, ey, glow);
-      p(x, ey + 1, glow);
-      p(x, ey - 1, brow);
-    }
-    p(O(f.cx - f.faceR * 0.5), ey, 0xffffff);
+    pat(['ooooooooo', 'oGGhGGGGG', 'oGhGGGGGG', 'ooooooooo'], O(f.cx - f.faceR * 0.45), ey);
   } else if (f.eyes === 1) {
-    const ex = O(f.cx) - 2;
-    for (let dy = -2; dy <= 2; dy++) for (let dx = 0; dx <= 2; dx++) p(ex + dx, ey + dy, f.stage === 2 ? glow : white);
-    for (let dy = -1; dy <= 1; dy++) p(ex + 2, ey + dy, pupil);
-    p(ex + 1, ey - 1, 0xffffff);
+    pat(f.stage === 2 ? ['..ooooo..', '.oGGGGGo.', 'oGGhpGGGo', 'oGGppGGGo', '.oGGGGGo.', '..ooooo..'] : ['..ooooo..', '.owwiiio.', 'owgiIIpio', 'owwiIppio', '.owwiiio.', '..ooooo..'], O(f.cx) - 0.5, ey, false);
   } else {
     eye(left, ey);
-    if (f.eyes === 3) {
-      const tx = O(f.cx) - 0.5;
-      p(tx, ey - 4, f.stage === 2 ? glow : white);
-      p(tx, ey - 3, pupil);
-    }
-    if (f.eyes === 4) eye(O(f.cx - f.spread * 0.6), ey + 4, true);
+    if (f.eyes === 3) pat(f.stage === 2 ? ['.o.', 'oGo', 'oho', '.o.'] : ['.o.', 'owo', 'opo', '.o.'], O(f.cx) - 0.5, ey - 6, false);
+    if (f.eyes === 4) eye(O(f.cx - f.spread * 0.6) - 0.5, ey + 6, true);
   }
 
-  const my = O(f.my);
-  const mx = O(f.cx);
-  const ink = brow;
-  const fang = 0xffffff;
+  const my = O(f.my) + 1;
+  const mx = O(f.cx) - 0.5;
   switch (f.mouth) {
     case 'smile':
-      p(mx - 3, my - 1, ink);
-      p(mx - 2, my, ink);
-      p(mx - 1, my, ink);
-      p(mx, my, ink);
+      pat(['k.....k', '.kk.kk.', '...k...'], mx, my, false);
       break;
     case 'fangs':
-      for (let dx = -3; dx <= 0; dx++) p(mx + dx, my, ink);
-      p(mx - 2, my + 1, fang);
-      p(mx - 2, my + 2, fang);
+      pat(['kkkkkkk', '.f...f.', '.f...f.'], mx, my, false);
       break;
     case 'tusks':
-      for (let dx = -3; dx <= 0; dx++) p(mx + dx, my, ink);
-      for (let i = 0; i < 3 + f.stage; i++) p(mx - 4 - i * 0.4, my - i, pal[6]);
+      pat(['t.......t', 't.......t', '.t.....t.', '.tkkkkkt.'], mx, my - 1, false);
       break;
     case 'mandibles':
-      for (let i = 0; i < 3 + f.stage; i++) p(mx - 2 - i * 0.6, my + i * 0.8, pal[6]);
-      p(mx - 1, my, ink);
+      pat(['t.....t', '.t...t.', '.tt.tt.', '..t.t..'], mx, my, false);
       break;
     case 'jaw':
-      for (let dx = -5; dx <= 0; dx++) p(mx + dx, my, ink);
-      for (const dx of [-5, -3, -1]) p(mx + dx, my - 1, fang);
-      for (const dx of [-4, -2, 0]) p(mx + dx, my + 1, fang);
+      pat(['kkkkkkkkk', 'kfmfmfmfk', 'kmmnnnmmk', 'kfmfmfmfk', '.kkkkkkk.'], mx, my, false);
       break;
     case 'beak':
-      for (let dy = -2; dy <= 1 + f.stage; dy++) for (let dx = -2 + Math.max(0, dy); dx <= 0; dx++) p(mx + dx, my + dy, dy > 0 ? pal[6] : mix(pal[6], 0xffffff, 0.3));
-      p(mx - 2, my, ink);
+      pat(['.ttttt.', 'tttttkk', '.ttttt.', '..ttt..', '...t...'], mx, my - 1, false);
       break;
     case 'none':
       break;
