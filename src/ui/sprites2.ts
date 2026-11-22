@@ -1,7 +1,9 @@
 import { SPECIES_BY_ID } from '../data/species';
 import type { Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
-import { buildGrid, hueShift, paletteFor, type FaceInfo } from './sprites';
+import { DEX_SPECIES } from '../data/legends';
+import { LINE_PLANS } from './linePlans';
+import { buildGrid, hueShift, paletteFor, shinyHue, type FaceInfo } from './sprites';
 
 /**
  * Hexbound 2.0 art (style test): the same part plans as today, drawn on a finer grid (56 px) and
@@ -74,19 +76,7 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   ctx.rect(ox0, oy0, SPRITE2_SIZE, SPRITE2_SIZE);
   ctx.clip();
   const { pal } = paletteFor(speciesId, stage, shiny);
-  // Each line gets its own hue and depth within its element, so an element's lines don't all share one colour.
-  const tone = hashString(speciesId + ':tone');
-  const deg = ((tone % 7) - 3) * 7;
-  const val = ((tone >> 3) % 5) * 0.06 - 0.12;
-  for (const key of [1, 3, 9]) {
-    const c = hueShift(pal[key], deg);
-    pal[key] = val < 0 ? dark(c, -val) : light(c, val);
-  }
-  // Light lines were washed-out beige: warm them toward gold.
-  if (SPECIES_BY_ID[speciesId].types[0] === 'Light') {
-    pal[1] = mix(pal[1], 0xf0bd4f, 0.42);
-    pal[3] = mix(pal[3], 0xfff0c4, 0.3);
-  }
+  recolour(pal, speciesId, stage, shiny);
   // A near-black belly (from a dark accent) swallows the shading: lift it toward the body colour.
   const lum = (c: number) => 0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255);
   if (lum(pal[3]) < 70) pal[3] = light(pal[1], 0.35);
@@ -369,4 +359,62 @@ function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number
       break;
   }
   void el;
+}
+
+/**
+ * Body colours: each element has a range of tones and its lines are dealt them in turn, so lines of
+ * one element look related but distinct (ember red, amber, crimson, gold, … for Fire).
+ */
+const TONES: Record<Element, number[]> = {
+  Fire: [0xe8553a, 0xf08a3c, 0xc93a52, 0xf2b441, 0xb8452d, 0xff7a5c, 0xd9602a, 0xa83248],
+  Water: [0x3f7fe0, 0x2fb3d6, 0x4a5fd1, 0x2a9d9f, 0x6aa8ff, 0x3550a8, 0x45c4c0, 0x5a7ac8],
+  Nature: [0x58b84a, 0x8cc63f, 0x2f9e6a, 0x6e9b3a, 0xa7c957, 0x3c8f4e, 0x7fb86a, 0x4aa38a],
+  Earth: [0xb08850, 0x9c6b3f, 0xc9a66b, 0x8a7a55, 0xb5653a, 0x7d6a4f, 0xa89060, 0x8e5a40],
+  Storm: [0xe8c83a, 0xf2e05a, 0xd4a72c, 0xb7d24a, 0x8aa0c8, 0xf0b030, 0x9ab8e0, 0xd8d070],
+  Frost: [0x8fd3e8, 0x6fb8d9, 0xb4c8f0, 0x7fd6c8, 0xa8a8e8, 0xc8e4f0, 0x5aa8c8, 0x9ad0b8],
+  Metal: [0x9aa4b0, 0x7e8a9c, 0xb08a5a, 0xc07a50, 0x6c7a8a, 0xc8b46a, 0x8a9aa0, 0xa0a8c0],
+  Toxic: [0x9a4fd0, 0x7bc043, 0xc04fb0, 0x6a3fb0, 0xa8d040, 0x5fb090, 0xb070e0, 0x8a3a90],
+  Shadow: [0x5a4a8a, 0x3e3a5c, 0x6a3a6e, 0x34506e, 0x4a4458, 0x7a4a9a, 0x5a3048, 0x2e3e58],
+  Light: [0xf0c050, 0xf8e8a8, 0xf8d880, 0xffc0c8, 0xe8dcb8, 0xffd27a, 0xf0a868, 0xfff0d0],
+  Spirit: [0xd07ac8, 0xa88ae0, 0x7ac8d0, 0xe8a0c8, 0x8a7ad0, 0xc0a0f0, 0x9ad8c0, 0xb06aa0],
+  Dragon: [0xc0384a, 0x2f8a6a, 0x6a4ac0, 0xd06a2a, 0x3a6ab0, 0x8a2a3a, 0x4a9a50, 0xb0485a],
+};
+/** The legendaries' colours are chosen to match their designs. */
+const LEGEND_TONES: Record<string, [number, number]> = {
+  solmane: [0xf2b441, 0xe8553a],
+  tidecrown: [0x2a5fb8, 0xf2d04a],
+  umbrawyrm: [0x2e2a48, 0xc0384a],
+  ironvault: [0x6c7a8a, 0xc8b46a],
+  thornmaw: [0x3c8f4e, 0xc04fb0],
+  rimeveil: [0xb4d8f0, 0xa88ae0],
+};
+
+const toneIndex = new Map<string, number>();
+function toneOf(speciesId: string): number {
+  if (!toneIndex.size) {
+    const seen: Record<string, number> = {};
+    for (const s of DEX_SPECIES) {
+      const e = s.types[0];
+      seen[e] = (seen[e] ?? 0) + 1;
+      toneIndex.set(s.id, seen[e] - 1);
+    }
+  }
+  return toneIndex.get(speciesId) ?? hashString(speciesId) % 8;
+}
+
+function recolour(pal: Record<number, number>, speciesId: string, stage: number, shiny: boolean) {
+  const [t1, t2] = SPECIES_BY_ID[speciesId].types;
+  const i = toneOf(speciesId);
+  const legend = LEGEND_TONES[speciesId];
+  let base = legend ? legend[0] : (LINE_PLANS[speciesId]?.color ?? TONES[t1][i % 8]);
+  let sec = legend ? legend[1] : t1 === t2 ? dark(TONES[t1][(i + 4) % 8], 0.28) : TONES[t2][(i * 3 + 1) % 8];
+  // Babies a touch lighter, finals a touch deeper.
+  base = stage === 0 ? light(base, 0.1) : stage === 2 ? dark(base, 0.14) : base;
+  if (stage === 2) sec = dark(sec, 0.06);
+  const deg = shiny ? shinyHue(speciesId) : 0;
+  const sh = (c: number) => (shiny ? hueShift(c, deg) : c);
+  pal[1] = sh(base);
+  pal[2] = sh(sec);
+  pal[3] = sh(stage === 2 ? light(mix(base, sec, 0.35), 0.22) : light(base, 0.4));
+  pal[9] = sh(dark(base, 0.78));
 }

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
+import { babyOf, LINE_PLANS } from './linePlans';
 
 export const SPRITE_SIZE = 40;
 /** Multiply display scales by this so sprites keep their on-screen size if SPRITE_SIZE changes. */
@@ -354,14 +355,16 @@ export interface FaceInfo {
 export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false): Px[][] {
   const types = SPECIES_BY_ID[speciesId].types;
   const legend = v2 ? LEGEND_PLANS[speciesId] : undefined;
-  const fam = legend ? { ...familyPlan(speciesId, types), ...legend.fam } : familyPlan(speciesId, types);
-  const P = { ...stagePlan(speciesId, stage, fam, types), ...(legend?.plan ?? {}) };
+  const lp = v2 ? LINE_PLANS[speciesId] : undefined;
+  const fam = { ...familyPlan(speciesId, types), ...(legend?.fam ?? {}), ...(lp?.fam ?? {}) };
+  const lineStage = lp ? (lp.stages?.[stage as 0 | 1 | 2] ?? (stage === 0 ? (lp.baby ?? babyOf(lp.plan)) : lp.plan)) : {};
+  const P = { ...stagePlan(speciesId, stage, fam, types), ...(legend?.plan ?? {}), ...lineStage };
   /** 2.0 art: extra parts rolled from their own seed, so the original rolls stay as they are. */
   const r2 = new Rng(hashString(`${speciesId}:v2:${stage}`));
   const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
   /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
-  const sigVariant = v2 ? hashString(`${speciesId}:sigv`) % 3 : 0;
-  if (v2 && !legend) {
+  const sigVariant = v2 ? (lp?.sig ?? hashString(`${speciesId}:sigv`) % 3) : 0;
+  if (v2 && !legend && !lp) {
     const has = (e: Element) => types.includes(e);
     if (stage > 0 && r2.chance(0.45))
       P.top = r2.weighted<Top>({
@@ -815,7 +818,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
 
   // ---------------------------------------------------------------- face
   const visor = types[0] === 'Metal' && stage > 0;
-  const hollow = (types[0] === 'Spirit' || types[0] === 'Shadow') && stage > 0;
+  const hollow = ((types[0] === 'Spirit' || types[0] === 'Shadow') && stage > 0) || !!lp?.hollow;
   const eyeY = Math.round(faceY - faceR * (stage === 0 ? 0 : 0.15));
   const spread = Math.max(1.5, faceR * 0.42);
   if (face) {
