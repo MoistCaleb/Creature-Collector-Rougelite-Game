@@ -558,6 +558,7 @@ export const NODE_ICONS: Record<string, IconId> = {
   event: 'question',
   revive: 'heart',
   boon: 'sparkle',
+  hidden: 'question',
   boss: 'skull',
 };
 

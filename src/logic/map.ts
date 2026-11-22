@@ -1,7 +1,7 @@
 import type { Element } from '../data/types';
 import { Rng } from './rng';
 
-export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boon' | 'boss';
+export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boon' | 'hidden' | 'boss';
 
 export interface MapNode {
   id: string;
@@ -245,5 +245,6 @@ export const NODE_INFO: Record<NodeKind, { label: string; color: number; desc: s
   event: { label: 'Event', color: 0x2f6b9c, desc: 'Something unexpected.' },
   revive: { label: 'Revival', color: 0xc0466e, desc: 'Bring back one fallen Hexling at 60% of the level it fell at. One per floor.' },
   boon: { label: 'Boon', color: 0xa8842a, desc: 'Choose a boon for the rest of the run.' },
+  hidden: { label: '???', color: 0x6a4a9a, desc: 'Something rare is hidden here.' },
   boss: { label: 'Boss', color: 0x5b2c6f, desc: 'Defeat it to clear the floor.' },
 };

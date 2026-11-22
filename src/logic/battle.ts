@@ -260,6 +260,9 @@ export class Battle {
       coins?: number;
       /** Second Wind: asked when one of yours would faint; true if it's still unused this floor. */
       secondWind?: () => boolean;
+      /** Surprises: an Eclipse floor's battles are at night; a Storm Front's open in weather. */
+      night?: boolean;
+      weather?: WeatherId | null;
     } = {},
   ) {
     this.playerDamageMult = opts.playerDamageMult ?? 1;
@@ -288,6 +291,8 @@ export class Battle {
     this.boonSets = { player: new Set(opts.boons?.player ?? []), enemy: new Set(opts.boons?.enemy ?? []) };
     this.coins = opts.coins ?? 0;
     this.windAsk = opts.secondWind ?? null;
+    if (opts.night) this.night = true;
+    if (opts.weather) this.setWeather(opts.weather, 5);
   }
 
   // Boons (2.0).

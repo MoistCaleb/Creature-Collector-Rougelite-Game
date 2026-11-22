@@ -29,13 +29,14 @@ import {
 } from '../src/logic/creature';
 import {
   allCreatures, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, equipHeld, fillTeamFromBench, grantXp, makeEncounter, moveTo,
-  postBattleRecover, potionHeal, promoteBench, rollHeld, startHunt, startRun, startWeekly, stash, TWIST_ORDER, TWISTS, usePotion, weeklyInfo, type Meta, type Run, type TwistId,
+  encounterKind, postBattleRecover, potionHeal, promoteBench, rollHeld, startHunt, startRun, startWeekly, stash, TWIST_ORDER, TWISTS, usePotion, weeklyInfo, type Meta, type Run, type TwistId,
 } from '../src/logic/run';
 import { Rng } from '../src/logic/rng';
 import { applyItem, eligibleTargets, pay, rollShop, unusableReason, type ItemId } from '../src/logic/shop';
 import { emptyDex } from '../src/logic/dex';
 import { BOONS } from '../src/data/boons';
-import { floorCurse, hasBoon, openOffer, skipOffer, takeBoon } from '../src/logic/boons';
+import { elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../src/logic/surprises';
+import { hasBoon, openOffer, skipOffer, takeBoon } from '../src/logic/boons';
 import { isRareTrait, setTraitsEnabled, silenceTrait, traitOf, TRAITS, type TraitId } from '../src/data/traits';
 
 (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -94,7 +95,7 @@ function fight(run: Run, kind: Kind): FightResult {
   if (process.env.TRAIT_SIDES === 'player') enemies.forEach(silenceTrait);
   if (process.env.TRAIT_SIDES === 'foe') allCreatures(run).forEach(silenceTrait);
   const boss = kind === 'boss' ? BOSSES[run.map.biome] : null;
-  const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
+  const rules = boss ? guardianRules(boss, Math.max(run.heat ?? 0, elderHere(run) ? 4 : 0), run.seed, run.floor) : [];
   const b = new Battle(run.team, enemies, run.rng, {
     playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? GLASS_MULT : 1),
     enemyDamageMult: run.twist === 'glass' ? GLASS_MULT : 1,
@@ -107,6 +108,8 @@ function fight(run: Run, kind: Kind): FightResult {
     enemyTactics: kind === 'battle' ? undefined : { potions: kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss?.name ?? 'Trainer' },
     boons: { player: run.boons?.held ?? [], enemy: [] },
     coins: run.coins,
+    night: floorSurprise(run).floor === 'eclipse',
+    weather: stormFrontWeather(run),
     secondWind: () => {
       const rb = run.boons;
       if (!rb || rb.windFloor === run.floor) return false;
@@ -148,7 +151,7 @@ function fight(run: Run, kind: Kind): FightResult {
   if (kind === 'battle' && allCreatures(run).length < 3 && run.rng.chance(0.35)) catchCreature(run, enemies[0]);
   else {
     grantXp(run, xp, [...b.fought]);
-    run.coins += Math.round(battleCoins(enemies, kind, run.heat ?? 0, run.twist ?? null) * (hasBoon(run, 'prospector') ? 1.4 : 1));
+    run.coins += Math.round(battleCoins(enemies, kind, run.heat ?? 0, run.twist ?? null) * (hasBoon(run, 'prospector') ? 1.4 : 1) * omenCoinMult(run));
   }
   if (kind === 'battle' && run.rng.chance(BALANCE.stoneDropChance[run.floor] ?? 0)) run.evoStones++;
   if (kind === 'elite') {
@@ -237,7 +240,7 @@ function play(opts: { seed: number; starter: string; heat?: number; hunt?: boole
       case 'battle':
       case 'elite':
       case 'boss': {
-        const r = fight(run, n.kind === 'battle' && floorCurse(run, 'hauntedfloor') ? 'elite' : n.kind);
+        const r = fight(run, n.kind === 'boss' ? 'boss' : encounterKind(run, n) as Kind);
         if (n.kind === 'boss') bossFights.push(r);
         if (!r.won) {
           if (!promoteBench(run)) {

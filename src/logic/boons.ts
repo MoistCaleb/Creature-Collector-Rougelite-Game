@@ -97,7 +97,7 @@ export function rollOffer(run: Run, tag: string, mode: OfferMode = 'normal'): Bo
     ids.push(rng.chance(0.1) ? (pick(mythics, () => 1) ?? pick(general, () => 1)) : pick(general, () => 1));
     ids.push(rng.chance(0.25) ? (pick(curses, () => 1) ?? pick(general, () => 1)) : (pick(general, () => 1) ?? pick(mine, elementW)));
     // Marked: guardians' offers (and every other) have a fourth choice.
-    if (hasBoon(run, 'marked')) ids.push(pick(general, () => 1) ?? pick(mine, elementW));
+    if (hasBoon(run, 'marked') || run.surprises?.omen === 'bloodmoon') ids.push(pick(general, () => 1) ?? pick(mine, elementW));
   }
   return ids.filter((x): x is BoonId => !!x);
 }

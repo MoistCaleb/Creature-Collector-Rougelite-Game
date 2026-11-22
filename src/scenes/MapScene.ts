@@ -1,4 +1,4 @@
-import { floorCurse, hasBoon, openOffer, runBoons } from '../logic/boons';
+import { hasBoon, openOffer, runBoons } from '../logic/boons';
 import { openBoonList, openBoonOffer } from '../ui/boonPick';
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
@@ -30,7 +30,7 @@ import { placeRng, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrai
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
-import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
+import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, encounterKind, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
@@ -1023,7 +1023,7 @@ export class MapScene extends Phaser.Scene {
       case 'battle':
       case 'elite':
         // Haunted Floor (a curse): every battle on this floor is a trainer.
-        this.scene.start('Battle', { kind: n.kind === 'battle' && floorCurse(run, 'hauntedfloor') ? 'elite' : n.kind });
+        this.scene.start('Battle', { kind: encounterKind(run, n) });
         return;
       case 'heal':
         return this.doHeal();

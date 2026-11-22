@@ -74,7 +74,7 @@ describe('boon offers', () => {
       const run = startRun(mkMeta(), 'emberkit', seed);
       const a = rollOffer(run, 'x');
       expect(rollOffer(run, 'x')).toEqual(a);
-      expect(a.length).toBe(3);
+      expect(a.length).toBe(run.surprises?.omen === 'bloodmoon' ? 4 : 3);
       // Slot 1: an element boon for an element on your team.
       expect(BOONS[a[0]].element).toBe('Fire');
       // Slot 2 is never a curse; slot 3 sometimes is.

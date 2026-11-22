@@ -1,3 +1,4 @@
+import { elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../logic/surprises';
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
 import { traitLine } from '../ui/traitText';
@@ -282,7 +283,9 @@ export class BattleScene extends Phaser.Scene {
     }
     const boss = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
     // Its own rule, plus extra ones at Heat 4+ (the same ones every time this floor is loaded).
-    const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
+    // An Elder guardian (a surprise) brings an extra rule, as at Heat 4.
+    const elder = !!boss && elderHere(run);
+    const rules = boss ? guardianRules(boss, Math.max(run.heat ?? 0, elder ? 4 : 0), run.seed, run.floor) : [];
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? GLASS_MULT : 1),
@@ -302,6 +305,8 @@ export class BattleScene extends Phaser.Scene {
       // Boons (2.0): yours apply on your side.
       boons: { player: run.boons?.held ?? [], enemy: [] },
       coins: run.coins,
+      night: floorSurprise(run).floor === 'eclipse',
+      weather: stormFrontWeather(run),
       // Second Wind: once per floor.
       secondWind: () => {
         const rb = run.boons;
@@ -313,7 +318,7 @@ export class BattleScene extends Phaser.Scene {
       enemyTactics:
         this.kind === 'battle'
           ? undefined
-          : { potions: this.kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss ? boss.name : (run.activeBattle.trainer ?? 'The trainer') },
+          : { potions: this.kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss ? `${elder ? 'Elder ' : ''}${boss.name}` : (run.activeBattle.trainer ?? 'The trainer') },
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -1811,7 +1816,7 @@ export class BattleScene extends Phaser.Scene {
     const lucky = teamTrait(run.team.filter((c) => (ab.fought ?? []).includes(c.uid)), 'lucky');
     // Boons: Prospector pays more; Haunted Floor (a curse) pays and teaches more on its floor.
     const haunted = floorCurse(run, 'hauntedfloor') ? 1.5 : 1;
-    const coins = Math.round(battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult * (1 + lucky) * (hasBoon(run, 'prospector') ? 1.4 : 1) * haunted);
+    const coins = Math.round(battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult * (1 + lucky) * (hasBoon(run, 'prospector') ? 1.4 : 1) * haunted * omenCoinMult(run));
     sfx.victory();
     this.cheer('player');
     playMusic(null);

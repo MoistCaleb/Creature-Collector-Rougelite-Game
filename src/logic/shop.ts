@@ -1,3 +1,4 @@
+import { omenPriceMult } from './surprises';
 import { hasBoon, teamMax } from './boons';
 import { rollTrait } from '../data/traits';
 import { BALANCE } from '../data/balance';
@@ -89,7 +90,7 @@ export interface Shop {
 export function priceFor(run: Run, base: number): number {
   const floorMult = 1 + BALANCE.shopFloorMarkup * run.floor;
   const discount = (run.passive === 'haggler' ? 0.75 : 1) * (run.prep === 'haggle' && run.floor === 0 ? 0.75 : 1);
-  return Math.max(1, Math.round((base * floorMult * discount * heatRules(run.heat ?? 0).priceMult) / 5) * 5);
+  return Math.max(1, Math.round((base * floorMult * discount * heatRules(run.heat ?? 0).priceMult * omenPriceMult(run)) / 5) * 5);
 }
 
 export function rerollPrice(run: Run, shop: Shop): number {
