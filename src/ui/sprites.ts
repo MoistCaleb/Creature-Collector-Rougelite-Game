@@ -18,8 +18,8 @@ type Loco = 'biped' | 'quad' | 'insect' | 'floater' | 'slime' | 'serpent' | 'avi
 type BodyShape = 'round' | 'pear' | 'drop' | 'oval' | 'vtorso' | 'boxy' | 'wide' | 'segmented' | 'tall' | 'hulk';
 type HeadShape = 'merged' | 'round' | 'wide' | 'long' | 'skull' | 'flat' | 'beak';
 type Arms = 'none' | 'stub' | 'claws' | 'long' | 'fists' | 'blades' | 'tentacles' | 'pincers';
-type Back = 'none' | 'batwings' | 'featherwings' | 'bugwings' | 'spines' | 'shell' | 'mane' | 'fins';
-type Top = 'none' | 'ears' | 'longears' | 'antennae' | 'horns-swept' | 'horns-ram' | 'antlers' | 'unihorn' | 'crest' | 'crown';
+type Back = 'none' | 'batwings' | 'featherwings' | 'bugwings' | 'spines' | 'shell' | 'mane' | 'fins' | 'crystals' | 'plates' | 'cape';
+type Top = 'none' | 'ears' | 'longears' | 'antennae' | 'horns-swept' | 'horns-ram' | 'antlers' | 'unihorn' | 'crest' | 'crown' | 'frill' | 'spikerow' | 'tuft' | 'horns-twin';
 type Mouth = 'none' | 'smile' | 'fangs' | 'tusks' | 'mandibles' | 'jaw' | 'beak';
 type Pattern = 'spots' | 'hstripes' | 'vstripes' | 'belly' | 'chevrons' | 'core' | 'rings';
 type Tail = 'none' | 'thin' | 'spiked' | 'club' | 'flame';
@@ -191,7 +191,11 @@ interface Draw {
   put: (x: number, y: number, v: Px, onlyOver?: Px[], mirror?: boolean) => void;
   blob: (ex: number, ey: number, rx: number, ry: number, v: Px, o?: { taper?: number; p?: number; over?: Px[] }) => void;
   line: (x0: number, y0: number, x1: number, y1: number, v: Px, thick?: number, mirror?: boolean) => void;
-  tri: (ax: number, ay: number, bx: number, by: number, qx: number, qy: number, v: Px) => void;
+  tri: (ax: number, ay: number, bx: number, by: number, qx: number, qy: number, v: Px, mirror?: boolean) => void;
+  /** A filled disc in design units at full output resolution (`r` in design units). */
+  disc: (x: number, y: number, r: number, v: Px, mirror?: boolean, over?: Px[]) => void;
+  /** While set, every draw only paints over these roles. */
+  clip: (over?: Px[]) => void;
 }
 
 /**
@@ -200,8 +204,10 @@ interface Draw {
  */
 function makeDraw(g: Px[][], S: number, cx: number, k = 1): Draw {
   const N = g.length;
+  let clipTo: Px[] | undefined;
   const setPx = (ox: number, oy: number, v: Px, onlyOver?: Px[], mirror = true) => {
     if (ox < 0 || oy < 0 || ox >= N || oy >= N) return;
+    onlyOver ??= clipTo;
     if (onlyOver && !onlyOver.includes(g[oy][ox])) return;
     g[oy][ox] = v;
     if (mirror) g[oy][N - 1 - ox] = v;
@@ -259,7 +265,7 @@ function makeDraw(g: Px[][], S: number, cx: number, k = 1): Draw {
         for (let px = Math.round(ox - r + 0.5); px <= Math.round(ox + r - 0.5); px++) setPx(px, py, v, undefined, mirror);
     }
   };
-  const tri: Draw['tri'] = (ax, ay, bx, by, qx, qy, v) => {
+  const tri: Draw['tri'] = (ax, ay, bx, by, qx, qy, v, mirror = true) => {
     const sign = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => (x1 - x3) * (y2 - y3) - (x2 - x3) * (y1 - y3);
     const inside = (x: number, y: number) => {
       const d1 = sign(x, y, ax, ay, bx, by);
@@ -269,14 +275,22 @@ function makeDraw(g: Px[][], S: number, cx: number, k = 1): Draw {
     };
     if (k === 1) {
       for (let y = Math.floor(Math.min(ay, by, qy)); y <= Math.ceil(Math.max(ay, by, qy)); y++)
-        for (let x = Math.floor(Math.min(ax, bx, qx)); x <= Math.ceil(Math.max(ax, bx, qx)); x++) if (inside(x, y)) put(x, y, v);
+        for (let x = Math.floor(Math.min(ax, bx, qx)); x <= Math.ceil(Math.max(ax, bx, qx)); x++) if (inside(x, y)) put(x, y, v, undefined, mirror);
       return;
     }
     for (let oy = Math.floor(Math.min(ay, by, qy) * k); oy <= Math.ceil((Math.max(ay, by, qy) + 1) * k); oy++)
       for (let ox = Math.floor(Math.min(ax, bx, qx) * k); ox <= Math.ceil((Math.max(ax, bx, qx) + 1) * k); ox++)
-        if (inside(toD(ox), toD(oy))) setPx(ox, oy, v);
+        if (inside(toD(ox), toD(oy))) setPx(ox, oy, v, undefined, mirror);
   };
-  return { put, blob, line, tri };
+  const disc: Draw['disc'] = (x, y, rad, v, mirror = true, over) => {
+    const ox = (x + 0.5) * k - 0.5;
+    const oy = (y + 0.5) * k - 0.5;
+    const R = Math.max(0.5, rad * k);
+    for (let py = Math.round(oy - R); py <= Math.round(oy + R); py++)
+      for (let px = Math.round(ox - R); px <= Math.round(ox + R); px++)
+        if ((px - ox) ** 2 + (py - oy) ** 2 <= R * R + 0.25) setPx(px, py, v, over, mirror);
+  };
+  return { put, blob, line, tri, disc, clip: (o) => void (clipTo = o) };
 }
 
 const SHAPES: Record<BodyShape, { rx: number; ry: number; taper: number; p: number }> = {
@@ -318,10 +332,31 @@ export interface FaceInfo {
 }
 
 /** The design grid is 40 pixels; `k` > 1 draws it finer (k = 1.4: 56 pixels). `face`: filled in, and with k > 1 the face is left out for the caller to draw. */
-export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>): Px[][] {
+export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false): Px[][] {
   const types = SPECIES_BY_ID[speciesId].types;
   const fam = familyPlan(speciesId, types);
-  const P = stagePlan(speciesId, stage, fam, types);
+  const P = { ...stagePlan(speciesId, stage, fam, types) };
+  /** 2.0 art: extra parts rolled from their own seed, so the original rolls stay as they are. */
+  const r2 = new Rng(hashString(`${speciesId}:v2:${stage}`));
+  const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
+  /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
+  const sigVariant = v2 ? hashString(`${speciesId}:sigv`) % 3 : 0;
+  if (v2) {
+    const has = (e: Element) => types.includes(e);
+    if (stage > 0 && r2.chance(0.45))
+      P.top = r2.weighted<Top>({
+        frill: has('Water') || has('Dragon') || has('Toxic') ? 3 : 0.5,
+        spikerow: has('Earth') || has('Metal') || has('Dragon') || has('Frost') ? 3 : 1,
+        tuft: has('Fire') || has('Nature') || has('Storm') || has('Light') || has('Shadow') ? 3 : 0.5,
+        'horns-twin': has('Fire') || has('Shadow') || has('Earth') ? 2.5 : 1,
+      });
+    if (stage > 0 && fam.loco !== 'avian' && r2.chance(0.35))
+      P.back = r2.weighted<Back>({
+        crystals: has('Frost') || has('Earth') || has('Light') || has('Metal') ? 3 : 0.4,
+        plates: has('Dragon') || has('Earth') || has('Metal') || has('Fire') ? 3 : 0.5,
+        cape: fam.loco === 'biped' || fam.loco === 'floater' ? (has('Shadow') || has('Spirit') || has('Light') ? 3 : 0.4) : 0,
+      });
+  }
   const S = 40;
   const N = Math.round(S * k);
   const g: Px[][] = Array.from({ length: N }, () => Array<Px>(N).fill(0));
@@ -392,7 +427,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       for (let i = 0; i <= span; i++) {
         const top = wingY - (span - i) * 0.15 - i * 0.55;
         const len = 3 + (span - i) * 0.35 + (i % 2);
-        for (let y = top; y <= top + len; y++) put(wingX - i, y, i % 3 === 0 ? 11 : 2);
+        for (let y = top; y <= top + len; y++) put(wingX - i, y, i % 3 === 0 && !v2 ? 11 : 2);
       }
       break;
     }
@@ -418,12 +453,58 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     case 'fins':
       tri(shoulderX + 1, shoulderY, shoulderX - 3 - stage * 2, shoulderY - 3 - stage, shoulderX - 1, shoulderY + 4, 2);
       break;
+    case 'crystals':
+      // A cluster of crystals growing from behind the shoulders.
+      for (let i = 0; i < 3; i++) {
+        const bx = shoulderX + 1.5 + i * 1.6;
+        const h = (3 + stage * 2.2) * (1 - i * 0.22);
+        const lean = (2 - i) * 0.9;
+        tri(bx - 1.1, shoulderY + 1, bx + 1.1, shoulderY + 1, bx - lean, shoulderY - h, 10);
+        line(bx - 0.2, shoulderY, bx - lean, shoulderY - h + 0.8, 11, 0.4);
+      }
+      break;
+    case 'plates':
+      // Dorsal plates rising behind the head and shoulders.
+      for (let i = 0; i < 3; i++) {
+        const px = cx - 1 - i * 2.4;
+        const base = bodyTop + 1 + i * 1.2;
+        const h = (2.5 + stage * 1.6) * (1 - i * 0.18);
+        tri(px - 1.3, base, px + 1.3, base, px - 0.3, base - h - (merged ? 0 : H.ry * 1.2), 2);
+        line(px - 0.2, base, px - 0.3, base - h - (merged ? 0 : H.ry * 1.2) + 1, 11, 0.4);
+      }
+      break;
+    case 'cape': {
+      // A ragged cloak hanging from the shoulders.
+      const flare = 2 + stage * 1.5;
+      tri(shoulderX + 1, shoulderY - 1, cx, shoulderY - 1, shoulderX - flare, ground - 1, 2);
+      tri(cx, shoulderY - 1, shoulderX - flare, ground - 1, cx, ground - 1, 2);
+      for (let i = 0; i < 4; i++) {
+        const x = shoulderX - flare + 1 + i * ((cx - shoulderX + flare) / 4);
+        tri(x - 1, ground - 1.5, x + 1, ground - 1.5, x, ground + 0.5, 2);
+      }
+      break;
+    }
     case 'none':
       break;
   }
 
+  if (P.top === 'frill' && !merged) {
+    // A fan of webbed spines behind the head.
+    const fx = cx - H.rx * 0.6;
+    const len = (3 + stage * 1.5) * 1.1;
+    for (let i = 0; i < 4; i++) {
+      const a = -0.7 + i * 0.5;
+      const tx = fx - Math.cos(a) * (H.rx * 0.5 + len);
+      const ty = hy + Math.sin(a) * (H.ry * 0.5 + len);
+      tri(fx, hy - 1.2, fx, hy + 1.2, tx, ty, 2);
+      line(fx, hy, tx, ty, 11, 0.45);
+    }
+  }
+
   // tail: asymmetric, sticks out to one side
-  if (fam.tail !== 'none' && L !== 'slime') {
+  if (v2 && L !== 'slime') {
+    drawTail2(D, types[0], fam, fr2, stage, cx + fam.tailSide * (rx * 0.55), by + ry * 0.55, sigVariant === 2);
+  } else if (fam.tail !== 'none' && L !== 'slime') {
     const side = fam.tailSide;
     const tx0 = cx + side * (rx * 0.6);
     const ty0 = by + ry * 0.6;
@@ -447,6 +528,14 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     const xs = L === 'quad' ? [cx - rx * 0.85, cx - rx * 0.35] : [cx - rx * 0.5];
     for (const lx of xs) {
       for (let y = by + ry - 2; y <= ground; y++) for (let k = 0; k < legW; k++) put(lx + k, y, 1);
+      if (v2) {
+        // A rounded foot with small claws along the front.
+        const fx = lx + (legW - 1) / 2 - 0.4;
+        for (let t = -1; t <= 1; t++) D.disc(fx + t * 0.5, ground - 0.2, legW / 2 + 0.25, 1);
+        // Claws: single pixels along the front of the foot.
+        if (stage >= 1) for (let t = 0; t < 1 + stage; t++) D.disc(fx - legW / 2 - 0.3 + (t * (legW + 0.2)) / stage, ground + 0.5, 0.45 / k, 8);
+        continue;
+      }
       if (stage >= 1) {
         put(lx - 1, ground, 8);
         if (stage === 2) put(lx + legW, ground, 8);
@@ -489,7 +578,8 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   if (L === 'slime') for (let k = 0; k < 2 + stage; k++) for (let y = 0; y < 2 + (k % 2); y++) put(cx - rx * (0.25 + 0.22 * k), by + ry + y, 1);
 
   const over: Px[] = [1];
-  switch (fam.pattern) {
+  if (v2) drawPattern2(D, fam.pattern, r, stage, cx, by, rx, ry);
+  else switch (fam.pattern) {
     case 'spots':
       for (let i = 0; i < 3 + stage * 2; i++) put(cx - rx * (0.25 + r.next() * 0.6), by - ry * 0.6 + r.next() * ry * 1.2, 2, over);
       break;
@@ -610,6 +700,24 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       for (let i = 0; i < 4 * big + 2; i++) put(cx - (i % 2), tY - i * 0.8, i % 3 === 0 ? 11 : 2);
       tri(tX + 1, tY + 1, tX + 3, tY + 2, tX - 2 * big, tY - 2 * big, 2);
       break;
+    case 'spikerow':
+      for (let i = 0; i < 4; i++) {
+        const x = cx - i * 1.5;
+        tri(x - 0.9, tY + 1.2, x + 0.7, tY + 1.2, x - 0.3, tY - 1 - big * (1.6 - i * 0.3), 6);
+      }
+      break;
+    case 'tuft':
+      for (let i = 0; i < 4; i++) {
+        const x = cx - i * 1.1;
+        tri(x - 0.6, tY + 1.2, x + 0.6, tY + 1.2, x - 1.2 - i * 0.5, tY - 1.5 * big - (3 - i) * 0.6, 2);
+      }
+      break;
+    case 'horns-twin':
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12;
+        D.disc(tX + 0.6 - t * 1.6 * big, tY + 0.5 - t * 3.2 * big + t * t * big, (0.95 + stage * 0.15) * (1 - t * 0.6), 6);
+      }
+      break;
     case 'crown':
       for (let k = 0; k < 3; k++) tri(cx - k * 2.2 - 1, tY + 1, cx - k * 2.2 + 0.5, tY + 1, cx - k * 2.2 - 0.3, tY - 3 - (k === 0 ? 2 : 0), 6);
       break;
@@ -617,7 +725,19 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       break;
   }
 
-  drawSignature(types[0], D, { cx, headTop, hy, shoulderX, shoulderY, by, rx, ry, stage, hrx: merged ? rx : H.rx });
+  // 2.0: a lighter muzzle on furred, snouted heads gives the face depth.
+  if (v2 && stage > 0 && !merged && P.head !== 'beak' && P.mouth !== 'jaw' && (L === 'biped' || L === 'quad') && fr2.chance(0.6))
+    blob(cx, hy + H.ry * 0.5, H.rx * 0.36, H.ry * 0.3, 3, { over: [1] });
+
+  const anchors: Anchors = { cx, headTop, hy, shoulderX, shoulderY, by, rx, ry, stage, hrx: merged ? rx : H.rx, v2 };
+  if (sigVariant === 1) {
+    const el = types[0];
+    if (el === 'Frost' || el === 'Earth') Object.assign(anchors, { shoulderY: headTop + 1, shoulderX: cx - anchors.hrx * 0.7 });
+    else if (el === 'Water' || el === 'Dragon') Object.assign(anchors, { hy: shoulderY + 1, hrx: cx - shoulderX - 0.5 });
+    else if (el === 'Spirit') Object.assign(anchors, { shoulderY: headTop - 1, rx: anchors.hrx * 0.4 });
+    else Object.assign(anchors, { cx: shoulderX + 2.2, headTop: shoulderY + 0.5, hrx: 2 });
+  }
+  if (sigVariant !== 2) drawSignature(types[0], D, anchors);
 
   // ---------------------------------------------------------------- face
   const visor = types[0] === 'Metal' && stage > 0;
@@ -718,6 +838,162 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   return g;
 }
 
+/** 2.0 tails: tapered and curved, with a tip that shows the element. */
+function drawTail2(d: Draw, el: Element, fam: Family, r: Rng, stage: number, x0: number, y0: number, force = false) {
+  const roll = r.chance(0.45);
+  const kind = fam.tail !== 'none' ? (force && fam.tail === 'club' ? 'thin' : fam.tail) : roll || force ? 'thin' : 'none';
+  if (kind === 'none') return;
+  const side = fam.tailSide;
+  const len = [5, 7.5, 10][stage];
+  const curl = r.next() * 0.6 + 0.4;
+  const pt = (t: number) => {
+    // A curve that leaves the body sideways and sweeps up.
+    const x = x0 + side * len * (0.9 * t + 0.15 * Math.sin(t * Math.PI));
+    const y = y0 - len * curl * t * t - len * 0.15 * t;
+    return [x, y] as const;
+  };
+  const base = [0.9, 1.2, 1.6][stage] * (kind === 'club' ? 1.2 : 1);
+  const n = 28;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const [x, y] = pt(t);
+    d.disc(x, y, base * (1 - t * 0.65), 1, false);
+    if (kind === 'spiked' && i % 7 === 3) {
+      const [nx, ny] = pt(Math.min(1, t + 0.05));
+      const ax = -(ny - y), ay = nx - x; // normal
+      const L2 = Math.hypot(ax, ay) || 1;
+      const up = ay / L2 < 0 ? 1 : -1;
+      d.tri(x - 0.5, y, x + 0.5, y, x + (ax / L2) * up * 2.2, y + (ay / L2) * up * 2.2, 6, false);
+    }
+  }
+  const [tx, ty] = pt(1);
+  const [px, py] = pt(0.9);
+  const dx = tx - px, dy = ty - py;
+  const dl = Math.hypot(dx, dy) || 1;
+  const ux = dx / dl, uy = dy / dl; // tip direction
+  const s = 1 + stage * 0.35;
+  const tipAt = (a: number) => [tx + ux * a, ty + uy * a] as const;
+  if (kind === 'club') {
+    d.disc(tx, ty, 1.4 * s, 6, false);
+    d.disc(tx - 0.4, ty - 0.4, 0.5 * s, 11, false);
+    return;
+  }
+  switch (el) {
+    case 'Fire': {
+      for (let i = 0; i < 6; i++) {
+        const [x, y] = tipAt(i * 0.5 * s);
+        d.disc(x, y - i * 0.25, (1.3 - i * 0.2) * s, i < 3 ? 10 : 11, false);
+      }
+      break;
+    }
+    case 'Nature': {
+      for (let i = 0; i < 7; i++) {
+        const [x, y] = tipAt(i * 0.45 * s);
+        d.disc(x, y, Math.sin(((i + 0.5) / 7) * Math.PI) * 1.3 * s, 10, false);
+      }
+      const [x1, y1] = tipAt(2.8 * s);
+      d.line(tx, ty, x1, y1, 11, 0.5, false);
+      break;
+    }
+    case 'Water':
+    case 'Dragon': {
+      const w = el === 'Water' ? 2.2 : 1.6;
+      const [x1, y1] = tipAt(2.6 * s);
+      d.tri(tx - uy * w * s, ty + ux * w * s, tx + uy * w * s, ty - ux * w * s, x1, y1, el === 'Water' ? 2 : 10, false);
+      if (el === 'Water') d.tri(tx, ty, x1 - uy * 1.5, y1 + ux * 1.5, x1 + uy * 0.3, y1 - ux * 0.3, 11, false);
+      break;
+    }
+    case 'Toxic': {
+      const [x1, y1] = tipAt(2.2 * s);
+      d.tri(tx - uy * 0.9, ty + ux * 0.9, tx + uy * 0.9, ty - ux * 0.9, x1, y1, 8, false);
+      d.disc(tx, ty, 0.9 * s, 10, false);
+      break;
+    }
+    case 'Storm': {
+      const [x1, y1] = tipAt(1.3 * s);
+      d.line(tx, ty, x1 + 1.2, y1, 10, 0.8, false);
+      d.line(x1 + 1.2, y1, x1 - 0.6, y1 - 1.6 * s, 10, 0.8, false);
+      d.line(x1 - 0.6, y1 - 1.6 * s, x1 + 0.4, y1 - 3 * s, 11, 0.6, false);
+      break;
+    }
+    case 'Frost':
+    case 'Metal': {
+      const [x1, y1] = tipAt(2.6 * s);
+      const [xm, ym] = tipAt(1.0 * s);
+      const w = 1.2 * s;
+      d.tri(xm - uy * w, ym + ux * w, xm + uy * w, ym - ux * w, x1, y1, el === 'Frost' ? 10 : 6, false);
+      d.tri(xm - uy * w, ym + ux * w, xm + uy * w, ym - ux * w, tx - ux * 0.3, ty - uy * 0.3, el === 'Frost' ? 10 : 6, false);
+      d.line(tx, ty, x1, y1, 11, 0.4, false);
+      break;
+    }
+    case 'Earth': {
+      d.disc(tx, ty, 1.2 * s, 10, false);
+      d.disc(tx + ux * 0.8, ty + uy * 0.8 - 0.5, 0.8 * s, 10, false);
+      break;
+    }
+    case 'Light':
+    case 'Spirit':
+    case 'Shadow': {
+      for (let i = 0; i < 5; i++) {
+        const [x, y] = tipAt(i * 0.6 * s);
+        d.disc(x + Math.sin(i * 1.3) * 0.6, y, (1.1 - i * 0.18) * s, i % 2 ? 11 : 10, false);
+      }
+      break;
+    }
+  }
+}
+
+/** 2.0 body markings, drawn at full resolution so they read as fur, scales or plating instead of blocks. */
+function drawPattern2(d: Draw, pattern: Pattern, r: Rng, stage: number, cx: number, by: number, rx: number, ry: number) {
+  const over: Px[] = [1];
+  d.clip(over);
+  switch (pattern) {
+    case 'spots':
+      for (let i = 0; i < 3 + stage * 2; i++) {
+        const a = r.next() * Math.PI * 2;
+        const dd = 0.3 + r.next() * 0.45;
+        const x = cx - Math.abs(Math.cos(a)) * rx * dd;
+        const y = by + Math.sin(a) * ry * dd;
+        const rad = 0.55 + r.next() * 0.55 + stage * 0.12;
+        d.disc(x, y, rad, 2, true, over);
+        d.disc(x - rad * 0.3, y - rad * 0.3, rad * 0.35, 11, true, [2]);
+      }
+      break;
+    case 'hstripes':
+      // Tiger stripes: wedges reaching in from the flank.
+      for (let k2 = 0; k2 < 2 + stage; k2++) {
+        const y = by - ry * 0.55 + k2 * ((ry * 1.3) / (2 + stage));
+        const x = cx - rx - 0.5;
+        d.tri(x, y - 0.7, x, y + 0.7, x + rx * (0.28 + 0.08 * (k2 % 2)), y + 0.9, 2);
+      }
+      break;
+    case 'vstripes':
+      // Stripes running down from the back.
+      for (let k2 = 0; k2 < 2 + (stage > 1 ? 1 : 0); k2++) {
+        const x = cx - rx * (0.15 + k2 * 0.3);
+        d.tri(x - 0.8, by - ry - 0.5, x + 0.8, by - ry - 0.5, x - 0.3, by - ry * (0.15 - 0.1 * (k2 % 2)), 2);
+      }
+      break;
+    case 'belly':
+      d.blob(cx, by + ry * 0.2, rx * 0.55, ry * 0.65, 3, { over });
+      break;
+    case 'chevrons':
+      for (let k2 = 0; k2 < 2 + stage; k2++) {
+        const y = by - ry * 0.45 + k2 * 2.6;
+        d.line(cx - rx * 0.55, y - 1.4, cx, y, 2, 0.8);
+      }
+      break;
+    case 'core':
+      d.blob(cx, by - ry * 0.1, 1.6 + stage * 0.6, 1.6 + stage * 0.6, 7, { over });
+      d.blob(cx, by - ry * 0.1, 0.8 + stage * 0.4, 0.8 + stage * 0.4, 11, { over: [7] });
+      break;
+    case 'rings':
+      for (let k2 = 0; k2 < 3 + stage; k2++) d.line(cx - rx, by - ry + 1.2 + k2 * 3.2, cx, by - ry + 1.6 + k2 * 3.2, 3, 0.8);
+      break;
+  }
+  d.clip(undefined);
+}
+
 interface Anchors {
   cx: number;
   headTop: number;
@@ -729,6 +1005,7 @@ interface Anchors {
   ry: number;
   stage: number;
   hrx: number;
+  v2?: boolean;
 }
 
 /** The family's primary element shows up as a feature that grows with each evolution. */
@@ -738,6 +1015,19 @@ function drawSignature(el: Element, d: Draw, c: Anchors) {
   const top = c.headTop;
   switch (el) {
     case 'Fire':
+      if (c.v2) {
+        // Licks of flame: a tall one in the middle, smaller ones leaning out.
+        const flame = (x: number, y: number, h: number, lean: number) => {
+          for (let i = 0; i <= 10; i++) {
+            const t = i / 10;
+            const r = (0.5 + h * 0.16) * (1 - t) ** 0.8;
+            d.disc(x + lean * t * t, y - h * t, r, t < 0.45 && h > 3 ? 11 : 10, x < c.cx - 0.6);
+          }
+        };
+        flame(c.cx - 0.5, top + 1, 3 + s * 1.8, 0.6);
+        if (s >= 1 || c.hrx > 3) flame(c.cx - 1.8 - s * 0.4, top + 1.4, 2 + s * 1.1, -1.4);
+        break;
+      }
       for (let i = 0; i < 2 + s; i++) {
         const fx = c.cx - i * 1.6;
         const h = (3 - i * 0.6) * k;

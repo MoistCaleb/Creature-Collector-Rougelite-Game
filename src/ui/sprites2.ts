@@ -28,17 +28,51 @@ const light = (c: number, t: number) => mix(c, LIGHT_TINT, t);
 const css = (c: number, a = 1) => (a >= 1 ? '#' + c.toString(16).padStart(6, '0') : `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a})`);
 
 /** Each line's own extra feature (the 2.0 plan's "signature part"). */
-const SIG_PARTS = ['gem', 'emblem', 'cheeks', 'scarf', 'tufts', 'collar', 'bracers', 'facemark'] as const;
+const SIG_PARTS = ['gem', 'emblem', 'cheeks', 'scarf', 'collar', 'bracers', 'facemark'] as const;
 type SigPart = (typeof SIG_PARTS)[number];
 export const signaturePart = (speciesId: string): SigPart => SIG_PARTS[hashString(speciesId + ':part') % SIG_PARTS.length];
 
-export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox = 0, oy = 0, shiny = false) {
-  const k = SPRITE2_K;
+/** How tall each stage stands in the 64-pixel frame (so every line fills it the same way). */
+const STAGE_H = [40, 51, 60];
+
+const bbox = (g: number[][]) => {
+  let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+  g.forEach((row, y) => row.forEach((v, x) => {
+    if (!v) return;
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }));
+  return { x0, y0, x1, y1 };
+};
+
+/** Scale for this sprite: its stage's height, but never wider than the frame. */
+function fitScale(speciesId: string, stage: number): number {
+  const b = bbox(buildGrid(speciesId, stage, 1, {}, true) as number[][]);
+  const h = b.y1 - b.y0 + 1;
+  const w = b.x1 - b.x0 + 1;
+  return Math.max(1.2, Math.min(2.8, STAGE_H[stage] / h, (SPRITE2_SIZE - 4) / w));
+}
+
+export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny = false) {
+  const k = fitScale(speciesId, stage);
   const face: Partial<FaceInfo> = {};
-  const g = buildGrid(speciesId, stage, k, face) as number[][];
+  const g = buildGrid(speciesId, stage, k, face, true) as number[][];
   const f = face as FaceInfo;
   const N = g.length;
+  // Centre the creature and stand it on the bottom of the frame.
+  const bb = bbox(g);
+  const ox = ox0 + Math.round(SPRITE2_SIZE / 2 - (bb.x0 + bb.x1 + 1) / 2);
+  const oy = oy0 + (SPRITE2_SIZE - 2 - bb.y1);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ox0, oy0, SPRITE2_SIZE, SPRITE2_SIZE);
+  ctx.clip();
   const { pal } = paletteFor(speciesId, stage, shiny);
+  // A near-black belly (from a dark accent) swallows the shading: lift it toward the body colour.
+  const lum = (c: number) => 0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255);
+  if (lum(pal[3]) < 70) pal[3] = light(pal[1], 0.35);
   const types = SPECIES_BY_ID[speciesId].types;
   const el = types[0] as Element;
   const rnd = new Rng(hashString(`${speciesId}:paint${stage}`));
@@ -76,9 +110,6 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
       for (let dy = 0; dy < 4 + stage * 2; dy++) set(tailX + Math.round(dy * 0.3), y0 + 2 + dy, 2, false);
       break;
     }
-    case 'tufts':
-      for (let i = 0; i < 4 + stage; i++) for (let h = 0; h <= 1 + (i % 2) + stage; h++) set(cxo - 1 - i, O(f.headTop) - h + (i === 0 ? 1 : 0), 2);
-      break;
     case 'collar': {
       const y0 = Math.round(Math.min(neckY, bodyMid - 3));
       for (let x = 0; x < N / 2; x++) if (g[y0]?.[x] === 1 || g[y0 + 1]?.[x] === 1) {
@@ -208,7 +239,8 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
         }
   }
 
-  drawFace(ctx, f, pal, ox, oy, O, el);
+  drawFace(ctx, f, pal, ox, oy, O, el, N);
+  ctx.restore();
 }
 
 /** A subtle surface texture for each element (scales, cracks, rivets, circuits, …). */
@@ -239,8 +271,7 @@ function texture(el: Element, c: number, x: number, y: number, d: number, pal: R
 }
 
 /** Eyes and mouth, drawn at full resolution. */
-function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number, number>, ox: number, oy: number, O: (d: number) => number, el: Element) {
-  const N = Math.round(40 * SPRITE2_K);
+function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number, number>, ox: number, oy: number, O: (d: number) => number, el: Element, N: number) {
   const p = (x: number, y: number, c: number, mirror = true) => {
     x = Math.round(x);
     y = Math.round(y);
