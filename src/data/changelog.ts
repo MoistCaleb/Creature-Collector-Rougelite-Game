@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.01';
+export const APP_VERSION = '2.02';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.02',
+    title: 'Fixes',
+    items: [
+      'Time Warp now beats Volta’s Tailwind: while time is twisted, the slower Hexling moves first even against her.',
+      'Winged Hexlings (like Voltwing) have their wings in front of their tails again.',
+      'In boss fights, Time Warp, weather and team effect tags sit below the boss’s rules instead of on top of them.',
+      'Team screen: the trait button no longer covers the “Evolves at” line. The Evolve button now shows the level instead.',
+    ],
+  },
   {
     version: '2.01',
     title: 'Easier to see',

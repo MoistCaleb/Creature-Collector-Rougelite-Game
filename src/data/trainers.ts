@@ -6,7 +6,7 @@ export type BossRule =
   | 'riptide' // switching in costs your creature 1/8 max HP
   | 'thorns' // hitting a boss creature hurts the attacker for 10% of the damage
   | 'bulwark' // boss creatures enter with +1 Defense
-  | 'tailwind' // the boss always moves first (priority moves still win)
+  | 'tailwind' // the boss always moves first (priority moves and Time Warp still win)
   | 'whiteout' // your creatures enter with -1 Speed
   | 'miasma' // your creatures are poisoned when they enter
   | 'overclock' // end of turn: the boss's active creature gains +1 Attack (up to +3)
@@ -61,7 +61,7 @@ export const BOSSES: Record<Element, BossDef> = {
   Storm: {
     element: 'Storm', name: 'Volta', title: 'the Living Gale', partner: 'Light',
     quote: 'You will never see me coming.',
-    rule: 'tailwind', ruleName: 'Tailwind', ruleDesc: 'Her Hexlings always strike first, unless you use a priority move.',
+    rule: 'tailwind', ruleName: 'Tailwind', ruleDesc: 'Her Hexlings always strike first, unless you use a priority move or Time Warp.',
   },
   Water: {
     element: 'Water', name: 'Maren', title: 'Keeper of the Undertow', partner: 'Frost',

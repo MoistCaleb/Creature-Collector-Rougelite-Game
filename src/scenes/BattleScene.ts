@@ -258,6 +258,7 @@ export class BattleScene extends Phaser.Scene {
 
   create(data: { kind: EncounterKind; match?: BattleMatch }) {
     this.crowd = null;
+    this.enemyFxY = 0;
     this.statsOpen = false;
     // Only this fight counts (kept with a run's saved battle, so a reload remembers them).
     this.foeSeen = new Set(state.run?.activeBattle?.seenMoves ?? []);
@@ -382,8 +383,10 @@ export class BattleScene extends Phaser.Scene {
       const syn = teamSynergy(this.enemies);
       if (syn.length) {
         const line = syn.map((s) => `${s.element} ×${s.count} ${SYNERGY_LABEL[s.stat]} +${Math.round(s.bonus * 100)}%`).join(' · ');
-        text(this, 16, ry, `Synergy: ${line}`, 10, '#ff8a7a', { wordWrap: { width: 214 } });
+        ry += text(this, 16, ry, `Synergy: ${line}`, 10, '#ff8a7a', { wordWrap: { width: 214 } }).height + 4;
       }
+      // Field chips (Time Warp, weather, team effects) go under the rule box, not over it.
+      this.enemyFxY = Math.max(L.enemyFx.y, ry);
     } else if (this.kind === 'elite') {
       onField(text(this, 16, 96, trainer, 13, '#ffc94d', { fontStyle: 'bold' }));
     }
@@ -1729,6 +1732,8 @@ export class BattleScene extends Phaser.Scene {
 
   /** Team effects up on each side: a colored tag with turns left, by each side's panel. */
   private fxChips: Phaser.GameObjects.Container | null = null;
+  /** Where the enemy's chips go: lower in boss fights, below the rule box. */
+  private enemyFxY = 0;
   private drawTeamFx() {
     this.showWeather();
     this.fxChips?.destroy();
@@ -1737,7 +1742,7 @@ export class BattleScene extends Phaser.Scene {
     // the player's go right to left above its panel.
     for (const side of ['enemy', 'player'] as const) {
       let x = side === 'enemy' ? L.enemyFx.x : L.playerFx.x;
-      const y = side === 'enemy' ? L.enemyFx.y : L.playerFx.y;
+      const y = side === 'enemy' ? Math.max(L.enemyFx.y, this.enemyFxY) : L.playerFx.y;
       for (const [fx, left] of Object.entries(this.battle.teamFx[side]) as [TeamFxId, number][]) {
         if (!left) continue;
         const def = TEAM_FX[fx];

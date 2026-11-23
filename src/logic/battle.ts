@@ -542,7 +542,8 @@ export class Battle {
       const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
       const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p) || this.firstStrike('player');
       const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e) || this.slipping(this.e) || this.firstStrike('enemy'));
-      const playerFirst = pPri !== ePri ? pPri : this.has('tailwind') ? false : this.playerGoesFirst();
+      // The Tailwind boss always goes first, except under Time Warp (then speed decides, slower first).
+      const playerFirst = pPri !== ePri ? pPri : this.has('tailwind') && !this.warp ? false : this.playerGoesFirst();
       const order = playerFirst ? (['player', 'enemy'] as const) : (['enemy', 'player'] as const);
       this.firstSide = order[0];
       for (const side of order) {
