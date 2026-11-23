@@ -3,7 +3,7 @@ import { BOONS } from '../src/data/boons';
 import { BALANCE } from '../src/data/balance';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { SURPRISES } from '../src/data/surprises';
-import { LORE_BOONS, LORE_SURPRISES, WORKSHOP, WORKSHOP_BRANCHES, WORKSHOP_TOTAL, branchUpgrades, type WorkshopId } from '../src/data/workshop';
+import { LORE_BOON_HINTS, LORE_BOONS, LORE_SURPRISES, WORKSHOP, WORKSHOP_BRANCHES, WORKSHOP_TOTAL, branchUpgrades, type WorkshopId } from '../src/data/workshop';
 import { emptyStats } from '../src/logic/achievements';
 import { rollOffer } from '../src/logic/boons';
 import { camp } from '../src/logic/camp';
@@ -16,6 +16,7 @@ import {
   boonInPool,
   buyUpgrade,
   freeRerollReady,
+  loreLock,
   nextUpgrade,
   ownedUpgrades,
   surpriseInPool,
@@ -213,5 +214,25 @@ describe('the Workshop (2.0)', () => {
     expect(addPartner(run, DEFAULT_STARTERS[2])).toBeNull();
     expect(rosterFull(run)).toBe(false);
     expect(addPartner(startRun(mkMeta(), 'emberkit', 7), other)).toBeNull();
+  });
+});
+
+describe('Lore hints in the Hexlidex', () => {
+  it('names the Lore upgrade a locked boon or surprise needs, until it is owned', () => {
+    const m = mkMeta();
+    expect(loreLock(m, 'boon', 'opportunist')?.id).toBe('lore2');
+    expect(loreLock(m, 'surprise', 'hiddenshop')?.id).toBe('lore3');
+    expect(loreLock(m, 'boon', 'prospector')?.name).toBe('Lore III');
+    const open = Object.keys(BOONS).find((id) => !LORE_BOONS[id])!;
+    expect(loreLock(m, 'boon', open)).toBeNull();
+    ownedUpgrades(m).push('lore1', 'lore2');
+    expect(loreLock(m, 'boon', 'opportunist')).toBeNull();
+    expect(loreLock(m, 'surprise', 'mirror')).toBeNull();
+    expect(loreLock(m, 'boon', 'firststrike')?.id).toBe('lore3');
+  });
+
+  it('has a hint for every Lore-locked boon, and only for those', () => {
+    expect(Object.keys(LORE_BOON_HINTS).sort()).toEqual(Object.keys(LORE_BOONS).sort());
+    for (const h of Object.values(LORE_BOON_HINTS)) expect(h.length).toBeGreaterThan(5);
   });
 });
