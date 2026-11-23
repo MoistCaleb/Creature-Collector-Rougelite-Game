@@ -2,6 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { cleanLook, cleanName, nameProblem, type TrainerLook } from '../data/trainerLook';
 import { accountClient, accountsAvailable, currentUser } from './account';
 import { GAME_MODES, type GameMode } from './duel';
+import { setGhostPool, type GhostMember } from '../logic/surprises';
 
 /**
  * Friends: a username and friend code each (you add people by code), friend requests, who's online (and what they're up
@@ -23,6 +24,8 @@ export interface Friend {
   title: string | null;
   /** Their favourite Hexling (or last starter), to sit by your campfire. */
   buddy: Buddy | null;
+  /** Their last winning team, for a friend's ghost (accepted friends only; needs ghost.sql). */
+  ghost: GhostMember[] | null;
   status: 'pending' | 'accepted';
   /** A request they sent you (pending only). */
   incoming: boolean;
@@ -41,6 +44,33 @@ function cleanBuddy(x: unknown): Buddy | null {
   if (!b || typeof b.id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(b.id)) return null;
   const stage = Number(b.stage);
   return { id: b.id, stage: Number.isInteger(stage) && stage >= 0 && stage <= 2 ? stage : 0, shiny: b.shiny === true };
+}
+
+/** A ghost team from the server: up to 4 real-looking members, or null. */
+export function cleanGhost(x: unknown): GhostMember[] | null {
+  if (!Array.isArray(x)) return null;
+  const team = x
+    .slice(0, 4)
+    .map((m) => (m && typeof m === 'object' ? (m as Record<string, unknown>) : null))
+    .filter((m): m is Record<string, unknown> => !!m && typeof m.speciesId === 'string' && /^[a-z0-9_-]{1,40}$/.test(m.speciesId))
+    .map((m) => {
+      const stage = Number(m.stage);
+      const level = Number(m.level);
+      return {
+        speciesId: m.speciesId as string,
+        stage: Number.isInteger(stage) && stage >= 0 && stage <= 2 ? stage : 0,
+        level: Number.isFinite(level) ? Math.max(1, Math.min(100, Math.round(level))) : 1,
+      };
+    });
+  return team.length ? team : null;
+}
+
+/** Your last winning team, for your friends' ghost encounters (quietly skipped before ghost.sql is run). */
+export async function shareGhost(team: GhostMember[] | null) {
+  const u = currentUser();
+  if (!u || !profile || !team?.length) return;
+  const ghost = team.slice(0, 4).map((m) => ({ speciesId: m.speciesId, stage: m.stage, level: m.level }));
+  await accountClient().from('profiles').update({ ghost }).eq('user_id', u.id);
 }
 
 export interface Invite {
@@ -107,7 +137,7 @@ export async function listFriends(): Promise<Friend[]> {
   const { data, error } = await accountClient().rpc('my_friends');
   if (error) throw err(error, 'Couldn’t load your friends.');
   const now = Date.now();
-  return ((data ?? []) as Record<string, unknown>[])
+  const list = ((data ?? []) as Record<string, unknown>[])
     .map((r) => {
       const seen = r.last_seen ? Date.parse(String(r.last_seen)) : 0;
       return {
@@ -117,6 +147,7 @@ export async function listFriends(): Promise<Friend[]> {
         look: cleanLook(r.look),
         title: typeof r.title === 'string' ? r.title : null,
         buddy: cleanBuddy(r.buddy),
+        ghost: r.status === 'accepted' ? cleanGhost(r.ghost) : null,
         status: r.status === 'accepted' ? 'accepted' : 'pending',
         incoming: !!r.incoming,
         online: r.status === 'accepted' && now - seen < ONLINE_MS,
@@ -124,6 +155,9 @@ export async function listFriends(): Promise<Friend[]> {
       } satisfies Friend;
     })
     .sort((a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username));
+  // Friends' ghosts can turn up on your runs (online or not).
+  setGhostPool(list.filter((f) => f.status === 'accepted' && f.ghost).map((f) => ({ name: f.username, look: f.look, team: f.ghost! })));
+  return list;
 }
 
 /** A friend code however it was typed ("hex 4k9p2", "4K9P2") as HEX-4K9P2, or null if it can't be one. */

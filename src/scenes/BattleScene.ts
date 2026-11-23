@@ -16,7 +16,7 @@ import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura }
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
-import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
+import { bossLook, cleanLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
 import { arenaBackdrop, arenaPad, type Crowd } from '../ui/arena';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
@@ -286,10 +286,11 @@ export class BattleScene extends Phaser.Scene {
         // Surprises: an Echo of yourself, or a Gilded trainer.
         const enc = fsx.encNode === run.currentId ? fsx.enc : undefined;
         const dojo = dojoOn(run) ? run.surprises!.dojo!.wins : -1;
+        if (enc === 'ghost' && fsx.ghost) run.activeBattle.ghost = true;
         run.activeBattle.trainer =
           dojo >= 0
             ? `${dojo === DOJO_ROUNDS - 1 ? 'Dojo Master' : 'Dojo student'} ${placeRng(run, `trainer:dojo${dojo}`).pick(TRAINER_NAMES)}`
-            : enc === 'echo' ? 'Your Echo' : enc === 'gildedtrainer' ? `Gilded ${trainerName((xs) => r.pick(xs))}` : trainerName((xs) => r.pick(xs));
+            : enc === 'ghost' && fsx.ghost ? `${fsx.ghost.name}'s ghost` : enc === 'echo' ? 'Your Echo' : enc === 'gildedtrainer' ? `Gilded ${trainerName((xs) => r.pick(xs))}` : trainerName((xs) => r.pick(xs));
       }
       persist();
     }
@@ -341,7 +342,9 @@ export class BattleScene extends Phaser.Scene {
     // The stage is picked once per battle and saved, so resuming or rotating keeps it.
     run.activeBattle!.stage ??= pickStage(run.map.biome);
     this.drawField(run.map.biome, run.activeBattle!.stage);
-    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
+    // A friend's ghost wears their own look.
+    const ghostLook = run.activeBattle.ghost && floorSurprise(run).ghost ? cleanLook(floorSurprise(run).ghost!.look) : null;
+    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? (ghostLook ?? lookForName(trainer)) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
@@ -1901,7 +1904,10 @@ export class BattleScene extends Phaser.Scene {
         // Your rival: a word from them, and an Evolution Stone on top.
         const rivalNote = ab.rival ? `${ab.trainer}: “${rivalBeaten(run)}”\n\n◆ Beating your rival earns an extra Evolution Stone.\n\n` : '';
         if (ab.rival) run.evoStones += 1;
-        ab.summary = `${rivalNote}${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        // A friend's ghost leaves a souvenir: an Evolution Stone.
+        if (ab.ghost) run.evoStones += 1;
+        const ghostNote = ab.ghost ? `${ab.trainer} fades, leaving a souvenir: an extra Evolution Stone ◆.\n\n` : '';
+        ab.summary = `${rivalNote}${ghostNote}${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);

@@ -37,7 +37,9 @@ const mapsWonAt = (meta: Meta, heat: number) => MAPS.filter((m) => (meta.mapHeat
 const weeklyWins = (meta: Meta) => Object.values(meta.weeklies ?? {}).filter((w) => w.best?.won).length;
 const gilded = (meta: Meta) => (meta.shinyOwned ?? []).length;
 /** Rare surprises found (2.0), and lands whose Elder you've beaten. */
-const found = (meta: Meta) => SURPRISE_LIST.filter((s) => (meta.surprisesFound ?? []).includes(s.id)).length;
+/** A friend's ghost needs friends, so it isn't needed for the collection titles. */
+const COLLECTABLE = SURPRISE_LIST.filter((s) => s.id !== 'ghost');
+const found = (meta: Meta) => COLLECTABLE.filter((s) => (meta.surprisesFound ?? []).includes(s.id)).length;
 const elders = (meta: Meta) => ELEMENTS.filter((e) => (meta.eldersBeaten ?? []).includes(e)).length;
 
 export const TITLES: TitleDef[] = [
@@ -74,7 +76,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Royale Champion', tier: 'legendary', desc: 'Win a battle royale with 6 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 6 ? 1 : 0, 1] },
   { name: 'Abyss Diver', tier: 'legendary', desc: 'Reach floor 18 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 18], gilded: true },
   { name: 'Elder Slayer', tier: 'legendary', desc: `Beat the Elder guardian of all ${ELEMENTS.length} lands.`, progress: (m) => [elders(m), ELEMENTS.length] },
-  { name: 'Wonderfinder', tier: 'legendary', desc: `Find all ${SURPRISE_LIST.length} rare surprises.`, progress: (m) => [found(m), SURPRISE_LIST.length] },
+  { name: 'Wonderfinder', tier: 'legendary', desc: `Find all ${COLLECTABLE.length} rare surprises.`, progress: (m) => [found(m), COLLECTABLE.length] },
   { name: 'Gilded Legend', tier: 'legendary', desc: 'Own 60 Gilded species.', progress: (m) => [gilded(m), 60], gilded: true },
   // Mythic
   { name: 'Unstoppable', tier: 'mythic', desc: 'Win 20 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 20] },

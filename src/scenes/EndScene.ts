@@ -16,6 +16,8 @@ import { type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
 import { MOVES } from '../data/moves';
 import { MAP_BY_ID } from '../data/maps';
+import { shareGhost } from '../net/friends';
+import { lastWinTeam } from '../logic/surprises';
 import { openPicker } from '../ui/picker';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
@@ -81,6 +83,8 @@ export class EndScene extends Phaser.Scene {
       } else {
         this.newBest = finishRunClock(state.meta, run, data.won);
         recordRun(run, data.won);
+        // A win: your friends may meet this team as your ghost.
+        if (data.won && !run.daily && !run.weekly) void shareGhost(lastWinTeam(state.meta)).catch(() => {});
       }
     }
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>

@@ -27,9 +27,31 @@ export interface FloorSurprise {
   /** A rare encounter on a battle hex. */
   enc?: string;
   encNode?: string;
+  /** A friend's ghost: who, and the team they field. */
+  ghost?: FriendGhost;
   /** Shown its banner already. */
   announced?: boolean;
 }
+
+/** A friend's last winning team (from the server, see net/friends), for a friend's ghost. */
+export interface FriendGhost {
+  name: string;
+  look: unknown;
+  team: GhostMember[];
+}
+
+export interface GhostMember {
+  speciesId: string;
+  stage: number;
+  level: number;
+}
+
+/** Friends' ghosts this session (filled when the friends list loads at camp or on the Friends screen). */
+let ghostPool: FriendGhost[] = [];
+export const setGhostPool = (g: FriendGhost[]) => {
+  ghostPool = g.filter((x) => x.team.length).slice(0, 50);
+};
+export const ghostPoolSize = () => ghostPool.length;
 
 export interface RunSurprises {
   omen?: string;
@@ -96,10 +118,20 @@ export function rollFloorSurprises(run: Run) {
   if (rng.chance(ODDS.elder)) fs.elder = true;
   // Keen eye (Workshop): hidden hexes half again as often.
   let hex = rng.chance(ODDS.hex * hiddenBoost(run)) ? rng.pick(of('hex', run)) : undefined;
-  let enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter', run)) : undefined;
-  // Echo of yourself can't be the same for everyone, and needs a winning team to copy: seeded runs
-  // (and players without a win yet) meet a Gilded trainer instead.
-  if (enc === 'echo' && (run.workshop?.full || run.daily || run.weekly || !lastWinTeam(run.meta))) enc = surpriseInPool(run, 'gildedtrainer') ? 'gildedtrainer' : undefined;
+  // A friend's ghost is never rolled itself: it takes Echo of yourself's place now and then.
+  let enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter', run).filter((id) => id !== 'ghost')) : undefined;
+  if (enc === 'echo') {
+    // Echo of yourself (and a friend's ghost) can't be the same for everyone: seeded runs meet a
+    // Gilded trainer instead. A friend's ghost turns up half the time (always, with no win of your own).
+    const gilded = surpriseInPool(run, 'gildedtrainer') ? 'gildedtrainer' : undefined;
+    const mine = lastWinTeam(run.meta);
+    if (run.workshop?.full || run.daily || run.weekly) enc = gilded;
+    else if (ghostPool.length && (!mine || rng.chance(0.5))) {
+      enc = 'ghost';
+      const g = ghostPool[rng.int(0, ghostPool.length - 1)];
+      fs.ghost = { name: g.name, look: g.look, team: g.team.map((m) => ({ ...m })) };
+    } else if (!mine) enc = gilded;
+  }
   // Drought protection: the first floor gets a hidden hex if nothing else turned up.
   if (rs.forced && !rs.omen && !fs.floor && !fs.elder && !hex && !enc) hex = rng.pick(of('hex', run));
   rs.forced = false;

@@ -43,6 +43,7 @@ export const SURPRISE_LIST: SurpriseDef[] = [
   S('gildedtrainer', 'encounter', 'Gilded trainer', 'A trainer whose whole team is Gilded.', 'A trainer who shines.'),
   S('twinwilds', 'encounter', 'Twin wilds', 'Two wild Hexlings of the same line, both with their rare ◆ trait.', 'Sometimes they come in pairs.'),
   S('caravan', 'encounter', 'Travelling caravan', 'A seven-item shop on wheels, with one thing free.', 'Wheels on the road, now and then.'),
+  S('ghost', 'encounter', "A friend's ghost", "A trainer fielding a friend's last winning team, with their name and look. Beat it for a souvenir.", 'Someone you know left a trace.'),
   S('echo', 'encounter', 'Echo of yourself', 'A trainer fielding your last winning team, at this floor\u2019s level.', 'You may meet someone familiar.'),
 ];
 

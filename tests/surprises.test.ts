@@ -22,6 +22,7 @@ import {
   layEgg,
   noteRunSurprises,
   runSurprises,
+  setGhostPool,
 } from '../src/logic/surprises';
 import { stats } from '../src/logic/creature';
 
@@ -173,6 +174,32 @@ describe('hatchery, dojo and caravan (2.0)', () => {
     expect(fossilChoices(run).map((c) => c.speciesId)).toEqual(a.map((c) => c.speciesId));
     expect(noteAncient(meta, a[0].speciesId)).toBe(true);
     expect(noteAncient(meta, a[0].speciesId)).toBe(false);
+  });
+
+  it("a friend's ghost takes Echo's place on unseeded runs only, with their team; bad server data is dropped", async () => {
+    const { cleanGhost } = await import('../src/net/friends');
+    expect(cleanGhost('nope')).toBeNull();
+    expect(cleanGhost([{ speciesId: 'DROP TABLE' }, 5, null])).toBeNull();
+    const team = cleanGhost([{ speciesId: 'emberkit', stage: 9, level: 900 }, { speciesId: 'nosuchline', stage: 1, level: 20 }])!;
+    expect(team[0]).toEqual({ speciesId: 'emberkit', stage: 0, level: 100 });
+    setGhostPool([{ name: 'Pal', look: null, team }]);
+    let ghosts = 0;
+    for (let seed = 1; seed < 4000 && ghosts < 3; seed++) {
+      const run = startRun(mkMeta(), 'emberkit', seed);
+      for (const fs of Object.values(runSurprises(run).floors)) {
+        if (fs.enc !== 'ghost') continue;
+        ghosts++;
+        expect(fs.ghost!.name).toBe('Pal');
+        const node = run.map.nodes[fs.encNode!];
+        expect(encounterKind(run, node)).toBe('elite');
+        // Lines the game doesn't know are left out of the ghost's team.
+        expect(makeEncounter(run, node).map((c) => c.speciesId)).toEqual(['emberkit']);
+      }
+      const daily = startRun(mkMeta(), 'emberkit', seed, 'wildlands', 'd1');
+      for (const fs of Object.values(runSurprises(daily).floors)) expect(fs.enc).not.toBe('ghost');
+    }
+    expect(ghosts).toBeGreaterThan(0);
+    setGhostPool([]);
   });
 
   it('the caravan sells seven things, one of them free, and Scout sees no wild there', async () => {

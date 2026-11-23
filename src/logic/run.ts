@@ -560,6 +560,8 @@ export interface ActiveBattle {
   legend?: string;
   /** The battle against your rival. */
   rival?: boolean;
+  /** A friend's ghost (a surprise). */
+  ghost?: boolean;
   kind: EncounterKind;
   enemies: Creature[];
   /** Opponent's name for trainer battles, e.g. "Ace Trainer Rhea". */
@@ -1399,8 +1401,17 @@ export function encounterKind(run: Run, node: MapNode): EncounterKind {
   const k = node.kind as EncounterKind;
   if (k !== 'battle') return k;
   const fs = floorSurprise(run);
-  if (floorCurse(run, 'hauntedfloor') || ((fs.enc === 'gildedtrainer' || fs.enc === 'echo') && fs.encNode === node.id)) return 'elite';
+  if (floorCurse(run, 'hauntedfloor') || ((fs.enc === 'gildedtrainer' || fs.enc === 'echo' || fs.enc === 'ghost') && fs.encNode === node.id)) return 'elite';
   return k;
+}
+
+/** Echo of yourself or a friend's ghost (surprises): the team on this hex (lines the game knows only). */
+function echoTeam(run: Run, node: MapNode): { speciesId: string; stage: number }[] | null {
+  const fs = floorSurprise(run);
+  if (fs.encNode !== node.id) return null;
+  const team = fs.enc === 'echo' ? lastWinTeam(run.meta) : fs.enc === 'ghost' ? (fs.ghost?.team ?? null) : null;
+  const known = (team ?? []).filter((t) => SPECIES_BY_ID[t.speciesId]);
+  return known.length ? known : null;
 }
 
 /** Travelling caravan (a surprise): this battle hex is a shop on wheels instead. */
@@ -1423,6 +1434,8 @@ export function peekEncounter(run: Run, node: MapNode): { speciesId: string; cou
   if (node.kind !== 'battle' && node.kind !== 'elite') return null;
   if (node.kind === 'battle' && run.roamer && run.roamer.node === node.id) return { speciesId: run.roamer.id, count: 1 };
   if (caravanAt(run, node)) return null;
+  const echo = echoTeam(run, node);
+  if (echo) return { speciesId: echo[0].speciesId, count: echo.length };
   const kind = encounterKind(run, node);
   const rng = placeRng(run, 'encounter', node.id);
   const count = encounterCount(run, kind, rng, node);
@@ -1515,12 +1528,12 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   run.log.fights += 1;
   // Your rival: their own team instead, led by their ace.
   if (kind === 'elite' && rivalHere(run, node.id)) return rivalTeam(run, enemies);
-  // Echo of yourself (a surprise): your last winning team, at this fight's level.
-  const echo = fsur.enc === 'echo' && fsur.encNode === node.id ? lastWinTeam(run.meta) : null;
+  // Echo of yourself (a surprise): your last winning team, at this fight's level. A friend's ghost: theirs.
+  const echo = echoTeam(run, node);
   if (echo && enemies.length) {
     const level = Math.max(...enemies.map((e) => e.level));
     return echo.map((t, i) => {
-      const c = createCreature(t.speciesId, level, Math.min(2, t.stage));
+      const c = createCreature(t.speciesId, level, Math.min(2, Math.max(0, t.stage)));
       c.trait = rollTrait(c.speciesId, `${run.seed}:echo:${run.floor}:${i}`);
       c.nature = natureFor(`${run.seed}:echo:${i}`);
       c.hp = stats(c).hp;
