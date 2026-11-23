@@ -3,7 +3,7 @@ import type { Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { DEX_SPECIES } from '../data/legends';
 import { LINE_PLANS } from './linePlans';
-import { altHue, buildGrid, fossilise, hueShift, paletteFor, shinyHue, type Colours, type FaceInfo } from './sprites';
+import { altHue, buildGrid, fossilise, hueShift, paletteFor, type Colours, type FaceInfo } from './sprites';
 
 /**
  * Hexbound 2.0 art: the line part plans, drawn on a finer grid (64 px) and painted with light and
@@ -463,11 +463,91 @@ function recolour(pal: Record<number, number>, speciesId: string, stage: number,
   // Babies a touch lighter, finals a touch deeper.
   base = stage === 0 ? light(base, 0.1) : stage === 2 ? dark(base, 0.14) : base;
   if (stage === 2) sec = dark(sec, 0.06);
-  // Gilded and bond colours turn the hue; an ancient form is amber stone (paletteFor's own rule).
-  const deg = shiny === 'alt' ? altHue(speciesId) : shiny ? shinyHue(speciesId) : 0;
-  const sh = (c: number) => (shiny === 'ancient' ? fossilise(c) : shiny ? hueShift(c, deg) : c);
+  // Gilded: one of several looks per line (2.02). Body and accent are set first, then shaded as usual.
+  if (shiny === true) {
+    const g = gildedColours(speciesId, base, sec, pal[10]);
+    base = g.base;
+    sec = g.sec;
+    pal[10] = g.sig;
+    pal[11] = light(g.sig, 0.45);
+  }
+  // Bond colours turn the hue; an ancient form is amber stone (paletteFor's own rule).
+  const deg = shiny === 'alt' ? altHue(speciesId) : 0;
+  const sh = (c: number) => (shiny === 'ancient' ? fossilise(c) : shiny === 'alt' ? hueShift(c, deg) : c);
   pal[1] = sh(base);
   pal[2] = sh(sec);
   pal[3] = sh(stage === 2 ? light(mix(base, sec, 0.35), 0.22) : light(base, 0.4));
   pal[9] = sh(dark(base, 0.78));
+}
+
+/** HSL (h in degrees, s and l 0..1) to and from a packed colour. */
+const toHsl = (c: number): [number, number, number] => {
+  const [r, g, b] = rgb(c).map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+};
+const fromHsl = (h: number, s: number, l: number): number => {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s));
+  l = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return pack([(r + m) * 255, (g + m) * 255, (b + m) * 255]);
+};
+
+/** The Gilded looks. Each line gets one (fixed), so Gilded Hexlings differ from each other, not just from their usual colours. */
+export const GILDED_STYLES = ['gold', 'turn', 'swap', 'pastel', 'onyx', 'pearl', 'twilight', 'rose'] as const;
+export type GildedStyle = (typeof GILDED_STYLES)[number];
+/** A line's first-choice look (gildedColours moves on to the next if it would look too much like its usual colours). */
+export const gildedStyle = (speciesId: string): GildedStyle => GILDED_STYLES[hashString(`${speciesId}:gildstyle`) % GILDED_STYLES.length];
+
+/**
+ * A line's Gilded body, accent and signature colours. Greys get real colour too (a plain hue turn
+ * left grey Metal lines looking almost the same).
+ */
+export function gildedColours(speciesId: string, base: number, sec: number, sig: number): { base: number; sec: number; sig: number } {
+  const [bh, bs, bl] = toHsl(base);
+  const [sh, ss, sl] = toHsl(sec);
+  const turn = 120 + (hashString(`${speciesId}:gildturn`) % 120);
+  const vivid = (s: number) => Math.max(0.45, Math.min(1, s * 1.15));
+  const first = GILDED_STYLES.indexOf(gildedStyle(speciesId));
+  for (let k = 0; k < GILDED_STYLES.length; k++) {
+    const out = look(GILDED_STYLES[(first + k) % GILDED_STYLES.length]);
+    // Too close to its usual body colour (same hue family and brightness)? Try the next look.
+    const [nh, ns, nl] = toHsl(out.base);
+    const hueGap = Math.abs(((nh - bh + 540) % 360) - 180);
+    const grey = bs < 0.15 || ns < 0.15;
+    const same = grey ? Math.abs(nl - bl) < 0.15 && Math.abs(ns - bs) < 0.2 : hueGap < 50 && Math.abs(nl - bl) < 0.2;
+    if (!same) return out;
+  }
+  return look('turn');
+
+  function look(style: GildedStyle): { base: number; sec: number; sig: number } {
+  switch (style) {
+    case 'gold': // Gilded for real: a gold body, its accent kept but deepened.
+      return { base: fromHsl(44, 0.78, Math.max(0.45, Math.min(0.62, bl))), sec: fromHsl(sh, vivid(ss), Math.min(sl, 0.42)), sig: 0xfff6c8 };
+    case 'turn': // Its colours turned round the wheel (the old Gilded), greys coloured in.
+      return { base: fromHsl(bh + turn, vivid(bs), bl), sec: fromHsl(sh + turn, vivid(ss), sl), sig: hueShift(sig, turn) };
+    case 'swap': // Body and accent trade places, nudged round the wheel.
+      return { base: fromHsl(sh + 30, vivid(ss), Math.max(0.4, Math.min(0.62, bl))), sec: fromHsl(bh + 30, vivid(bs), Math.max(0.3, Math.min(0.55, sl))), sig: hueShift(sig, 180) };
+    case 'pastel': // Soft and pale, across the wheel.
+      return { base: fromHsl(bh + 180, 0.6, 0.76), sec: fromHsl(sh + 180, 0.55, 0.6), sig: fromHsl(bh + 300, 0.9, 0.7) };
+    case 'onyx': // Near-black body, glowing accents.
+      return { base: fromHsl(bh, 0.25, 0.2), sec: fromHsl(bh + 160, 0.95, 0.55), sig: fromHsl(bh + 160, 1, 0.65) };
+    case 'pearl': // Pearly white with a bright accent.
+      return { base: fromHsl(bh, 0.3, 0.86), sec: fromHsl(sh + 60, 0.85, 0.5), sig: fromHsl(sh + 60, 1, 0.62) };
+    case 'twilight': // Deep violet blue with a warm accent.
+      return { base: fromHsl(252, 0.55, Math.max(0.32, Math.min(0.48, bl))), sec: fromHsl(28 + (turn % 30), 0.9, 0.58), sig: 0xffd36e };
+    case 'rose': // Rose and silver.
+      return { base: fromHsl(338, 0.65, Math.max(0.5, Math.min(0.66, bl))), sec: fromHsl(220, 0.15, 0.78), sig: 0xfff0f6 };
+  }
+  }
 }
