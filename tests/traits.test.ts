@@ -138,6 +138,44 @@ describe('trait effects in battle', () => {
     expect(b3.eActive).toBe(1);
   });
 
+  it('fatigue: after 30 turns damage doubles and healing halves, so an absorber stalemate ends', () => {
+    const one = (turns: number) => {
+      const p = withTrait('emberkit', 'hitandrun', 40);
+      const e = withTrait('frostling', 'ab_Fire', 40);
+      p.moves = [{ id: 'Earth:0', tier: 1 }];
+      e.moves = [{ id: 'Neutral:warp', tier: 1 }];
+      const b = new Battle([p], [e], new Rng(5), { permadeath: false });
+      b.start();
+      (b as unknown as { turnNo: number }).turnNo = turns;
+      const before = e.hp;
+      const ev = b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'potion', index: 0, heal: 0.5 });
+      return { b, dealt: before - e.hp, ev };
+    };
+    const fresh = one(0);
+    expect(fresh.b.fatigued).toBe(false);
+    const late = one(30);
+    expect(late.b.fatigued).toBe(true);
+    expect(late.ev.some((x) => x.kind === 'text' && x.text.includes('Fatigue sets in'))).toBe(true);
+    expect(one(31).ev.some((x) => x.kind === 'text' && x.text.includes('Fatigue sets in'))).toBe(false);
+    // Same seed, same hit: twice the damage.
+    expect(late.dealt).toBe(fresh.dealt * 2);
+    // Healing (an absorbed hit) is halved.
+    const soak = (turns: number) => {
+      const e = withTrait('frostling', 'ab_Fire', 40);
+      e.hp = Math.round(stats(e).hp / 2);
+      const start = e.hp;
+      const p = withTrait('emberkit', 'hitandrun', 40);
+      p.moves = [{ id: 'Fire:2', tier: 1 }];
+      e.moves = [{ id: 'Neutral:warp', tier: 1 }];
+      const b = new Battle([p], [e], new Rng(5), { permadeath: false });
+      b.start();
+      (b as unknown as { turnNo: number }).turnNo = turns;
+      b.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'potion', index: 0, heal: 0 });
+      return e.hp - start;
+    };
+    expect(soak(30)).toBe(Math.ceil(soak(0) / 2));
+  });
+
   it('Thick Hide softens super-effective hits', () => {
     const plain = hit(withTrait('puddlet', 'rainrider'), withTrait('magmole', 'magmaskin', 70), 'Water:2', 9).dealt;
     const hide = hit(withTrait('puddlet', 'rainrider'), withTrait('magmole', 'thickhide', 70), 'Water:2', 9).dealt;

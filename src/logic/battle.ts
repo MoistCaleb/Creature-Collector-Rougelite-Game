@@ -56,6 +56,8 @@ const TOUCH_STATUS: Record<Element, StatusId> = {
 export const THORNS_RECOIL = 0.1;
 /** Overclock: their Attack climbs one stage a turn, up to this many. */
 export const OVERCLOCK_MAX = 3;
+/** Fatigue: after this many turns, all damage is doubled and all healing halved (no battle can stall forever). */
+export const FATIGUE_TURNS = 30;
 
 /** What a battle in progress needs to pick up exactly where it was after a reload. */
 export interface BattleState {
@@ -157,6 +159,22 @@ export class Battle {
   get turns(): number {
     return this.turnNo;
   }
+  /** Fatigue has set in (past FATIGUE_TURNS turns): damage ×2, healing ×½. */
+  get fatigued(): boolean {
+    return this.turnNo > FATIGUE_TURNS;
+  }
+  /** A heal amount, halved by fatigue. */
+  private mend(n: number): number {
+    return this.fatigued ? Math.ceil(n / 2) : n;
+  }
+  /** A damage amount, doubled by fatigue. */
+  private harsh(n: number): number {
+    return this.fatigued ? n * 2 : n;
+  }
+  /** The turn fatigue sets in, say so. */
+  private fatigueNotice(ev: BattleEvent[]) {
+    if (this.turnNo === FATIGUE_TURNS + 1) ev.push({ kind: 'text', text: 'The battle drags on… Fatigue sets in: all damage is doubled and all healing halved!' });
+  }
   /** Set for duels between two people (see the constructor option). */
   readonly duel: { player: string; enemy: string } | null;
   /** Team effects up on each side, with turns left (see TEAM_FX). */
@@ -193,7 +211,7 @@ export class Battle {
         if (!isAlive(x.c)) continue;
         const max = stats(x.c).hp;
         const healed = x.c.hp < max;
-        x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * mendHeal(tier)));
+        x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * mendHeal(tier))));
         const active = x === (side === 'player' ? this.p : this.e);
         if (healed && active) ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
         if (x.status) {
@@ -415,7 +433,7 @@ export class Battle {
     if (this.has('static') && !x.status && !skipHpCost && this.rng.chance(0.35)) this.inflict(x, side, 'para', ev, `${this.rn('static')}: `);
     if (this.has('riptide') && !skipHpCost) {
       const max = stats(x.c).hp;
-      const dmg = Math.min(x.c.hp - 1, Math.max(1, Math.floor(max / 8)));
+      const dmg = Math.min(x.c.hp - 1, this.harsh(Math.max(1, Math.floor(max / 8))));
       if (dmg > 0) {
         x.c.hp -= dmg;
         ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
@@ -480,6 +498,7 @@ export class Battle {
   takeTurn(action: PlayerAction): BattleEvent[] {
     const ev: BattleEvent[] = [];
     this.turnNo++;
+    this.fatigueNotice(ev);
     this.firstSide = null;
     // Trainers may switch or drink a potion instead of attacking; that happens first.
     const plan = this.enemyPlan();
@@ -491,7 +510,7 @@ export class Battle {
       if (!x || !isAlive(x.c)) return ev;
       const max = stats(x.c).hp;
       const hurt = x.c.hp < max;
-      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * action.heal));
+      x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * action.heal)));
       ev.push({ kind: 'text', text: `You use a Potion on ${creatureName(x.c)}.` });
       if (x === this.p && hurt) ev.push({ kind: 'heal', side: 'player', hp: x.c.hp, maxHp: max });
       if (hurt) ev.push({ kind: 'text', text: `${creatureName(x.c)} recovered health!` });
@@ -585,6 +604,7 @@ export class Battle {
   takeDuelTurn(pAct: PlayerAction, eAct: PlayerAction): BattleEvent[] {
     const ev: BattleEvent[] = [];
     this.turnNo++;
+    this.fatigueNotice(ev);
     this.firstSide = null;
     const names = this.duel ?? { player: 'You', enemy: 'The enemy' };
     if (pAct.kind === 'swap' && this.canSwapTo(pAct.index)) {
@@ -611,7 +631,7 @@ export class Battle {
       const active = side === 'player' ? this.p : this.e;
       const max = stats(x.c).hp;
       const hurt = x.c.hp < max;
-      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * Math.max(0, Math.min(1, act.heal))));
+      x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * Math.max(0, Math.min(1, act.heal)))));
       ev.push({ kind: 'text', text: `${names[side]} uses a Potion on ${creatureName(x.c)}.` });
       if (x === active && hurt) ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
       if (hurt) ev.push({ kind: 'text', text: `${creatureName(x.c)} recovered health!` });
@@ -768,7 +788,7 @@ export class Battle {
     if (!x || !isAlive(x.c) || !this.is(x, 'regenerator')) return;
     const max = stats(x.c).hp;
     if (x.c.hp >= max) return;
-    x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * this.tv(x, 'regenerator')));
+    x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * this.tv(x, 'regenerator'))));
     ev.push({ kind: 'text', text: `${this.tcall(x, side, ev)}: it recovers as it pulls back.` });
   }
 
@@ -798,7 +818,7 @@ export class Battle {
     const t = traitOf(x.c);
     if (!t || TRAITS[t].absorb !== el || !isAlive(x.c)) return false;
     const max = stats(x.c).hp;
-    x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * this.tv(x, t)));
+    x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * this.tv(x, t))));
     const tn = this.tcall(x, side, ev);
     ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
     ev.push({ kind: 'text', text: `${tn} soaks up the ${el} hit!` });
@@ -894,13 +914,13 @@ export class Battle {
     if (ut && isAlive(user.c)) {
       const v = this.tv(user, ut);
       if (ut === 'leech' && total > 0 && user.c.hp < umax && !this.scorched(user)) {
-        user.c.hp = Math.min(umax, user.c.hp + Math.ceil(total * v));
+        user.c.hp = Math.min(umax, user.c.hp + this.mend(Math.ceil(total * v)));
         this.tcall(user, side, ev);
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: it drinks in the damage.` });
       }
       if (ut === 'tidalgrace' && el === 'Water' && user.c.hp < umax) {
-        user.c.hp = Math.min(umax, user.c.hp + Math.ceil(umax * v));
+        user.c.hp = Math.min(umax, user.c.hp + this.mend(Math.ceil(umax * v)));
         this.tcall(user, side, ev);
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: the water refreshes it.` });
@@ -957,7 +977,7 @@ export class Battle {
         if (v >= 2) this.bump(user, side, 'atk', 1, ev);
       }
       if (ut === 'carnivore' && user.c.hp < umax) {
-        user.c.hp = Math.min(umax, user.c.hp + Math.ceil(umax * v));
+        user.c.hp = Math.min(umax, user.c.hp + this.mend(Math.ceil(umax * v)));
         this.tcall(user, side, ev);
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: it feeds on its fallen foe.` });
@@ -979,7 +999,7 @@ export class Battle {
       const max = stats(x.c).hp;
       const who = this.traitName(x, side);
       if (t === 'rooted' && x.c.hp < max && !this.scorched(x)) {
-        x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * v));
+        x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * v)));
         this.tcall(x, side, ev);
         ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
         ev.push({ kind: 'text', text: `${who}: it draws strength from its roots.` });
@@ -1165,7 +1185,7 @@ export class Battle {
         for (const y of side === 'player' ? this.player : this.enemy) {
           if (!isAlive(y.c)) continue;
           const max = stats(y.c).hp;
-          y.c.hp = Math.min(max, y.c.hp + Math.ceil(max * 0.1));
+          y.c.hp = Math.min(max, y.c.hp + this.mend(Math.ceil(max * 0.1)));
           if (y === user) ev.push({ kind: 'heal', side, hp: y.c.hp, maxHp: max });
         }
         ev.push({ kind: 'text', text: 'Soul Link: the team is restored a little!' });
@@ -1200,7 +1220,7 @@ export class Battle {
       const t = creatureTypes(x.c);
       const max = stats(x.c).hp;
       if (this.hb(side, 'overgrowth') && t.includes('Nature') && x.c.hp < max && !this.scorched(x)) {
-        x.c.hp = Math.min(max, x.c.hp + Math.ceil(max / 16));
+        x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max / 16)));
         ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
         ev.push({ kind: 'text', text: `Overgrowth: ${this.label(x)} grows back a little.` });
       }
@@ -1357,7 +1377,7 @@ export class Battle {
       }
       const max = stats(x.c).hp;
       const hurt = x.c.hp < max;
-      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * 0.5));
+      x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * 0.5)));
       ev.push({ kind: 'text', text: `${who} uses a Potion on ${creatureName(x.c)}!` });
       if (hurt) ev.push({ kind: 'heal', side: 'enemy', hp: x.c.hp, maxHp: max });
       if (x.status) this.cure(x, 'enemy', ev);
@@ -1712,7 +1732,7 @@ export class Battle {
     }
     if (def.kind === 'heal') {
       const max = stats(user.c).hp;
-      user.c.hp = Math.min(max, user.c.hp + Math.ceil(max * healAtTier(def, slot.tier)));
+      user.c.hp = Math.min(max, user.c.hp + this.mend(Math.ceil(max * healAtTier(def, slot.tier))));
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: max });
       ev.push({ kind: 'text', text: `${who} recovered health!` });
       if (def.effects.length) this.applyStatus(side, slot, ev);
@@ -1809,13 +1829,13 @@ export class Battle {
       const tmax = stats(target.c).hp;
       if (target.c.hp < tmax / 3) {
         this.winded.add(target.c.uid);
-        target.c.hp = Math.min(tmax, target.c.hp + Math.ceil(tmax * 0.35));
+        target.c.hp = Math.min(tmax, target.c.hp + this.mend(Math.ceil(tmax * 0.35)));
         ev.push({ kind: 'heal', side: targetSide, hp: target.c.hp, maxHp: tmax });
         ev.push({ kind: 'text', text: `${this.rn('secondwind')}: Enemy ${creatureName(target.c)} catches a second wind!` });
       }
     }
     if (this.has('thorns') && side === 'player' && total > 0 && isAlive(user.c)) {
-      const th = Math.max(1, Math.round(total * THORNS_RECOIL));
+      const th = this.harsh(Math.max(1, Math.round(total * THORNS_RECOIL)));
       user.c.hp = Math.max(0, user.c.hp - th);
       ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: userMax, amount: th });
       ev.push({ kind: 'text', text: `${this.rn('thorns')}: ${creatureName(user.c)} is cut by thorns!` });
@@ -1826,12 +1846,12 @@ export class Battle {
       ev.push({ kind: 'text', text: `${who} is pricked by the Barb Collar!` });
     }
     if (user.c.held === 'fang' && total > 0 && isAlive(user.c) && user.c.hp < userMax) {
-      user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * 0.15));
+      user.c.hp = Math.min(userMax, user.c.hp + this.mend(Math.ceil(total * 0.15)));
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
       ev.push({ kind: 'text', text: `${who}'s Vampire Fang drinks deep.` });
     }
     if (def.drain && isAlive(user.c) && !this.scorched(user)) {
-      user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(total * def.drain));
+      user.c.hp = Math.min(userMax, user.c.hp + this.mend(Math.ceil(total * def.drain)));
       ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
       ev.push({ kind: 'text', text: `${who} drained energy!` });
     }
@@ -1877,7 +1897,7 @@ export class Battle {
       case 'Nature': {
         const amt = Math.ceil(damage * 0.15);
         if (amt > 0 && isAlive(user.c)) {
-          user.c.hp = Math.min(userMax, user.c.hp + amt);
+          user.c.hp = Math.min(userMax, user.c.hp + this.mend(amt));
           ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
           ev.push({ kind: 'text', text: `${creatureName(user.c)} drained energy!` });
         }
@@ -1891,7 +1911,7 @@ export class Battle {
         break;
       case 'Water':
         if (isAlive(user.c) && damage > 0) {
-          user.c.hp = Math.min(userMax, user.c.hp + Math.ceil(damage * 0.15));
+          user.c.hp = Math.min(userMax, user.c.hp + this.mend(Math.ceil(damage * 0.15)));
           ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: userMax });
           ev.push({ kind: 'text', text: `${creatureName(user.c)} was refreshed!` });
         }
@@ -1953,7 +1973,7 @@ export class Battle {
       }
       if (this.has('curse') && isAlive(this.p.c)) {
         const max = stats(this.p.c).hp;
-        const dmg = Math.max(1, Math.floor(max / 5));
+        const dmg = this.harsh(Math.max(1, Math.floor(max / 5)));
         this.p.c.hp = Math.max(0, this.p.c.hp - dmg);
         ev.push({ kind: 'damage', side: 'player', hp: this.p.c.hp, maxHp: max, amount: dmg });
         ev.push({ kind: 'text', text: `${this.rn('curse')}: ${creatureName(this.p.c)} is struck by the curse!` });
@@ -1967,6 +1987,7 @@ export class Battle {
    * standing stops at 1 HP and is marked spared (ready to catch) instead of fainting.
    */
   private hurt(x: Combatant, dmg: number, foeHit = false): number {
+    dmg = this.harsh(dmg);
     const isLastEnemy =
       this.spareLast && this.enemy.includes(x) && this.enemy.every((o) => o === x || !isAlive(o.c));
     const floor = isLastEnemy ? 1 : 0;
@@ -2097,7 +2118,7 @@ export class Battle {
       const x = side === 'player' ? this.p : this.e;
       const max = stats(x.c).hp;
       if (x.c.held !== 'berry' || !isAlive(x.c) || x.c.hp >= max || this.scorched(x)) continue;
-      x.c.hp = Math.min(max, x.c.hp + Math.ceil(max / 12));
+      x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max / 12)));
       ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
       ev.push({ kind: 'text', text: `${this.nameOf(side, x.c)} snacks on a berry.` });
     }
@@ -2110,7 +2131,7 @@ export class Battle {
     const e = this.e;
     if (this.has('scorch') && isAlive(p.c) && !creatureTypes(p.c).includes('Fire')) {
       const max = stats(p.c).hp;
-      const dmg = Math.max(1, Math.floor(max / 16));
+      const dmg = this.harsh(Math.max(1, Math.floor(max / 16)));
       p.c.hp = Math.max(0, p.c.hp - dmg);
       ev.push({ kind: 'damage', side: 'player', hp: p.c.hp, maxHp: max, amount: dmg });
       ev.push({ kind: 'text', text: `${this.rn('scorch')}: ${creatureName(p.c)} is scorched!` });
@@ -2120,7 +2141,7 @@ export class Battle {
     if (this.has('sanctuary') && isAlive(e.c)) {
       const max = stats(e.c).hp;
       if (e.c.hp < max) {
-        e.c.hp = Math.min(max, e.c.hp + Math.ceil(max / 12));
+        e.c.hp = Math.min(max, e.c.hp + this.mend(Math.ceil(max / 12)));
         ev.push({ kind: 'heal', side: 'enemy', hp: e.c.hp, maxHp: max });
         ev.push({ kind: 'text', text: `${this.rn('sanctuary')}: Enemy ${creatureName(e.c)} is restored by the light!` });
       }
@@ -2128,12 +2149,12 @@ export class Battle {
     // Leech Field: your active Hexling feeds theirs.
     if (this.has('leech') && isAlive(p.c) && isAlive(e.c) && this.outcome() !== 'win') {
       const pmax = stats(p.c).hp;
-      const dmg = Math.min(p.c.hp, Math.max(1, Math.floor(pmax / 16)));
+      const dmg = Math.min(p.c.hp, this.harsh(Math.max(1, Math.floor(pmax / 16))));
       p.c.hp -= dmg;
       ev.push({ kind: 'damage', side: 'player', hp: p.c.hp, maxHp: pmax, amount: dmg });
       const emax = stats(e.c).hp;
       if (e.c.hp < emax) {
-        e.c.hp = Math.min(emax, e.c.hp + dmg);
+        e.c.hp = Math.min(emax, e.c.hp + this.mend(dmg));
         ev.push({ kind: 'heal', side: 'enemy', hp: e.c.hp, maxHp: emax });
       }
       ev.push({ kind: 'text', text: `${this.rn('leech')}: Enemy ${creatureName(e.c)} drains ${creatureName(p.c)}!` });

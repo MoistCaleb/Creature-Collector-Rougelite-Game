@@ -42,6 +42,7 @@ export const HOW_TO_PLAY: Page[] = [
       'Switch sends in another team member (it uses your turn). Potions heal mid-battle (also your turn).',
       'Auto picks the best move for you; the speed button plays battles at 1×, 2× or 3×.',
       'Up to 4 Hexlings fight; up to 3 wait on the bench. If your team falls, the bench steps in as a second life.',
+      'Fatigue: after 30 turns, all damage is doubled and all healing halved, so no battle lasts forever.',
     ],
   },
   {
