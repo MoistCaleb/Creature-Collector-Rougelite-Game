@@ -1285,10 +1285,23 @@ export function shinyHue(speciesId: string): number {
   return 120 + (h % 120);
 }
 
-function paletteFor(speciesId: string, stage: number, shiny = false) {
+/**
+ * A sprite's colours: its own, Gilded (`true`), or its bond colours (`'alt'`, camp bond heart 5).
+ */
+export type Colours = boolean | 'alt';
+
+/** Bond colours: turned the other way round the wheel from Gilded, so the two never match. */
+export function altHue(speciesId: string): number {
+  return (shinyHue(speciesId) + 120) % 360;
+}
+
+/** A Hexling's colours: Gilded first, then its bond colours. */
+export const colours = (c: { shiny?: boolean; alt?: boolean }): Colours => (c.shiny ? true : c.alt ? 'alt' : false);
+
+function paletteFor(speciesId: string, stage: number, shiny: Colours = false) {
   const p = basePalette(speciesId, stage);
   if (!shiny) return p;
-  const deg = shinyHue(speciesId);
+  const deg = shiny === 'alt' ? altHue(speciesId) : shinyHue(speciesId);
   for (const k of [1, 2, 3, 9, 10, 11]) p.pal[k] = hueShift(p.pal[k], deg);
   return { pal: p.pal, outline: hueShift(p.outline, deg), shadow: hueShift(p.shadow, deg), light: hueShift(p.light, deg) };
 }
@@ -1324,7 +1337,7 @@ function basePalette(speciesId: string, stage: number) {
 }
 
 /** Paints a creature onto any 2D canvas context at (ox, oy), one canvas pixel per sprite pixel. */
-export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox = 0, oy = 0, shiny = false) {
+export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox = 0, oy = 0, shiny: Colours = false) {
   const grid = buildGrid(speciesId, stage);
   const { pal, outline, shadow, light } = paletteFor(speciesId, stage, shiny);
   const S = SPRITE_SIZE;
@@ -1349,8 +1362,8 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
     }
 }
 
-export function creatureTextureKey(speciesId: string, stage: number, shiny = false): string {
-  return `cr-${speciesId}-${stage}${shiny ? '-s' : ''}`;
+export function creatureTextureKey(speciesId: string, stage: number, shiny: Colours = false): string {
+  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny ? '-s' : ''}`;
 }
 
 /**
@@ -1383,7 +1396,7 @@ export function ensureGrayTexture(scene: Phaser.Scene, speciesId: string, stage:
 }
 
 /** Draws (once) and returns the texture key for a creature sprite (`shiny`: its rare colors). */
-export function ensureCreatureTexture(scene: Phaser.Scene, speciesId: string, stage: number, shiny = false): string {
+export function ensureCreatureTexture(scene: Phaser.Scene, speciesId: string, stage: number, shiny: Colours = false): string {
   const key = creatureTextureKey(speciesId, stage, shiny);
   if (scene.textures.exists(key)) return key;
   const canvas = document.createElement('canvas');

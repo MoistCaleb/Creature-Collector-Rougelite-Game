@@ -41,6 +41,8 @@ export interface Creature {
   teamOffered?: boolean;
   /** A rare color variant (about 1 wild Hexling in 200). Cosmetic; kept when caught and evolved. */
   shiny?: boolean;
+  /** Its line's bond colours (camp bond heart 5, see logic/camp). Cosmetic; Gilded wins if both. */
+  alt?: boolean;
   /** Extra moves (see extraMoves) it has already been offered. */
   extraOffered?: string[];
   /** Moves it learned from the land it was on (instead of a move from its own learnset). */

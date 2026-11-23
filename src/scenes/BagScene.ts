@@ -5,7 +5,7 @@ import { canEvolve, creatureName, creatureTypes, evolveLevel, readyToEvolve } fr
 import { ELEMENT_COLORS } from '../data/types';
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { allCreatures, equipHeld, evolveTracked, maxPotions, needsPotion, potionHeal, releaseNote, unequipHeld, usePotion } from '../logic/run';
 import { sfx } from '../ui/sound';
 import { dex, persist, state } from '../state';
@@ -159,13 +159,13 @@ export class BagScene extends Phaser.Scene {
         run.evoStones -= 1;
         run.stonesSeen = run.evoStones;
         const from = creatureName(c);
-        const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
+        const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, colours(c));
         const lv = c.level;
         evolveTracked(run, c);
         const note = releaseNote(c, lv);
         dex.creature(c, true);
         persist();
-        const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
+        const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, colours(c));
         playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
           cry(c.speciesId, c.stage);
           showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!${note}`, () => this.scene.restart({ from: this.from }));

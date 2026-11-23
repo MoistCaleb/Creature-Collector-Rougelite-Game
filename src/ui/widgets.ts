@@ -5,7 +5,7 @@ import { STATUS } from '../data/status';
 import { ELEMENT_COLORS, elementTextColor, type Element } from '../data/types';
 import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../logic/creature';
 import { isMuted, setMuted, sfx } from './sound';
-import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from './sprites';
 import { ensureIcon, icon as iconImage, type IconId } from './icons';
 
 /**
@@ -322,7 +322,7 @@ export class HpBar {
 }
 
 export function creatureSprite(scene: Phaser.Scene, x: number, y: number, c: Creature, scale = 3): Phaser.GameObjects.Image {
-  const key = ensureCreatureTexture(scene, c.speciesId, c.stage, c.shiny);
+  const key = ensureCreatureTexture(scene, c.speciesId, c.stage, colours(c));
   return scene.add.image(x, y, key).setScale(scale * SPRITE_FIT);
 }
 
@@ -346,7 +346,7 @@ export function creatureRow(
     .setOrigin(0)
     .setStrokeStyle(2, opts.highlight ? COLORS.accent : COLORS.stroke);
   cont.add(bg);
-  cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage, c.shiny)).setScale(1.8 * SPRITE_FIT));
+  cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage, colours(c))).setScale(1.8 * SPRITE_FIT));
   if (c.shiny) cont.add(iconImage(scene, 56, 12, 'sparkle', 14));
   const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16);
   cont.add(nameText);

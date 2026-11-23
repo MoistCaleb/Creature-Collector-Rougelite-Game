@@ -112,7 +112,7 @@ import {
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
 
 interface SidePanel {
@@ -1203,7 +1203,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.shownPlayer !== p) this.clearAura('player');
     this.shownPlayer = p;
     dex.creature(p, true);
-    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
+    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, colours(p))).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
     this.fillPanel(this.playerPanel, p, hp);
   }
@@ -2077,12 +2077,12 @@ export class BattleScene extends Phaser.Scene {
             onPick: (k) => {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
-              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
+              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, colours(c));
               const lv = c.level;
               evolveTracked(run, c);
               const note = releaseNote(c, lv);
               dex.creature(c, true);
-              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
+              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, colours(c));
               playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
                 cry(c.speciesId, c.stage);
                 this.finishFloor(`${from} evolved into ${creatureName(c)}!${note}`);

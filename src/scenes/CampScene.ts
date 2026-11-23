@@ -8,7 +8,14 @@ import { dayPhase } from '../logic/ambience';
 import {
   buyCampItem,
   camp,
+  BOND_HEART,
+  BOND_POINTS,
+  bondColours,
+  bondReward,
+  bondToNext,
   CAMP_HEARTS,
+  campVisitor,
+  toggleBondColours,
   CAMP_ITEMS,
   CARE,
   campCrew,
@@ -46,7 +53,7 @@ import { calm } from '../ui/motion';
 import { openPicker, showMessage } from '../ui/picker';
 import { prefs } from '../ui/prefs';
 import { playMusic, sfx } from '../ui/sound';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT , type Colours } from '../ui/sprites';
 import { titleBadge } from '../ui/titleBadge';
 import { trainerFx } from '../ui/trainerFx';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
@@ -189,8 +196,14 @@ export class CampScene extends Phaser.Scene {
     const crew = campCrew(meta);
     crew.forEach((c, i) => {
       const a = Math.PI + ((i + 1) * Math.PI) / (crew.length + 1);
-      this.wanderer(c.speciesId, c.stage, c.shiny, { x: fx + Math.cos(a) * rx, y: fy + Math.sin(a) * ry + 8 }, fx);
+      this.wanderer(c.speciesId, c.stage, c.shiny || (c.alt ? 'alt' : false), { x: fx + Math.cos(a) * rx, y: fy + Math.sin(a) * ry + 8 }, fx);
     });
+    // Camp bond heart 5: a best friend who isn't staying drops by, in front of the fire.
+    const guest = campVisitor(meta);
+    if (guest) {
+      const look = (meta.shinyOwned ?? []).includes(guest) && !(meta.shinyOff ?? []).includes(guest) ? true : bondColours(meta, guest) ? 'alt' : false;
+      this.wanderer(guest, campStage(meta, guest), look, { x: fx + rx * 0.62, y: fy + ry * 0.72 + 8 }, fx, true);
+    }
 
     // ---- visitors
     this.visitors(groundY, x1);
@@ -549,7 +562,7 @@ export class CampScene extends Phaser.Scene {
   // ================================================================ the Hexlings at camp
 
   /** One of the Hexlings staying at camp: little walks and naps. Tap to spend time with it. */
-  private wanderer(speciesId: string, stage: number, shiny: boolean, home: { x: number; y: number }, fx: number) {
+  private wanderer(speciesId: string, stage: number, shiny: Colours, home: { x: number; y: number }, fx: number, visiting = false) {
     if (!SPECIES_BY_ID[speciesId]) return;
     const c = this.add.container(home.x, home.y);
     const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, 0.35);
@@ -557,8 +570,9 @@ export class CampScene extends Phaser.Scene {
     c.add([shadow, img]);
     const hearts = campHearts(state.meta, speciesId);
     if (hearts) c.add(text(this, 0, 4, '♥'.repeat(hearts), 10, '#ff8ab0', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0));
-    // Best friends: a warm glow.
-    if (hearts >= CAMP_HEARTS.length) {
+    if (visiting) c.add(text(this, 0, -62, 'visiting', 10, '#e8e0ff', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0));
+    // Close friends (heart 3 on): a warm glow.
+    if (hearts >= BOND_HEART.startBond) {
       const halo = this.add.ellipse(0, -14, 46, 46, 0xff8ab0, 0.18);
       c.addAt(halo, 0);
       if (!calm()) this.tweens.add({ targets: halo, scale: 1.15, alpha: 0.32, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
@@ -600,44 +614,48 @@ export class CampScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(400, 2500), act);
   }
 
-  /** Pet, feed or play with a camp Hexling (each once a day): it builds your bond. */
+  /** Pet, feed or play with a camp Hexling (each once a day; the first each day builds your bond). */
   private careFor(speciesId: string, stage: number, c: Phaser.GameObjects.Container) {
     const meta = state.meta;
     const name = SPECIES_BY_ID[speciesId].names[stage] ?? SPECIES_BY_ID[speciesId].names[0];
     const hearts = campHearts(meta, speciesId);
     const done = caredToday(meta, speciesId);
-    const points = meta.camp?.bond[speciesId] ?? 0;
-    const next = CAMP_HEARTS.find((n) => points < n);
+    const next = bondToNext(meta, speciesId);
     const labels: Record<Care, [string, string]> = {
       pet: ['Pet', 'A scratch behind the ears.'],
       feed: ['Feed', 'A handful of berries.'],
       play: ['Play', 'A game of chase around the fire.'],
     };
+    const now = hearts ? `${hearts >= BOND_HEART.max ? 'Best friends! ' : ''}${bondReward(Math.min(hearts, BOND_HEART.max), name).replace(/^./, (ch) => ch.toUpperCase())}.` : '';
+    const toNext = next
+      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and your first time together here each day (+${BOND_POINTS.care}).`
+      : '';
+    const alt = hearts >= BOND_HEART.max;
+    const altOn = bondColours(meta, speciesId);
     openPicker(this, {
       title: `${name} ${'♥'.repeat(hearts)}${'♡'.repeat(CAMP_HEARTS.length - hearts)}`,
-      subtitle:
-        hearts >= CAMP_HEARTS.length
-          ? `Best friends! ${name} starts your runs with a bond heart, so it can hang on when it would faint.`
-          : `Spend time together to build your bond (${next! - points} more to the next heart). Each heart evolves it here at camp, and with a full bond, ${name} starts your runs with a bond heart.`,
-      options: CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
+      subtitle: [now, toNext].filter(Boolean).join(' '),
+      options: [
+        ...CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
+        ...(alt ? [{ label: `Bond colours: ${altOn ? 'on' : 'off'}`, sub: 'Tap to switch', color: 0x3a4a6a }] : []),
+      ],
       cancelLabel: 'Back',
       onCancel: () => {},
       onPick: (i) => {
+        if (i >= CARE.length) {
+          toggleBondColours(meta, speciesId);
+          saveMeta(meta);
+          this.scene.restart();
+          return;
+        }
+        const first = !done.length;
         const gained = care(meta, speciesId, CARE[i]);
         saveMeta(meta);
         sfx.coin();
-        this.bubble(c, '♥', '#ff8ab0');
+        this.bubble(c, first ? '♥ +1' : '♥', '#ff8ab0');
         if (gained) {
-          const now = campHearts(meta, speciesId);
-          const evolved = now <= 2 ? SPECIES_BY_ID[speciesId].names[now] : null;
-          showMessage(
-            this,
-            `${name} trusts you more!`,
-            now >= CAMP_HEARTS.length
-              ? `A full bond! ${name} glows with happiness, and will start your runs with a bond heart.`
-              : `Camp bond: ${'♥'.repeat(now)}. ${name} evolved into ${evolved} here at camp!`,
-            () => this.scene.restart(),
-          );
+          const h = campHearts(meta, speciesId);
+          showMessage(this, `${name} trusts you more!`, `Camp bond ${'♥'.repeat(h)}: ${bondReward(h, name)}.`, () => this.scene.restart());
         }
       },
     });

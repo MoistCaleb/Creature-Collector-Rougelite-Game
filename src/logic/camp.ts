@@ -1,6 +1,7 @@
 import { LEGEND_CHANCE, LEGENDS } from '../data/legends';
 import { MAP_BY_ID } from '../data/maps';
 import { SPECIES_BY_ID } from '../data/species';
+import { traitsFound } from './dex';
 import { hashString, Rng } from './rng';
 import type { Meta, Run } from './run';
 
@@ -28,8 +29,14 @@ export interface CampState {
   fire?: string;
   /** Who stays at camp (species ids, up to CREW_MAX). Unset: last run's team. */
   crew?: string[];
-  /** Lifetime bond with each species, from time at camp. */
+  /** Lifetime bond with each line: time at camp and runs together (2.0 scale, see CAMP_HEARTS). */
   bond: Record<string, number>;
+  /** Bond scale the points are on (2: 2.0's five hearts; unset: older saves, converted on load). */
+  bondV?: number;
+  /** Heart 4: the trait each line starts with as your starter (one you've found). */
+  bondTrait?: Record<string, import('../data/traits').TraitId>;
+  /** Heart 5: lines you've switched back from their bond colours. */
+  altOff?: string[];
   /** What you've done with each Hexling today ('pet', 'feed', 'play'). */
   cared: Record<string, string[]>;
   /** Workshop upgrades bought (2.0, see logic/workshop). */
@@ -66,7 +73,11 @@ export function counters(m: Meta): Record<string, number> {
 /** Your camp, set up for today (a new day brings new challenges and fresh care). */
 export function camp(m: Meta, now = new Date()): CampState {
   const day = localDay(now);
-  const c = (m.camp ??= { day: '', base: {}, claimed: [], done: 0, embers: 0, owned: [], bond: {}, cared: {} });
+  const c = (m.camp ??= { day: '', base: {}, claimed: [], done: 0, embers: 0, owned: [], bond: {}, cared: {}, bondV: BOND_VERSION });
+  if ((c.bondV ?? 1) < BOND_VERSION) {
+    for (const id of Object.keys(c.bond)) c.bond[id] = convertBond(c.bond[id]);
+    c.bondV = BOND_VERSION;
+  }
   if (c.day !== day) {
     c.day = day;
     c.base = counters(m);
@@ -229,22 +240,84 @@ export function growth(m: Meta, dexTotal: number): Growth {
 
 export const CARE = ['pet', 'feed', 'play'] as const;
 export type Care = (typeof CARE)[number];
-/** Camp bond points for each heart; three hearts and that species starts runs with a bond heart. */
-export const CAMP_HEARTS = [3, 10, 21];
-/** Bond a Hexling starts a run with once its camp bond is full (one bond heart). */
+/**
+ * Bond points for each of the five hearts (2.0: a favourite line takes about 25-35 runs to max).
+ * Heart 1: its middle form at camp; 2: its final form; 3: it starts runs with a bond heart;
+ * 4: as your starter you choose its trait; 5: +2 starting levels, bond colours, and it visits camp.
+ */
+export const CAMP_HEARTS = [10, 30, 60, 100, 150];
+/** Hearts at which each bond reward arrives. */
+export const BOND_HEART = { startBond: 3, trait: 4, max: 5 } as const;
+/** Bond a Hexling starts a run with from heart 3 (one bond heart). */
 export const CAMP_START_BOND = 3;
+/** Heart 5: extra starting levels as your starter. */
+export const BOND_START_LEVELS = 2;
+/** Bond points from a run (see payRunBond) and from camp (the first care each day). */
+export const BOND_POINTS = { care: 1, finished: 2, won: 4, mvp: 3, guardian: 1 } as const;
+
+/** The bond scale saved points are on. */
+export const BOND_VERSION = 2;
+/** 1.x's three hearts, at these points. */
+const OLD_HEARTS = [3, 10, 21];
+
+/**
+ * Old bond points on the 2.0 scale, keeping every heart: each old heart's range maps onto the new
+ * one's (3 -> 10, 10 -> 30, 21 -> 60), and points past a full 1.x bond count double, up to just short
+ * of heart 4 (that one is new, so it's earned on the new scale).
+ */
+export function convertBond(old: number): number {
+  if (!(old > 0)) return 0;
+  const from = [0, ...OLD_HEARTS];
+  const to = [0, ...CAMP_HEARTS.slice(0, OLD_HEARTS.length)];
+  for (let i = 1; i < from.length; i++) {
+    if (old <= from[i]) return Math.floor(to[i - 1] + ((old - from[i - 1]) / (from[i] - from[i - 1])) * (to[i] - to[i - 1]));
+  }
+  return Math.min(CAMP_HEARTS[OLD_HEARTS.length] - 1, to[to.length - 1] + Math.floor((old - from[from.length - 1]) * 2));
+}
 
 export const campHearts = (m: Meta, speciesId: string) => CAMP_HEARTS.filter((n) => (m.camp?.bond[speciesId] ?? 0) >= n).length;
 
-/** Spend time with a Hexling (each kind once a day). Returns the hearts gained (0 or 1), or null if already done today. */
+/** Points still to the next heart (null at five hearts). */
+export function bondToNext(m: Meta, speciesId: string): { points: number; next: number; need: number } | null {
+  const points = m.camp?.bond[speciesId] ?? 0;
+  const next = CAMP_HEARTS.find((n) => points < n);
+  return next === undefined ? null : { points, next, need: next - points };
+}
+
+/** What a heart gives (1-5). */
+export function bondReward(heart: number, name = 'it'): string {
+  return (
+    [
+      `${name} evolves here at camp`,
+      `${name} reaches its final form at camp`,
+      `${name} starts your runs with a bond heart`,
+      `as your starter, you choose ${name}'s trait from the ones you've found`,
+      `${name} starts 2 levels higher as your starter, wears its bond colours, and visits your camp`,
+    ][heart - 1] ?? ''
+  );
+}
+
+/** Add bond to a line. Returns the hearts before and after. */
+export function addBond(m: Meta, speciesId: string, points: number): { before: number; after: number } {
+  const c = camp(m);
+  const before = campHearts(m, speciesId);
+  c.bond[speciesId] = (c.bond[speciesId] ?? 0) + points;
+  return { before, after: campHearts(m, speciesId) };
+}
+
+/**
+ * Spend time with a Hexling (each kind once a day; the first each day builds your bond).
+ * Returns the hearts gained (0 or 1), or null if that was already done today.
+ */
 export function care(m: Meta, speciesId: string, what: Care): number | null {
   const c = camp(m);
   const done = (c.cared[speciesId] ??= []);
   if (done.includes(what)) return null;
+  const first = !done.length;
   done.push(what);
-  const before = campHearts(m, speciesId);
-  c.bond[speciesId] = (c.bond[speciesId] ?? 0) + 1;
-  return campHearts(m, speciesId) - before;
+  if (!first) return 0;
+  const r = addBond(m, speciesId, BOND_POINTS.care);
+  return r.after - r.before;
 }
 
 export const caredToday = (m: Meta, speciesId: string): string[] => (m.camp?.day === localDay() ? (m.camp.cared[speciesId] ?? []) : []);
@@ -263,24 +336,104 @@ export function closestBond(m: Meta): { speciesId: string; points: number } | nu
  */
 export const campStage = (m: Meta, speciesId: string) => Math.min(campHearts(m, speciesId), 2);
 
+/** Heart 5: does this line wear its bond colours? (On unless you've switched it off.) */
+export const bondColours = (m: Meta, speciesId: string) => campHearts(m, speciesId) >= BOND_HEART.max && !(m.camp?.altOff ?? []).includes(speciesId);
+
+/** Switch a heart-5 line between its bond colours and its normal ones. */
+export function toggleBondColours(m: Meta, speciesId: string) {
+  const c = camp(m);
+  const off = new Set(c.altOff ?? []);
+  if (off.has(speciesId)) off.delete(speciesId);
+  else off.add(speciesId);
+  c.altOff = [...off];
+}
+
+/** Heart 4: the trait you've chosen for this line as a starter (only one you've found). */
+export function bondTrait(m: Meta, speciesId: string): import('../data/traits').TraitId | undefined {
+  if (campHearts(m, speciesId) < BOND_HEART.trait) return undefined;
+  const t = m.camp?.bondTrait?.[speciesId];
+  return t && traitsFound(m.dex, speciesId).includes(t) ? t : undefined;
+}
+
+/** Heart 4: can you choose this line's trait? (Two or more found.) */
+export const canChooseTrait = (m: Meta, speciesId: string) => campHearts(m, speciesId) >= BOND_HEART.trait && traitsFound(m.dex, speciesId).length > 1;
+
+export function setBondTrait(m: Meta, speciesId: string, trait: import('../data/traits').TraitId) {
+  const c = camp(m);
+  (c.bondTrait ??= {})[speciesId] = trait;
+}
+
+/** Heart 5: extra starting levels for this line as your starter. */
+export const bondStarterLevels = (m: Meta, speciesId: string) => (campHearts(m, speciesId) >= BOND_HEART.max ? BOND_START_LEVELS : 0);
+
+/** Heart 5: a best friend who isn't staying at camp drops by (a different one each day). */
+export function campVisitor(m: Meta, now = new Date()): string | null {
+  const crew = new Set(campCrew(m).map((c) => c.speciesId));
+  const ids = Object.keys(m.camp?.bond ?? {})
+    .filter((id) => SPECIES_BY_ID[id] && !crew.has(id) && campHearts(m, id) >= BOND_HEART.max)
+    .sort();
+  return ids.length ? ids[hashString(`visit:${localDay(now)}`) % ids.length] : null;
+}
+
 /** Who stays at camp: your pick, else last run's team (or your first starters), in their camp forms. */
-export function campCrew(m: Meta): { speciesId: string; stage: number; shiny: boolean }[] {
+export function campCrew(m: Meta): { speciesId: string; stage: number; shiny: boolean; alt: boolean }[] {
   const shiny = (id: string) => (m.shinyOwned ?? []).includes(id) && !(m.shinyOff ?? []).includes(id);
   const ids = m.camp?.crew?.length
     ? m.camp.crew
     : m.history?.[0]?.team.length
       ? m.history[0].team.slice(0, CREW_MAX).map((c) => c.speciesId)
       : m.unlockedStarters.slice(0, CREW_MAX);
-  return ids.filter((id) => SPECIES_BY_ID[id]).map((id) => ({ speciesId: id, stage: campStage(m, id), shiny: shiny(id) }));
+  return ids.filter((id) => SPECIES_BY_ID[id]).map((id) => ({ speciesId: id, stage: campStage(m, id), shiny: shiny(id), alt: bondColours(m, id) }));
 }
 
 /** Runs that are the same for everyone don't get camp perks. */
 export const campPerks = (run: Run) => !run.daily && !run.weekly && !run.hunt;
 
-/** A Hexling joining your team: a full camp bond means it starts with a bond heart. */
-export function applyCampBond(run: Run, c: { speciesId: string; bond?: number }) {
+/**
+ * A Hexling joining your team: from heart 3 it starts with a bond heart (not on runs that are the
+ * same for everyone), and at heart 5 it wears its bond colours (looks only, so every run).
+ */
+export function applyCampBond(run: Run, c: { speciesId: string; bond?: number; shiny?: boolean; alt?: boolean }) {
+  if (!c.shiny && bondColours(run.meta, c.speciesId)) c.alt = true;
   if (!campPerks(run) || run.race) return;
-  if (campHearts(run.meta, c.speciesId) >= CAMP_HEARTS.length) c.bond = Math.max(c.bond ?? 0, CAMP_START_BOND);
+  if (campHearts(run.meta, c.speciesId) >= BOND_HEART.startBond) c.bond = Math.max(c.bond ?? 0, CAMP_START_BOND);
+}
+
+/** Each line's share of a run's bond: on the team at the end, the win, the MVP, guardians it helped beat. */
+export function runBond(run: Run, won: boolean): Record<string, number> {
+  const out: Record<string, number> = {};
+  const add = (id: string, n: number) => SPECIES_BY_ID[id] && (out[id] = (out[id] ?? 0) + n);
+  const team = new Set([...run.team, ...run.bench].map((c) => c.speciesId));
+  for (const id of team) {
+    add(id, BOND_POINTS.finished);
+    if (won) add(id, BOND_POINTS.won);
+  }
+  const all = [...run.team, ...run.bench, ...(run.log.fallen ?? [])];
+  const mvp = all.length ? all.reduce((a, b) => ((b.dealt ?? 0) > (a.dealt ?? 0) ? b : a)) : null;
+  if (mvp && (mvp.dealt ?? 0) > 0) add(mvp.speciesId, BOND_POINTS.mvp);
+  for (const [id, n] of Object.entries(run.bondLog ?? {})) add(id, n * BOND_POINTS.guardian);
+  return out;
+}
+
+/** Pay a run's bond once. Returns each line's points and hearts, most points first. */
+export function payRunBond(meta: Meta, run: Run, won: boolean): { speciesId: string; points: number; before: number; after: number }[] {
+  const pts = runBond(run, won);
+  const out = Object.entries(pts)
+    .map(([speciesId, points]) => {
+      const h = campHearts(meta, speciesId);
+      return { speciesId, points, before: h, after: h };
+    })
+    .sort((a, b) => b.points - a.points);
+  if (run.bondPaid) return out;
+  run.bondPaid = true;
+  for (const o of out) Object.assign(o, addBond(meta, o.speciesId, o.points));
+  return out;
+}
+
+/** A guardian beaten: each Hexling standing on the team helped. */
+export function noteGuardianBond(run: Run) {
+  const log = (run.bondLog ??= {});
+  for (const c of run.team) if (c.hp > 0) log[c.speciesId] = (log[c.speciesId] ?? 0) + 1;
 }
 
 // ---------------------------------------------------------------- the choice before a run

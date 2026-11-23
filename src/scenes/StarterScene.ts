@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { rollTrait, TRAITS, type TraitId } from '../data/traits';
 import { traitDescOf, traitName } from '../ui/traitText';
-import { prepsAvailable } from '../logic/camp';
+import { bondColours, bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTrait } from '../logic/camp';
+import { traitsFound } from '../logic/dex';
 import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
@@ -14,7 +15,7 @@ import type { RaceInfo } from '../net/duel';
 import { duel, sendProgress } from '../net/runtime';
 import { royale } from '../net/royale';
 import { session } from '../net/session';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT, type Colours } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { icon as pixelIcon } from '../ui/icons';
 import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
@@ -75,12 +76,16 @@ export class StarterScene extends Phaser.Scene {
     const passives = this.race ? racePassives(this.race.seed, this.race.starters) : week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
     this.gold = !this.race && !week && !this.daily ? gildedStarterOffer(state.meta, choices) : null;
     traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : (traitKey ?? `free:${Math.random()}`);
+    const free = !this.race && !week && !this.daily;
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
-      const trait = rollTrait(id, traitKey!);
-      const tName = trait ? `Trait: ${traitName(id, trait)}` : '';
+      const trait = this.cardTrait(id);
+      // Camp bond heart 4: tap the trait to choose it (from the ones you've found).
+      const choose = free && canChooseTrait(state.meta, id);
+      const tName = trait ? `Trait: ${traitName(id, trait)}${choose ? ' ♥' : ''}` : '';
       dex.form(id, 0);
-      const preview = createCreature(id, BALANCE.starterLevel);
+      const preview = createCreature(id, BALANCE.starterLevel + (free ? bondStarterLevels(state.meta, id) : 0));
+      const look: Colours = starterShiny(state.meta, id) || id === this.gold ? true : bondColours(state.meta, id) ? 'alt' : false;
       const s = stats(preview);
       if (LANDSCAPE) {
         // Sideways: three tall cards side by side.
@@ -90,7 +95,7 @@ export class StarterScene extends Phaser.Scene {
         const mid = x + cw / 2;
         const card = this.add.rectangle(x, y, cw, 350, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
         card.setInteractive({ useHandCursor: true }).on('pointerup', () => this.pick(id));
-        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id) || id === this.gold)).setScale(3.4 * SPRITE_FIT);
+        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0, look)).setScale(3.4 * SPRITE_FIT);
         this.shinyToggle(id, x + cw - 50, y + 18, 84);
         if (id === this.gold) this.goldTag(x + cw - 50, y + 18);
         this.tweens.add({ targets: img, y: y + 60, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
@@ -102,13 +107,15 @@ export class StarterScene extends Phaser.Scene {
         const chipsW = sp.types[0] === sp.types[1] ? 104 : 128;
         typeChips(this, mid - chipsW / 2, y + 162, sp.types);
         text(this, mid, y + 180, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 14, COLORS.textDim, { lineSpacing: 3, align: 'center' }).setOrigin(0.5, 0);
-        text(this, mid, y + 224, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
-        if (tName) traitHint(text(this, mid, y + 252, `${tName}  ⓘ`, 12, '#ffe9a8', { fontStyle: 'bold' }).setOrigin(0.5, 0), trait!);
+        const mv = text(this, mid, y + 224, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 12, COLORS.textDim, { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+        // A third move (camp bond heart 5's extra levels) can wrap: make room below it.
+        const dy = mv.height > 20 ? 12 : 0;
+        if (tName) this.traitTap(text(this, mid, y + 252 + dy, `${tName}  ⓘ`, 12, '#ffe9a8', { fontStyle: 'bold' }).setOrigin(0.5, 0), id, trait!, choose);
         // (With a passive to show, the card has no room for the evolution line.)
         if (passives?.[id]) {
           const pv = PASSIVES[passives[id]];
-          text(this, mid, y + 272, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
-        } else text(this, mid, y + 274, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
+          text(this, mid, y + 272 + dy, `${pv.name}: ${pv.desc}`, 11, '#ffc94d', { wordWrap: { width: cw - 16 }, align: 'center' }).setOrigin(0.5, 0);
+        } else text(this, mid, y + 274 + dy, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 11, '#8e86ad', { wordWrap: { width: cw - 20 }, align: 'center' }).setOrigin(0.5, 0);
         button(this, mid, y + 328, cw - 40, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
         return;
       }
@@ -117,7 +124,7 @@ export class StarterScene extends Phaser.Scene {
       card.setInteractive({ useHandCursor: true });
       card.on('pointerup', () => this.pick(id));
 
-      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id) || id === this.gold)).setScale(4 * SPRITE_FIT);
+      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, look)).setScale(4 * SPRITE_FIT);
       this.shinyToggle(id, 82, y + 20, 100);
       if (id === this.gold) this.goldTag(82, y + 20);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
@@ -128,13 +135,15 @@ export class StarterScene extends Phaser.Scene {
       }
       typeChips(this, 175, y + 56, sp.types);
       text(this, 175, y + 76, `HP ${s.hp}   ATK ${s.atk}\nDEF ${s.def}   SPD ${s.spd}`, 15, COLORS.textDim, { lineSpacing: 4 });
-      text(this, 175, y + 122, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 13, COLORS.textDim, {
+      const mv = text(this, 175, y + 122, 'Moves: ' + preview.moves.map((m) => moveDef(m).name).join(', '), 13, COLORS.textDim, {
         wordWrap: { width: W - 215 },
       });
-      if (tName) traitHint(text(this, 175, y + 146, `${tName}  ⓘ`, 13, '#ffe9a8', { fontStyle: 'bold' }), trait!);
+      // A third move (camp bond heart 5's extra levels) can wrap: make room below it.
+      const dy = mv.height > 22 ? 14 : 0;
+      if (tName) this.traitTap(text(this, 175, y + 146 + dy, `${tName}  ⓘ`, 13, '#ffe9a8', { fontStyle: 'bold' }), id, trait!, choose);
       // (With a passive to show, the card has no room for the evolution line.)
       if (!passives?.[id]) {
-        const evo = text(this, 175, y + 168, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 12, '#8e86ad');
+        const evo = text(this, 175, y + 168 + dy, `Evolves: ${formName(state.meta.dex, id, 1)} → ${formName(state.meta.dex, id, 2)}`, 12, '#8e86ad');
         // Keep it clear of the Pick button.
         if (evo.width > W - 320) evo.setScale((W - 320) / evo.width, 1);
       }
@@ -154,6 +163,33 @@ export class StarterScene extends Phaser.Scene {
         this.scene.start(this.daily || this.weekly ? 'Daily' : 'MapSelect', {});
       }, { fontSize: 15, glyph: 'back' });
     }
+  }
+
+  /** The trait a card shows: your chosen one (camp bond heart 4, normal runs), else rolled. */
+  private cardTrait(id: string): TraitId | undefined {
+    const free = !this.race && !this.weekly && !this.daily;
+    return (free ? bondTrait(state.meta, id) : undefined) ?? rollTrait(id, traitKey!);
+  }
+
+  /** Tap a trait: what it does, or (camp bond heart 4) choose it from the ones you've found. */
+  private traitTap(t: Phaser.GameObjects.Text, id: string, trait: TraitId, choose: boolean) {
+    if (!choose) return traitHint(t, trait);
+    t.setInteractive({ useHandCursor: true }).on('pointerup', (_p: unknown, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+      e?.stopPropagation?.();
+      const found = traitsFound(state.meta.dex, id);
+      openPicker(this, {
+        title: 'Choose its trait',
+        subtitle: `Camp bond ♥♥♥♥: as your starter, ${SPECIES_BY_ID[id].names[0]} can have any trait you've found on its line.`,
+        options: found.map((k) => ({ label: `${TRAITS[k].name}${k === trait ? ' (now)' : ''}`, sub: traitDescOf(k, false), color: k === trait ? 0x6a3a5a : undefined })),
+        cancelLabel: 'Back',
+        onCancel: () => {},
+        onPick: (i) => {
+          setBondTrait(state.meta, id, found[i]);
+          saveMeta(state.meta);
+          this.scene.restart({ mapId: this.mapId });
+        },
+      });
+    });
   }
 
   /** The Gilded offer's tag: pick it and the line is yours Gilded (a Gilded Hunt milestone). */
@@ -183,7 +219,7 @@ export class StarterScene extends Phaser.Scene {
     this.gold = null;
     const others = !this.race && !this.daily && !this.weekly ? (rolled ?? []).filter((x) => x !== id) : [];
     rolled = null;
-    const trait = traitKey ? rollTrait(id, traitKey) : undefined;
+    const trait = traitKey ? this.cardTrait(id) : undefined;
     traitKey = null;
     if (this.race) {
       // Same map and seed as the other racer; Heat 0 and no passive so it's even.
