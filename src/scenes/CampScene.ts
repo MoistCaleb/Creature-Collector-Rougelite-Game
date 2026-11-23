@@ -41,6 +41,7 @@ import { createCreature } from '../logic/creature';
 import { branchUpgrades, WORKSHOP_BRANCHES, type WorkshopBranch } from '../data/workshop';
 import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
 import { payHuntMilestones } from '../logic/huntMilestones';
+import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
 import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
@@ -229,8 +230,13 @@ export class CampScene extends Phaser.Scene {
       this.campButtons();
       // Gilded Hunt milestones (2.0): saves that went deep before 2.0 are paid here, once.
       payHuntMilestones(meta);
+      // Welcome-back embers (2.0): saves from before it get a head start on the Workshop, once.
+      const welcome = payWelcomeBack(meta);
       saveMeta(meta);
-      announceHunt(this, meta, () => {});
+      if (welcome) {
+        sfx.coin();
+        showMessage(this, 'Welcome to Hexbound 2.0!', welcomeText(welcome), () => this.scene.restart());
+      } else announceHunt(this, meta, () => {});
       if (this.reopen) {
         const b = this.reopen;
         this.reopen = null;

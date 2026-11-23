@@ -85,6 +85,7 @@ export const HOW_TO_PLAY: Page[] = [
       'The Workshop has four branches (Supplies, Training, Fortune, Lore), each built in order and ending in a capstone.',
       'Lore adds more boons and surprises to your runs: variety, not power.',
       'Daily and weekly runs and online races ignore the Workshop, so they stay fair for everyone.',
+      'Played before 2.0? Your first camp visit pays welcome-back embers for the runs you\'ve already won and played.',
     ],
   },
   {

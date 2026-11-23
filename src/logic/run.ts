@@ -46,6 +46,7 @@ import {
 import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
+import { freshWelcome, noteWelcomeBack } from './welcomeBack';
 import { applyCampBond, bondStarterLevels, camp, CAMP_START_BOND, noteGuardianBond, type PrepId } from './camp';
 import { lines, noteCatch, noteRunRecord } from './dexInfo';
 import { emptyDex, type Dex } from './dex';
@@ -198,6 +199,8 @@ export interface Meta {
   runRecord?: { wins: number; losses: number };
   /** The game version that last saved this (from v1.52). */
   savedBy?: string;
+  /** Welcome-back embers (2.0): the one-time gift for progress made before 2.0 (see logic/welcomeBack). */
+  welcome?: import('./welcomeBack').WelcomeBack;
   /** Online games won: duels (series), stage battles, battle royales and online tournaments. */
   onlineWins?: number;
   /** Online games lost (counted from v1.46), and online wins in a row (now and best). */
@@ -355,6 +358,7 @@ export function loadMeta(): Meta {
     stats: emptyStats(),
     achievements: [],
     newAchievements: [],
+    welcome: freshWelcome(),
   };
   try {
     const raw = storage.getItem(META_KEY);
@@ -373,6 +377,11 @@ export function loadMeta(): Meta {
     if (!saved.seenTitles) meta.seenTitles = earnedTitles(meta);
     // v1.47: the run W/L starts over from your recent runs (online races had been counted as losses).
     if (!saved.runRecord) seedRunRecord(meta);
+    // 2.0: saves from before it get welcome-back embers for their progress (paid at camp).
+    if (!saved.welcome) {
+      delete meta.welcome;
+      noteWelcomeBack(meta);
+    }
     return meta;
   } catch {
     return fallback;
