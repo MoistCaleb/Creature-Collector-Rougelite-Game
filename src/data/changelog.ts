@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '1.52';
+export const APP_VERSION = '2.0';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,20 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.0',
+    title: 'Hexbound 2.0',
+    items: [
+      'All-new art: every Hexling is redrawn at 64 px, with a back view for your side in battle. 66 new lines and 3 new legendaries (Ironvault, Thornmaw, Rimeveil) join the Hexlidex.',
+      'Traits: every Hexling has one of its line\u2019s three traits (one is rare ◆). Evolving keeps it, and the final form makes it stronger. Pick any trait you\u2019ve found in the Arena.',
+      'Boons: after each guardian, choose a perk that bends the rules for the rest of the run. 63 of them, including golden mythics and curses that pay you back.',
+      'Surprises: omens, strange floors, Elder guardians, hidden hexes (wishing well, cursed altar, hatchery, dojo and more) and rare encounters. The Hexlidex tracks what you\u2019ve found.',
+      'Embers and the Workshop: every run pays embers, win or lose. Spend them on lasting upgrades in four branches. Played before? Your first camp visit pays welcome-back embers.',
+      'Camp bond now goes to 5 hearts, Gilded Hunts have milestones, and Quick runs (2 floors) are here for a short session.',
+      'Battles show what triggered: trait and boon callouts, plus a reason under damage numbers. After 30 turns, fatigue doubles damage and halves healing, so no battle lasts forever.',
+      'New leaderboards and titles, new music and sounds, and a Report a bug button in Settings.',
+    ],
+  },
   {
     version: '1.52',
     title: 'Safer saves',

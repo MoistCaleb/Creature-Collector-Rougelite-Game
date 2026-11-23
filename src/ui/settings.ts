@@ -16,7 +16,7 @@ import { BATTLE_SPEEDS, prefs } from './prefs';
 import { applyVolumes, isMuted, setMuted, sfx } from './sound';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
 
-const ROW = 50;
+const ROW_H = 50;
 
 /**
  * Settings, as a panel over any screen (title, map, battle): volumes, sound on/off,
@@ -24,6 +24,8 @@ const ROW = 50;
  */
 export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}) {
   const rows = 7;
+  // Sideways the board is only 450 tall: slightly shorter rows keep the last one clear of Close.
+  const ROW = LANDSCAPE ? 48 : ROW_H;
   // Bug reports need the server (not in the claude.ai version).
   const bigs = accountsAvailable() ? 6 : 5;
   const p = openPanel(scene, 'Settings', {
