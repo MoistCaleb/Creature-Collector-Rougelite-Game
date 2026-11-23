@@ -3,6 +3,7 @@ import { BOON_COLOR, BOONS } from '../data/boons';
 import { runBoons, skipOffer, takeBoon } from '../logic/boons';
 import type { Run } from '../logic/run';
 import { persist } from '../state';
+import { openBoonCards } from './boonCards';
 import { openPicker, showMessage } from './picker';
 import { sfx } from './sound';
 import { tip, tipDone } from './tips';
@@ -30,11 +31,10 @@ export function openBoonOffer(scene: Phaser.Scene, run: Run, onDone: () => void)
   sfx.boonOffer();
   const many = offer.picks > 1;
   const title = offer.mode === 'mythic' ? 'Mythic boon' : offer.mode === 'rare' ? 'Rare boons' : 'Choose a boon';
-  openPicker(scene, {
+  openBoonCards(scene, {
     title,
     subtitle: `${many ? `Take ${offer.picks} of these.` : 'Take one for the rest of this run.'}${offer.ids.some((id) => BOONS[id].rarity === 'curse') ? ' Curses cost you something but pay you back.' : ''}`,
-    options: offer.ids.map((id) => ({ ...boonCardText(id), color: BOON_COLOR[BOONS[id].rarity] })),
-    rowHeight: 92,
+    ids: offer.ids,
     cancelLabel: many ? 'Done' : 'Skip',
     onCancel: () => {
       skipOffer(run);
@@ -48,14 +48,16 @@ export function openBoonOffer(scene: Phaser.Scene, run: Run, onDone: () => void)
       persist();
       sfx.boonPick(b.rarity);
       const next = () => openBoonOffer(scene, run, onDone);
-      showMessage(scene, b.rarity === 'curse' ? `Cursed: ${b.name}` : `${b.name}!`, `${b.rarity === 'curse' ? `${b.drawback}\n${b.reward}` : b.desc}${res.note ? `\n\n${res.note}` : ''}`, next);
+      // The card already showed what it does: only stop to explain something extra.
+      if (res.note) showMessage(scene, b.rarity === 'curse' ? `Cursed: ${b.name}` : `${b.name}!`, res.note, next);
+      else next();
     },
   });
 }
 
 /** Your boons this run (and curses), from the map bar or the menu. */
-export function openBoonList(scene: Phaser.Scene, run: Run, onClose: () => void = () => {}) {
-  const held = run.boons?.held ?? [];
+export function openBoonList(scene: Phaser.Scene, src: Run | readonly string[], onClose: () => void = () => {}) {
+  const held = Array.isArray(src) ? [...(src as readonly string[])] : ((src as Run).boons?.held ?? []);
   openPicker(scene, {
     title: `Boons (${held.length})`,
     subtitle: held.length ? 'They last for the rest of this run.' : 'No boons yet. Beat a guardian or find a Boon hex to choose one.',

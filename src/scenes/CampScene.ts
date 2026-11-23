@@ -38,9 +38,10 @@ import {
   type PrepId,
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
-import { branchUpgrades, WORKSHOP_BRANCHES, type WorkshopBranch } from '../data/workshop';
+import { type WorkshopBranch } from '../data/workshop';
+import { openWorkshopTree } from '../ui/workshopTree';
 import { titleNews } from '../logic/cosmetics';
-import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
+import { workshopProgress } from '../logic/workshop';
 import { payHuntMilestones } from '../logic/huntMilestones';
 import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
 import { tip } from '../ui/tips';
@@ -240,10 +241,8 @@ export class CampScene extends Phaser.Scene {
         showMessage(this, 'Welcome to Hexbound 2.0!', welcomeText(welcome), () => this.scene.restart());
       } else announceHunt(this, meta, () => tip(this, 'camp'));
       if (this.reopen) {
-        const b = this.reopen;
         this.reopen = null;
-        if (b === 'list') this.workshop();
-        else this.workshopBranch(b);
+        this.workshop();
       }
       this.signposts();
     }
@@ -708,20 +707,49 @@ export class CampScene extends Phaser.Scene {
       const img = this.add.image(x, y, ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.6).setDepth(y / 1000).setFlipX(x > this.fx);
       const short = i === 1 ? 'Alder' : i === 2 ? (this.prep && run?.rival ? run.rival.name : 'Rival') : v.name;
       text(this, x, y + 4, short, 10, '#e8e0ff', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0).setDepth(2);
-      // "!" when they have something for you.
+      // A speech bubble when they have something for you: gold "!" for something to claim or big
+      // news, white "?" for today's challenge, "…" for a word before the run. It bobs, and a
+      // glow under their feet draws the eye; it clears once you've heard them out.
       const ch = list[v.tier];
       const news = this.prep ? this.newsFrom(i) : null;
-      const flag = this.prep ? (i === 1 && legendFloors(run!, floorsOf(run!)).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
-      if (flag) {
-        const f = text(this, x, y - 66, flag, 18, flag === '!' ? '#ffd04a' : '#c8d8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5).setDepth(3);
-        if (!calm()) this.tweens.add({ targets: f, y: f.y - 5, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
-      }
+      const flag = this.prep ? (i === 1 && legendFloors(run!, floorsOf(run!)).length ? '!' : news ? '…' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
+      const bubble = flag ? this.talkBubble(x, y, flag) : null;
       img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         sfx.click();
-        if (news) showMessage(this, short === 'Alder' ? 'Professor Alder' : short, news);
-        else if (!this.prep) this.challengeFrom(i, ch);
+        if (news) {
+          bubble?.destroy();
+          showMessage(this, short === 'Alder' ? 'Professor Alder' : short, news);
+        } else if (!this.prep) this.challengeFrom(i, ch);
       });
     });
+  }
+
+  /** A speech bubble over a visitor (and a glow at their feet). Destroying it clears both. */
+  private talkBubble(x: number, y: number, mark: string): Phaser.GameObjects.Container {
+    const urgent = mark === '!';
+    const fill = urgent ? 0xffd04a : 0xf4f0ff;
+    const glow = this.add.ellipse(x, y, 46, 14, urgent ? 0xffd04a : 0xc8d8ff, 0.35).setDepth(y / 1000 - 0.001).setBlendMode(Phaser.BlendModes.ADD);
+    const c = this.add.container(x, y - 76).setDepth(4);
+    const g = this.add.graphics();
+    g.fillStyle(0x14101e, 1).fillRoundedRect(-17, -15, 34, 28, 9);
+    g.fillStyle(fill, 1).fillRoundedRect(-15, -13, 30, 24, 8);
+    // The tail, pointing down at their head.
+    g.fillStyle(0x14101e, 1).fillTriangle(-7, 9, 7, 9, 0, 21);
+    g.fillStyle(fill, 1).fillTriangle(-5, 8, 5, 8, 0, 17);
+    const t = text(this, 0, -2, mark, mark === '…' ? 16 : 18, '#2a1a08', { fontStyle: 'bold' }).setOrigin(0.5);
+    c.add([g, t]);
+    c.once('destroy', () => glow.destroy());
+    if (!calm()) {
+      this.tweens.add({ targets: c, y: c.y - 6, yoyo: true, repeat: -1, duration: 560, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: glow, alpha: 0.1, scaleX: 1.25, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+      // Every few seconds the bubble pops, so it catches the eye.
+      this.time.addEvent({
+        delay: urgent ? 1800 : 3200,
+        loop: true,
+        callback: () => c.active && this.tweens.add({ targets: c, scale: { from: 1.25, to: 1 }, duration: 320, ease: 'Back.easeOut' }),
+      });
+    }
+    return c;
   }
 
   /** What a visitor has to say before a run. */
@@ -843,68 +871,21 @@ export class CampScene extends Phaser.Scene {
     });
   }
 
-  /** The Workshop (2.0): lasting upgrades for embers, in four branches. */
+  /** The Workshop (2.0): lasting upgrades for embers, as a tech tree of four branches. */
   private workshop() {
     const meta = state.meta;
-    const c = camp(meta);
-    const prog = workshopProgress(meta);
-    const own = ownedUpgrades(meta);
-    openPicker(this, {
-      title: 'Workshop',
-      subtitle: prog.done
-        ? `Every upgrade built (${prog.total} embers). You have ${c.embers} embers.`
-        : `You have ${c.embers} embers · ${prog.spent}/${prog.total} built.\nUpgrades work on normal runs and the Gilded Hunt, not on daily or weekly runs or online.`,
-      options: WORKSHOP_BRANCHES.map((b) => {
-        const ups = branchUpgrades(b.id);
-        const have = ups.filter((u) => own.includes(u.id)).length;
-        const next = nextUpgrade(meta, b.id);
-        return {
-          label: `${b.name}   ${have}/${ups.length}`,
-          sub: next ? `Next: ${next.name} · ${next.cost} embers` : `Complete · ${b.blurb}`,
-          color: b.color,
-          badge: next && c.embers >= next.cost ? 'READY' : undefined,
-        };
-      }),
-      rowHeight: 56,
-      cancelLabel: 'Back',
-      onCancel: () => {},
-      onPick: (i) => this.workshopBranch(WORKSHOP_BRANCHES[i].id),
-    });
-  }
-
-  /** One branch of the Workshop: what you've built, the next upgrade to buy, and what's after it. */
-  private workshopBranch(id: WorkshopBranch) {
-    const meta = state.meta;
-    const c = camp(meta);
-    const b = WORKSHOP_BRANCHES.find((x) => x.id === id)!;
-    const own = ownedUpgrades(meta);
-    const next = nextUpgrade(meta, id);
-    const ups = branchUpgrades(id);
-    openPicker(this, {
-      title: `Workshop · ${b.name}`,
-      subtitle: `${b.blurb}\nYou have ${c.embers} embers. Buy them in order.`,
-      options: ups.map((u) => {
-        const have = own.includes(u.id);
-        const isNext = next?.id === u.id;
-        return {
-          label: `${have ? '✓ ' : ''}${u.name}${u.capstone ? '  ★' : ''}`,
-          sub: have ? `Built · ${u.desc}` : `${u.cost} embers · ${u.desc}`,
-          disabled: have || !isNext || c.embers < u.cost,
-          color: have ? 0x2f3f2a : isNext ? b.color : 0x2a2a34,
-          badge: u.capstone ? 'CAPSTONE' : undefined,
-        };
-      }),
-      rowHeight: 60,
-      cancelLabel: 'Back',
-      onCancel: () => this.workshop(),
-      onPick: (i) => {
-        const built = buyUpgrade(meta, ups[i].id) === null;
-        if (built) sfx.workshopBuild(!!ups[i].capstone);
-        const fresh = built ? takeNewTitles(meta) : [];
+    let built = false;
+    openWorkshopTree(this, {
+      meta,
+      afterBuy: (u, done) => {
+        built = true;
+        const fresh = takeNewTitles(meta);
         saveMeta(meta);
-        if (fresh.length) showMessage(this, `${ups[i].name} built!`, titleNews(fresh).replace(/^\n+/, ''), () => this.scene.restart({ workshop: id }));
-        else this.scene.restart({ workshop: id });
+        if (fresh.length) showMessage(this, `${u.name} built!`, titleNews(fresh).replace(/^\n+/, ''), done);
+        else done();
       },
+      // Embers changed: redraw the camp.
+      onClose: () => built && this.scene.restart(),
     });
   }
 

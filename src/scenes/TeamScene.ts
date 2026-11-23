@@ -1,6 +1,7 @@
 import { benchMax } from '../logic/workshop';
 import { teamMax } from '../logic/boons';
-import { traitTag } from '../ui/traitText';
+import { traitDescOf, traitTag } from '../ui/traitText';
+import { traitOf } from '../data/traits';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
 import Phaser from 'phaser';
 import { accText, maxUses, moveSummary, moveColor } from '../data/moves';
@@ -160,7 +161,7 @@ export class TeamScene extends Phaser.Scene {
     const dy = wide ? 18 : 0;
     const fit = (t: Phaser.GameObjects.Text, room: number) => (t.width > room ? t.setScale(room / t.width, 1) : t);
     fit(text(this, lx, y0 + 31 + dy, `Lv ${c.level}/${cap}  ·  ${xpLine}`, 12, COLORS.textDim), pw - 20);
-    const nat = (c.nature ? `  ·  ${NATURES[c.nature].name} (${natureShort(c.nature)})` : '') + (traitTag(c) ? `  ·  ${traitTag(c)}` : '');
+    const nat = c.nature ? `  ·  ${NATURES[c.nature].name} (${natureShort(c.nature)})` : '';
     const hearts = bondHearts(c.bond);
     fit(text(this, lx, y0 + 47 + dy, `HP ${s.hp}  ATK ${s.atk}  DEF ${s.def}  SPD ${s.spd}${nat}${hearts ? `  ·  ${'♥'.repeat(hearts)}` : ''}`, 13, COLORS.text), pw - 20);
     c.moves.forEach((m, i) => {
@@ -194,6 +195,20 @@ export class TeamScene extends Phaser.Scene {
       () => this.itemPicker(c),
       { enabled: !!c.held || bag.length > 0, fontSize: 13, color: 0x3a3a5a, glyph: c.held ? HELD[c.held].icon : 'bag' },
     );
+
+    // Trait: its own button (tap to read what it does); sideways there's room to show it too.
+    const tid = traitOf(c);
+    if (tid) {
+      const desc = traitDescOf(tid, c.stage >= 2);
+      const read = () => showMessage(this, traitTag(c), desc);
+      const tx = wide ? px + pw / 2 : (222 + W - 18) / 2;
+      const ty = wide ? y0 + 266 : y0 + 145;
+      const tw = wide ? pw - 20 : W - 18 - 222;
+      const tb = button(this, tx, ty, tw, wide ? 30 : 24, `${traitTag(c)}  ⓘ`, read, { fontSize: 13, color: 0x2f4a6b, glyph: 'gem' });
+      const lab = tb.list.find((o): o is Phaser.GameObjects.Text => o instanceof Phaser.GameObjects.Text);
+      if (lab && lab.width > tw - 40) lab.setScale((tw - 40) / lab.width, 1);
+      if (wide) text(this, lx, ty + 22, desc, 12, COLORS.textDim, { wordWrap: { width: pw - 20 }, lineSpacing: 3 });
+    }
 
     // Actions: a row of four (upright) or a 2x2 grid (sideways).
     const bw = wide ? (pw - 26) / 2 : 0;
