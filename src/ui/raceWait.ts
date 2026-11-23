@@ -1,7 +1,6 @@
 import type Phaser from 'phaser';
 import { titleNews } from '../logic/cosmetics';
-import { isAlive } from '../logic/creature';
-import { potionHeal, saveMeta, type Run } from '../logic/run';
+import { potionHeal, raceTeam, saveMeta, type Run } from '../logic/run';
 import { addOnlineLoss, addOnlineWin, addRoyaleWin } from '../logic/titles';
 import { duel, endRace, leaveDuelRoyale, raceVerdict, sendProgress } from '../net/runtime';
 import { countRoyaleLoss, royale, royaleQuit, royaleSummary } from '../net/royale';
@@ -25,7 +24,7 @@ const winNews = new WeakMap<object, string>();
 function handIn(run: Run, won: boolean) {
   if (handedIn.has(run)) return;
   handedIn.add(run);
-  const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
+  const team = raceTeam(run).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
   sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run), boons: run.boons?.held ?? [] });
 }
 

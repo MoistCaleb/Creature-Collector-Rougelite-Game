@@ -19,13 +19,16 @@ import { beginDuel, cleanCreatures, cleanLead, cleanNodeId, cleanRoster, duel, g
  */
 
 /** How long a player whose link dropped has to come back before they're out. */
-const GRACE = 20000;
+// Long enough to lock a phone or switch apps for a moment and come back (it was 20 s).
+const GRACE = 45000;
 
 interface HostRacer {
   progress: RaceProgress | null;
   /** Their finished team (empty: wiped out). */
   team: Creature[] | null;
   gone: boolean;
+  /** They chose to leave (gone for good, even if they reconnect). */
+  quit?: boolean;
   /** Potions left for the bracket, and how much one heals. */
   potions: number;
   heal: number;
@@ -67,6 +70,7 @@ export const royale = {
   /** Redraw hook for whichever screen shows the royale. */
   onChange: null as (() => void) | null,
   reset() {
+    lastProgress = null;
     for (const r of this.racers.values()) if (r.timer) clearTimeout(r.timer);
     this.active = false;
     this.tourney = false;
@@ -96,8 +100,10 @@ export function royaleSummary(): string {
   if (!s.length) return 'starting';
   const racing = s.filter((x) => !x.finished && !x.gone).length;
   const ready = s.filter((x) => x.finished && x.alive).length;
-  const out = s.filter((x) => !x.alive || x.gone).length;
-  return [`${racing} racing`, ready ? `${ready} at the boss` : '', out ? `${out} out` : ''].filter(Boolean).join(' · ');
+  // A dropped link isn't a wiped team: say which it is.
+  const out = s.filter((x) => !x.alive && !x.gone).length;
+  const lost = s.filter((x) => x.gone).length;
+  return [`${racing} racing`, ready ? `${ready} at the boss` : '', out ? `${out} out` : '', lost ? `${lost} disconnected` : ''].filter(Boolean).join(' · ');
 }
 
 // ---------------------------------------------------------------- starting
@@ -149,9 +155,13 @@ function enterRoyale(race: RaceInfo, players: RosterEntry[]) {
 
 /** Share where you are (or your finished team). */
 export function royaleProgress(p: RaceProgress) {
+  lastProgress = p;
   if (session.role === 'host') onProgress(myPid, p);
   else session.send({ t: 'progress', p });
 }
+
+/** What this guest last shared, so it can be sent again if the host missed it while the link was down. */
+let lastProgress: RaceProgress | null = null;
 
 function onProgress(pid: string | undefined, p: RaceProgress) {
   const r = pid ? royale.racers.get(pid) : undefined;
@@ -457,6 +467,11 @@ export function royaleBack(pid: string) {
   const r = royale.racers.get(pid);
   if (r?.timer) clearTimeout(r.timer);
   if (r) r.timer = undefined;
+  // Back after the grace period, but before the bracket is set: they're still in it.
+  if (r?.gone && !r.quit && !royale.bracket && !royale.champion && !royale.ended) {
+    r.gone = false;
+    shareStandings();
+  }
   // Bring them up to date.
   const peer = duel.peers.get(pid);
   if (!peer) return;
@@ -503,6 +518,9 @@ function onMessage(msg: DuelMsg, from: string) {
             const lead = cleanLead(x.lead);
             return { pid: x.pid, name: nameIn(x.pid), floor: Number(x.floor) || 0, steps: typeof x.steps === 'number' ? x.steps : undefined, finished: !!x.finished, alive: !!x.alive, ...(x.gone ? { gone: true } : {}), ...(at ? { at } : {}), ...(lead ? { lead } : {}) };
           });
+        // Back from a dropped link: if the host doesn't have our finished team yet, send it again.
+        const me = royale.standings.find((x) => x.pid === myPid);
+        if (me && !me.gone && !me.finished && lastProgress?.finished) session.send({ t: 'progress', p: lastProgress });
         changed();
       }
       return;
@@ -551,6 +569,8 @@ function onMessage(msg: DuelMsg, from: string) {
     case 'quit':
       if (host && royale.active) {
         const pid = pidOf(from);
+        const r = pid ? royale.racers.get(pid) : undefined;
+        if (r) r.quit = true;
         if (pid) goneFor(pid);
       }
       return;

@@ -259,6 +259,11 @@ export class BattleScene extends Phaser.Scene {
     // Only this fight counts (kept with a run's saved battle, so a reload remembers them).
     this.foeSeen = new Set(state.run?.activeBattle?.seenMoves ?? []);
     this.panelPress = null;
+    // Scene instances are reused: a second spectated match (or duel) must not inherit the last one's
+    // "already wrapped up" flag, queued next step or fast-forward.
+    this.watchEnded = false;
+    this.duelNext = null;
+    this.fast = false;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
     const run = state.run!;

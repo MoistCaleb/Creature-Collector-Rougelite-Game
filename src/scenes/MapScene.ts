@@ -150,7 +150,11 @@ export class MapScene extends Phaser.Scene {
     const base = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color;
     background(this, base);
     mapBackdrop(this, map.biome, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, base);
+    // Redrawing with the shop (or an event) still open keeps its music going instead of starting
+    // the map theme and then the shop's again from the top.
     if (run.race?.done) playMusic('showdown');
+    else if (run.shop) playMusic('shop');
+    else if (run.pendingNode === 'event') playMusic('event');
     else playMusic('map', map.biome);
 
     // ---- map layer
@@ -686,14 +690,23 @@ export class MapScene extends Phaser.Scene {
     }
     const p = this.posOf(r.node);
     const at = { x: p.x, y: p.y - 6 };
+    // Cornered (nowhere to step), it stays put with a "!" over its head instead of the usual "?".
+    const markFor = () => (r.cornered ? '!' : '?');
     if (this.roamerSprite?.active) {
       this.tweens.add({ targets: this.roamerSprite, x: at.x, y: at.y, duration: 900, ease: 'Sine.easeInOut' });
+      const m = this.roamerSprite.getByName('mark') as Phaser.GameObjects.Text | null;
+      if (m && m.text !== markFor()) {
+        m.setText(markFor()).setColor(r.cornered ? '#ffd84d' : '#e0c8ff').setFontSize(r.cornered ? 22 : 16);
+        if (r.cornered) this.tweens.add({ targets: m, scale: 1.35, yoyo: true, duration: 180, repeat: 2 });
+      }
       return;
     }
     const c = this.add.container(at.x, at.y);
     const glow = this.add.ellipse(0, 4, 64, 22, 0xb48aff, 0.25);
     const body = this.add.image(0, 0, ensureGrayTexture(this, r.id, 2, true)).setOrigin(0.5, 0.85).setScale(1.9 * SPRITE_FIT).setTint(0x2a1a4a).setAlpha(0.9);
-    const mark = text(this, 0, -62, '?', 16, '#e0c8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5);
+    const mark = text(this, 0, -62, markFor(), r.cornered ? 22 : 16, r.cornered ? '#ffd84d' : '#e0c8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 })
+      .setOrigin(0.5)
+      .setName('mark');
     c.add([glow, body, mark]);
     this.layer.add(c);
     this.roamerSprite = c;
@@ -1227,15 +1240,29 @@ export class MapScene extends Phaser.Scene {
     const forms = grave.map((c) => revivedForm(c, run));
     openPicker(this, {
       title: 'Revival',
-      subtitle: `Bring back one fallen Hexling at ${Math.round(reviveShare(run) * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: release someone first to make room.' : ''}`,
-      options: forms.map((c, i) => ({ creature: c, disabled: full, note: `Fell at Lv ${grave[i].level} → returns at Lv ${c.level}` })),
+      subtitle: `Bring back one fallen Hexling at ${Math.round(reviveShare(run) * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: you\u2019ll pick someone to swap out.' : ''}`,
+      options: forms.map((c, i) => ({ creature: c, note: `Fell at Lv ${grave[i].level} → returns at Lv ${c.level}${full ? ' · swap someone out' : ''}` })),
       onPick: (i) => {
-        const c = reviveFallen(run, grave[i].uid);
-        if (!c) return this.done();
-        sfx.levelUp();
-        dex.creature(c, true);
-        persist();
-        showMessage(this, 'Revival', `${creatureName(c)} is back, at Lv ${c.level}! It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`, this.done);
+        const back = (release?: Creature) => {
+          const name = release ? creatureName(release) : '';
+          const c = reviveFallen(run, grave[i].uid, release);
+          if (!c) return this.done();
+          sfx.levelUp();
+          dex.creature(c, true);
+          persist();
+          showMessage(this, 'Revival', `${release ? `${name} was released.\n\n` : ''}${creatureName(c)} is back, at Lv ${c.level}! It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`, this.done);
+        };
+        if (!full) return back();
+        // Party full: swap someone out (they leave for good) or go back to the list.
+        const all = allCreatures(run);
+        openPicker(this, {
+          title: `Swap out for ${creatureName(forms[i])}?`,
+          subtitle: 'Your party is full. Release one to make room; it leaves for good and the revived Hexling takes its spot. Held items go back to your bag.',
+          options: all.map((c) => ({ creature: c, note: run.team.includes(c) ? 'Team' : 'Bench' })),
+          onPick: (k) => back(all[k]),
+          onCancel: () => this.doRevive(),
+          cancelLabel: 'Back',
+        });
       },
       onCancel: this.done,
       cancelLabel: 'Leave',
