@@ -787,6 +787,12 @@ export class Battle {
     return true;
   }
 
+  /** Would a hit of this element be soaked up by the target's trait (the AI reads traits)? */
+  private soaks(x: Combatant, el: Element): boolean {
+    const t = traitOf(x.c);
+    return !!t && TRAITS[t].absorb === el && isAlive(x.c);
+  }
+
   /** Absorbers: a hit of their element heals them instead. */
   private absorbs(x: Combatant, side: Side, el: Element, ev: BattleEvent[]): boolean {
     const t = traitOf(x.c);
@@ -1212,24 +1218,31 @@ export class Battle {
   private threatTo(x: Combatant): number {
     const types = creatureTypes(x.c);
     let best = 0;
+    let soaked = false;
     for (const m of this.p.c.moves) {
       const d = moveDef(m);
       if (d.kind !== 'attack' || !hasUses(m)) continue;
-      best = Math.max(best, typeMultiplier(attackElement(d, this.p, x), types));
+      const el = attackElement(d, this.p, x);
+      if (this.soaks(x, el)) soaked = true;
+      else best = Math.max(best, typeMultiplier(el, types));
     }
-    return best || 1;
+    return best || (soaked ? 0.1 : 1);
   }
 
   /** How well this enemy creature hits the player's active one (its best type multiplier). */
   private punchOf(x: Combatant): number {
     const types = creatureTypes(this.p.c);
     let best = 0;
+    let soaked = false;
     for (const m of x.c.moves) {
       const d = moveDef(m);
       if (d.kind !== 'attack' || !hasUses(m)) continue;
-      best = Math.max(best, typeMultiplier(attackElement(d, x, this.p), types));
+      const el = attackElement(d, x, this.p);
+      if (this.soaks(this.p, el)) soaked = true;
+      else best = Math.max(best, typeMultiplier(el, types));
     }
-    return best || 1;
+    // Every attack it has would be soaked up: it can't hurt the player's Hexling at all.
+    return best || (soaked ? 0.1 : 1);
   }
 
   /** The living enemy creature with the best matchup against the player's active one. */
@@ -1253,13 +1266,16 @@ export class Battle {
   private autoMatchup(x: Combatant): number {
     const best = (from: Combatant, to: Combatant) => {
       let v = 0;
+      let soaked = false;
       for (const m of from.c.moves) {
         const d = moveDef(m);
         if (d.kind !== 'attack' || !hasUses(m)) continue;
         const el = attackElement(d, from, to);
-        v = Math.max(v, attackValue(d, m.tier) * typeMultiplier(el, creatureTypes(to.c)) * stabMultiplier(el, creatureTypes(from.c)));
+        if (this.soaks(to, el)) soaked = true;
+        else v = Math.max(v, attackValue(d, m.tier) * typeMultiplier(el, creatureTypes(to.c)) * stabMultiplier(el, creatureTypes(from.c)));
       }
-      return v || 1;
+      // Every attack would be soaked up by the other's trait: next to useless.
+      return v || (soaked ? 0.05 : 1);
     };
     const off = best(x, this.e) * stats(x.c).atk;
     const def = best(this.e, x) * stats(this.e.c).atk;
@@ -1321,6 +1337,11 @@ export class Battle {
       if (i >= 0 && this.threatTo(this.enemy[i]) <= 1 && this.enemy[i].c.hp / stats(this.enemy[i].c).hp > 0.4 && this.rng.chance(0.6)) {
         return { kind: 'swap', index: i };
       }
+    }
+    // Every attack it has would be soaked up by the player's trait: send in someone who can hurt it.
+    if (this.turnNo - this.lastEnemySwitch > 2 && this.punchOf(e) < 0.5) {
+      const i = this.bestEnemyAnswer(this.eActive);
+      if (i >= 0 && this.punchOf(this.enemy[i]) >= 0.5) return { kind: 'swap', index: i };
     }
     return null;
   }
@@ -1488,6 +1509,8 @@ export class Battle {
   private attackScore(user: Combatant, target: Combatant, m: MoveSlot): number {
     const d = moveDef(m);
     const el = attackElement(d, user, target);
+    // An absorber's trait heals it from this element: never worth it (below even a useless status move).
+    if (this.soaks(target, el)) return -0.5;
     let v = attackValue(d, m.tier) * typeMultiplier(el, creatureTypes(target.c)) * stabMultiplier(el, creatureTypes(user.c));
     const targetFrac = target.c.hp / stats(target.c).hp;
     if (d.execute && targetFrac < 0.5) v *= 2;

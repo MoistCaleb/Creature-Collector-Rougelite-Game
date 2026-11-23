@@ -110,6 +110,34 @@ describe('trait effects in battle', () => {
     expect(b.e.c.hp).toBeGreaterThan(stats(e).hp / 2);
   });
 
+  it('the AI never aims an attack an absorber would soak up, and trainers swap in someone who can hurt it', () => {
+    // Its Fire attack would be its best pick on type alone; the Earth one is the only one that hurts.
+    const me = withTrait('frostling', 'ab_Fire');
+    me.moves = [{ id: 'Fire:2', tier: 1 }];
+    const foe = withTrait('emberkit', 'hitandrun');
+    foe.moves = [{ id: 'Fire:2', tier: 2 }, { id: 'Earth:0', tier: 1 }];
+    const b = new Battle([me], [foe], new Rng(3), { permadeath: false });
+    b.start();
+    expect(b.bestMove('enemy')).toBe(1);
+    // Auto-battle (your side) skips it too.
+    const mine = withTrait('emberkit', 'hitandrun');
+    mine.moves = [{ id: 'Fire:2', tier: 2 }, { id: 'Earth:0', tier: 1 }];
+    const b2 = new Battle([mine], [withTrait('frostling', 'ab_Fire')], new Rng(3), { permadeath: false });
+    b2.start();
+    expect(b2.bestMove('player')).toBe(1);
+    // A trainer whose only attacks are soaked up calls in a teammate that can hurt you.
+    const only = withTrait('emberkit', 'hitandrun');
+    only.moves = [{ id: 'Fire:2', tier: 1 }];
+    const helper = createCreature('pebblin', 30);
+    helper.moves = [{ id: 'Earth:2', tier: 1 }];
+    const me2 = withTrait('frostling', 'ab_Fire');
+    me2.moves = [{ id: 'Neutral:warp', tier: 1 }];
+    const b3 = new Battle([me2], [only, helper], new Rng(3), { permadeath: false, enemyTactics: { potions: 0 } });
+    b3.start();
+    for (let i = 0; i < 4 && b3.eActive === 0; i++) b3.takeTurn({ kind: 'move', index: 0 });
+    expect(b3.eActive).toBe(1);
+  });
+
   it('Thick Hide softens super-effective hits', () => {
     const plain = hit(withTrait('puddlet', 'rainrider'), withTrait('magmole', 'magmaskin', 70), 'Water:2', 9).dealt;
     const hide = hit(withTrait('puddlet', 'rainrider'), withTrait('magmole', 'thickhide', 70), 'Water:2', 9).dealt;

@@ -579,7 +579,7 @@ describe('early fairness', () => {
         }
       }
     }
-  });
+  }, 30000); // Builds every starter's first battle: about 4 s alone, so the 5 s default flakes under load.
 });
 
 describe('roster and move variety', () => {
