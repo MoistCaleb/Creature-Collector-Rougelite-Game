@@ -499,6 +499,17 @@ export class CampScene extends Phaser.Scene {
       const glow = this.add.circle(x, y - 66, 16, 0xffc94d, 0.18).setDepth(d);
       if (!calm()) this.tweens.add({ targets: [crest, glow], alpha: 0.65, yoyo: true, repeat: -1, duration: 1200 });
     }
+    // Elder stones (rare surprises): a standing stone for each land whose Elder guardian you've beaten.
+    const elders = state.meta.eldersBeaten ?? [];
+    elders.slice(0, 12).forEach((el, i) => {
+      const x = x1 * 0.44 + (i - (Math.min(12, elders.length) - 1) / 2) * 17;
+      const y = groundY + 38 + (i % 2) * 4;
+      const col = ELEMENT_COLORS[el as keyof typeof ELEMENT_COLORS] ?? 0x9a94b0;
+      // (A polygon is placed by its middle: 18 px tall, so its foot sits on y.)
+      this.add.polygon(x, y - 9, [1, 18, 0, 6, 4, 0, 9, 1, 12, 7, 11, 18], 0x7a7486).setStrokeStyle(1, 0x2a2638).setDepth(depth(y));
+      const rune = this.add.rectangle(x, y - 11, 3, 6, col).setDepth(depth(y) + 0.001);
+      if (!calm()) this.tweens.add({ targets: rune, alpha: 0.45, yoyo: true, repeat: -1, duration: 1100 + i * 110 });
+    });
     if (owned.includes('flag')) {
       const x = x1 * 0.42;
       const y = groundY + 34;
