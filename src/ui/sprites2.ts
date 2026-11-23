@@ -3,12 +3,12 @@ import type { Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { DEX_SPECIES } from '../data/legends';
 import { LINE_PLANS } from './linePlans';
-import { buildGrid, hueShift, paletteFor, shinyHue, type FaceInfo } from './sprites';
+import { altHue, buildGrid, fossilise, hueShift, paletteFor, shinyHue, type Colours, type FaceInfo } from './sprites';
 
 /**
- * Hexbound 2.0 art (style test): the same part plans as today, drawn on a finer grid (56 px) and
- * painted with light and shadow, detailed eyes and mouths, element textures and a signature part
- * per line. Not used by the game yet.
+ * Hexbound 2.0 art: the line part plans, drawn on a finer grid (64 px) and painted with light and
+ * shadow, detailed eyes and mouths, element textures and a signature part per line. Every creature
+ * texture in the game comes from here (`ensureCreatureTexture` in sprites.ts).
  */
 
 export const SPRITE2_K = 1.6;
@@ -27,7 +27,6 @@ const SHADOW_TINT = 0x2a1850;
 const LIGHT_TINT = 0xfff4d0;
 const dark = (c: number, t: number) => mix(c, SHADOW_TINT, t);
 const light = (c: number, t: number) => mix(c, LIGHT_TINT, t);
-const css = (c: number, a = 1) => (a >= 1 ? '#' + c.toString(16).padStart(6, '0') : `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a})`);
 
 /** Each line's own extra feature (the 2.0 plan's "signature part"). */
 const SIG_PARTS = ['gem', 'emblem', 'cheeks', 'scarf', 'collar', 'bracers', 'facemark'] as const;
@@ -51,8 +50,17 @@ const bbox = (g: number[][]) => {
   return { x0, y0, x1, y1 };
 };
 
-/** Scale for this sprite: its stage's height, but never wider than the frame. */
+/** Scale for this sprite: its stage's height, but never wider than the frame (worked out once each). */
+const fitCache = new Map<string, number>();
 function fitScale(speciesId: string, stage: number): number {
+  const key = `${speciesId}:${stage}`;
+  const hit = fitCache.get(key);
+  if (hit !== undefined) return hit;
+  const k = measureFit(speciesId, stage);
+  fitCache.set(key, k);
+  return k;
+}
+function measureFit(speciesId: string, stage: number): number {
   const b = bbox(buildGrid(speciesId, stage, 1, {}, true) as number[][]);
   const h = b.y1 - b.y0 + 1;
   const w = b.x1 - b.x0 + 1;
@@ -61,7 +69,7 @@ function fitScale(speciesId: string, stage: number): number {
 }
 
 /** `back`: the view from behind (the player's side in battle). */
-export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny = false, back = false) {
+export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny: Colours = false, back = false) {
   const k = fitScale(speciesId, stage);
   const face: Partial<FaceInfo> = {};
   const g = buildGrid(speciesId, stage, k, face, true, back) as number[][];
@@ -71,10 +79,10 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   const bb = bbox(g);
   const ox = ox0 + Math.round(SPRITE2_SIZE / 2 - (bb.x0 + bb.x1 + 1) / 2);
   const oy = oy0 + (SPRITE2_SIZE - 2 - bb.y1);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(ox0, oy0, SPRITE2_SIZE, SPRITE2_SIZE);
-  ctx.clip();
+  // Paint into a pixel buffer (much faster than a fillRect per pixel), then draw it over ctx once.
+  const buf = new PixelBuf();
+  const bx = ox - ox0;
+  const by = oy - oy0;
   const { pal } = paletteFor(speciesId, stage, shiny);
   recolour(pal, speciesId, stage, shiny);
   // A near-black belly (from a dark accent) swallows the shading: lift it toward the body colour.
@@ -152,30 +160,30 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   }
 
   // ---- distance from the edge (for light and shadow)
+  // Two-pass chamfer distance (1 straight, 1.4 diagonal), in a flat buffer (no per-pixel arrays).
   const INF = 99;
-  const dist: number[][] = Array.from({ length: N }, (_, y) => Array.from({ length: N }, (_, x) => (g[y][x] ? INF : 0)));
-  for (let pass = 0; pass < 2; pass++)
-    for (let yy = 0; yy < N; yy++)
-      for (let xx = 0; xx < N; xx++) {
-        const y = pass ? N - 1 - yy : yy;
-        const x = pass ? N - 1 - xx : xx;
-        if (!dist[y][x]) continue;
-        const nb = pass ? [[x + 1, y], [x, y + 1], [x + 1, y + 1], [x - 1, y + 1]] : [[x - 1, y], [x, y - 1], [x - 1, y - 1], [x + 1, y - 1]];
-        for (const [nx, ny] of nb) {
-          const d = nx < 0 || ny < 0 || nx >= N || ny >= N ? 0 : dist[ny][nx];
-          dist[y][x] = Math.min(dist[y][x], d + (nx !== x && ny !== y ? 1.4 : 1));
-        }
-      }
-  const D = (x: number, y: number) => (x < 0 || y < 0 || x >= N || y >= N ? 0 : dist[y][x]);
+  const dist = new Float32Array(N * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) dist[y * N + x] = g[y][x] ? INF : 0;
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= N || y >= N ? 0 : dist[y * N + x]);
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      if (!dist[i]) continue;
+      dist[i] = Math.min(dist[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1.4, at(x + 1, y - 1) + 1.4);
+    }
+  for (let y = N - 1; y >= 0; y--)
+    for (let x = N - 1; x >= 0; x--) {
+      const i = y * N + x;
+      if (!dist[i]) continue;
+      dist[i] = Math.min(dist[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1.4, at(x - 1, y + 1) + 1.4);
+    }
+  const D = at;
 
   // ---- base colours per region (shiny palettes already applied)
   const colorOf = (v: number) => pal[v] ?? pal[1];
   const LX = -0.62;
   const LY = -0.78;
-  const px = (x: number, y: number, c: number, a = 1) => {
-    ctx.fillStyle = css(c, a);
-    ctx.fillRect(ox + x, oy + y, 1, 1);
-  };
+  const px = (x: number, y: number, c: number, a = 1) => buf.put(bx + x, by + y, c, a);
 
   // Spirit wisps and Light sparkles float behind/around (drawn first, faint).
   if (el === 'Spirit' || el === 'Light' || LEGEND_IDS.includes(speciesId)) {
@@ -198,7 +206,7 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
       const v = g[y][x];
       if (!v) {
         // Outline: the darkest tone of whatever it borders, darker underneath.
-        const nb = [g[y]?.[x - 1], g[y]?.[x + 1], g[y - 1]?.[x], g[y + 1]?.[x]].find((n) => n);
+        const nb = g[y][x - 1] || g[y][x + 1] || g[y - 1]?.[x] || g[y + 1]?.[x];
         if (nb) px(x, y, dark(colorOf(nb), filled(x, y - 1) ? 0.82 : 0.7));
         continue;
       }
@@ -212,7 +220,7 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
       const gy = D(x, y + 1) - D(x, y - 1);
       const len = Math.hypot(gx, gy) || 1;
       const ndl = (-gx / len) * LX + (-gy / len) * LY; // outward normal · light
-      const d = dist[y][x];
+      const d = dist[y * N + x];
       const edge = Math.max(0, 1 - (d - 1) / 3.2); // 1 at the edge, fading inward
       const lit = ndl * edge;
       if (lit > 0.55) c = light(c, d <= 1.5 ? 0.42 : 0.28);
@@ -246,9 +254,54 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
         }
   }
 
-  if (!back) drawFace(ctx, f, pal, ox, oy, O, el, N, hashString(speciesId + ':mouth') % 4);
-  ctx.restore();
+  if (!back) drawFace(buf, f, pal, bx, by, O, el, N, hashString(speciesId + ':mouth') % 4);
+  buf.drawTo(ctx, ox0, oy0);
 }
+
+/** One sprite frame's pixels, painted with source-over blending like a canvas would. */
+class PixelBuf {
+  readonly data = new Uint8ClampedArray(SPRITE2_SIZE * SPRITE2_SIZE * 4);
+  put(x: number, y: number, c: number, a = 1) {
+    x = Math.round(x);
+    y = Math.round(y);
+    if (x < 0 || y < 0 || x >= SPRITE2_SIZE || y >= SPRITE2_SIZE || a <= 0) return;
+    const d = this.data;
+    const i = (y * SPRITE2_SIZE + x) * 4;
+    const r = (c >> 16) & 255;
+    const g = (c >> 8) & 255;
+    const b = c & 255;
+    if (a >= 1) {
+      d[i] = r;
+      d[i + 1] = g;
+      d[i + 2] = b;
+      d[i + 3] = 255;
+      return;
+    }
+    const da = d[i + 3] / 255;
+    const oa = a + da * (1 - a);
+    const w = (da * (1 - a)) / oa;
+    d[i] = r * (a / oa) + d[i] * w;
+    d[i + 1] = g * (a / oa) + d[i + 1] * w;
+    d[i + 2] = b * (a / oa) + d[i + 2] * w;
+    d[i + 3] = oa * 255;
+  }
+  /** Draw over ctx at (x, y), blending with whatever is there (a contact sheet's background). */
+  drawTo(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    const c = scratch();
+    const cx = c.getContext('2d')!;
+    cx.putImageData(new ImageData(this.data, SPRITE2_SIZE, SPRITE2_SIZE), 0, 0);
+    ctx.drawImage(c, x, y);
+  }
+}
+let scratchCanvas: HTMLCanvasElement | undefined;
+const scratch = () => {
+  if (!scratchCanvas) {
+    scratchCanvas = document.createElement('canvas');
+    scratchCanvas.width = SPRITE2_SIZE;
+    scratchCanvas.height = SPRITE2_SIZE;
+  }
+  return scratchCanvas;
+};
 
 /** A subtle surface texture for each element (scales, cracks, rivets, circuits, …). */
 function texture(el: Element, c: number, x: number, y: number, d: number, pal: Record<number, number>, N: number): number {
@@ -278,13 +331,12 @@ function texture(el: Element, c: number, x: number, y: number, d: number, pal: R
 }
 
 /** Eyes and mouth, drawn at full resolution. */
-function drawFace(ctx: CanvasRenderingContext2D, f: FaceInfo, pal: Record<number, number>, ox: number, oy: number, O: (d: number) => number, el: Element, N: number, mouthVariant = 0) {
+function drawFace(buf: PixelBuf, f: FaceInfo, pal: Record<number, number>, ox: number, oy: number, O: (d: number) => number, el: Element, N: number, mouthVariant = 0) {
   const p = (x: number, y: number, c: number, mirror = true) => {
     x = Math.round(x);
     y = Math.round(y);
-    ctx.fillStyle = css(c);
-    ctx.fillRect(ox + x, oy + y, 1, 1);
-    if (mirror) ctx.fillRect(ox + N - 1 - x, oy + y, 1, 1);
+    buf.put(ox + x, oy + y, c);
+    if (mirror) buf.put(ox + N - 1 - x, oy + y, c);
   };
   const white = 0xffffff;
   const pupil = 0x1a1428;
@@ -402,7 +454,7 @@ function toneOf(speciesId: string): number {
   return toneIndex.get(speciesId) ?? hashString(speciesId) % 8;
 }
 
-function recolour(pal: Record<number, number>, speciesId: string, stage: number, shiny: boolean) {
+function recolour(pal: Record<number, number>, speciesId: string, stage: number, shiny: Colours) {
   const [t1, t2] = SPECIES_BY_ID[speciesId].types;
   const i = toneOf(speciesId);
   const legend = LEGEND_TONES[speciesId];
@@ -411,8 +463,9 @@ function recolour(pal: Record<number, number>, speciesId: string, stage: number,
   // Babies a touch lighter, finals a touch deeper.
   base = stage === 0 ? light(base, 0.1) : stage === 2 ? dark(base, 0.14) : base;
   if (stage === 2) sec = dark(sec, 0.06);
-  const deg = shiny ? shinyHue(speciesId) : 0;
-  const sh = (c: number) => (shiny ? hueShift(c, deg) : c);
+  // Gilded and bond colours turn the hue; an ancient form is amber stone (paletteFor's own rule).
+  const deg = shiny === 'alt' ? altHue(speciesId) : shiny ? shinyHue(speciesId) : 0;
+  const sh = (c: number) => (shiny === 'ancient' ? fossilise(c) : shiny ? hueShift(c, deg) : c);
   pal[1] = sh(base);
   pal[2] = sh(sec);
   pal[3] = sh(stage === 2 ? light(mix(base, sec, 0.35), 0.22) : light(base, 0.4));

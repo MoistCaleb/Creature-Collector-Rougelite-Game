@@ -1283,7 +1283,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.shownPlayer !== p) this.clearAura('player');
     this.shownPlayer = p;
     dex.creature(p, true);
-    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, colours(p))).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
+    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, colours(p), true)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
     this.fillPanel(this.playerPanel, p, hp);
   }

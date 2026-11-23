@@ -3,10 +3,13 @@ import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, type Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { babyOf, LINE_PLANS } from './linePlans';
+import { paintCreature2 } from './sprites2';
 
 export const SPRITE_SIZE = 40;
-/** Multiply display scales by this so sprites keep their on-screen size if SPRITE_SIZE changes. */
-export const SPRITE_FIT = 32 / SPRITE_SIZE;
+/** The 2.0 art's frame (`SPRITE2_SIZE` in sprites2.ts): what creature textures are drawn at. */
+const ART_SIZE = 64;
+/** Multiply display scales by this so sprites keep their on-screen size whatever the frame size. */
+export const SPRITE_FIT = 32 / ART_SIZE;
 
 /**
  * Pixel roles (shading and outline are computed when painting):
@@ -1299,7 +1302,7 @@ export function altHue(speciesId: string): number {
 export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean }): Colours => (c.shiny ? true : c.ancient ? 'ancient' : c.alt ? 'alt' : false);
 
 /** Ancient forms (Fossil Site): every colour turned to amber stone, keeping its light and dark. */
-function fossilise(col: number): number {
+export function fossilise(col: number): number {
   const r = (col >> 16) & 255;
   const g = (col >> 8) & 255;
   const b = col & 255;
@@ -1379,8 +1382,9 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
     }
 }
 
-export function creatureTextureKey(speciesId: string, stage: number, shiny: Colours = false): string {
-  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}`;
+/** `back`: the view from behind (your side in battle). */
+export function creatureTextureKey(speciesId: string, stage: number, shiny: Colours = false, back = false): string {
+  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}${back ? '-b' : ''}`;
 }
 
 /**
@@ -1392,11 +1396,11 @@ export function ensureGrayTexture(scene: Phaser.Scene, speciesId: string, stage:
   const key = `${creatureTextureKey(speciesId, stage)}-gray${solid ? '-solid' : ''}`;
   if (scene.textures.exists(key)) return key;
   const canvas = document.createElement('canvas');
-  canvas.width = SPRITE_SIZE;
-  canvas.height = SPRITE_SIZE;
+  canvas.width = ART_SIZE;
+  canvas.height = ART_SIZE;
   const ctx = canvas.getContext('2d')!;
-  paintCreature(ctx, speciesId, stage);
-  const img = ctx.getImageData(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+  paintCreature2(ctx, speciesId, stage);
+  const img = ctx.getImageData(0, 0, ART_SIZE, ART_SIZE);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
     if (!d[i + 3]) continue;
@@ -1412,14 +1416,17 @@ export function ensureGrayTexture(scene: Phaser.Scene, speciesId: string, stage:
   return key;
 }
 
-/** Draws (once) and returns the texture key for a creature sprite (`shiny`: its rare colors). */
-export function ensureCreatureTexture(scene: Phaser.Scene, speciesId: string, stage: number, shiny: Colours = false): string {
-  const key = creatureTextureKey(speciesId, stage, shiny);
+/**
+ * Draws (once) and returns the texture key for a creature sprite in the 2.0 art (`shiny`: its rare
+ * colours; `back`: seen from behind, for your side in battle).
+ */
+export function ensureCreatureTexture(scene: Phaser.Scene, speciesId: string, stage: number, shiny: Colours = false, back = false): string {
+  const key = creatureTextureKey(speciesId, stage, shiny, back);
   if (scene.textures.exists(key)) return key;
   const canvas = document.createElement('canvas');
-  canvas.width = SPRITE_SIZE;
-  canvas.height = SPRITE_SIZE;
-  paintCreature(canvas.getContext('2d')!, speciesId, stage, 0, 0, shiny);
+  canvas.width = ART_SIZE;
+  canvas.height = ART_SIZE;
+  paintCreature2(canvas.getContext('2d')!, speciesId, stage, 0, 0, shiny, back);
   scene.textures.addCanvas(key, canvas);
   return key;
 }
