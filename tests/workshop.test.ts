@@ -191,7 +191,7 @@ describe('the Workshop (2.0)', () => {
       return n;
     };
     expect(count(() => owning('hidden'))).toBeGreaterThan(count(mkMeta) * 1.2);
-  });
+  }, 30_000); // 3,000 simulated runs: slow on CI runners
 
   it('Restocker: one free reroll a floor', () => {
     const run = startRun(owning('freeroll'), 'emberkit', 7);
