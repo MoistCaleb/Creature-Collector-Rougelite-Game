@@ -474,6 +474,12 @@ export const sfx = {
     tone(1319, 0.12, { type: 'triangle', vol: 0.08 });
     tone(1976, 0.16, { type: 'sine', vol: 0.06, delay: 0.05 });
   },
+  /** A trait kicks in: softer than a boon, pitched by the Hexling's element (0-11). */
+  traitFire(el = 0) {
+    const root = note([0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19][el % 12] ?? 0, 523);
+    tone(root, 0.14, { type: 'sine', vol: 0.07 });
+    tone(root * 1.5, 0.12, { type: 'sine', vol: 0.04, delay: 0.04 });
+  },
   /** A shiny's hit lands: a bright ping on top of the normal hit. */
   shinyHit() {
     tone(2637, 0.22, { type: 'sine', vol: 0.08 });

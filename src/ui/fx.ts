@@ -288,7 +288,7 @@ export function faintFx(scene: Phaser.Scene, at: Pt, color: number) {
 }
 
 /** A number that pops off the target. */
-export function damageNumber(scene: Phaser.Scene, at: Pt, amount: number, mult = 1) {
+export function damageNumber(scene: Phaser.Scene, at: Pt, amount: number, mult = 1, why?: string[]) {
   const big = mult > 1.01;
   const weak = mult < 0.99;
   const t = scene.add
@@ -306,6 +306,27 @@ export function damageNumber(scene: Phaser.Scene, at: Pt, amount: number, mult =
     .setScale(0.4);
   scene.tweens.add({ targets: t, scale: 1, duration: 140, ease: 'Back.easeOut' });
   scene.tweens.add({ targets: t, y: t.y - 46, alpha: 0, delay: 380, duration: 520, onComplete: () => t.destroy() });
+  // The "why": what boons and traits changed this hit, in small print under the number.
+  if (why?.length) {
+    const w = scene.add
+      .text(t.x, t.y + 24, why.slice(0, 3).join('  ·  '), {
+        fontFamily: '"Trebuchet MS", system-ui, sans-serif',
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#ffe9a8',
+        stroke: '#000000',
+        strokeThickness: 4,
+        resolution: ZOOM,
+      })
+      .setOrigin(0.5)
+      .setDepth(60)
+      .setAlpha(0);
+    // Keep it on screen (the foe stands near the right edge on a phone).
+    const half = w.displayWidth / 2 + 8;
+    w.setX(Phaser.Math.Clamp(w.x, half, Math.max(half, scene.cameras.main.width - half)));
+    scene.tweens.add({ targets: w, alpha: 1, duration: 120 });
+    scene.tweens.add({ targets: w, y: w.y - 30, alpha: 0, delay: 700, duration: 500, onComplete: () => w.destroy() });
+  }
 }
 
 /** A glowing hexagonal "bond crystal" drawn around (0, 0). */

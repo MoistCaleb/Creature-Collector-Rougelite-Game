@@ -2,6 +2,7 @@ import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
 import { traitLine } from '../ui/traitText';
+import { TRAITS, type TraitId } from '../data/traits';
 import { ELDER_TAUNTS, GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
@@ -1129,21 +1130,57 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  /** Callouts still on screen, per side, so a busy turn stacks them instead of piling them up. */
+  private callouts: Record<'player' | 'enemy', number> = { player: 0, enemy: 0 };
+
   /** A boon kicked in: a ribbon with its name slides in by that side's panel, with a chime. */
-  private async boonCallout(side: 'player' | 'enemy', id: string) {
+  private async boonCallout(side: 'player' | 'enemy', id: string, more: boolean) {
     const b = BOONS[id];
     if (!b) return;
     sfx.boonFire();
+    await this.callout(side, `✦ ${b.name}`, BOON_COLOR[b.rarity], 0xffe9a8, more);
+  }
+
+  /** A trait kicked in: a softer ribbon in the Hexling's element colour. */
+  private async traitCallout(side: 'player' | 'enemy', id: TraitId, more: boolean) {
+    const t = TRAITS[id];
+    if (!t) return;
+    const c = side === 'player' ? this.shownPlayer : this.shownEnemy;
+    const el = c ? creatureTypes(c)[0] : 'Fire';
+    sfx.traitFire(ELEMENTS.indexOf(el));
+    await this.callout(side, t.name, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[el]).darken(20).color, 0xffffff, more);
+  }
+
+  /**
+   * The ribbon itself. Several in a row stack above each other and only the last one waits, so a busy
+   * turn reads at a glance. It follows the battle speed (the scene's time scale) and Reduce motion.
+   */
+  private async callout(side: 'player' | 'enemy', label: string, fill: number, edge: number, more: boolean) {
     const at = side === 'player' ? L.playerPanel : L.enemyPanel;
-    const y = side === 'player' ? at.y - 30 : at.y + 82;
+    const slot = this.callouts[side]++;
+    const y = side === 'player' ? at.y - 30 - slot * 30 : at.y + 82 + slot * 30;
     const c = this.add.container(at.x + 135, y).setDepth(40);
-    const label = text(this, 0, 0, `✦ ${b.name}`, 14, '#ffffff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
-    const bg = this.add.rectangle(0, 0, label.width + 26, 26, BOON_COLOR[b.rarity], 0.95).setStrokeStyle(2, 0xffe9a8);
-    c.add([bg, label]);
-    c.setScale(0.6).setAlpha(0);
-    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' });
-    this.tweens.add({ targets: c, alpha: 0, y: y - 14, delay: 900, duration: 300, onComplete: () => c.destroy() });
-    await this.wait(380);
+    const t = text(this, 0, 0, label, 14, '#ffffff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, t.width + 26, 26, fill, 0.95).setStrokeStyle(2, edge);
+    c.add([bg, t]);
+    c.setAlpha(0);
+    if (calm()) this.tweens.add({ targets: c, alpha: 1, duration: 120 });
+    else {
+      c.setScale(0.6);
+      this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' });
+    }
+    this.tweens.add({
+      targets: c,
+      alpha: 0,
+      y: calm() ? y : y - 14,
+      delay: 900,
+      duration: 300,
+      onComplete: () => {
+        c.destroy();
+        this.callouts[side] = Math.max(0, this.callouts[side] - 1);
+      },
+    });
+    await this.wait(more ? 110 : 380);
   }
 
   private makePanel(x: number, y: number, side: 'player' | 'enemy'): SidePanel {
@@ -1573,7 +1610,7 @@ export class BattleScene extends Phaser.Scene {
               this.setSpeed();
             } else if (!weak) this.cameras.main.shake(120, 0.005);
           } else sfx.dot();
-          damageNumber(this, at, ev.amount, ev.mult ?? 1);
+          damageNumber(this, at, ev.amount, ev.mult ?? 1, ev.why);
           s.setTintFill(0xffffff);
           this.tweens.add({ targets: s, x: s.x + 6, yoyo: true, repeat: 2, duration: 40, onComplete: () => s.setX(at.x) });
           this.time.delayedCall(120, () => s.clearTint());
@@ -1615,8 +1652,14 @@ export class BattleScene extends Phaser.Scene {
           this.drawTeamFx();
           break;
         case 'boon':
-          await this.boonCallout(ev.side, ev.id);
+        case 'trait': {
+          // Another callout straight after? Don't wait on this one: they stack and read together.
+          const nx = events[idx + 1];
+          const more = nx?.kind === 'boon' || nx?.kind === 'trait';
+          if (ev.kind === 'boon') await this.boonCallout(ev.side, ev.id, more);
+          else await this.traitCallout(ev.side, ev.id, more);
           break;
+        }
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
           if (ev.side === 'enemy' && ev.status && !this.match) trackStat(state.run!, 'statusInflicted');

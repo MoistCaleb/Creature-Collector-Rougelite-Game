@@ -8,6 +8,7 @@ import { effectivenessLabel, RESIST, stabMultiplier, typeMultiplier } from '../d
 import { creatureName, creatureTypes, fallbackMove, hasUses, isAlive, levelFactor, moveDef, spendUse, stats, usesLeft, type Creature, type MoveSlot } from './creature';
 import { Rng } from './rng';
 import { STATUS, type StatusId } from '../data/status';
+import { BOONS } from '../data/boons';
 import { TRAITS, traitOf, traitValue, type TraitId } from '../data/traits';
 import { ELEMENTS } from '../data/types';
 
@@ -82,6 +83,26 @@ export type PlayerAction =
   /** Heal a party member by `heal` (fraction of max HP); uses the turn. */
   | { kind: 'potion'; index: number; heal: number };
 
+/** What changed a hit's damage, as [name, multiplier] pairs (the battle log's "why"). */
+export type Why = [string, number][];
+
+/** Note a multiplier if it did anything (several notes for one name multiply together). */
+function note(why: Why | undefined, name: string, k: number) {
+  if (!why || Math.abs(k - 1) < 0.005) return;
+  const had = why.find((w) => w[0] === name);
+  if (had) had[1] *= k;
+  else why.push([name, k]);
+}
+
+/** "+20% Kindling", "−15% Thick Hide" (biggest first), or nothing. */
+export function whyText(why: Why): string[] | undefined {
+  const out = why
+    .filter(([, k]) => Math.abs(k - 1) >= 0.005)
+    .sort((a, b) => Math.abs(b[1] - 1) - Math.abs(a[1] - 1))
+    .map(([n, k]) => `${k > 1 ? '+' : '−'}${Math.round(Math.abs(k - 1) * 100)}% ${n}`);
+  return out.length ? out : undefined;
+}
+
 export type BattleEvent =
   | { kind: 'text'; text: string }
   /** hp: the newcomer's HP at the moment it enters (later events in the turn may change it). */
@@ -89,7 +110,7 @@ export type BattleEvent =
   | { kind: 'attack'; side: Side; move: string; moveId: string; /** Team slot of the Hexling using it. */ slot?: number }
   | { kind: 'stat'; side: Side; up: boolean }
   /** `mult` is the type multiplier for attack hits; absent for recoil, poison and field damage. */
-  | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number; mult?: number; element?: Element }
+  | { kind: 'damage'; side: Side; hp: number; maxHp: number; amount: number; mult?: number; element?: Element; /** What changed the damage: "+20% Kindling". */ why?: string[] }
   | { kind: 'heal'; side: Side; hp: number; maxHp: number }
   | { kind: 'faint'; side: Side; index: number }
   | { kind: 'enemySend'; index: number; hp: number }
@@ -100,7 +121,9 @@ export type BattleEvent =
   /** The weather changed (null: it cleared). */
   | { kind: 'weather'; id: WeatherId | null }
   /** A boon kicked in (2.0): the screen shows a callout. */
-  | { kind: 'boon'; side: Side; id: string };
+  | { kind: 'boon'; side: Side; id: string }
+  /** A trait kicked in: a callout over that side's Hexling. */
+  | { kind: 'trait'; side: Side; id: TraitId };
 
 export type BattleOutcome = 'ongoing' | 'win' | 'lose' | 'needSwitch';
 
@@ -647,6 +670,22 @@ export class Battle {
     return `${this.nameOf(side, x.c)}'s ${t ? TRAITS[t].name : 'trait'}`;
   }
 
+  /** The trait fired: queue its callout, and give its name for the line that follows. */
+  private tcall(x: Combatant, side: Side, ev: BattleEvent[]): string {
+    const t = traitOf(x.c);
+    if (t) ev.push({ kind: 'trait', side, id: t });
+    return this.traitName(x, side);
+  }
+
+  /** Run something a trait might cause; the callout goes in front only if it did. */
+  private ifCalled(x: Combatant, side: Side, ev: BattleEvent[], fn: () => boolean): boolean {
+    const n = ev.length;
+    const t = traitOf(x.c);
+    if (!fn()) return false;
+    if (t) ev.splice(n, 0, { kind: 'trait', side, id: t });
+    return true;
+  }
+
   private traitsOnEnter(side: Side, ev: BattleEvent[], resuming: boolean) {
     const x = side === 'player' ? this.p : this.e;
     if (!x || !isAlive(x.c)) return;
@@ -656,6 +695,9 @@ export class Battle {
     const t = traitOf(x.c);
     if (!t) return;
     const who = this.traitName(x, side);
+    // Every trait here announces itself (Night Stalker only if it isn't night already).
+    if (!(t === 'nightstalker' && this.night) && ['sunseeker', 'rainrider', 'sandshroud', 'daybreak', 'tidalcrown', 'whiteoutveil', 'nightstalker', 'eclipse', 'quickstart'].includes(t))
+      ev.push({ kind: 'trait', side, id: t });
     const foeSide: Side = side === 'player' ? 'enemy' : 'player';
     const foe = foeSide === 'player' ? this.p : this.e;
     const turns = x.c.stage >= 2 ? 3 : 2;
@@ -727,7 +769,7 @@ export class Battle {
     const max = stats(x.c).hp;
     if (x.c.hp >= max) return;
     x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * this.tv(x, 'regenerator')));
-    ev.push({ kind: 'text', text: `${this.traitName(x, side)}: it recovers as it pulls back.` });
+    ev.push({ kind: 'text', text: `${this.tcall(x, side, ev)}: it recovers as it pulls back.` });
   }
 
   /** Unshakable: foes can't lower its Attack (final form: any stat). */
@@ -741,7 +783,7 @@ export class Battle {
         return true;
       }
     if (!this.is(x, 'unshakable') || (this.tv(x, 'unshakable') < 2 && stat !== 'atk')) return false;
-    ev.push({ kind: 'text', text: `${this.traitName(x, side)}: its ${STAT_LABEL[stat]} won't drop!` });
+    ev.push({ kind: 'text', text: `${this.tcall(x, side, ev)}: its ${STAT_LABEL[stat]} won't drop!` });
     return true;
   }
 
@@ -751,20 +793,21 @@ export class Battle {
     if (!t || TRAITS[t].absorb !== el || !isAlive(x.c)) return false;
     const max = stats(x.c).hp;
     x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * this.tv(x, t)));
+    const tn = this.tcall(x, side, ev);
     ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
-    ev.push({ kind: 'text', text: `${this.traitName(x, side)} soaks up the ${el} hit!` });
+    ev.push({ kind: 'text', text: `${tn} soaks up the ${el} hit!` });
     return true;
   }
 
   /** Ethereal: now and then a hit passes straight through. */
   private slipsThrough(x: Combatant, side: Side, ev: BattleEvent[]): boolean {
     if (!this.is(x, 'ethereal') || !this.rng.chance(this.tv(x, 'ethereal'))) return false;
-    ev.push({ kind: 'text', text: `${this.traitName(x, side)}: the hit passes straight through it!` });
+    ev.push({ kind: 'text', text: `${this.tcall(x, side, ev)}: the hit passes straight through it!` });
     return true;
   }
 
   /** Damage from the attacker's and the defender's traits (and benched Cheerleaders). */
-  private traitMult(user: Combatant, target: Combatant, def: MoveDef, el: Element, powerMult: number, side: Side, rmult: number): number {
+  private traitMult(user: Combatant, target: Combatant, def: MoveDef, el: Element, powerMult: number, side: Side, rmult: number, why?: Why): number {
     let m = 1;
     const t = traitOf(user.c);
     const v = t ? this.tv(user, t) : 0;
@@ -809,9 +852,15 @@ export class Battle {
         if (user.avenge === this.turnNo) m *= 1 + v;
         break;
     }
+    if (t) note(why, TRAITS[t].name, m);
     const cheer = (side === 'player' ? this.player : this.enemy).filter((x) => x !== user && isAlive(x.c) && this.is(x, 'cheer'));
-    if (cheer.length) m *= 1 + Math.max(...cheer.map((x) => this.tv(x, 'cheer')));
+    if (cheer.length) {
+      const k = 1 + Math.max(...cheer.map((x) => this.tv(x, 'cheer')));
+      note(why, TRAITS.cheer.name, k);
+      m *= k;
+    }
     const d = traitOf(target.c);
+    const before = m;
     const dv = d ? this.tv(target, d) : 0;
     switch (d) {
       case 'thickhide':
@@ -827,6 +876,7 @@ export class Battle {
         if ((target.turnsIn ?? 0) < dv) m *= 0.8;
         break;
     }
+    if (d) note(why, TRAITS[d].name, m / before);
     return m;
   }
 
@@ -839,29 +889,33 @@ export class Battle {
       const v = this.tv(user, ut);
       if (ut === 'leech' && total > 0 && user.c.hp < umax && !this.scorched(user)) {
         user.c.hp = Math.min(umax, user.c.hp + Math.ceil(total * v));
+        this.tcall(user, side, ev);
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: it drinks in the damage.` });
       }
       if (ut === 'tidalgrace' && el === 'Water' && user.c.hp < umax) {
         user.c.hp = Math.min(umax, user.c.hp + Math.ceil(umax * v));
+        this.tcall(user, side, ev);
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: the water refreshes it.` });
       }
       if (ut === 'hitandrun' && superHit) {
+        this.tcall(user, side, ev);
         this.bump(user, side, 'spd', 1, ev);
         if (v >= 2) this.bump(user, side, 'atk', 1, ev);
       }
       if (ut === 'touch' && isAlive(target.c) && !target.status && this.rng.chance(v))
-        this.inflict(target, targetSide, TOUCH_STATUS[creatureTypes(user.c)[0]], ev, `${uname}: `, { x: user, side });
+        this.ifCalled(user, side, ev, () => this.inflict(target, targetSide, TOUCH_STATUS[creatureTypes(user.c)[0]], ev, `${uname}: `, { x: user, side }));
     }
     const tt = traitOf(target.c);
     if (tt && total > 0 && isAlive(user.c)) {
       const tv = this.tv(target, tt);
       const tn = this.traitName(target, targetSide);
-      const onHit = (id: StatusId) => this.rng.chance(tv) && this.inflict(user, side, id, ev, `${tn}: `);
+      const onHit = (id: StatusId) => this.rng.chance(tv) && this.ifCalled(target, targetSide, ev, () => this.inflict(user, side, id, ev, `${tn}: `));
       switch (tt) {
         case 'roughskin': {
           const dmg = this.hurt(user, Math.max(1, Math.floor(umax * tv)));
+          this.tcall(target, targetSide, ev);
           ev.push({ kind: 'damage', side, hp: user.c.hp, maxHp: umax, amount: dmg });
           ev.push({ kind: 'text', text: `${tn} cuts ${this.label(user)}!` });
           break;
@@ -877,6 +931,7 @@ export class Battle {
           break;
         case 'frostaura':
           if (this.rng.chance(tv)) {
+            this.tcall(target, targetSide, ev);
             ev.push({ kind: 'text', text: `${tn} chills ${this.label(user)}!` });
             this.bump(user, side, 'spd', -1, ev, true);
           }
@@ -885,17 +940,19 @@ export class Battle {
     }
     if (tt === 'ironwill' && isAlive(target.c) && !target.willUsed && target.c.hp < stats(target.c).hp / 2) {
       target.willUsed = true;
-      ev.push({ kind: 'text', text: `${this.traitName(target, targetSide)}: it steels itself!` });
+      ev.push({ kind: 'text', text: `${this.tcall(target, targetSide, ev)}: it steels itself!` });
       this.bump(target, targetSide, 'def', this.tv(target, 'ironwill'), ev);
     }
     if (!isAlive(target.c) && isAlive(user.c) && ut) {
       const v = this.tv(user, ut);
       if (ut === 'momentum') {
+        this.tcall(user, side, ev);
         this.bump(user, side, 'spd', 1, ev);
         if (v >= 2) this.bump(user, side, 'atk', 1, ev);
       }
       if (ut === 'carnivore' && user.c.hp < umax) {
         user.c.hp = Math.min(umax, user.c.hp + Math.ceil(umax * v));
+        this.tcall(user, side, ev);
         ev.push({ kind: 'heal', side, hp: user.c.hp, maxHp: umax });
         ev.push({ kind: 'text', text: `${uname}: it feeds on its fallen foe.` });
       }
@@ -917,15 +974,20 @@ export class Battle {
       const who = this.traitName(x, side);
       if (t === 'rooted' && x.c.hp < max && !this.scorched(x)) {
         x.c.hp = Math.min(max, x.c.hp + Math.ceil(max * v));
+        this.tcall(x, side, ev);
         ev.push({ kind: 'heal', side, hp: x.c.hp, maxHp: max });
         ev.push({ kind: 'text', text: `${who}: it draws strength from its roots.` });
       }
       if (t === 'latebloomer' && x.turnsIn % v === 0) {
+        this.tcall(x, side, ev);
         ev.push({ kind: 'text', text: `${who}: it's coming into its own!` });
         this.bump(x, side, 'atk', 1, ev);
         if (x.c.stage >= 2) this.bump(x, side, 'def', 1, ev);
       }
-      if (t === 'purifier' && x.status && this.rng.chance(v)) this.cure(x, side, ev);
+      if (t === 'purifier' && x.status && this.rng.chance(v)) {
+        this.tcall(x, side, ev);
+        this.cure(x, side, ev);
+      }
     }
   }
 
@@ -956,57 +1018,65 @@ export class Battle {
   }
 
   /** Stat multipliers from boons (Attack goes into damage, Defense out of it, Speed into speedOf). */
-  private boonStat(x: Combatant, stat: 'atk' | 'def' | 'spd'): number {
+  private boonStat(x: Combatant, stat: 'atk' | 'def' | 'spd', why?: Why, inverse = false): number {
     const side = this.sideOfC(x);
     if (!this.boonSets[side].size) return 1;
     const t = creatureTypes(x.c);
     const team = side === 'player' ? this.player : this.enemy;
     const active = side === 'player' ? this.p : this.e;
     let m = 1;
-    if (stat === 'spd' && this.hb(side, 'tailwind') && t.includes('Storm')) m *= 1.2;
-    if (stat === 'atk' && this.hb(side, 'glassmenagerie')) m *= 1.4;
-    if (stat === 'atk' && this.hb(side, 'shortfuse')) m *= 1.25;
-    if (this.hb(side, 'dragonpride') && creatureTypes(active.c).includes('Dragon')) m *= 1.15;
+    const mul = (id: string, k: number) => {
+      note(why, BOONS[id]?.name ?? id, inverse ? 1 / k : k);
+      m *= k;
+    };
+    if (stat === 'spd' && this.hb(side, 'tailwind') && t.includes('Storm')) mul('tailwind', 1.2);
+    if (stat === 'atk' && this.hb(side, 'glassmenagerie')) mul('glassmenagerie', 1.4);
+    if (stat === 'atk' && this.hb(side, 'shortfuse')) mul('shortfuse', 1.25);
+    if (this.hb(side, 'dragonpride') && creatureTypes(active.c).includes('Dragon')) mul('dragonpride', 1.15);
     if (this.hb(side, 'rainbowsquad')) {
       const els = new Set(team.map((y) => creatureTypes(y.c)[0]));
-      if (els.size >= 4) m *= 1.2;
+      if (els.size >= 4) mul('rainbowsquad', 1.2);
     }
     if (this.hb(side, 'lonechampion') && x === active) {
       const slots = this.hb(side, 'glassmenagerie') ? 3 : 4;
       const down = slots - team.filter((y) => isAlive(y.c)).length;
-      m *= 1 + 0.1 * Math.max(0, down);
+      mul('lonechampion', 1 + 0.1 * Math.max(0, down));
     }
     return m;
   }
 
   /** Damage from boons, the attacker's side's and the defender's. */
-  private boonMult(user: Combatant, target: Combatant, el: Element, side: Side, rmult: number, firstMove: boolean): number {
+  private boonMult(user: Combatant, target: Combatant, el: Element, side: Side, rmult: number, firstMove: boolean, why?: Why): number {
     const ts: Side = side === 'player' ? 'enemy' : 'player';
     if (!this.boonSets[side].size && !this.boonSets[ts].size) return 1;
-    let m = this.boonStat(user, 'atk') / this.boonStat(target, 'def');
+    let m = this.boonStat(user, 'atk', why) / this.boonStat(target, 'def', why, true);
+    const mul = (id: string, k: number) => {
+      note(why, BOONS[id]?.name ?? id, k);
+      m *= k;
+    };
     const ut = creatureTypes(user.c);
     const tt = creatureTypes(target.c);
-    if (this.hb(side, 'kindling') && el === 'Fire' && target.status === 'burn') m *= 1.2;
-    if (this.hb(side, 'permafrost') && target.status === 'freeze') m *= 1.25;
-    if (this.hb(side, 'venomsac') && ut.includes('Toxic') && target.status === 'poison') m *= 1.25;
-    if (this.hb(side, 'ambush') && firstMove) m *= 1.5;
-    if (this.hb(side, 'hoard') && el === 'Dragon' && side === 'player') m *= 1 + Math.min(0.25, 0.05 * Math.floor(this.coins / 100));
-    if (this.hb(side, 'riptide') && el === 'Water' && this.speedOf(target) > this.speedOf(user)) m *= 1.3;
+    if (this.hb(side, 'kindling') && el === 'Fire' && target.status === 'burn') mul('kindling', 1.2);
+    if (this.hb(side, 'permafrost') && target.status === 'freeze') mul('permafrost', 1.25);
+    if (this.hb(side, 'venomsac') && ut.includes('Toxic') && target.status === 'poison') mul('venomsac', 1.25);
+    if (this.hb(side, 'ambush') && firstMove) mul('ambush', 1.5);
+    if (this.hb(side, 'hoard') && el === 'Dragon' && side === 'player') mul('hoard', 1 + Math.min(0.25, 0.05 * Math.floor(this.coins / 100)));
+    if (this.hb(side, 'riptide') && el === 'Water' && this.speedOf(target) > this.speedOf(user)) mul('riptide', 1.3);
     if (this.hb(side, 'packtactics')) {
       const mates = (side === 'player' ? this.player : this.enemy).filter((y) => y !== user && creatureTypes(y.c).some((e) => ut.includes(e))).length;
-      m *= 1 + 0.08 * mates;
+      mul('packtactics', 1 + 0.08 * mates);
     }
-    if (this.hb(side, 'opportunist') && target.status) m *= 1.3;
-    if (this.hb(side, 'rampage')) m *= 1 + 0.15 * (user.rampage ?? 0);
+    if (this.hb(side, 'opportunist') && target.status) mul('opportunist', 1.3);
+    if (this.hb(side, 'rampage')) mul('rampage', 1 + 0.15 * (user.rampage ?? 0));
     // Fault Line: Earth moves ignore the foe's Defense boosts.
-    if (this.hb(side, 'quake') && el === 'Earth' && target.defStage > 0) m *= stageMult(target.defStage);
-    if (this.hb(ts, 'emberheart') && tt.includes('Fire') && el === 'Water') m *= 0.75;
-    if (this.hb(ts, 'hailguard') && tt.includes('Frost') && this.speedOf(user) < this.speedOf(target)) m *= 0.8;
-    if (this.hb(ts, 'dread') && tt.includes('Shadow')) m *= 0.85;
-    if (this.hb(ts, 'halo') && tt.includes('Light')) m *= 0.85;
+    if (this.hb(side, 'quake') && el === 'Earth' && target.defStage > 0) mul('quake', stageMult(target.defStage));
+    if (this.hb(ts, 'emberheart') && tt.includes('Fire') && el === 'Water') mul('emberheart', 0.75);
+    if (this.hb(ts, 'hailguard') && tt.includes('Frost') && this.speedOf(user) < this.speedOf(target)) mul('hailguard', 0.8);
+    if (this.hb(ts, 'dread') && tt.includes('Shadow')) mul('dread', 0.85);
+    if (this.hb(ts, 'halo') && tt.includes('Light')) mul('halo', 0.85);
     if (this.hb(ts, 'bedrock') && !target.bedrock) {
       target.bedrock = true;
-      m *= 0.5;
+      mul('bedrock', 0.5);
     }
     void rmult;
     return m;
@@ -1674,9 +1744,10 @@ export class Battle {
     for (let h = 0; h < hits && isAlive(target.c) && !this.spared; h++) {
       const r = computeDamage(user, target, def, slot.tier, this.rng, el, powerMult);
       if (h === 0) superHit = r.mult > 1.01;
+      const why: Why = [];
       const fxMult =
-        this.traitMult(user, target, def, el, powerMult, side, r.mult) *
-        this.boonMult(user, target, el, side, r.mult, firstMove) *
+        this.traitMult(user, target, def, el, powerMult, side, r.mult, why) *
+        this.boonMult(user, target, el, side, r.mult, firstMove, why) *
         (this.hasFx(side, 'rally') ? 1.25 : 1) *
         (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
         weatherMult(this.weather, el) *
@@ -1690,7 +1761,7 @@ export class Battle {
         if (!isAlive(target.c)) user.c.kos = (user.c.kos ?? 0) + 1;
       }
       landed++;
-      ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el });
+      ev.push({ kind: 'damage', side: targetSide, hp: target.c.hp, maxHp: stats(target.c).hp, amount: dmg, mult: r.mult, element: el, why: whyText(why) });
       this.sashNote(target, ev);
       // Moves named for a condition can inflict it: every hit rolls (a 3-hit move gets three chances).
       if (def.status && isAlive(target.c) && !target.status && this.rng.chance(def.status.chance * (side === 'player' ? this.playerStatusMult : 1))) {
@@ -1985,6 +2056,7 @@ export class Battle {
     }
     if (x.endured === 'fired') {
       x.endured = 'spent';
+      this.tcall(x, this.sideOfC(x), ev);
       ev.push({ kind: 'text', text: `${this.label(x)} hung on with its ${TRAITS[traitOf(x.c)!].name}!` });
     }
     if (x.bonded === 'fired') {

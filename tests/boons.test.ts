@@ -219,3 +219,52 @@ describe('boons online', () => {
     }
   });
 });
+
+describe('showing what triggered', () => {
+  it('a trait that fires queues its callout; a damage change says why', () => {
+    let checked = 0;
+    for (let seed = 1; seed < 20 && checked < 3; seed++) {
+      const a = mon('emberkit', 30);
+      const b = createCreature('shardlet', 30);
+      b.trait = 'roughskin';
+      a.moves = [{ id: 'Fire:2', tier: 1 }];
+      b.moves = [{ id: 'Neutral:warp', tier: 1 }];
+      const bt = new Battle([a], [b], new Rng(seed), { permadeath: false, boons: { player: ['opportunist'], enemy: [] } });
+      bt.start();
+      bt.e.status = 'poison';
+      bt.e.statusTurns = 0;
+      const ev = bt.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      const hit = ev.find((x) => x.kind === 'damage' && x.side === 'enemy' && x.mult !== undefined);
+      if (!hit || hit.kind !== 'damage') continue; // missed
+      checked++;
+      expect(hit.why).toContain('+30% Opportunist');
+      const t = ev.findIndex((x) => x.kind === 'trait' && x.side === 'enemy' && x.id === 'roughskin');
+      expect(t).toBeGreaterThan(-1);
+      // The callout comes before the line it explains.
+      const line = ev.findIndex((x) => x.kind === 'text' && x.text.includes('Rough Skin'));
+      expect(line).toBeGreaterThan(t);
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('a status a trait might cause only calls it out when it lands', () => {
+    const a = mon('pebblin', 30);
+    const b = createCreature('magmole', 30);
+    b.trait = 'magmaskin';
+    a.moves = [{ id: 'Earth:2', tier: 1 }];
+    b.moves = [{ id: 'Neutral:warp', tier: 1 }];
+    let burns = 0;
+    for (let seed = 1; seed < 40; seed++) {
+      const x = { ...a, hp: stats(a).hp };
+      const y = { ...b, uid: b.uid + seed, hp: stats(b).hp };
+      const bt = new Battle([x], [y], new Rng(seed), { permadeath: false });
+      bt.start();
+      const ev = bt.takeDuelTurn({ kind: 'move', index: 0 }, { kind: 'move', index: 0 });
+      const called = ev.some((e) => e.kind === 'trait' && e.id === 'magmaskin');
+      const burned = ev.some((e) => e.kind === 'text' && e.text.includes('Magma Skin'));
+      expect(called).toBe(burned);
+      if (burned) burns++;
+    }
+    expect(burns).toBeGreaterThan(0);
+  });
+});
