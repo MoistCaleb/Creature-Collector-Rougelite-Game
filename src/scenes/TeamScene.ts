@@ -215,6 +215,8 @@ export class TeamScene extends Phaser.Scene {
     const slot = (k: number, x: number, w: number) =>
       wide ? { x: px + 10 + bw / 2 + (k % 2) * (bw + 6), y: y0 + 300 + Math.floor(k / 2) * 36, w: bw } : { x, y: y0 + 176, w };
     const stoneOk = run.evoStones > 0 && readyToEvolve(c);
+    // Holding a stone but not there yet: the button says when (it used to be a line the trait button covered).
+    const waitLv = !stoneOk && run.evoStones > 0 && canEvolve(c) ? evolveLevel(c) : 0;
     const b0 = slot(0, 58, 100);
     button(
       this,
@@ -222,7 +224,7 @@ export class TeamScene extends Phaser.Scene {
       b0.y,
       b0.w,
       28,
-      'Evolve',
+      waitLv ? `Evolve Lv ${waitLv}` : 'Evolve',
       () => {
         run.evoStones -= 1;
         const from = creatureName(c);
@@ -237,7 +239,7 @@ export class TeamScene extends Phaser.Scene {
           showMessage(this, 'Evolution!', `${from} evolved into ${creatureName(c)}!${note}`, () => this.scene.restart({ selected: this.selected }));
         });
       },
-      { enabled: stoneOk, fontSize: 15, color: 0x5b3c8a, glyph: 'stone' },
+      { enabled: stoneOk, fontSize: waitLv ? 12 : 15, color: 0x5b3c8a, glyph: 'stone' },
     );
     const ref = this.selected!;
     const canMove = ref.list === 'team' ? run.bench.length < benchMax(run) && run.team.length > 1 : run.team.length < teamMax(run);
@@ -296,10 +298,6 @@ export class TeamScene extends Phaser.Scene {
       },
       { enabled: potions > 0 && needsPotion(c), fontSize: 14, color: 0x2f5a4a, glyph: 'potion' },
     );
-    if (!stoneOk && run.evoStones > 0 && canEvolve(c)) {
-      if (wide) text(this, px + pw / 2, y0 + 262, `Evolves at Lv ${evolveLevel(c)}.`, 11, '#ffc94d').setOrigin(0.5);
-      else text(this, 226, y0 + 145, `Evolves at Lv ${evolveLevel(c)}.`, 11, '#ffc94d', { wordWrap: { width: W - 244 } }).setOrigin(0, 0.5);
-    }
   }
 
   /** Give, swap or take off a held item. */

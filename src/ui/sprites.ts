@@ -461,8 +461,8 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
 
   // ---------------------------------------------------------------- back parts (behind the body; in front of it in the back view)
   const backLayer = () => {
-  // From the front, a tail comes out from under the shell, so the shell goes over it.
-  const tailUnder = !back && P.back === 'shell';
+  // From the front, a tail comes out from under a shell, and wings (at the shoulders, nearer you) cover it.
+  const tailUnder = !back && (P.back === 'shell' || P.back === 'featherwings' || P.back === 'batwings' || P.back === 'bugwings');
   if (tailUnder) tailPart();
   const wingY = shoulderY - 1;
   const wingX = back ? cx - 1.5 : shoulderX + 1;

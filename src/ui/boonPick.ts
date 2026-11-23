@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BOON_COLOR, BOONS } from '../data/boons';
+import { ELEMENT_COLORS } from '../data/types';
 import { runBoons, skipOffer, takeBoon } from '../logic/boons';
 import type { Run } from '../logic/run';
 import { persist } from '../state';
@@ -55,13 +56,24 @@ export function openBoonOffer(scene: Phaser.Scene, run: Run, onDone: () => void)
   });
 }
 
+/** A boon's row colour in the list: its element's (deepened so white text reads on it), else its rarity's. */
+export function boonRowColor(id: string): number {
+  const b = BOONS[id];
+  if (!b.element) return BOON_COLOR[b.rarity];
+  const col = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[b.element]);
+  const hsv = Phaser.Display.Color.RGBToHSV(col.red, col.green, col.blue) as Phaser.Types.Display.HSVColorObject;
+  // Pale elements (Light, Frost, Storm) get richer so they don't turn muddy when deepened; Metal stays steel.
+  const out = Phaser.Display.Color.HSVToRGB(hsv.h, b.element === 'Metal' ? hsv.s : Math.max(hsv.s, 0.55), Math.min(hsv.v, 0.62)) as Phaser.Types.Display.ColorObject;
+  return Phaser.Display.Color.GetColor(out.r, out.g, out.b);
+}
+
 /** Your boons this run (and curses), from the map bar or the menu. */
 export function openBoonList(scene: Phaser.Scene, src: Run | readonly string[], onClose: () => void = () => {}) {
   const held = Array.isArray(src) ? [...(src as readonly string[])] : ((src as Run).boons?.held ?? []);
   openPicker(scene, {
     title: `Boons (${held.length})`,
     subtitle: held.length ? 'They last for the rest of this run.' : 'No boons yet. Beat a guardian or find a Boon hex to choose one.',
-    options: held.map((id) => ({ ...boonCardText(id), color: BOON_COLOR[BOONS[id].rarity] })),
+    options: held.map((id) => ({ ...boonCardText(id), color: boonRowColor(id) })),
     rowHeight: 86,
     onPick: () => onClose(),
     onCancel: onClose,

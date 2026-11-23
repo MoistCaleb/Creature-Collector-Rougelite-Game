@@ -1,8 +1,8 @@
 import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
 import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
-import { BOON_COLOR, BOONS } from '../data/boons';
-import { boonCardText, openBoonList, openBoonOffer } from '../ui/boonPick';
+import { BOONS } from '../data/boons';
+import { boonCardText, boonRowColor, openBoonList, openBoonOffer } from '../ui/boonPick';
 import { boonBadge } from '../ui/boonUi';
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
@@ -1305,7 +1305,7 @@ export class MapScene extends Phaser.Scene {
       title: `Hidden Shop   ◉ ${run.coins}`,
       subtitle: 'A cloaked stranger sells boons, not items.',
       options: [
-        ...ids.map((b) => ({ ...boonCardText(b), label: `${BOONS[b].name}   ◉ ${price}`, disabled: run.coins < price, color: BOON_COLOR[BOONS[b].rarity] })),
+        ...ids.map((b) => ({ ...boonCardText(b), label: `${BOONS[b].name}   ◉ ${price}`, disabled: run.coins < price, color: boonRowColor(b) })),
         { label: 'Leave', color: 0x3a3450 },
       ],
       rowHeight: 86,
