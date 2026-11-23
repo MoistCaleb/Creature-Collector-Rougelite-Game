@@ -43,6 +43,8 @@ export interface Creature {
   shiny?: boolean;
   /** Its line's bond colours (camp bond heart 5, see logic/camp). Cosmetic; Gilded wins if both. */
   alt?: boolean;
+  /** An ancient form (a Fossil Site surprise): amber stone colours. Cosmetic; Gilded wins if both. */
+  ancient?: boolean;
   /** Extra moves (see extraMoves) it has already been offered. */
   extraOffered?: string[];
   /** Moves it learned from the land it was on (instead of a move from its own learnset). */

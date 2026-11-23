@@ -351,6 +351,8 @@ export class DexScene extends Phaser.Scene {
     this.tapArea(row, y, h, i, true, owned);
     row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
     if (owned) row.add(text(this, W - 138, y + 26, '✦ Gilded unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
+    // Fossil Site (a surprise): its ancient form, once brought back.
+    else if ((state.meta.ancientFound ?? []).includes(sp.id)) row.add(text(this, W - 138, y + 26, '◈ Ancient form found', 11, '#e0a85a', { fontStyle: 'bold' }).setOrigin(1, 0));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
     const caught = dex.caught.includes(sp.id);

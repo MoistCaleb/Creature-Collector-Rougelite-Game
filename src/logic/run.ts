@@ -121,6 +121,8 @@ export interface Meta {
   /** Rare surprises (2.0): runs in a row without one, and the ones you've found. */
   surpriseDrought?: number;
   surprisesFound?: string[];
+  /** Lines whose ancient form you've brought back from a Fossil Site (2.0). */
+  ancientFound?: string[];
   /** Lands whose Elder guardian you've beaten (2.0). */
   eldersBeaten?: string[];
   /** Roaming legendaries: health left (a share) and whether caught. */

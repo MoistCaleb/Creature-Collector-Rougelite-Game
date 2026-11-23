@@ -1,5 +1,5 @@
 import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
-import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, hatchEgg, layEgg, leaveDojo } from '../logic/surprises';
+import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { boonCardText, openBoonList, openBoonOffer } from '../ui/boonPick';
@@ -1190,6 +1190,7 @@ export class MapScene extends Phaser.Scene {
       });
     }
     if (id === 'dojo') return this.doDojo();
+    if (id === 'fossil') return this.doFossil();
     // A boon gained here: open it as an offer of one (or a mythic offer), then move on.
     const offerAndGo = (mode: 'normal' | 'mythic') => {
       openOffer(run, `hidden${run.floor}:${id}:${mode}`, mode);
@@ -1272,6 +1273,47 @@ export class MapScene extends Phaser.Scene {
         persist();
         showMessage(this, `${BOONS[ids[i]].name}!`, BOONS[ids[i]].desc, this.done);
       },
+    });
+  }
+
+  /** Fossil Site (a surprise): bring back one of three ancient forms (swap someone out if the party is full). */
+  private doFossil() {
+    const run = state.run!;
+    const forms = fossilChoices(run);
+    const full = rosterFull(run);
+    openPicker(this, {
+      title: 'Fossil Site',
+      subtitle: `Three fossils in the rock. Bring one back as an ancient form: its line in amber stone, for good in your Hexlidex.${full ? '\nYour party is full: you\u2019ll pick someone to swap out.' : ''}`,
+      options: forms.map((c) => ({ creature: c, note: `Ancient form · Lv ${c.level}` })),
+      onPick: (i) => {
+        const c = forms[i];
+        const take = (release?: Creature) => {
+          const gone = release ? creatureName(release) : '';
+          if (!joinParty(run, c, release)) return this.done();
+          const fresh = noteAncient(state.meta, c.speciesId);
+          dex.creature(c, true);
+          sfx.shinyReveal();
+          persist();
+          showMessage(
+            this,
+            'An ancient form!',
+            `${release ? `${gone} was released.\n\n` : ''}${creatureName(c)} shakes off the dust of ages and joins your ${run.team.includes(c) ? 'team' : 'bench'}.${fresh ? '\n\nNew in your Hexlidex: its ancient form.' : ''}`,
+            this.done,
+          );
+        };
+        if (!full) return take();
+        const all = allCreatures(run);
+        openPicker(this, {
+          title: `Swap out for ${creatureName(c)}?`,
+          subtitle: 'Your party is full. Release one to make room; it leaves for good. Held items go back to your bag.',
+          options: all.map((x) => ({ creature: x, note: run.team.includes(x) ? 'Team' : 'Bench' })),
+          onPick: (k) => take(all[k]),
+          onCancel: () => this.doFossil(),
+          cancelLabel: 'Back',
+        });
+      },
+      onCancel: this.done,
+      cancelLabel: 'Leave them',
     });
   }
 

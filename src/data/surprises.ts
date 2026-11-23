@@ -37,6 +37,7 @@ export const SURPRISE_LIST: SurpriseDef[] = [
   S('altar', 'hex', 'Cursed Altar', 'Give up a Hexling or half your coins for a mythic boon.', 'A dark stone that asks for a price.'),
   S('hiddenshop', 'hex', 'Hidden Shop', 'A secret stall that sells boons.', 'Someone sells more than items, if you can find them.'),
   S('hatchery', 'hex', 'Hatchery', "An egg that hatches after 5 battles into a line you haven't caught, always with its rare ◆ trait.", 'A warm nest, left alone.'),
+  S('fossil', 'hex', 'Fossil Site', 'Dig up one of three fossils and bring back an ancient form: a rare amber-stone version of its line, kept in the Hexlidex like Gilded.', 'Old bones in the rock.'),
   S('dojo', 'hex', 'Dojo', 'Three trainer battles in a row with no healing between. Win them all for a boon and a Limit Breaker.', 'A place to test yourself, three times over.'),
   // ------------------------------------------------------------ rare encounters
   S('gildedtrainer', 'encounter', 'Gilded trainer', 'A trainer whose whole team is Gilded.', 'A trainer who shines.'),

@@ -4,7 +4,7 @@ import type { WeatherId } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { highestLevel, placeRng, placeRoamer, saveMeta, type Meta, type Run } from './run';
 import { SPECIES } from '../data/species';
-import { traitsOf } from '../data/traits';
+import { rollTrait, traitsOf } from '../data/traits';
 import { createCreature, stats, type Creature } from './creature';
 import { hiddenBoost, surpriseInPool } from './workshop';
 
@@ -216,6 +216,31 @@ export function hatchEgg(run: Run): Creature | null {
   c.hp = stats(c).hp;
   delete run.surprises!.egg;
   return c;
+}
+
+// ---------------------------------------------------------------- Fossil Site
+
+/** The three fossils at this Fossil Site (seeded), as the ancient forms they'd become. */
+export function fossilChoices(run: Run): Creature[] {
+  const rng = placeRng(run, 'fossil');
+  const ids = rng.shuffle(SPECIES.map((sp) => sp.id).sort()).slice(0, 3);
+  const level = Math.max(1, Math.round(highestLevel(run) * 0.8));
+  return ids.map((id) => {
+    const c = createCreature(id, level, Math.min(2, run.floor));
+    c.ancient = true;
+    c.trait = rollTrait(id, `${run.seed}:fossil:${run.floor}:${id}`);
+    c.hp = stats(c).hp;
+    return c;
+  });
+}
+
+/** An ancient form joined you: it goes in the Hexlidex. True if it's a new line. */
+export function noteAncient(meta: Meta, speciesId: string): boolean {
+  const list = (meta.ancientFound ??= []);
+  if (list.includes(speciesId)) return false;
+  list.push(speciesId);
+  saveMeta(meta);
+  return true;
 }
 
 // ---------------------------------------------------------------- Dojo

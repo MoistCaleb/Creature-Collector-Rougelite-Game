@@ -1288,19 +1288,36 @@ export function shinyHue(speciesId: string): number {
 /**
  * A sprite's colours: its own, Gilded (`true`), or its bond colours (`'alt'`, camp bond heart 5).
  */
-export type Colours = boolean | 'alt';
+export type Colours = boolean | 'alt' | 'ancient';
 
 /** Bond colours: turned the other way round the wheel from Gilded, so the two never match. */
 export function altHue(speciesId: string): number {
   return (shinyHue(speciesId) + 120) % 360;
 }
 
-/** A Hexling's colours: Gilded first, then its bond colours. */
-export const colours = (c: { shiny?: boolean; alt?: boolean }): Colours => (c.shiny ? true : c.alt ? 'alt' : false);
+/** A Hexling's colours: Gilded first, then an ancient form's, then its bond colours. */
+export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean }): Colours => (c.shiny ? true : c.ancient ? 'ancient' : c.alt ? 'alt' : false);
+
+/** Ancient forms (Fossil Site): every colour turned to amber stone, keeping its light and dark. */
+function fossilise(col: number): number {
+  const r = (col >> 16) & 255;
+  const g = (col >> 8) & 255;
+  const b = col & 255;
+  const lum = 0.3 * r + 0.59 * g + 0.11 * b;
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return (c(lum * 1.08 + 28) << 16) | (c(lum * 0.86 + 14) << 8) | c(lum * 0.58 + 4);
+}
 
 function paletteFor(speciesId: string, stage: number, shiny: Colours = false) {
   const p = basePalette(speciesId, stage);
   if (!shiny) return p;
+  if (shiny === 'ancient') {
+    // Amber stone, with a teal glow where its signature colour was.
+    for (const k of [1, 2, 3, 9]) p.pal[k] = fossilise(p.pal[k]);
+    p.pal[10] = 0x3fc7b4;
+    p.pal[11] = 0x9ff5e6;
+    return { pal: p.pal, outline: fossilise(p.outline), shadow: fossilise(p.shadow), light: fossilise(p.light) };
+  }
   const deg = shiny === 'alt' ? altHue(speciesId) : shinyHue(speciesId);
   for (const k of [1, 2, 3, 9, 10, 11]) p.pal[k] = hueShift(p.pal[k], deg);
   return { pal: p.pal, outline: hueShift(p.outline, deg), shadow: hueShift(p.shadow, deg), light: hueShift(p.light, deg) };
@@ -1363,7 +1380,7 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
 }
 
 export function creatureTextureKey(speciesId: string, stage: number, shiny: Colours = false): string {
-  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny ? '-s' : ''}`;
+  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}`;
 }
 
 /**

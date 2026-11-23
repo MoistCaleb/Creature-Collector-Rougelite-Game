@@ -15,7 +15,9 @@ import {
   eggReady,
   enterDojo,
   floorSurprise,
+  fossilChoices,
   hadSurprise,
+  noteAncient,
   hatchEgg,
   layEgg,
   noteRunSurprises,
@@ -159,6 +161,18 @@ describe('hatchery, dojo and caravan (2.0)', () => {
     runSurprises(run).dojo = undefined;
     postBattleRecover(run, { won: true });
     expect(lead.hp).toBeGreaterThan(Math.ceil(stats(lead).hp / 2));
+  });
+
+  it('a Fossil Site offers three seeded ancient forms, and the Hexlidex keeps each line once', () => {
+    const meta = mkMeta();
+    const run = startRun(meta, 'emberkit', 51);
+    const a = fossilChoices(run);
+    expect(a.length).toBe(3);
+    expect(new Set(a.map((c) => c.speciesId)).size).toBe(3);
+    expect(a.every((c) => c.ancient && c.hp === stats(c).hp)).toBe(true);
+    expect(fossilChoices(run).map((c) => c.speciesId)).toEqual(a.map((c) => c.speciesId));
+    expect(noteAncient(meta, a[0].speciesId)).toBe(true);
+    expect(noteAncient(meta, a[0].speciesId)).toBe(false);
   });
 
   it('the caravan sells seven things, one of them free, and Scout sees no wild there', async () => {
