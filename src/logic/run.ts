@@ -46,7 +46,7 @@ import {
 import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
-import { applyCampBond, camp, CAMP_START_BOND, type PrepId } from './camp';
+import { applyCampBond, bondStarterLevels, camp, CAMP_START_BOND, noteGuardianBond, type PrepId } from './camp';
 import { lines, noteCatch, noteRunRecord } from './dexInfo';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
@@ -526,6 +526,10 @@ export interface Run {
   workshop?: import('./workshop').RunWorkshop;
   /** Embers for this run have been paid (2.0). */
   embersPaid?: boolean;
+  /** Camp bond for this run has been paid (2.0). */
+  bondPaid?: boolean;
+  /** Guardians each line helped beat this run (camp bond, 2.0). */
+  bondLog?: Record<string, number>;
   /** Rare surprises (2.0): the omen and each floor's (see logic/surprises). */
   surprises?: import('./surprises').RunSurprises;
 }
@@ -832,7 +836,9 @@ export function startRun(
         : meta.equippedPassive;
   saveMeta(meta);
   // The Workshop (2.0): seeded runs (daily, weekly, races) start without it.
-  const workshop = workshopSnapshot(meta, even || !!daily || !!weekly || racePassive !== undefined);
+  // Seeded runs (daily, weekly, races) are the same for everyone: no Workshop, no camp bond levels.
+  const seeded = even || !!daily || !!weekly || racePassive !== undefined;
+  const workshop = workshopSnapshot(meta, seeded);
   const run: Run = {
     workshop,
     heat: even ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
@@ -847,7 +853,7 @@ export function startRun(
     map,
     currentId: map.startId,
     visited: [map.startId],
-    team: [withShiny(createCreature(starterId, (passive === 'champion' ? 10 : BALANCE.starterLevel) + starterBonus({ workshop })), starterShiny(meta, starterId))],
+    team: [withShiny(createCreature(starterId, (passive === 'champion' ? 10 : BALANCE.starterLevel) + starterBonus({ workshop }) + (seeded ? 0 : bondStarterLevels(meta, starterId))), starterShiny(meta, starterId))],
     bench: [],
     evoStones: passive === 'evolutionist' ? 1 : 0,
     stonesSeen: passive === 'evolutionist' ? 1 : 0,
@@ -1922,6 +1928,7 @@ export function trackStat(run: Run, stat: keyof MetaStats, by = 1) {
 export function clearFloor(run: Run): boolean {
   const meta = run.meta;
   meta.bossesDefeated += 1;
+  noteGuardianBond(run);
   if (run.hunt) {
     // Shiny Hunting never ends in a win: deeper you go.
     run.hunt.depth += 1;

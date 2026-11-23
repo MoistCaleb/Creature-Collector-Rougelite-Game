@@ -1,7 +1,8 @@
+import { SPECIES_BY_ID } from '../data/species';
 import Phaser from 'phaser';
 import { workshopProgress } from '../logic/workshop';
 import { huntRewardLines, nextHuntMilestone } from '../logic/huntMilestones';
-import { camp, payRunEmbers } from '../logic/camp';
+import { camp, payRunBond, payRunEmbers } from '../logic/camp';
 import { BOONS } from '../data/boons';
 import { takeNewMilestones } from '../logic/gilded';
 import { takeNewTitles } from '../logic/titles';
@@ -219,6 +220,14 @@ export class EndScene extends Phaser.Scene {
       const next = workshopProgress(state.meta).next;
       const goal = next ? (have >= next.cost ? ` · ready to build ${next.name} in the Workshop` : ` · ${have}/${next.cost} to ${next.name}`) : '';
       if (em.total) extra.unshift(`Embers +${em.total} (${em.lines.join(', ')}) · ${have} at camp${goal}`);
+    }
+    // Camp bond (2.0): every run builds it with the Hexlings who came along (races and dailies too).
+    const bond = payRunBond(state.meta, run, data.won);
+    if (bond.length) {
+      saveMeta(state.meta);
+      const shown = bond.slice(0, 3).map((b) => `${SPECIES_BY_ID[b.speciesId].names[0]} +${b.points}${b.after > b.before ? ` (new ${'♥'.repeat(b.after)})` : ''}`);
+      const more = bond.length > 3 ? ` +${bond.length - 3} more` : '';
+      extra.push(`Camp bond: ${shown.join(', ')}${more}`);
     }
     // Gilded Hunt (2.0): the next milestone to dive for.
     if (hunt) {

@@ -44,7 +44,7 @@ import { announceGilded } from '../ui/gildedUi';
 import { TWISTS } from '../logic/run';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
-import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureGrayTrainerTexture, ensureTrainerTexture } from '../ui/trainerSprite';
 import { trainerFx } from '../ui/trainerFx';
@@ -553,7 +553,7 @@ export class MapScene extends Phaser.Scene {
       const slotH = (H - 20) / 4;
       run.team.forEach((c, i) => {
         const y = 10 + slotH * i;
-        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.6 * SPRITE_FIT);
+        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage, colours(c))).setScale(1.6 * SPRITE_FIT);
         img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
         text(this, x0 + 76, y + slotH / 2 - 18, `Lv ${c.level}`, 13, COLORS.text, { fontStyle: 'bold' });
         new HpBar(this, x0 + 76, y + slotH / 2 + 4, SIDE_R - 88, 7, false).set(c.hp, stats(c).hp);
@@ -566,7 +566,7 @@ export class MapScene extends Phaser.Scene {
     const slotW = W / 4;
     run.team.forEach((c, i) => {
       const x = slotW * i + slotW / 2;
-      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.6 * SPRITE_FIT);
+      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage, colours(c))).setScale(1.6 * SPRITE_FIT);
       img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
       text(this, x, y0 + 64, `Lv ${c.level}`, 12, COLORS.textDim).setOrigin(0.5);
       new HpBar(this, x - 36, y0 + 84, 72, 7, false).set(c.hp, stats(c).hp);
@@ -753,7 +753,7 @@ export class MapScene extends Phaser.Scene {
     w.f?.destroy();
     const f = this.add.container(w.c.x + FOLLOW.x * w.side, w.c.y + FOLLOW.y);
     const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, w.ghost ? 0.25 : 0.4);
-    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage, true) : ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny);
+    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage, true) : ensureCreatureTexture(this, lead.speciesId, lead.stage, colours(lead));
     const fBody = this.add
       .image(0, 0, key)
       .setOrigin(0.5, 0.92)
