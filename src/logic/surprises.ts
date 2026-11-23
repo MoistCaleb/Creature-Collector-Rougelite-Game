@@ -71,12 +71,16 @@ export const floorSurprise = (run: Run | null | undefined): FloorSurprise => (ru
 
 export const omenOf = (run: Run | null | undefined): string | undefined => run?.surprises?.omen;
 
+/** The omen a seed brings (from these omens; seeded runs have them all), if any. Shown at the starter pick. */
+export function omenFor(seed: number, omens: string[] = of('omen')): string | undefined {
+  const h = hashString(`${seed}:omen`);
+  return (h % 10000) / 10000 < ODDS.omen && omens.length ? omens[(h >>> 8) % omens.length] : undefined;
+}
+
 /** A new run: its omen, and (if it's been a while) a promise of a surprise on the first floor. */
 export function startSurprises(run: Run, seeded: boolean) {
   const rs = runSurprises(run);
-  const h = hashString(`${run.seed}:omen`);
-  const omens = of('omen', run);
-  if ((h % 10000) / 10000 < ODDS.omen && omens.length) rs.omen = omens[(h >>> 8) % omens.length];
+  rs.omen = omenFor(run.seed, of('omen', run));
   if (!seeded && (run.meta.surpriseDrought ?? 0) >= DROUGHT_MAX) rs.forced = true;
   rollFloorSurprises(run);
 }
@@ -202,6 +206,11 @@ export function tickEgg(run: Run) {
 export function hatchEgg(run: Run): Creature | null {
   if (!eggReady(run)) return null;
   const egg = run.surprises!.egg!;
+  // An egg from an old save whose line is gone: it never hatches.
+  if (!SPECIES.some((sp) => sp.id === egg.speciesId)) {
+    delete run.surprises!.egg;
+    return null;
+  }
   const c = createCreature(egg.speciesId, Math.max(1, Math.round(highestLevel(run) * 0.85)), Math.min(2, run.floor));
   c.trait = traitsOf(c.speciesId)[2] ?? c.trait;
   c.hp = stats(c).hp;

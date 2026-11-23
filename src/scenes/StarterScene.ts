@@ -7,6 +7,8 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
+import { omenFor } from '../logic/surprises';
+import { SURPRISES } from '../data/surprises';
 import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
@@ -68,6 +70,14 @@ export class StarterScene extends Phaser.Scene {
       14,
       COLORS.textDim,
     ).setOrigin(0.5);
+
+    // Shared seeds: everyone gets the same omen, so it's shown before you pick.
+    const omenSeed = this.race ? this.race.seed : week ? week.seed : this.daily ? dailySeed(this.daily) : null;
+    const omen = omenSeed !== null ? omenFor(omenSeed) : undefined;
+    if (omen) {
+      const o = text(this, W / 2 + 20, 84, `✶ Omen: ${SURPRISES[omen].name}  (tap)`, 13, '#ff7ad9', { fontStyle: 'bold' }).setOrigin(0.5);
+      o.setInteractive({ useHandCursor: true }).on('pointerup', () => showMessage(this, `Omen: ${SURPRISES[omen].name}`, SURPRISES[omen].desc));
+    }
 
     // The roll is kept until you pick or leave, so turning the phone doesn't reroll it.
     rolled ??= rollStarterChoices(state.meta, new Rng());

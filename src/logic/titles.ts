@@ -1,5 +1,7 @@
 import { DEX_SPECIES } from '../data/legends';
 import { MAPS } from '../data/maps';
+import { SURPRISE_LIST } from '../data/surprises';
+import { ELEMENTS } from '../data/types';
 import type { Meta } from './run';
 
 /**
@@ -34,6 +36,9 @@ const topHeat = (meta: Meta) => Math.max(0, ...Object.values(meta.mapHeats ?? {}
 const mapsWonAt = (meta: Meta, heat: number) => MAPS.filter((m) => (meta.mapHeats?.[m.id] ?? []).includes(heat)).length;
 const weeklyWins = (meta: Meta) => Object.values(meta.weeklies ?? {}).filter((w) => w.best?.won).length;
 const gilded = (meta: Meta) => (meta.shinyOwned ?? []).length;
+/** Rare surprises found (2.0), and lands whose Elder you've beaten. */
+const found = (meta: Meta) => SURPRISE_LIST.filter((s) => (meta.surprisesFound ?? []).includes(s.id)).length;
+const elders = (meta: Meta) => ELEMENTS.filter((e) => (meta.eldersBeaten ?? []).includes(e)).length;
 
 export const TITLES: TitleDef[] = [
   // Common
@@ -59,6 +64,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Rival', tier: 'epic', desc: 'Win 10 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 10] },
   { name: 'Grand Champion', tier: 'epic', desc: 'Win 5 Arena tournaments.', progress: (m) => [m.tourneyWins ?? 0, 5] },
   { name: 'Royale Victor', tier: 'epic', desc: 'Win a battle royale with 4 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 4 ? 1 : 0, 1] },
+  { name: 'Curious', tier: 'epic', desc: 'Find 10 different rare surprises.', progress: (m) => [Math.min(found(m), 10), 10] },
   { name: 'Gilded Collector', tier: 'epic', desc: 'Own 30 Gilded species.', progress: (m) => [gilded(m), 30], gilded: true },
   // Legendary
   { name: 'Inferno Walker', tier: 'legendary', desc: 'Win a run at Heat 8.', progress: (m) => [Math.min(topHeat(m), 8), 8] },
@@ -67,6 +73,8 @@ export const TITLES: TitleDef[] = [
   { name: 'Grand Duelist', tier: 'legendary', desc: 'Win 50 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 50] },
   { name: 'Royale Champion', tier: 'legendary', desc: 'Win a battle royale with 6 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 6 ? 1 : 0, 1] },
   { name: 'Abyss Diver', tier: 'legendary', desc: 'Reach floor 18 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 18], gilded: true },
+  { name: 'Elder Slayer', tier: 'legendary', desc: `Beat the Elder guardian of all ${ELEMENTS.length} lands.`, progress: (m) => [elders(m), ELEMENTS.length] },
+  { name: 'Wonderfinder', tier: 'legendary', desc: `Find all ${SURPRISE_LIST.length} rare surprises.`, progress: (m) => [found(m), SURPRISE_LIST.length] },
   { name: 'Gilded Legend', tier: 'legendary', desc: 'Own 60 Gilded species.', progress: (m) => [gilded(m), 60], gilded: true },
   // Mythic
   { name: 'Unstoppable', tier: 'mythic', desc: 'Win 20 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 20] },

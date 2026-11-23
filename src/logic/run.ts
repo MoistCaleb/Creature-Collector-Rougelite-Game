@@ -121,6 +121,8 @@ export interface Meta {
   /** Rare surprises (2.0): runs in a row without one, and the ones you've found. */
   surpriseDrought?: number;
   surprisesFound?: string[];
+  /** Lands whose Elder guardian you've beaten (2.0). */
+  eldersBeaten?: string[];
   /** Roaming legendaries: health left (a share) and whether caught. */
   legends?: Record<string, { hp: number; caught?: boolean; met?: number }>;
   unlockedStarters: string[];
@@ -2020,6 +2022,8 @@ export function clearFloor(run: Run): boolean {
   const meta = run.meta;
   meta.bossesDefeated += 1;
   noteGuardianBond(run);
+  // Elder guardians beaten, one per land (the Elder Slayer title).
+  if (elderHere(run) && !(meta.eldersBeaten ??= []).includes(run.map.biome)) meta.eldersBeaten.push(run.map.biome);
   if (run.hunt) {
     // Shiny Hunting never ends in a win: deeper you go.
     run.hunt.depth += 1;

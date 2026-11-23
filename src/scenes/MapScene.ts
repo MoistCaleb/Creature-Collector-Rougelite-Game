@@ -1140,7 +1140,8 @@ export class MapScene extends Phaser.Scene {
     const name = SPECIES_BY_ID[run.surprises!.egg!.speciesId]?.names[0] ?? 'a Hexling';
     const hatch = (release?: Creature) => {
       const gone = release ? creatureName(release) : '';
-      const c = hatchEgg(run)!;
+      const c = hatchEgg(run);
+      if (!c) return then();
       joinParty(run, c, release);
       dex.creature(c, true);
       sfx.shinyReveal();
@@ -1148,7 +1149,7 @@ export class MapScene extends Phaser.Scene {
       showMessage(
         this,
         'The egg hatches!',
-        `${release ? `${gone} was released.\n\n` : ''}Out pops ${creatureName(c)} (Lv ${c.level}), with its rare ◆ trait${c.trait ? `: ${traitName(c.speciesId, c.trait)}` : ''}. It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`,
+        `${release ? `${gone} was released.\n\n` : ''}Out pops ${creatureName(c)} (Lv ${c.level}), with its rare trait${c.trait ? `: ${traitName(c.speciesId, c.trait)}` : ''}. It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`,
         then,
       );
     };
