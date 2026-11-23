@@ -85,7 +85,10 @@ export class ArenaPickScene extends Phaser.Scene {
     // Drag (or the mouse wheel) to scroll the grid; a drag isn't a tap.
     this.scroller = new Scroller(this, {
       get: () => this.grid.y,
-      set: (v) => this.grid.setY(v),
+      set: (v) => {
+        this.grid.setY(v);
+        this.buildVisible();
+      },
       min: () => Math.min(0, H - this.gridBottom),
       max: () => 0,
       area: (p) => (LANDSCAPE ? p.x >= this.toScreen(g.x) : p.y >= this.toScreen(g.top)),
@@ -157,37 +160,62 @@ export class ArenaPickScene extends Phaser.Scene {
     if (!list.length) {
       this.grid.add(text(this, G().x + (W - G().x) / 2, G().top + 40, 'Nothing matches. Try another name or element.', 14, COLORS.textDim).setOrigin(0.5, 0));
     }
-    list.forEach((id, i) => {
-      const sp = SPECIES_BY_ID[id];
-      const forms = arenaForms(meta, id);
-      const stage = forms[forms.length - 1];
-      const g = G();
-      const CELL_W = g.cell;
-      const x = g.x + (i % g.cols) * CELL_W;
-      const y = g.top + Math.floor(i / g.cols) * CELL_H;
-      const inTeam = taken.includes(id);
-      const bg = this.add.rectangle(x + 3, y, CELL_W - 6, CELL_H - 8, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-      this.grid.add(bg);
-      const shiny = ownsShiny(meta, id);
-      const img = this.add.image(x + CELL_W / 2, y + 40, ensureCreatureTexture(this, id, stage, shiny)).setScale(1.9 * SPRITE_FIT);
-      this.grid.add(img);
-      if (shiny) this.grid.add(text(this, x + CELL_W - 10, y + 22, '✦ GILDED', 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
-      this.grid.add(text(this, x + CELL_W / 2, y + 68, sp.names[stage], 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
-      const chips = this.add.container(0, 0);
-      typeChipsInto(this, chips, x + CELL_W / 2, y + 96, sp.types);
-      this.grid.add(chips);
-      const nSaved = loadoutsFor(meta, id).length;
-      if (nSaved) this.grid.add(text(this, x + 12, y + 6, `${nSaved} SAVED`, 10, '#c9a3ff', { fontStyle: 'bold' }));
-      if (inTeam) {
-        [bg, img].forEach((o) => o.setAlpha(0.4));
-        this.grid.add(text(this, x + CELL_W - 10, y + 6, 'IN TEAM', 10, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0));
-        return;
-      }
-      bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-        if (!this.scroller?.moved) this.choose(id, stage);
-      });
-    });
+    // Cards are built a row at a time as they scroll into view (a big roster opens instantly).
+    this.cells = list;
+    this.taken = taken;
+    this.builtRows = new Set();
     this.gridBottom = G().top + Math.ceil(list.length / G().cols) * CELL_H + 10;
+    this.buildVisible();
+  }
+
+  private cells: string[] = [];
+  private taken: string[] = [];
+  private builtRows = new Set<number>();
+
+  /** Build the rows within a screen of the view that aren't built yet. */
+  private buildVisible() {
+    const g = G();
+    const rows = Math.ceil(this.cells.length / g.cols);
+    const from = Math.max(0, Math.floor((-this.grid.y - g.top) / CELL_H) - 1);
+    const to = Math.min(rows - 1, Math.ceil((-this.grid.y + H - g.top) / CELL_H) + 1);
+    for (let r = from; r <= to; r++) {
+      if (this.builtRows.has(r)) continue;
+      this.builtRows.add(r);
+      for (let i = r * g.cols; i < Math.min(this.cells.length, (r + 1) * g.cols); i++) this.drawCell(this.cells[i], i);
+    }
+  }
+
+  private drawCell(id: string, i: number) {
+    const meta = state.meta;
+    const taken = this.taken;
+    const sp = SPECIES_BY_ID[id];
+    const forms = arenaForms(meta, id);
+    const stage = forms[forms.length - 1];
+    const g = G();
+    const CELL_W = g.cell;
+    const x = g.x + (i % g.cols) * CELL_W;
+    const y = g.top + Math.floor(i / g.cols) * CELL_H;
+    const inTeam = taken.includes(id);
+    const bg = this.add.rectangle(x + 3, y, CELL_W - 6, CELL_H - 8, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+    this.grid.add(bg);
+    const shiny = ownsShiny(meta, id);
+    const img = this.add.image(x + CELL_W / 2, y + 40, ensureCreatureTexture(this, id, stage, shiny)).setScale(1.9 * SPRITE_FIT);
+    this.grid.add(img);
+    if (shiny) this.grid.add(text(this, x + CELL_W - 10, y + 22, '✦ GILDED', 10, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
+    this.grid.add(text(this, x + CELL_W / 2, y + 68, sp.names[stage], 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
+    const chips = this.add.container(0, 0);
+    typeChipsInto(this, chips, x + CELL_W / 2, y + 96, sp.types);
+    this.grid.add(chips);
+    const nSaved = loadoutsFor(meta, id).length;
+    if (nSaved) this.grid.add(text(this, x + 12, y + 6, `${nSaved} SAVED`, 10, '#c9a3ff', { fontStyle: 'bold' }));
+    if (inTeam) {
+      [bg, img].forEach((o) => o.setAlpha(0.4));
+      this.grid.add(text(this, x + CELL_W - 10, y + 6, 'IN TEAM', 10, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0));
+      return;
+    }
+    bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      if (!this.scroller?.moved) this.choose(id, stage);
+    });
   }
 
   private choose(speciesId: string, stage: number) {

@@ -8,7 +8,14 @@ import { dayPhase } from '../logic/ambience';
 import {
   buyCampItem,
   camp,
+  BOND_HEART,
+  BOND_POINTS,
+  bondColours,
+  bondReward,
+  bondToNext,
   CAMP_HEARTS,
+  campVisitor,
+  toggleBondColours,
   CAMP_ITEMS,
   CARE,
   campCrew,
@@ -31,9 +38,16 @@ import {
   type PrepId,
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
+import { branchUpgrades, WORKSHOP_BRANCHES, type WorkshopBranch } from '../data/workshop';
+import { titleNews } from '../logic/cosmetics';
+import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
+import { payHuntMilestones } from '../logic/huntMilestones';
+import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
+import { tip } from '../ui/tips';
+import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
-import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
-import { myTitle } from '../logic/titles';
+import { applyPrep, clearSavedRun, floorsOf, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
+import { myTitle, takeNewTitles } from '../logic/titles';
 import { friendsAvailable, listFriends, type Friend } from '../net/friends';
 import { state } from '../state';
 import { card } from '../ui/accountUi';
@@ -42,7 +56,7 @@ import { calm } from '../ui/motion';
 import { openPicker, showMessage } from '../ui/picker';
 import { prefs } from '../ui/prefs';
 import { playMusic, sfx } from '../ui/sound';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { ensureCreatureTexture, SPRITE_FIT , type Colours } from '../ui/sprites';
 import { titleBadge } from '../ui/titleBadge';
 import { trainerFx } from '../ui/trainerFx';
 import { ensureTrainerTexture } from '../ui/trainerSprite';
@@ -79,8 +93,12 @@ export class CampScene extends Phaser.Scene {
     super('Camp');
   }
 
-  init(data: { prep?: boolean }) {
+  /** Reopen the Workshop on this branch after a purchase (the scene restarts to redraw). */
+  private reopen: WorkshopBranch | 'list' | null = null;
+
+  init(data: { prep?: boolean; workshop?: WorkshopBranch | 'list' }) {
     this.prep = !!data.prep && !!state.run;
+    this.reopen = data.workshop ?? null;
   }
 
   create() {
@@ -181,8 +199,14 @@ export class CampScene extends Phaser.Scene {
     const crew = campCrew(meta);
     crew.forEach((c, i) => {
       const a = Math.PI + ((i + 1) * Math.PI) / (crew.length + 1);
-      this.wanderer(c.speciesId, c.stage, c.shiny, { x: fx + Math.cos(a) * rx, y: fy + Math.sin(a) * ry + 8 }, fx);
+      this.wanderer(c.speciesId, c.stage, c.shiny || (c.alt ? 'alt' : false), { x: fx + Math.cos(a) * rx, y: fy + Math.sin(a) * ry + 8 }, fx);
     });
+    // Camp bond heart 5: a best friend who isn't staying drops by, in front of the fire.
+    const guest = campVisitor(meta);
+    if (guest) {
+      const look = (meta.shinyOwned ?? []).includes(guest) && !(meta.shinyOff ?? []).includes(guest) ? true : bondColours(meta, guest) ? 'alt' : false;
+      this.wanderer(guest, campStage(meta, guest), look, { x: fx + rx * 0.62, y: fy + ry * 0.72 + 8 }, fx, true);
+    }
 
     // ---- visitors
     this.visitors(groundY, x1);
@@ -206,6 +230,21 @@ export class CampScene extends Phaser.Scene {
     if (this.prep) this.prepPanel();
     else {
       this.campButtons();
+      // Gilded Hunt milestones (2.0): saves that went deep before 2.0 are paid here, once.
+      payHuntMilestones(meta);
+      // Welcome-back embers (2.0): saves from before it get a head start on the Workshop, once.
+      const welcome = payWelcomeBack(meta);
+      saveMeta(meta);
+      if (welcome) {
+        sfx.coin();
+        showMessage(this, 'Welcome to Hexbound 2.0!', welcomeText(welcome), () => this.scene.restart());
+      } else announceHunt(this, meta, () => tip(this, 'camp'));
+      if (this.reopen) {
+        const b = this.reopen;
+        this.reopen = null;
+        if (b === 'list') this.workshop();
+        else this.workshopBranch(b);
+      }
       this.signposts();
     }
 
@@ -451,6 +490,28 @@ export class CampScene extends Phaser.Scene {
       const halo = this.add.circle(x, y - 10, 18, 0x6ae0f0, 0.15);
       if (!calm()) this.tweens.add({ targets: [c, halo], alpha: 0.6, yoyo: true, repeat: -1, duration: 1400 });
     }
+    // The Gilded Hunt totem (floor 10 milestone): a carved post with a gilded crest.
+    if (owned.includes('hunt-totem')) {
+      const x = x1 * 0.76;
+      const y = groundY + 26;
+      const d = depth(y);
+      this.add.rectangle(x, y, 10, 58, 0x6a4a2a).setOrigin(0.5, 1).setStrokeStyle(1, 0x2a1a10).setDepth(d);
+      for (const k of [0, 1, 2]) this.add.rectangle(x, y - 12 - k * 15, 14, 4, 0xb07a10).setDepth(d);
+      const crest = this.add.polygon(x, y - 66, [0, -12, 11, 0, 0, 12, -11, 0], 0xffc94d).setStrokeStyle(2, 0xfff4b0).setDepth(d);
+      const glow = this.add.circle(x, y - 66, 16, 0xffc94d, 0.18).setDepth(d);
+      if (!calm()) this.tweens.add({ targets: [crest, glow], alpha: 0.65, yoyo: true, repeat: -1, duration: 1200 });
+    }
+    // Elder stones (rare surprises): a standing stone for each land whose Elder guardian you've beaten.
+    const elders = state.meta.eldersBeaten ?? [];
+    elders.slice(0, 12).forEach((el, i) => {
+      const x = x1 * 0.44 + (i - (Math.min(12, elders.length) - 1) / 2) * 17;
+      const y = groundY + 38 + (i % 2) * 4;
+      const col = ELEMENT_COLORS[el as keyof typeof ELEMENT_COLORS] ?? 0x9a94b0;
+      // (A polygon is placed by its middle: 18 px tall, so its foot sits on y.)
+      this.add.polygon(x, y - 9, [1, 18, 0, 6, 4, 0, 9, 1, 12, 7, 11, 18], 0x7a7486).setStrokeStyle(1, 0x2a2638).setDepth(depth(y));
+      const rune = this.add.rectangle(x, y - 11, 3, 6, col).setDepth(depth(y) + 0.001);
+      if (!calm()) this.tweens.add({ targets: rune, alpha: 0.45, yoyo: true, repeat: -1, duration: 1100 + i * 110 });
+    });
     if (owned.includes('flag')) {
       const x = x1 * 0.42;
       const y = groundY + 34;
@@ -520,7 +581,7 @@ export class CampScene extends Phaser.Scene {
   // ================================================================ the Hexlings at camp
 
   /** One of the Hexlings staying at camp: little walks and naps. Tap to spend time with it. */
-  private wanderer(speciesId: string, stage: number, shiny: boolean, home: { x: number; y: number }, fx: number) {
+  private wanderer(speciesId: string, stage: number, shiny: Colours, home: { x: number; y: number }, fx: number, visiting = false) {
     if (!SPECIES_BY_ID[speciesId]) return;
     const c = this.add.container(home.x, home.y);
     const shadow = this.add.ellipse(0, 0, 26, 8, 0x000000, 0.35);
@@ -528,8 +589,9 @@ export class CampScene extends Phaser.Scene {
     c.add([shadow, img]);
     const hearts = campHearts(state.meta, speciesId);
     if (hearts) c.add(text(this, 0, 4, '♥'.repeat(hearts), 10, '#ff8ab0', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0));
-    // Best friends: a warm glow.
-    if (hearts >= CAMP_HEARTS.length) {
+    if (visiting) c.add(text(this, 0, -62, 'visiting', 10, '#e8e0ff', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0));
+    // Close friends (heart 3 on): a warm glow.
+    if (hearts >= BOND_HEART.startBond) {
       const halo = this.add.ellipse(0, -14, 46, 46, 0xff8ab0, 0.18);
       c.addAt(halo, 0);
       if (!calm()) this.tweens.add({ targets: halo, scale: 1.15, alpha: 0.32, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
@@ -571,44 +633,51 @@ export class CampScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(400, 2500), act);
   }
 
-  /** Pet, feed or play with a camp Hexling (each once a day): it builds your bond. */
+  /** Pet, feed or play with a camp Hexling (each once a day; the first each day builds your bond). */
   private careFor(speciesId: string, stage: number, c: Phaser.GameObjects.Container) {
     const meta = state.meta;
     const name = SPECIES_BY_ID[speciesId].names[stage] ?? SPECIES_BY_ID[speciesId].names[0];
     const hearts = campHearts(meta, speciesId);
     const done = caredToday(meta, speciesId);
-    const points = meta.camp?.bond[speciesId] ?? 0;
-    const next = CAMP_HEARTS.find((n) => points < n);
+    const next = bondToNext(meta, speciesId);
     const labels: Record<Care, [string, string]> = {
       pet: ['Pet', 'A scratch behind the ears.'],
       feed: ['Feed', 'A handful of berries.'],
       play: ['Play', 'A game of chase around the fire.'],
     };
+    const now = hearts ? `${hearts >= BOND_HEART.max ? 'Best friends! ' : ''}${bondReward(Math.min(hearts, BOND_HEART.max), name).replace(/^./, (ch) => ch.toUpperCase())}.` : '';
+    const toNext = next
+      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and your first time together here each day (+${BOND_POINTS.care}).`
+      : '';
+    const alt = hearts >= BOND_HEART.max;
+    const altOn = bondColours(meta, speciesId);
     openPicker(this, {
       title: `${name} ${'♥'.repeat(hearts)}${'♡'.repeat(CAMP_HEARTS.length - hearts)}`,
-      subtitle:
-        hearts >= CAMP_HEARTS.length
-          ? `Best friends! ${name} starts your runs with a bond heart, so it can hang on when it would faint.`
-          : `Spend time together to build your bond (${next! - points} more to the next heart). Each heart evolves it here at camp, and with a full bond, ${name} starts your runs with a bond heart.`,
-      options: CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
+      subtitle: [now, toNext].filter(Boolean).join(' '),
+      options: [
+        ...CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
+        ...(alt ? [{ label: `Bond colours: ${altOn ? 'on' : 'off'}`, sub: 'Tap to switch', color: 0x3a4a6a }] : []),
+      ],
       cancelLabel: 'Back',
       onCancel: () => {},
       onPick: (i) => {
+        if (i >= CARE.length) {
+          toggleBondColours(meta, speciesId);
+          saveMeta(meta);
+          this.scene.restart();
+          return;
+        }
+        const first = !done.length;
         const gained = care(meta, speciesId, CARE[i]);
         saveMeta(meta);
         sfx.coin();
-        this.bubble(c, '♥', '#ff8ab0');
+        this.bubble(c, first ? '♥ +1' : '♥', '#ff8ab0');
         if (gained) {
-          const now = campHearts(meta, speciesId);
-          const evolved = now <= 2 ? SPECIES_BY_ID[speciesId].names[now] : null;
-          showMessage(
-            this,
-            `${name} trusts you more!`,
-            now >= CAMP_HEARTS.length
-              ? `A full bond! ${name} glows with happiness, and will start your runs with a bond heart.`
-              : `Camp bond: ${'♥'.repeat(now)}. ${name} evolved into ${evolved} here at camp!`,
-            () => this.scene.restart(),
-          );
+          sfx.bondHeart();
+          const h = campHearts(meta, speciesId);
+          const news = titleNews(takeNewTitles(meta));
+          if (news) saveMeta(meta);
+          showMessage(this, `${name} trusts you more!`, `Camp bond ${'♥'.repeat(h)}: ${bondReward(h, name)}.${news}`, () => this.scene.restart());
         }
       },
     });
@@ -642,7 +711,7 @@ export class CampScene extends Phaser.Scene {
       // "!" when they have something for you.
       const ch = list[v.tier];
       const news = this.prep ? this.newsFrom(i) : null;
-      const flag = this.prep ? (i === 1 && legendFloors(run!, FLOORS).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
+      const flag = this.prep ? (i === 1 && legendFloors(run!, floorsOf(run!)).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
       if (flag) {
         const f = text(this, x, y - 66, flag, 18, flag === '!' ? '#ffd04a' : '#c8d8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5).setDepth(3);
         if (!calm()) this.tweens.add({ targets: f, y: f.y - 5, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
@@ -660,8 +729,8 @@ export class CampScene extends Phaser.Scene {
     const run = state.run!;
     if (i === 0) return run.prep && run.prep !== 'skip' ? 'Good choice! Safe travels, and come see me in the shops.' : 'Take something for the road! On the house, just this once. Pick one below.';
     if (i === 1) {
-      const floors = legendFloors(run, FLOORS);
-      const lands = (run.biomes ?? []).slice(0, FLOORS).join(', then ');
+      const floors = legendFloors(run, floorsOf(run));
+      const lands = (run.biomes ?? []).slice(0, floorsOf(run)).join(', then ');
       if (floors.length)
         return `Exciting news! A legendary Hexling has been sighted up ahead: it should be roaming floor ${floors.map((f) => f + 1).join(' and ')}. Look for the glowing hex!${lands ? ` The lands ahead: ${lands}.` : ''}`;
       return lands ? `My notes say the lands ahead are ${lands}. Plan your team around them!` : 'Stay curious out there!';
@@ -725,13 +794,15 @@ export class CampScene extends Phaser.Scene {
     const items: [string, () => void, number][] = [
       [`Challenges${ready ? ` (${ready}!)` : ''}`, () => this.challengeList(), ready ? 0x8a5a1a : 0x4a3a2a],
       [`Ember stall · ${c.embers}`, () => this.stall(), 0x6a3a1a],
+      [workshopProgress(meta).next && c.embers >= workshopProgress(meta).next!.cost ? 'Workshop (!)' : 'Workshop', () => this.workshop(), 0x4a3a5a],
       ['Camp crew', () => this.crewPicker(), 0x3a4a2a],
     ];
     items.forEach(([label, fn, color], i) => {
       // Upright: a stack top right. Sideways: a row along the top right.
-      const bx = LANDSCAPE ? W - 300 + i * 100 : W - 72;
+      // (Sideways, four fit where three used to, clear of the title.)
+      const bx = LANDSCAPE ? W - 53 - (items.length - 1 - i) * 82 : W - 72;
       const by = LANDSCAPE ? 30 : 110 + i * 40;
-      button(this, bx, by, LANDSCAPE ? 94 : 128, 34, label, () => (sfx.click(), fn()), { fontSize: LANDSCAPE ? 11 : 12, color }).setDepth(3);
+      button(this, bx, by, LANDSCAPE ? 78 : 128, 34, label, () => (sfx.click(), fn()), { fontSize: LANDSCAPE ? 11 : 12, color }).setDepth(3);
     });
   }
 
@@ -739,7 +810,9 @@ export class CampScene extends Phaser.Scene {
   private stall() {
     const meta = state.meta;
     const c = camp(meta);
-    const opts = CAMP_ITEMS.map((it) => {
+    // Rewards (the Gilded Hunt totem) only show once they're yours.
+    const items = CAMP_ITEMS.filter((it) => !it.reward || c.owned.includes(it.id));
+    const opts = items.map((it) => {
       const own = c.owned.includes(it.id);
       const inUse = it.kind === 'fire' && c.fire === it.id;
       return {
@@ -758,14 +831,79 @@ export class CampScene extends Phaser.Scene {
       cancelLabel: 'Back',
       onCancel: () => {},
       onPick: (i) => {
-        if (i >= CAMP_ITEMS.length) c.fire = undefined;
+        if (i >= items.length) c.fire = undefined;
         else {
-          const it = CAMP_ITEMS[i];
+          const it = items[i];
           if (c.owned.includes(it.id)) c.fire = it.id;
           else if (buyCampItem(meta, it.id) === null) sfx.coin();
         }
         saveMeta(meta);
         this.scene.restart();
+      },
+    });
+  }
+
+  /** The Workshop (2.0): lasting upgrades for embers, in four branches. */
+  private workshop() {
+    const meta = state.meta;
+    const c = camp(meta);
+    const prog = workshopProgress(meta);
+    const own = ownedUpgrades(meta);
+    openPicker(this, {
+      title: 'Workshop',
+      subtitle: prog.done
+        ? `Every upgrade built (${prog.total} embers). You have ${c.embers} embers.`
+        : `You have ${c.embers} embers · ${prog.spent}/${prog.total} built.\nUpgrades work on normal runs and the Gilded Hunt, not on daily or weekly runs or online.`,
+      options: WORKSHOP_BRANCHES.map((b) => {
+        const ups = branchUpgrades(b.id);
+        const have = ups.filter((u) => own.includes(u.id)).length;
+        const next = nextUpgrade(meta, b.id);
+        return {
+          label: `${b.name}   ${have}/${ups.length}`,
+          sub: next ? `Next: ${next.name} · ${next.cost} embers` : `Complete · ${b.blurb}`,
+          color: b.color,
+          badge: next && c.embers >= next.cost ? 'READY' : undefined,
+        };
+      }),
+      rowHeight: 56,
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => this.workshopBranch(WORKSHOP_BRANCHES[i].id),
+    });
+  }
+
+  /** One branch of the Workshop: what you've built, the next upgrade to buy, and what's after it. */
+  private workshopBranch(id: WorkshopBranch) {
+    const meta = state.meta;
+    const c = camp(meta);
+    const b = WORKSHOP_BRANCHES.find((x) => x.id === id)!;
+    const own = ownedUpgrades(meta);
+    const next = nextUpgrade(meta, id);
+    const ups = branchUpgrades(id);
+    openPicker(this, {
+      title: `Workshop · ${b.name}`,
+      subtitle: `${b.blurb}\nYou have ${c.embers} embers. Buy them in order.`,
+      options: ups.map((u) => {
+        const have = own.includes(u.id);
+        const isNext = next?.id === u.id;
+        return {
+          label: `${have ? '✓ ' : ''}${u.name}${u.capstone ? '  ★' : ''}`,
+          sub: have ? `Built · ${u.desc}` : `${u.cost} embers · ${u.desc}`,
+          disabled: have || !isNext || c.embers < u.cost,
+          color: have ? 0x2f3f2a : isNext ? b.color : 0x2a2a34,
+          badge: u.capstone ? 'CAPSTONE' : undefined,
+        };
+      }),
+      rowHeight: 60,
+      cancelLabel: 'Back',
+      onCancel: () => this.workshop(),
+      onPick: (i) => {
+        const built = buyUpgrade(meta, ups[i].id) === null;
+        if (built) sfx.workshopBuild(!!ups[i].capstone);
+        const fresh = built ? takeNewTitles(meta) : [];
+        saveMeta(meta);
+        if (fresh.length) showMessage(this, `${ups[i].name} built!`, titleNews(fresh).replace(/^\n+/, ''), () => this.scene.restart({ workshop: id }));
+        else this.scene.restart({ workshop: id });
       },
     });
   }
@@ -866,7 +1004,7 @@ export class CampScene extends Phaser.Scene {
     const [px, py, pw, ph] = LANDSCAPE ? [W - 272, 92, 262, H - 100] : [10, H - 280, W - 20, 272];
     this.add.rectangle(px, py, pw, ph, 0x1a1428, 0.94).setOrigin(0).setStrokeStyle(2, 0x6a4a2a).setDepth(4);
     text(this, px + pw / 2, py + 10, 'Before you set out', 16, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0).setDepth(4);
-    const floors = legendFloors(run, FLOORS);
+    const floors = legendFloors(run, floorsOf(run));
     const tip = floors.length
       ? `Alder: “A legendary is roaming floor ${floors.map((f) => f + 1).join(' and ')}!”`
       : 'Take one thing for the road. Tap a visitor for news.';

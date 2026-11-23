@@ -1,7 +1,8 @@
 -- Hexbound leaderboards: run this once in Supabase › SQL Editor › New query (after friends.sql).
 -- All-time Top 10s. Each player's best ever number on each board is kept on their profile; the
 -- game sends its numbers and the server only ever raises them (within sensible limits).
--- Running it again is safe (it updates an older project).
+-- Running it again is safe (it updates an older project). Hexbound 2.0 added five boards (workshop,
+-- bond5, surprises, elders, mythics): run it again once so the server accepts them.
 
 alter table public.profiles add column if not exists scores jsonb not null default '{}';
 -- When each best was reached: on a tie, whoever got there first ranks higher.
@@ -19,7 +20,8 @@ language sql immutable as $$
     "wins": 100000, "streak": 100000, "heat": 20, "dex": 2000, "caught": 10000000,
     "battles": 10000000, "guardians": 1000000, "gilded": 1000000, "legends": 100,
     "hunt": 100000, "tourney": 100000, "online": 1000000, "titles": 1000, "coins": 2000000000,
-    "fastest": 86400
+    "fastest": 86400,
+    "workshop": 100, "bond5": 1000, "surprises": 100, "elders": 100, "mythics": 100
   }'::jsonb;
 $$;
 

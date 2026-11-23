@@ -60,6 +60,15 @@ Once that's deployed, Settings shows **Account & saves**.
 2. That's it. It also turns on live updates for invites (they arrive the moment they're sent);
    if live updates are ever off, invites still arrive within about 20 seconds.
 
+## 7. Bug reports (Settings › Report a bug)
+
+1. **SQL Editor** › **New query**: paste everything from
+   [`supabase/bug-reports.sql`](../supabase/bug-reports.sql) and press **Run**.
+2. The result shows one row, `bug_report_key`. That's the private key that reads and deletes
+   reports. Save it in Claude Code's credential form (for the Supabase host, header `x-bug-token`),
+   never in a chat. Players can send reports but can't read any.
+3. To see the key again later, run `select token from public.bug_admin;`.
+
 ## Good to know
 
 - **Email limits:** Supabase's built-in email sender only sends a few emails an hour, which is
@@ -67,4 +76,4 @@ Once that's deployed, Settings shows **Account & saves**.
   **Authentication › Emails › SMTP Settings** (Resend, Brevo and others have free tiers).
 - **Deleting accounts:** players can delete their own account in the game (Account & saves ›
   Delete my account). You can also delete one under **Authentication › Users**.
-- **What's stored:** each player's email and their save. Nothing else.
+- **What's stored:** each player's email and their save, plus any bug reports they send.

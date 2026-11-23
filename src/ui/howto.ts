@@ -21,6 +21,7 @@ export const HOW_TO_PLAY: Page[] = [
       'A Hexling that faints is gone for the rest of the run. If your whole team falls, the run is over.',
       'Between runs you keep what you unlocked: starters, Hexlidex entries, maps and trainer passives.',
       'Win a run and you can go on a Gilded Hunt: endless floors where gilded Hexlings are everywhere and enemies keep getting stronger.',
+      'Each new deepest hunt floor can pay a one-time milestone: embers on floor 3, the Gilded campfire on 5, Gilded starter offers on 7, a camp totem on 10, then more embers and titles every few floors.',
     ],
   },
   {
@@ -41,6 +42,7 @@ export const HOW_TO_PLAY: Page[] = [
       'Switch sends in another team member (it uses your turn). Potions heal mid-battle (also your turn).',
       'Auto picks the best move for you; the speed button plays battles at 1×, 2× or 3×.',
       'Up to 4 Hexlings fight; up to 3 wait on the bench. If your team falls, the bench steps in as a second life.',
+      'Fatigue: after 30 turns, all damage is doubled and all healing halved, so no battle lasts forever.',
     ],
   },
   {
@@ -62,6 +64,63 @@ export const HOW_TO_PLAY: Page[] = [
       'Prestige ★: a big stat boost and a higher level cap. At a ★ node it costs a bench Hexling that shares an element.',
       'Skills: Skill nodes upgrade a move. Held items give one Hexling a passive bonus.',
       'Land moves: now and then a Hexling learns a move of the land\u2019s element instead of its usual next move.',
+    ],
+  },
+  {
+    title: 'Boons',
+    glyph: 'sparkle',
+    lines: [
+      'After each guardian (and on Boon hexes ✦), choose a boon: a perk that bends the rules for the rest of the run.',
+      'The first card helps an element on your team; the second is general (now and then a golden mythic); the third is sometimes a curse.',
+      'Curses cost something (no healing at rests, less HP…) but pay you back with more or better boons.',
+      'Guardians gain a level for each boon you hold. See yours from the ✦ on the map bar or the menu.',
+      'Online, your boons come with you into the stage battle duel and the royale bracket.',
+    ],
+  },
+  {
+    title: 'Traits',
+    glyph: 'gem',
+    lines: [
+      'Every Hexling has a trait: a passive that works on its own, in battle or on the map.',
+      'Each line has three possible traits: two common and one rare (◆, about 1 in 7). Legendaries each have their own.',
+      'Evolving keeps the trait, and the final form makes it stronger.',
+      'Tap a trait on the starter pick, team screen or Hexlidex to read it. The Hexlidex shows which of a line\'s traits you\'ve found.',
+      'In the Arena you can give a Hexling any trait you\'ve found for its line.',
+    ],
+  },
+  {
+    title: 'Rare surprises',
+    glyph: 'star',
+    lines: [
+      'Now and then a run brings a surprise: an omen for the whole run, a strange floor, an Elder guardian, a hidden hex (???) or a rare encounter.',
+      'About half of runs meet at least one, and you never go more than 3 runs in a row without.',
+      'Elder guardians are older and tougher, with every Hexling carrying its rare ◆ trait. Beat one for a mythic boon offer.',
+      'Hidden hexes include a wishing well, a cursed altar, a secret boon shop, a hatchery egg and a three-trainer dojo.',
+      'Daily and weekly runs and online races share the same surprises for everyone; their omen shows at the starter pick.',
+      'The Hexlidex lists the surprises you’ve found, with hints for the rest.',
+    ],
+  },
+  {
+    title: 'Embers and the Workshop',
+    glyph: 'flame',
+    lines: [
+      'Every run pays embers, win or lose: more for floors, guardians, wins, Gilded and Heat.',
+      'Spend them at camp: decorations at the Ember stall, lasting upgrades in the Workshop.',
+      'The Workshop has four branches (Supplies, Training, Fortune, Lore), each built in order and ending in a capstone.',
+      'Lore adds more boons and surprises to your runs: variety, not power. The Hexlidex Boons tab shows which Lore tier each locked one needs, with a hint.',
+      'Daily and weekly runs and online races ignore the Workshop, so they stay fair for everyone.',
+      'Played before 2.0? Your first camp visit pays welcome-back embers for the runs you\'ve already won and played.',
+    ],
+  },
+  {
+    title: 'Camp bond',
+    glyph: 'heart',
+    lines: [
+      'Each line you play builds a bond, up to 5 hearts: finishing a run together, winning, being MVP, beating guardians, and your first time together at camp each day.',
+      'Hearts 1 and 2 evolve it at camp. Heart 3: it starts your runs with a bond heart.',
+      'Heart 4: as your starter, tap its trait to choose any trait you\'ve found on its line.',
+      'Heart 5: it starts 2 levels higher as your starter, wears its bond colours, and visits your camp.',
+      'Daily and weekly runs and online races still build bond, but skip the starting bonuses.',
     ],
   },
   {

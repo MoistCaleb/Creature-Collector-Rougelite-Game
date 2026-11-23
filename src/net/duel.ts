@@ -1,3 +1,4 @@
+import { isBoon } from '../data/boons';
 import type { ArenaPick } from '../logic/arena';
 import type { TrainerLook } from '../data/trainerLook';
 import { makeArenaCreature } from '../logic/arena';
@@ -13,7 +14,8 @@ import type { StatusId } from '../data/status';
  * battle state, which it copies into its own display-only Battle.
  */
 
-export const DUEL_VERSION = 1;
+/** Bumped when battles change in ways both phones must agree on (2.0: traits, boons, speed attacks). */
+export const DUEL_VERSION = 2;
 
 /** What a session is for, chosen by the host before the code is made. */
 export type GameMode = 'duel' | 'stage' | 'royale' | 'tourney';
@@ -80,6 +82,9 @@ export interface StartInfo {
   /** Stage race finale: the teams as they finished their runs (levels, stars, items), fully healed. */
   hostCreatures?: Creature[];
   guestCreatures?: Creature[];
+  /** Stage race finale and royale bracket (2.0): the boons each side picked on its climb. */
+  hostBoons?: string[];
+  guestBoons?: string[];
 }
 
 /** A stage race: both play the same map from the same seed, then duel with what they've got. */
@@ -104,6 +109,8 @@ export interface RaceProgress {
   heal?: number;
   /** Team to bring to the final duel (empty if wiped out). */
   team?: Creature[];
+  /** Boons picked on the climb (2.0): they apply in the duel and the bracket. */
+  boons?: string[];
   /** Map node they're on, and their lead Hexling (shown grayed out on the other player's map). */
   at?: string;
   lead?: { speciesId: string; stage: number; shiny?: boolean };
@@ -130,6 +137,8 @@ export interface Standing {
   alive: boolean;
   /** Lost the connection for good. */
   gone?: boolean;
+  /** In a battle on their climb right now (battle royale: others who are out can watch it). */
+  fighting?: boolean;
   /** Map hex they're on, and their lead Hexling (drawn grayed out on everyone's map). */
   at?: string;
   lead?: { speciesId: string; stage: number; shiny?: boolean };
@@ -172,9 +181,17 @@ export type DuelMsg =
   /** Spectator to host: watch this bracket match ('' to stop watching). */
   | { t: 'watch'; match: string }
   /** Host to spectator: the match you asked to watch, as it stands. */
-  | { t: 'wstart'; match: string; info: StartInfo; snap?: Snap; next?: Next }
+  | { t: 'wstart'; match: string; info: StartInfo; snap?: Snap; next?: Next; wild?: boolean }
   /** A turn of a bracket match, from its runner's side (runner to host, host to spectators). */
   | { t: 'wstep'; match: string; events: BattleEvent[]; snap: Snap; next: Next }
+  /** Battle royale climb (racer to host): a battle on my climb starts, as it stands. */
+  | { t: 'cstart'; info: StartInfo; snap: Snap; next: Next; wild?: boolean }
+  /** A turn of that battle (racer to host). */
+  | { t: 'cstep'; events: BattleEvent[]; snap: Snap; next: Next }
+  /** That battle's screen closed (racer to host). */
+  | { t: 'cend' }
+  /** Host to spectators: the battle you're watching is over (or its player left). */
+  | { t: 'wover'; match: string }
   /** The sender gives up this battle. */
   | { t: 'forfeit' }
   | { t: 'lobby' };
@@ -275,9 +292,11 @@ export function duelBattle(info: StartInfo, role: 'host' | 'guest'): Battle {
   const guest = info.guestCreatures ? info.guestCreatures.map(readyForDuel) : info.guestTeam.map((p) => makeArenaCreature(p, { level }));
   const [mine, theirs] = role === 'host' ? [host, guest] : [guest, host];
   const names = role === 'host' ? { player: info.hostName, enemy: info.guestName } : { player: info.guestName, enemy: info.hostName };
+  const [myBoons, theirBoons] = role === 'host' ? [info.hostBoons, info.guestBoons] : [info.guestBoons, info.hostBoons];
   return new Battle(mine, theirs, new Rng(info.seed), {
     permadeath: false,
     duel: names,
+    boons: { player: cleanBoonIds(myBoons), enemy: cleanBoonIds(theirBoons) },
     synergy: synergyMults(mine),
     enemySynergy: synergyMults(theirs),
   });
@@ -479,4 +498,9 @@ export class DuelController {
 export function potionHealOf(info: StartInfo, side: 'host' | 'guest'): number {
   const v = Number(side === 'host' ? info.potions?.hostHeal : info.potions?.guestHeal);
   return Number.isFinite(v) && v > 0 ? Math.min(1, v) : 0.5;
+}
+
+/** Only real boons (from the other phone, so checked). */
+export function cleanBoonIds(list: unknown): string[] {
+  return Array.isArray(list) ? [...new Set(list.filter(isBoon))].slice(0, 40) : [];
 }

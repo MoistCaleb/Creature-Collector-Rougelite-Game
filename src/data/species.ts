@@ -215,6 +215,85 @@ export const SPECIES: Species[] = [
   f('frostfern', 'Frostfern/Iceblossom/Winterbloom', 'Frost', 'Nature', 62, 60, 58, 55, 'Frost Bloom'),
   f('cinderwisp', 'Cinderwisp/Ashveil/Pyrewraith', 'Fire', 'Nature', 58, 68, 50, 65, 'Ash Bloom'),
   f('gildwing', 'Gildwing/Sunwyrm/Aurumdrake', 'Light', 'Dragon', 64, 70, 58, 54, 'Golden Breath'),
+  // ------------------------------------------------------------ 2.0: 66 new lines (see docs/2.0-new-lines.md)
+  // Metal
+  f('forgepup', 'Forgepup/Smeltwolf/Crucibane', 'Metal', 'Fire', 66, 72, 58, 48, 'Slag Fang'),
+  f('rivetfin', 'Rivetfin/Hullshark/Dreadnaut', 'Metal', 'Water', 62, 74, 60, 48, 'Torpedo Dive'),
+  f('gearbud', 'Gearbud/Cogbloom/Clockroot', 'Metal', 'Nature', 70, 56, 70, 48, 'Clockwork Bloom'),
+  f('coldcog', 'Coldcog/Frostforge/Cryomech', 'Metal', 'Frost', 64, 64, 68, 48, 'Cryo Cannon'),
+  f('rustbug', 'Rustbug/Corrodite/Ruinmech', 'Metal', 'Toxic', 62, 66, 64, 52, 'Acid Sting'),
+  f('nightcog', 'Nightcog/Shadowgear/Umbratron', 'Metal', 'Shadow', 58, 72, 56, 58, 'Night Strike'),
+  f('alloylet', 'Alloylet/Chromewyrm/Mechadrake', 'Metal', 'Dragon', 66, 70, 62, 46, 'Chrome Breath'),
+  // Toxic
+  f('smoglet', 'Smoglet/Fumehound/Smogtyrant', 'Toxic', 'Fire', 62, 70, 56, 56, 'Fume Breath'),
+  f('tarlet', 'Tarlet/Tarback/Tarmageddon', 'Toxic', 'Earth', 72, 62, 68, 42, 'Tar Bind'),
+  f('fizzlet', 'Fizzlet/Acidarc/Toxicyclone', 'Toxic', 'Storm', 58, 66, 54, 66, 'Acid Arc'),
+  f('gelicle', 'Gelicle/Frostrot/Cryoblight', 'Toxic', 'Frost', 64, 64, 62, 54, 'Frostbite Fang'),
+  f('neonewt', 'Neonewt/Glowtoxin/Radiantox', 'Toxic', 'Light', 60, 66, 56, 62, 'Neon Glare'),
+  f('spooklet', 'Spooklet/Sporeshade/Pallmancer', 'Toxic', 'Spirit', 60, 64, 58, 62, 'Haunt Spores'),
+  f('hisslet', 'Hisslet/Venomdrake/Basilisk', 'Toxic', 'Dragon', 62, 74, 56, 52, 'Basilisk Glare'),
+  // Shadow
+  f('inklet', 'Inklet/Inkshade/Abyssquid', 'Shadow', 'Water', 60, 68, 56, 60, 'Ink Snare'),
+  f('nightbud', 'Nightbud/Thornshade/Gravethorn', 'Shadow', 'Nature', 64, 66, 62, 52, 'Thorn Curse'),
+  f('gravelet', 'Gravelet/Tombmole/Cryptlord', 'Shadow', 'Earth', 70, 66, 66, 42, 'Grave Crush'),
+  f('crowlet', 'Crowlet/Duskcrow/Stormraven', 'Shadow', 'Storm', 56, 70, 52, 66, 'Raven Dive'),
+  f('chilkit', 'Chilkit/Nightfrost/Hoarfang', 'Shadow', 'Frost', 58, 70, 54, 62, 'Hoarfrost Claw'),
+  f('twilit', 'Twilit/Duskmirror/Penumbrax', 'Shadow', 'Light', 60, 68, 56, 60, 'Twilight Ray'),
+  f('duskhatch', 'Duskhatch/Noxdrake/Voidrex', 'Shadow', 'Dragon', 64, 74, 56, 50, 'Void Rend'),
+  // Spirit
+  f('flickghost', 'Flickghost/Pyregeist/Pyrelich', 'Spirit', 'Fire', 58, 70, 54, 62, 'Geist Beam'),
+  f('siplet', 'Siplet/Sirenwail/Shipwrath', 'Spirit', 'Water', 60, 64, 58, 62, 'Siren Wail'),
+  f('sprigghost', 'Sprigghost/Dryadwisp/Elderdryad', 'Spirit', 'Nature', 64, 60, 64, 56, 'Soul Bloom'),
+  f('totemkin', 'Totemkin/Totemshade/Monumentor', 'Spirit', 'Earth', 72, 60, 70, 42, 'Totem Slam'),
+  f('breezeling', 'Breezeling/Galegeist/Tempestwraith', 'Spirit', 'Storm', 56, 66, 52, 70, 'Gale Wail'),
+  f('helmlet', 'Helmlet/Hollowhelm/Phantarmor', 'Spirit', 'Metal', 66, 66, 68, 44, 'Hollow Guard'),
+  f('bonelet', 'Bonelet/Bonedrake/Ossiwyrm', 'Spirit', 'Dragon', 62, 72, 58, 52, 'Bone Breath'),
+  // Light
+  f('sunpup', 'Sunpup/Sunhound/Solarion', 'Light', 'Fire', 62, 70, 52, 56, 'Sunburst Pounce'),
+  f('shinefin', 'Shinefin/Glintray/Radiaray', 'Light', 'Water', 60, 62, 56, 62, 'Glint Ray'),
+  f('sunsprout', 'Sunsprout/Sunbloom/Heliotree', 'Light', 'Nature', 66, 58, 64, 52, 'Sunpetal Storm'),
+  f('quartzlet', 'Quartzlet/Crystalback/Geodeus', 'Light', 'Earth', 70, 60, 70, 40, 'Crystal Shards'),
+  f('twinklet', 'Twinklet/Starfrost/Northstar', 'Light', 'Frost', 58, 64, 54, 64, 'Starfall Crash'),
+  f('shinepup', 'Shinepup/Brightmane/Luminaire', 'Light', 'Light', 62, 66, 56, 56, 'Bright Fang'),
+  // Dragon
+  f('vinelet', 'Vinelet/Vinewyrm/Verdragon', 'Dragon', 'Nature', 66, 66, 60, 52, 'Vine Coil'),
+  f('sparkhatch', 'Sparkhatch/Stormdrake/Thunderwyrm', 'Dragon', 'Storm', 60, 72, 54, 58, 'Thunder Roar'),
+  f('rimehatch', 'Rimehatch/Rimedrake/Hoarwyrm', 'Dragon', 'Frost', 64, 70, 60, 50, 'Rime Breath'),
+  f('hornling', 'Hornling/Hornwyrm/Dracohorn', 'Dragon', 'Dragon', 66, 72, 60, 46, 'Horn Roar'),
+  f('glidelet', 'Glidelet/Skywyrm/Aetherdrake', 'Dragon', 'Dragon', 60, 68, 54, 62, 'Sky Dive'),
+  f('jadelet', 'Jadelet/Jadewyrm/Celestiwyrm', 'Dragon', 'Spirit', 64, 66, 60, 54, 'Jade Soul'),
+  // Frost
+  f('thawlet', 'Thawlet/Frostflame/Cryoblaze', 'Frost', 'Fire', 60, 70, 54, 56, 'Frostflame Arc'),
+  f('snowlet', 'Snowlet/Snowl/Blizzowl', 'Frost', 'Frost', 58, 64, 54, 64, 'Snow Talon'),
+  f('yetling', 'Yetling/Yetibrute/Yetimaul', 'Frost', 'Frost', 72, 70, 58, 40, 'Yeti Slam'),
+  f('icemite', 'Icemite/Frostspinner/Rimewidow', 'Frost', 'Toxic', 58, 66, 56, 60, 'Frost Web'),
+  f('shardlet', 'Shardlet/Shardwyrm/Crystadrake', 'Frost', 'Dragon', 62, 68, 58, 52, 'Ice Shards'),
+  // Fire
+  f('sallet', 'Sallet/Salamandra/Pyrosaur', 'Fire', 'Fire', 60, 68, 52, 56, 'Salamander Dash'),
+  f('emberchick', 'Emberchick/Flamehawk/Pyrohawk', 'Fire', 'Fire', 56, 68, 50, 62, 'Flame Peck'),
+  f('smithlet', 'Smithlet/Anvilbrute/Forgemaster', 'Fire', 'Metal', 66, 70, 62, 38, 'Anvil Hammer'),
+  f('brimlet', 'Brimlet/Sulfurion/Brimstone', 'Fire', 'Toxic', 60, 66, 54, 56, 'Sulfur Burst'),
+  f('torchlet', 'Torchlet/Brandknight/Pyreknight', 'Fire', 'Light', 62, 68, 56, 50, 'Torch Blade'),
+  // Water
+  f('squalllet', 'Squalllet/Squallfin/Tempestide', 'Water', 'Storm', 60, 66, 54, 60, 'Squall Surge'),
+  f('ottlet', 'Ottlet/Streamotter/Rivermarch', 'Water', 'Water', 62, 64, 56, 58, 'Torrent Dive'),
+  f('pinchlet', 'Pinchlet/Crabber/Kingcrab', 'Water', 'Water', 68, 66, 66, 40, 'Pincer Crush'),
+  f('bubblit', 'Bubblit/Foamshade/Undertow', 'Water', 'Spirit', 60, 62, 56, 62, 'Undertow Drain'),
+  f('divebot', 'Divebot/Hydrohull/Depthmech', 'Water', 'Metal', 64, 66, 64, 46, 'Depth Cannon'),
+  // Nature
+  f('acornet', 'Acornet/Acornbrute/Oakenfist', 'Nature', 'Nature', 70, 64, 64, 42, 'Acorn Barrage'),
+  f('larvlet', 'Larvlet/Cocoonix/Lunamoth', 'Nature', 'Nature', 60, 64, 54, 62, 'Luna Dust'),
+  f('fernling', 'Fernling/Ferndrake/Junglewyrm', 'Nature', 'Dragon', 64, 68, 58, 50, 'Jungle Fang'),
+  f('gnarlet', 'Gnarlet/Gnarlwood/Witchbark', 'Nature', 'Shadow', 66, 64, 64, 46, 'Hex Bramble'),
+  // Storm
+  f('cloudlet', 'Cloudlet/Nimbuster/Cumulord', 'Storm', 'Storm', 62, 62, 56, 60, 'Cloud Burst'),
+  f('ramlet', 'Ramlet/Thunderram/Stormhorn', 'Storm', 'Storm', 64, 68, 56, 52, 'Ram Crash'),
+  f('zapeel', 'Zapeel/Volteel/Thundereel', 'Storm', 'Water', 58, 68, 52, 62, 'Volt Coil'),
+  f('waspark', 'Waspark/Stingvolt/Hornetron', 'Storm', 'Toxic', 56, 68, 50, 66, 'Volt Sting'),
+  // Earth
+  f('dillokin', 'Dillokin/Armadoll/Bouldillo', 'Earth', 'Earth', 70, 60, 72, 38, 'Roll Crash'),
+  f('rhinlet', 'Rhinlet/Hornboulder/Rhinocrag', 'Earth', 'Earth', 70, 70, 64, 36, 'Rhino Slam'),
+  f('stalaglet', 'Stalaglet/Stalagloom/Cavernlord', 'Earth', 'Shadow', 70, 64, 66, 40, 'Gloom Quake'),
 ];
 
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((s) => [s.id, s]));

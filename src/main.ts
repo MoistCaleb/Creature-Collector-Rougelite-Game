@@ -5,8 +5,11 @@ import { accountAtBoot } from './ui/accountUi';
 import { startFriends } from './ui/friendsUi';
 import { startRunClock } from './logic/runClock';
 import { state } from './state';
+import { flushBugReports, watchErrors } from './net/bugReport';
 
 setupPwa();
+// Note errors from the start, so a bug report can say what broke.
+watchErrors();
 
 // Load the save (cloud copy when available) before any game state is read.
 const el = document.getElementById('game');
@@ -30,4 +33,6 @@ initStorage()
     );
     // Friends: show as online, and hear about invites.
     void startFriends();
+    // Bug reports that couldn't be sent last time.
+    setTimeout(() => void flushBugReports(), 8000);
   });

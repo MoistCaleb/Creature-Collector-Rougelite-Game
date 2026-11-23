@@ -6,6 +6,7 @@ import type { Element } from '../data/types';
 import { openElementChart } from './elementChart';
 import { openHowToPlay } from './howto';
 import { openSettings } from './settings';
+import { openBoonList } from './boonPick';
 
 /**
  * The in-run menu (map and battle): resume, settings, the element chart (highlighting `focus`, e.g.
@@ -22,6 +23,7 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
       { label: 'Settings', sub: 'Sound, speed, tips', glyph: 'gear' },
       { label: 'Element chart', sub: focus.length ? 'Your foe’s elements are highlighted' : 'What beats what', glyph: 'sparkle' },
       { label: 'How to play', glyph: 'book' },
+      { label: `Boons (${state.run?.boons?.held.length ?? 0})`, sub: 'What your boons and curses do', glyph: 'sparkle', disabled: !state.run?.boons?.held.length },
       { label: 'Exit to title', sub: state.run?.race ? 'Leaves the online game (your own saved run is kept)' : 'Your run is saved', color: 0x2f4a6b, glyph: 'back' },
       { label: 'Abandon run', sub: 'End this run for good', color: 0x5a2a2a, glyph: 'skull' },
     ],
@@ -30,7 +32,8 @@ export function openGameMenu(scene: Phaser.Scene, onResume: () => void = () => {
       if (i === 1) return void openSettings(scene, back);
       if (i === 2) return void openElementChart(scene, focus, back);
       if (i === 3) return void openHowToPlay(scene, back);
-      if (i === 4) {
+      if (i === 4) return void openBoonList(scene, state.run!, back);
+      if (i === 5) {
         persist();
         state.run = null;
         return scene.scene.start('Title', {});

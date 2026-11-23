@@ -1,18 +1,26 @@
+import { SPECIES_BY_ID } from '../data/species';
 import Phaser from 'phaser';
+import { workshopProgress } from '../logic/workshop';
+import { huntRewardLines, nextHuntMilestone } from '../logic/huntMilestones';
+import { camp, payRunBond, payRunEmbers } from '../logic/camp';
+import { BOONS } from '../data/boons';
 import { takeNewMilestones } from '../logic/gilded';
 import { takeNewTitles } from '../logic/titles';
 import { unlocksOf } from '../logic/cosmetics';
 import { finishRunClock, formatDuration } from '../logic/runClock';
-import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
+import { promoteBench, recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
+import { allCreatures, clearSavedRun, dailyRecord, floorsOf, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
 import { persist, state } from '../state';
 import { type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
 import { MOVES } from '../data/moves';
 import { MAP_BY_ID } from '../data/maps';
+import { shareGhost } from '../net/friends';
+import { lastWinTeam } from '../logic/surprises';
 import { openPicker } from '../ui/picker';
 import { playMusic, sfx } from '../ui/sound';
+import { calm } from '../ui/motion';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
 
@@ -36,6 +44,13 @@ export class EndScene extends Phaser.Scene {
     // others still climbing until the final duel or the bracket.
     const r = state.run;
     if (r?.race) {
+      // A loss with Hexlings still on the bench isn't the end of the climb: they step up and the
+      // run goes on. (The battle screen already does this; this catches any other way here.)
+      if (!data.won && !r.race.done && promoteBench(r)) {
+        persist();
+        this.scene.start('Map', { banner: 'Your team fell, but your bench stepped up. The climb goes on!' });
+        return;
+      }
       r.race.done ??= { won: data.won, byDefault: data.byDefault };
       if (data.won) sfx.victory();
       else sfx.defeat();
@@ -69,6 +84,8 @@ export class EndScene extends Phaser.Scene {
       } else {
         this.newBest = finishRunClock(state.meta, run, data.won);
         recordRun(run, data.won);
+        // A win: your friends may meet this team as your ghost.
+        if (data.won && !run.daily && !run.weekly && !run.quick) void shareGhost(lastWinTeam(state.meta)).catch(() => {});
       }
     }
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>
@@ -89,7 +106,9 @@ export class EndScene extends Phaser.Scene {
             : `You reached the boss. Your team now faces ${race.opponent}!`
         : `Your team fell in the ${run.map.biome} lands before reaching the boss.`
       : data.won
-        ? `${run.map.biome} lands conquered. All three floors cleared.`
+        ? run.quick
+          ? `${run.map.biome} lands conquered. Both floors of a quick run cleared.`
+          : `${run.map.biome} lands conquered. All three floors cleared.`
         : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`;
     text(this, W / 2, LANDSCAPE ? 28 : 46, title, race ? 34 : 40, data.won ? '#ffc94d' : '#e0524a', { fontStyle: 'bold' }).setOrigin(0.5);
     text(
@@ -133,7 +152,7 @@ export class EndScene extends Phaser.Scene {
     const totalDamage = [...allCreatures(run), ...(run.log.fallen ?? [])].reduce((n, c) => n + (c.dealt ?? 0), 0);
     const stats: [string, string][] = [
       ['Battles won', String(run.log.battlesWon)],
-      hunt ? ['Hunt floor', String(hunt.depth)] : race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? 3 : run.floor)],
+      hunt ? ['Hunt floor', String(hunt.depth)] : race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? floorsOf(run) : run.floor)],
       ...((hunt || race
         ? [
             ['Caught', String(run.log.caught)],
@@ -182,6 +201,8 @@ export class EndScene extends Phaser.Scene {
     roster('Fallen', run.log.fallen ?? [], true);
 
     const extra: string[] = [];
+    let emberLine: ((n: number) => string) | null = null;
+    let emberTotal = 0;
     if (run.daily) {
       // Record once per run (the screen lays itself out again when the phone turns).
       const best = recordedRuns.has(run) ? false : recordDaily(run, data.won);
@@ -195,6 +216,11 @@ export class EndScene extends Phaser.Scene {
       const rec = weeklyRecord(state.meta, run.weekly);
       extra.push(`Weekly ${TWISTS[run.twist].name}: ${best ? 'new best!' : `best this week: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
     }
+    // Quick runs: their own record (the main W/L, wins and unlocks are untouched).
+    if (run.quick && !hunt) {
+      const q = state.meta.quick ?? { wins: 0, losses: 0, streak: 0, best: 0 };
+      extra.push(`Quick runs: ${q.wins}–${q.losses}${q.streak > 1 ? ` · ${q.streak} wins in a row` : ''}`);
+    }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
     const earned = state.meta.newAchievements.splice(0);
     if (earned.length) {
@@ -206,21 +232,81 @@ export class EndScene extends Phaser.Scene {
       saveMeta(state.meta);
       extra.push(`Gilded milestone: ${milestones.map((m) => m.title ?? `${m.count} Gilded`).join(', ')} (new outfit pieces)`);
     }
+    // Embers (2.0): every run pays some, win or lose (races and dailies too).
+    if (!race || !data.won) {
+      const em = payRunEmbers(state.meta, run, data.won);
+      saveMeta(state.meta);
+      const have = camp(state.meta).embers;
+      // The next goal: the cheapest Workshop upgrade still to build.
+      const next = workshopProgress(state.meta).next;
+      const goal = next ? (have >= next.cost ? ` · ready to build ${next.name} in the Workshop` : ` · ${have}/${next.cost} to ${next.name}`) : '';
+      if (em.total) {
+        // The tally ticks up from 0 once the screen is in (see below).
+        emberLine = (n) => `Embers +${n} (${em.lines.join(', ')}) · ${have - em.total + n} at camp${n === em.total ? goal : ''}`;
+        emberTotal = em.total;
+        extra.unshift(emberLine(em.total));
+      }
+    }
+    // Camp bond (2.0): every run builds it with the Hexlings who came along (races and dailies too).
+    const bond = payRunBond(state.meta, run, data.won);
+    if (bond.length) {
+      saveMeta(state.meta);
+      const shown = bond.slice(0, 3).map((b) => `${SPECIES_BY_ID[b.speciesId].names[0]} +${b.points}${b.after > b.before ? ` (new ${'♥'.repeat(b.after)})` : ''}`);
+      const more = bond.length > 3 ? ` +${bond.length - 3} more` : '';
+      extra.push(`Camp bond: ${shown.join(', ')}${more}`);
+      if (bond.some((b) => b.after > b.before)) this.time.delayedCall(2600, () => sfx.bondHeart());
+    }
+    // Gilded Hunt (2.0): the next milestone to dive for.
+    if (hunt) {
+      const nm = nextHuntMilestone(state.meta);
+      extra.push(`Next Gilded Hunt milestone: floor ${nm.floor} (${huntRewardLines(nm).join(', ')})`);
+    }
+    // The boons this run was built on.
+    const held = run.boons?.held ?? [];
+    if (held.length) extra.unshift(`Boons: ${held.map((id) => `${BOONS[id].rarity === 'curse' ? '☠ ' : BOONS[id].rarity === 'mythic' ? '✦ ' : ''}${BOONS[id].name}`).join(', ')}`);
     const titles = takeNewTitles(state.meta);
     if (titles.length || milestones.length) saveMeta(state.meta);
     if (titles.length) {
       const u = unlocksOf(titles);
       extra.push(`New title${titles.length > 1 ? 's' : ''}: ${titles.map((t) => t.name).join(', ')}${u ? ` · unlocks ${u}` : ''} (Edit trainer)`);
     }
-    const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race;
+    const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race && !run.quick;
     if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
-      text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
+      const block = text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
+      // The ember tally (2.0): counts up with a crackle, then lands with a ping (instant with Reduce motion).
+      const line = emberLine;
+      const at = line ? extra.indexOf(line(emberTotal)) : -1;
+      if (line && at >= 0 && !calm()) {
+        const show = (n: number) => block.setText(extra.map((l, i) => (i === at ? line(n) : l)).join('\n'));
+        show(0);
+        const counter = { n: 0 };
+        let last = 0;
+        this.tweens.add({
+          targets: counter,
+          n: emberTotal,
+          delay: 900,
+          duration: Math.min(1800, 600 + emberTotal * 30),
+          ease: 'Cubic.easeOut',
+          onUpdate: () => {
+            const n = Math.round(counter.n);
+            if (n === last) return;
+            // A tick every few embers, so big tallies don't buzz.
+            if (Math.floor(n / Math.max(1, Math.ceil(emberTotal / 16))) !== Math.floor(last / Math.max(1, Math.ceil(emberTotal / 16)))) sfx.emberTick(Math.floor((n / emberTotal) * 16));
+            last = n;
+            show(n);
+          },
+          onComplete: () => {
+            show(emberTotal);
+            sfx.emberDone();
+          },
+        });
+      }
     }
 
     // Keep a good creature: save its form and moves for the team builder.
     const alive = allCreatures(run).filter((c) => c.hp > 0);
     // Won a normal run: keep climbing as a Shiny Hunt.
-    const canHunt = data.won && !run.daily && !run.weekly && !hunt;
+    const canHunt = data.won && !run.daily && !run.weekly && !hunt && !run.quick;
     if (canHunt) {
       const hb = button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 296 : 630, 320, 52, 'Gilded Hunt', () => this.confirmHunt(run), {
         fontSize: 20,
@@ -232,7 +318,7 @@ export class EndScene extends Phaser.Scene {
       this.tweens.add({ targets: hb, scale: 1.04, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     }
     if (alive.length) {
-      const label = `${hunt ? `Hunt ${hunt.depth}` : data.won ? 'Win' : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
+      const label = `${hunt ? `Hunt ${hunt.depth}` : data.won ? (run.quick ? 'Quick win' : 'Win') : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
       button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 352 : 692, 320, 44, 'Save a loadout', () => this.saveLoadouts(alive, label), {
         fontSize: 16,
         color: 0x2f4a6b,
@@ -240,10 +326,23 @@ export class EndScene extends Phaser.Scene {
         sub: 'Keep its form and moves for the team builder',
       });
     }
-    button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 410 : 756, 260, 52, 'Back to camp', () => {
+    // Run again (2.0): straight back to the starter pick on the same map (normal runs only).
+    const again = !run.race && !run.daily && !run.weekly && !hunt;
+    const bx = LANDSCAPE ? cx0 + colW / 2 : W / 2;
+    const by = LANDSCAPE ? 410 : 756;
+    const bw = again ? 150 : 260;
+    button(this, again ? bx - 80 : bx, by, bw, 52, 'Back to camp', () => {
       state.run = null;
       this.scene.start('Camp', {});
-    }, { color: 0x3b6d4a, fontSize: 20 });
+    }, { color: 0x3b6d4a, fontSize: again ? 16 : 20 });
+    if (again) {
+      const mapId = run.mapId;
+      const quick = !!run.quick;
+      button(this, bx + 80, by, bw, 52, 'Run again', () => {
+        state.run = null;
+        this.scene.start('Starter', { mapId, quick });
+      }, { color: 0x5b3c8a, fontSize: 16, glyph: 'play' });
+    }
   }
 
   /** Explain Shiny Hunting, then start it: the run continues on endless floors. */

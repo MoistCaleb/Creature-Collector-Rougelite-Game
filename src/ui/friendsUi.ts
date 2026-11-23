@@ -4,7 +4,8 @@ import { myBuddy } from '../logic/camp';
 import { saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
 import { GAME_MODES } from '../net/duel';
-import { claimUsername, dismissInvite, friendsAvailable, listenForInvites, loadProfile, shareLook, startPresence, stopListening, type Invite } from '../net/friends';
+import { claimUsername, dismissInvite, friendsAvailable, listenForInvites, listFriends, loadProfile, shareGhost, shareLook, startPresence, stopListening, type Invite } from '../net/friends';
+import { lastWinTeam } from '../logic/surprises';
 import { postMyScores } from '../net/leaderboard';
 import { royale, royaleQuit } from '../net/royale';
 import { leaveDuel } from '../net/runtime';
@@ -46,6 +47,9 @@ export async function startFriends() {
       }
     }
     void shareLook(myLook(state.meta), myTitle(state.meta) ?? null, myBuddy(state.meta)).catch(() => {});
+    // Your last winning team, for your friends' ghost encounters; and theirs, for yours.
+    void shareGhost(lastWinTeam(state.meta)).catch(() => {});
+    void listFriends().catch(() => {});
     startPresence(activityNow);
     listenForInvites(showInvite);
     // Leaderboards: send your numbers now and whenever they change (checked every minute).

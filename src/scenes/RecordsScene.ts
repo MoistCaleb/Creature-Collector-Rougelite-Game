@@ -6,6 +6,10 @@ import { formatDuration } from '../logic/runClock';
 import { gildedCount } from '../logic/gilded';
 import { earnedTitles, TITLES } from '../logic/titles';
 import { MAP_BY_ID } from '../data/maps';
+import { BOON_COLOR } from '../data/boons';
+import { ELEMENTS } from '../data/types';
+import { WORKSHOP } from '../data/workshop';
+import { boonsTaken, COLLECTABLE, eldersBeaten, favouriteTrait, maxBondLines, MYTHICS, mythicsFound, surprisesFound, topBoons, workshopOwned } from '../logic/feats';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { mostUsed, type RunRecord } from '../logic/run';
 import { state } from '../state';
@@ -15,6 +19,18 @@ import { shinySparkle } from '../ui/shiny';
 import { background, button, clipList, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
 const TOP = 72;
+
+/** Keeps a line of text within `max` pixels: shrinks it a little first, then trims it with an ellipsis. */
+function fit(t: Phaser.GameObjects.Text, max: number, minScale = 0.8): Phaser.GameObjects.Text {
+  if (max <= 0 || t.width <= max) return t;
+  const scale = Math.max(minScale, max / t.width);
+  t.setScale(scale);
+  if (t.width * scale <= max) return t;
+  const full = t.text;
+  let n = full.length;
+  while (n > 1 && t.width * scale > max) t.setText(full.slice(0, --n).trimEnd() + '…');
+  return t;
+}
 
 /** Lifetime records: wins and streaks, your most-used Hexling, lifetime counts and recent runs. */
 export class RecordsScene extends Phaser.Scene {
@@ -55,14 +71,18 @@ export class RecordsScene extends Phaser.Scene {
       ['Online W/L', `${meta.onlineWins ?? 0}–${meta.onlineLosses ?? 0}`],
       ['Online streak', String(meta.onlineStreak ?? 0)],
       ['Best online streak', String(meta.bestOnlineStreak ?? 0)],
+      // Quick runs (2.0): their own record.
+      ['Quick run W/L', `${meta.quick?.wins ?? 0}–${meta.quick?.losses ?? 0}`],
+      ['Quick streak', String(meta.quick?.streak ?? 0)],
+      ['Fastest quick win', meta.quick?.fastest ? formatDuration(meta.quick.fastest) : '—'],
     ];
     const tw = (colW - 8) / 3;
     tiles.forEach(([label, value], i) => {
       const x = x0 + (i % 3) * (tw + 4);
       const yy = y + Math.floor(i / 3) * 62;
       list.add(this.add.rectangle(x, yy, tw, 56, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
-      list.add(text(this, x + tw / 2, yy + 22, value, 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5));
-      list.add(text(this, x + tw / 2, yy + 44, label, 11, COLORS.textDim).setOrigin(0.5));
+      list.add(fit(text(this, x + tw / 2, yy + 22, value, 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5), tw - 10, 0.6));
+      list.add(fit(text(this, x + tw / 2, yy + 44, label, 11, COLORS.textDim).setOrigin(0.5), tw - 8));
     });
     y += Math.ceil(tiles.length / 3) * 62 + 8;
 
@@ -76,6 +96,32 @@ export class RecordsScene extends Phaser.Scene {
       list.add(text(this, x0 + 84, y + 30, sp.names[0], 18, COLORS.text, { fontStyle: 'bold' }));
       list.add(text(this, x0 + 84, y + 52, `On your team for ${fav.runs} run${fav.runs === 1 ? '' : 's'}`, 12, COLORS.textDim));
       y += 86;
+    }
+
+    // Favourite trait and the boons you take most (2.0).
+    const ft = favouriteTrait(meta);
+    const boons = topBoons(meta, 5);
+    if (ft || boons.length) heading(x0, 'Boons and traits');
+    if (ft) {
+      list.add(this.add.rectangle(x0, y, colW, 64, COLORS.panel).setOrigin(0).setStrokeStyle(2, 0x5cc2ff, 0.7));
+      list.add(text(this, x0 + 12, y + 10, 'Favourite trait', 12, '#5cc2ff', { fontStyle: 'bold' }));
+      list.add(text(this, x0 + colW - 12, y + 10, `${ft.runs} run${ft.runs === 1 ? '' : 's'}`, 12, COLORS.textDim).setOrigin(1, 0));
+      list.add(fit(text(this, x0 + 12, y + 26, ft.trait.name, 16, COLORS.text, { fontStyle: 'bold' }), colW - 24));
+      list.add(fit(text(this, x0 + 12, y + 46, ft.trait.text, 11, COLORS.textDim), colW - 24, 0.75));
+      y += 72;
+    }
+    if (boons.length) {
+      list.add(text(this, x0 + 2, y, `Boons you take most · ${boonsTaken(meta)} taken in all`, 12, COLORS.textDim));
+      y += 20;
+      for (const { boon, picks } of boons) {
+        list.add(this.add.rectangle(x0, y, colW, 30, COLORS.panel).setOrigin(0));
+        list.add(this.add.rectangle(x0, y, 5, 30, BOON_COLOR[boon.rarity]).setOrigin(0));
+        const mark = boon.rarity === 'curse' ? '☠ ' : boon.rarity === 'mythic' ? '✦ ' : '';
+        list.add(fit(text(this, x0 + 14, y + 15, `${mark}${boon.name}`, 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0, 0.5), colW - 80));
+        list.add(text(this, x0 + colW - 10, y + 15, `×${picks}`, 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5));
+        y += 34;
+      }
+      y += 6;
     }
 
     // Lifetime counts, two columns.
@@ -107,6 +153,13 @@ export class RecordsScene extends Phaser.Scene {
       ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
       ['Closest camp bond', closest ? `${SPECIES_BY_ID[closest.speciesId].names[0]} ${'♥'.repeat(campHearts(meta, closest.speciesId))}` : '—'],
       ['Camp challenges', String(meta.camp?.done ?? 0)],
+      // 2.0's long-term feats (also leaderboards).
+      ['Workshop upgrades', `${workshopOwned(meta)}/${WORKSHOP.length}`],
+      ['Lines at 5 hearts', String(maxBondLines(meta))],
+      ['Rare surprises', `${surprisesFound(meta)}/${COLLECTABLE.length}`],
+      ['Elders beaten', `${eldersBeaten(meta)}/${ELEMENTS.length}`],
+      ['Mythic boons found', `${mythicsFound(meta)}/${MYTHICS.length}`],
+      ['Boons taken', String(boonsTaken(meta))],
       ['Fastest win', meta.fastestWin ? formatDuration(meta.fastestWin) : '—'],
       ['Hexlidex rewards', String(meta.dexClaimed?.length ?? 0)],
       ['Dailies played', String(Object.values(meta.dailies ?? {}).filter((r) => r.attempts > 0).length)],
@@ -117,8 +170,17 @@ export class RecordsScene extends Phaser.Scene {
       const x = x0 + (i % 2) * (hw + 4);
       const yy = y + Math.floor(i / 2) * 38;
       list.add(this.add.rectangle(x, yy, hw, 34, i % 4 < 2 ? COLORS.panelLight : COLORS.panel).setOrigin(0));
-      list.add(text(this, x + 10, yy + 17, label, 12, COLORS.textDim).setOrigin(0, 0.5));
-      list.add(text(this, x + hw - 10, yy + 17, value, 14, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5));
+      const l = text(this, x + 10, yy + 17, label, 12, COLORS.textDim).setOrigin(0, 0.5);
+      const v = text(this, x + hw - 10, yy + 17, value, 14, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5);
+      // Long pairs (Deepest Gilded Hunt, Closest camp bond…) stack instead of running into each other:
+      // the label along the top, the value under it on the right.
+      if (l.width + v.width + 28 > hw) {
+        l.setFontSize(11).setY(yy + 9);
+        v.setFontSize(13).setY(yy + 24);
+        fit(l, hw - 20);
+        fit(v, hw - 20, 0.85);
+      }
+      list.add([l, v]);
     });
     y += Math.ceil(counts.length / 2) * 38 + 10;
     let bottom = y;
@@ -155,13 +217,10 @@ export class RecordsScene extends Phaser.Scene {
     const map = MAP_BY_ID[r.mapId]?.name ?? r.mapId;
     list.add(text(this, x + 16, y + 8, r.won ? 'WON' : `Floor ${r.floor}`, 15, r.won ? '#8fe08a' : '#ff8a7a', { fontStyle: 'bold' }));
     const date = new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    list.add(text(this, x + 16, y + 28, `${map}${r.heat ? ` · Heat ${r.heat}` : ''}${r.daily ? ' · Daily' : ''}${r.weekly ? ' · Weekly' : ''}`, 12, COLORS.text));
-    list.add(
-      text(this, x + 16, y + 46, `${date} · ${r.battlesWon} wins · ${r.caught} caught${r.endedBy ? ` · ${r.endedBy}` : ''}`, 11, COLORS.textDim, {
-        wordWrap: { width: w - 24 - Math.min(4, r.team.length) * 40 },
-        maxLines: 1,
-      }),
-    );
+    // Text stops short of the team sprites on the right.
+    const room = w - 24 - Math.min(4, r.team.length) * 40;
+    list.add(fit(text(this, x + 16, y + 28, `${map}${r.heat ? ` · Heat ${r.heat}` : ''}${r.daily ? ' · Daily' : ''}${r.weekly ? ' · Weekly' : ''}`, 12, COLORS.text), room));
+    list.add(fit(text(this, x + 16, y + 46, `${date} · ${r.battlesWon} wins · ${r.caught} caught${r.endedBy ? ` · ${r.endedBy}` : ''}`, 11, COLORS.textDim), room, 0.9));
     // The team that finished the run (up to 4 shown).
     r.team.slice(0, 4).forEach((c, i) => {
       const sx = x + w - 24 - i * 40;

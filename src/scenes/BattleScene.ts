@@ -1,4 +1,9 @@
-import { GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
+import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../logic/surprises';
+import { BOON_COLOR, BOONS } from '../data/boons';
+import { floorCurse, hasBoon } from '../logic/boons';
+import { traitLine } from '../ui/traitText';
+import { TRAITS, type TraitId } from '../data/traits';
+import { ELDER_TAUNTS, GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
 import { titleBadge } from '../ui/titleBadge';
@@ -12,14 +17,14 @@ import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura }
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
-import { bossLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
+import { bossLook, cleanLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
 import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
 import { arenaBackdrop, arenaPad, type Crowd } from '../ui/arena';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
 import { accText, attackEl, MAX_STAGE, maxUses, moveColor, MOVES, moveSummary, TEAM_FX, WEATHER, type TeamFxId } from '../data/moves';
-import { BOSSES, guardianRules, trainerName } from '../data/trainers';
+import { BOSSES, guardianRules, trainerName, TRAINER_NAMES } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
 import { emergeFrom, recallToHex, releaseFromHex } from '../ui/entrance';
@@ -36,10 +41,10 @@ import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, stageMult, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { openPanel } from '../ui/panel';
 import { Rng } from '../logic/rng';
-import type { DuelController, Next } from '../net/duel';
+import { snapshot, type DuelController, type Next } from '../net/duel';
 import { session } from '../net/session';
 import { afterSeriesGame, duel, endRace, leaveDuel, recordSeriesGame, sendHello } from '../net/runtime';
-import { countRoyaleLoss, reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
+import { climbEnd, climbStart, climbStep, countRoyaleLoss, reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
 import {
   canEvolve,
   getFloorCeiling,
@@ -79,6 +84,7 @@ import {
   rollHeld,
   stash,
   potionHeal,
+  potionsBlocked,
   notePotion,
   needsPotion,
   earnCoins,
@@ -103,12 +109,11 @@ import {
   noteShiny,
   GLASS_MULT,
   placeRng,
-  saveMeta,
-} from '../logic/run';
+  saveMeta, teamTrait, floorsOf } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
 
 interface SidePanel {
@@ -158,7 +163,7 @@ export interface BattleMatch {
   /** Their trainer title (online), shown in the cut-in. */
   opponentTitle?: string;
   /** Watching someone else's bracket match: the "near side" trainer, shown where you'd be. */
-  spectate?: { player: string; playerLook?: TrainerLook };
+  spectate?: { player: string; playerLook?: TrainerLook; climb?: boolean; wild?: boolean };
 }
 
 /** Where everything goes on the battle screen: upright (450x800) or wide (800x450). */
@@ -255,6 +260,11 @@ export class BattleScene extends Phaser.Scene {
     // Only this fight counts (kept with a run's saved battle, so a reload remembers them).
     this.foeSeen = new Set(state.run?.activeBattle?.seenMoves ?? []);
     this.panelPress = null;
+    // Scene instances are reused: a second spectated match (or duel) must not inherit the last one's
+    // "already wrapped up" flag, queued next step or fast-forward.
+    this.watchEnded = false;
+    this.duelNext = null;
+    this.fast = false;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
     const run = state.run!;
@@ -273,13 +283,23 @@ export class BattleScene extends Phaser.Scene {
         run.activeBattle.rival = true;
       } else if (this.kind === 'elite') {
         const r = placeRng(run, 'trainer');
-        run.activeBattle.trainer = trainerName((xs) => r.pick(xs));
+        const fsx = floorSurprise(run);
+        // Surprises: an Echo of yourself, or a Gilded trainer.
+        const enc = fsx.encNode === run.currentId ? fsx.enc : undefined;
+        const dojo = dojoOn(run) ? run.surprises!.dojo!.wins : -1;
+        if (enc === 'ghost' && fsx.ghost) run.activeBattle.ghost = true;
+        run.activeBattle.trainer =
+          dojo >= 0
+            ? `${dojo === DOJO_ROUNDS - 1 ? 'Dojo Master' : 'Dojo student'} ${placeRng(run, `trainer:dojo${dojo}`).pick(TRAINER_NAMES)}`
+            : enc === 'ghost' && fsx.ghost ? `${fsx.ghost.name}'s ghost` : enc === 'echo' ? 'Your Echo' : enc === 'gildedtrainer' ? `Gilded ${trainerName((xs) => r.pick(xs))}` : trainerName((xs) => r.pick(xs));
       }
       persist();
     }
     const boss = this.kind === 'boss' ? BOSSES[run.map.biome] : null;
     // Its own rule, plus extra ones at Heat 4+ (the same ones every time this floor is loaded).
-    const rules = boss ? guardianRules(boss, run.heat ?? 0, run.seed, run.floor) : [];
+    // An Elder guardian (a surprise) brings an extra rule, as at Heat 4.
+    const elder = !!boss && elderHere(run);
+    const rules = boss ? guardianRules(boss, Math.max(run.heat ?? 0, elder ? 4 : 0), run.seed, run.floor) : [];
     const trainer = run.activeBattle.trainer ?? 'A trainer';
     this.battle = new Battle(run.team, this.enemies, run.rng, {
       playerDamageMult: (run.passive === 'drill' ? 1.1 : 1) * (run.twist === 'glass' ? GLASS_MULT : 1),
@@ -296,11 +316,23 @@ export class BattleScene extends Phaser.Scene {
       playerStatusMult: run.passive === 'afflicter' ? 2 : 1,
       playerStatusImmune: run.passive === 'tempered' ? ['burn', 'poison'] : [],
       reserve: run.bench,
+      // Boons (2.0): yours apply on your side.
+      boons: { player: run.boons?.held ?? [], enemy: [] },
+      coins: run.coins,
+      night: floorSurprise(run).floor === 'eclipse',
+      weather: stormFrontWeather(run),
+      // Second Wind: once per floor.
+      secondWind: () => {
+        const rb = run.boons;
+        if (!rb || rb.windFloor === run.floor) return false;
+        rb.windFloor = run.floor;
+        return true;
+      },
       // Trainers and guardians switch and use potions (guardians carry more).
       enemyTactics:
         this.kind === 'battle'
           ? undefined
-          : { potions: this.kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss ? boss.name : (run.activeBattle.trainer ?? 'The trainer') },
+          : { potions: this.kind === 'boss' ? BALANCE.bossPotions : BALANCE.trainerPotions, name: boss ? `${elder ? 'Elder ' : ''}${boss.name}` : (run.activeBattle.trainer ?? 'The trainer') },
     });
     this.input.on('pointerdown', () => {
       if (this.busy) this.fast = true;
@@ -311,7 +343,9 @@ export class BattleScene extends Phaser.Scene {
     // The stage is picked once per battle and saved, so resuming or rotating keeps it.
     run.activeBattle!.stage ??= pickStage(run.map.biome);
     this.drawField(run.map.biome, run.activeBattle!.stage);
-    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? lookForName(trainer) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
+    // A friend's ghost wears their own look.
+    const ghostLook = run.activeBattle.ghost && floorSurprise(run).ghost ? cleanLook(floorSurprise(run).ghost!.look) : null;
+    this.drawTrainers(boss ? bossLook(boss.element) : this.kind === 'elite' ? (ghostLook ?? lookForName(trainer)) : null, boss ? boss.name : this.kind === 'elite' ? trainer : null);
 
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
@@ -382,7 +416,11 @@ export class BattleScene extends Phaser.Scene {
     this.showActions();
     ensureFxTextures(this);
     // The floor's element colours the music; floor 3's guardian has its own song.
-    playMusic(boss ? (run.floor === 2 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', run.map.biome);
+    // 2.0: an Elder has its own song, the Dojo's trainers theirs, and Eclipse battles sound of the night.
+    const eclipse = floorSurprise(run).floor === 'eclipse';
+    if (boss && elderHere(run)) playMusic('elder', run.map.biome);
+    else if (this.kind === 'elite' && dojoOn(run)) playMusic('dojo');
+    else playMusic(boss ? (run.floor === floorsOf(run) - 1 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', eclipse && !boss ? 'Shadow' : run.map.biome);
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     // Resuming: stat stages, who's out, the foe's potions and used-up rule effects come back too.
@@ -390,6 +428,26 @@ export class BattleScene extends Phaser.Scene {
       this.battle.restoreState(run.activeBattle.state);
       this.refreshEnemy();
       this.refreshPlayer();
+    }
+    // Battle royale with 3 or more: others who are out can watch this battle live.
+    if (run.race?.royale) {
+      const foe = boss ? boss.name : this.kind === 'elite' ? trainer : `Wild ${this.enemies.map((e) => creatureName(e)).join(' & ')}`;
+      climbStart(
+        {
+          seed: 1,
+          hostName: myName(state.meta),
+          guestName: foe,
+          hostTeam: [],
+          guestTeam: [],
+          hostCreatures: this.battle.player.map((x) => x.c),
+          guestCreatures: this.battle.enemy.map((x) => x.c),
+          hostBoons: run.boons?.held ?? [],
+        },
+        snapshot(this.battle),
+        this.climbNext(),
+        this.kind === 'battle',
+      );
+      this.events.once('shutdown', () => climbEnd());
     }
     const begin = () => {
       if (boss && !resuming) this.bossEntrance();
@@ -430,7 +488,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.kind === 'battle') this.msg.setText(intro);
         // Trainers, your rival and guardians say something as the fight starts.
         const said = boss
-          ? `${boss.name}: “${pickLine(GUARDIAN_TAUNTS[boss.element], `${run.seed}:${run.floor}:${run.hunt?.depth ?? 0}:taunt`)}”`
+          ? `${elderHere(run) ? 'Elder ' : ''}${boss.name}: “${pickLine((elderHere(run) ? ELDER_TAUNTS : GUARDIAN_TAUNTS)[boss.element], `${run.seed}:${run.floor}:${run.hunt?.depth ?? 0}:taunt`)}”`
           : run.activeBattle?.rival
             ? `${trainer}: “${rivalHello(run)}”`
             : this.kind === 'elite'
@@ -690,7 +748,8 @@ export class BattleScene extends Phaser.Scene {
       arenaPad(this, PLAYER_POS.x, PLAYER_POS.y + 72);
     }
     else this.drawField(el, m.stage);
-    this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
+    // Watching a wild battle on someone's climb: no trainer on the far side.
+    this.drawTrainers(m.spectate?.wild ? null : (m.opponentLook ?? lookForName(m.opponent)), m.spectate?.wild ? null : m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.trainerInFront();
@@ -721,7 +780,8 @@ export class BattleScene extends Phaser.Scene {
     this.busy = true;
     void (async () => {
       // Online duels and Arena battles open with the cut-in too: their trainer, name and Hexlings.
-      {
+      // (Not a wild battle on someone's climb: there's no trainer to show.)
+      if (!m.spectate?.wild) {
         await trainerCutIn(this, {
           name: m.opponent,
           sub: m.spectate ? `Watching · ${m.spectate.player} vs ${m.opponent}` : m.duel ? 'Online duel' : m.sub ?? `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
@@ -755,7 +815,7 @@ export class BattleScene extends Phaser.Scene {
     if (!m.duel && this.busy) return;
     this.cancelAuto();
     const giveUp = m.spectate ? 'Stop watching' : m.duel ? 'Forfeit this battle' : 'Leave the ladder';
-    const sub = m.spectate ? 'Back to the bracket' : m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
+    const sub = m.spectate ? (m.spectate.climb ? 'Back to the map' : 'Back to the bracket') : m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
     openPicker(this, {
       title: 'Menu',
       options: [
@@ -770,7 +830,7 @@ export class BattleScene extends Phaser.Scene {
         if (i === 2) return void openElementChart(this, this.shownEnemy ? creatureTypes(this.shownEnemy) : [], () => this.maybeAuto());
         if (m.spectate) {
           stopWatching();
-          return void this.scene.start('Bracket', {});
+          return void this.scene.start(m.spectate.climb ? 'Map' : 'Bracket', {});
         }
         openPicker(this, {
           title: `${giveUp}?`,
@@ -817,6 +877,8 @@ export class BattleScene extends Phaser.Scene {
     if (this.match!.spectate) {
       this.actions.setVisible(false);
       if (next.phase === 'end') return this.endSpectate(next.won);
+      const sp = this.match!.spectate;
+      if (sp.climb) return this.showWaiting(next.phase === 'choose' ? `${sp.player} is choosing a move.` : `${sp.player} is choosing their next Hexling.`);
       return this.showWaiting(next.phase === 'choose' ? 'Both trainers are choosing their moves.' : 'A trainer is choosing their next Hexling.');
     }
     switch (next.phase) {
@@ -1033,6 +1095,21 @@ export class BattleScene extends Phaser.Scene {
     const held = text(this, x0, y, `${nat}${c.held ? `Held: ${HELD[c.held].name} · ${HELD[c.held].desc}` : 'Held: nothing'}`, 13, c.held || nat ? COLORS.text : COLORS.textDim, { wordWrap: { width: w } });
     r.add(held);
     y += Math.max(24, held.height + 8);
+    // Its trait (both sides: a foe's shows too).
+    const tl = traitLine(c);
+    if (tl) {
+      const tt = text(this, x0, y - 4, tl, 13, '#ffe9a8', { wordWrap: { width: w } });
+      r.add(tt);
+      y += Math.max(22, tt.height + 6);
+    }
+    // Boons that help this Hexling (its elements' ones, and the general ones).
+    const sideBoons = side === 'player' ? (this.match ? (this.battle as unknown as { boonSets?: Record<string, Set<string>> }).boonSets?.player : new Set(state.run?.boons?.held ?? [])) : undefined;
+    const mine = [...(sideBoons ?? [])].filter((id) => BOONS[id] && BOONS[id].rarity !== 'curse' && (!BOONS[id].element || creatureTypes(c).includes(BOONS[id].element!)));
+    if (mine.length) {
+      const bt = text(this, x0, y - 4, `Boons: ${mine.map((id) => BOONS[id].name).join(', ')}`, 12, '#c9b8ff', { wordWrap: { width: w } });
+      r.add(bt);
+      y += Math.max(20, bt.height + 6);
+    }
 
     // Moves (a foe's only once it has used them in this battle).
     const cols = LANDSCAPE ? 2 : 1;
@@ -1055,6 +1132,59 @@ export class BattleScene extends Phaser.Scene {
       if (sub.width > mw) sub.setScale(mw / sub.width);
       r.add([top, sub]);
     });
+  }
+
+  /** Callouts still on screen, per side, so a busy turn stacks them instead of piling them up. */
+  private callouts: Record<'player' | 'enemy', number> = { player: 0, enemy: 0 };
+
+  /** A boon kicked in: a ribbon with its name slides in by that side's panel, with a chime. */
+  private async boonCallout(side: 'player' | 'enemy', id: string, more: boolean) {
+    const b = BOONS[id];
+    if (!b) return;
+    sfx.boonFire();
+    await this.callout(side, `✦ ${b.name}`, BOON_COLOR[b.rarity], 0xffe9a8, more);
+  }
+
+  /** A trait kicked in: a softer ribbon in the Hexling's element colour. */
+  private async traitCallout(side: 'player' | 'enemy', id: TraitId, more: boolean) {
+    const t = TRAITS[id];
+    if (!t) return;
+    const c = side === 'player' ? this.shownPlayer : this.shownEnemy;
+    const el = c ? creatureTypes(c)[0] : 'Fire';
+    sfx.traitFire(ELEMENTS.indexOf(el));
+    await this.callout(side, t.name, Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[el]).darken(20).color, 0xffffff, more);
+  }
+
+  /**
+   * The ribbon itself. Several in a row stack above each other and only the last one waits, so a busy
+   * turn reads at a glance. It follows the battle speed (the scene's time scale) and Reduce motion.
+   */
+  private async callout(side: 'player' | 'enemy', label: string, fill: number, edge: number, more: boolean) {
+    const at = side === 'player' ? L.playerPanel : L.enemyPanel;
+    const slot = this.callouts[side]++;
+    const y = side === 'player' ? at.y - 30 - slot * 30 : at.y + 82 + slot * 30;
+    const c = this.add.container(at.x + 135, y).setDepth(40);
+    const t = text(this, 0, 0, label, 14, '#ffffff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, t.width + 26, 26, fill, 0.95).setStrokeStyle(2, edge);
+    c.add([bg, t]);
+    c.setAlpha(0);
+    if (calm()) this.tweens.add({ targets: c, alpha: 1, duration: 120 });
+    else {
+      c.setScale(0.6);
+      this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' });
+    }
+    this.tweens.add({
+      targets: c,
+      alpha: 0,
+      y: calm() ? y : y - 14,
+      delay: 900,
+      duration: 300,
+      onComplete: () => {
+        c.destroy();
+        this.callouts[side] = Math.max(0, this.callouts[side] - 1);
+      },
+    });
+    await this.wait(more ? 110 : 380);
   }
 
   private makePanel(x: number, y: number, side: 'player' | 'enemy'): SidePanel {
@@ -1153,7 +1283,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.shownPlayer !== p) this.clearAura('player');
     this.shownPlayer = p;
     dex.creature(p, true);
-    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
+    this.playerSprite.setTexture(ensureCreatureTexture(this, p.speciesId, p.stage, colours(p), true)).setAlpha(1).setPosition(PLAYER_POS.x, PLAYER_POS.y);
     this.playerSprite.setScale(5 * SPRITE_FIT);
     this.fillPanel(this.playerPanel, p, hp);
   }
@@ -1295,7 +1425,8 @@ export class BattleScene extends Phaser.Scene {
     if (!m) {
       const run = state.run!;
       return {
-        left: run.potions ?? 0,
+        // Short Fuse (a curse): no potions this run.
+        left: potionsBlocked(run) ? 0 : (run.potions ?? 0),
         heal: potionHeal(run),
         use: () => {
           run.potions = Math.max(0, (run.potions ?? 0) - 1);
@@ -1397,7 +1528,15 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.timeScale = k;
   }
 
+  /** What a spectator of this run battle waits on next (battle royale climbs). */
+  private climbNext(): Next {
+    const o = this.battle.outcome();
+    return o === 'win' ? { phase: 'end', won: true } : o === 'lose' ? { phase: 'end', won: false } : o === 'needSwitch' ? { phase: 'switch' } : { phase: 'choose' };
+  }
+
   private async play(events: BattleEvent[]) {
+    // A run battle in a battle royale: share the turn with anyone watching.
+    if (!this.match && state.run?.race?.royale) climbStep(events, snapshot(this.battle), this.climbNext());
     this.busy = true;
     this.fast = false;
     this.actions.setVisible(false);
@@ -1475,7 +1614,7 @@ export class BattleScene extends Phaser.Scene {
               this.setSpeed();
             } else if (!weak) this.cameras.main.shake(120, 0.005);
           } else sfx.dot();
-          damageNumber(this, at, ev.amount, ev.mult ?? 1);
+          damageNumber(this, at, ev.amount, ev.mult ?? 1, ev.why);
           s.setTintFill(0xffffff);
           this.tweens.add({ targets: s, x: s.x + 6, yoyo: true, repeat: 2, duration: 40, onComplete: () => s.setX(at.x) });
           this.time.delayedCall(120, () => s.clearTint());
@@ -1516,6 +1655,15 @@ export class BattleScene extends Phaser.Scene {
           this.showWeather();
           this.drawTeamFx();
           break;
+        case 'boon':
+        case 'trait': {
+          // Another callout straight after? Don't wait on this one: they stack and read together.
+          const nx = events[idx + 1];
+          const more = nx?.kind === 'boon' || nx?.kind === 'trait';
+          if (ev.kind === 'boon') await this.boonCallout(ev.side, ev.id, more);
+          else await this.traitCallout(ev.side, ev.id, more);
+          break;
+        }
         case 'status': {
           const panel = ev.side === 'player' ? this.playerPanel : this.enemyPanel;
           if (ev.side === 'enemy' && ev.status && !this.match) trackStat(state.run!, 'statusInflicted');
@@ -1665,6 +1813,12 @@ export class BattleScene extends Phaser.Scene {
       this.crowd?.cheer(3);
     }
     stopWatching();
+    if (sp.climb) {
+      // A battle on someone's climb: back to the map (and the others still climbing).
+      const title = won === null ? 'Battle over' : won ? `${sp.player} wins!` : 'Battle lost';
+      const body = won === null ? `${sp.player}’s battle has ended.` : won ? `${sp.player} climbs on.` : `${sp.player} lost this battle. With Hexlings on the bench, the climb goes on.`;
+      return void showMessage(this, title, body, () => this.scene.start('Map', {}));
+    }
     showMessage(this, winner ? `${winner} wins!` : 'Match over', winner ? `${winner} goes through in the bracket.` : 'The match has ended.', () => this.scene.start('Bracket', {}));
   }
 
@@ -1757,8 +1911,12 @@ export class BattleScene extends Phaser.Scene {
     const ab = run.activeBattle!;
     // Stage races pay double.
     const raceMult = run.race ? 2 : 1;
-    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult);
-    const coins = battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult;
+    const xp = Math.round(battleXp(this.enemies, this.kind, state.run!.floor) * (this.kind === 'battle' && run.passive === 'naturalist' ? 1.25 : 1) * raceMult * (floorCurse(run, 'hauntedfloor') ? 1.5 : 1));
+    // Lucky: battles it fought in pay more.
+    const lucky = teamTrait(run.team.filter((c) => (ab.fought ?? []).includes(c.uid)), 'lucky');
+    // Boons: Prospector pays more; Haunted Floor (a curse) pays and teaches more on its floor.
+    const haunted = floorCurse(run, 'hauntedfloor') ? 1.5 : 1;
+    const coins = Math.round(battleCoins(this.enemies, this.kind, run.heat ?? 0, run.twist ?? null) * raceMult * (1 + lucky) * (hasBoon(run, 'prospector') ? 1.4 : 1) * haunted * omenCoinMult(run));
     sfx.victory();
     this.cheer('player');
     playMusic(null);
@@ -1770,8 +1928,9 @@ export class BattleScene extends Phaser.Scene {
       if (teamSynergy(run.team).length) trackStat(run, 'synergyWins');
       // Hexlings that fought and are still standing grow closer to you.
       const hearts = growBond(run, ab.fought ?? []);
+      if (hearts.length) this.time.delayedCall(1100, () => sfx.bondHeart());
       const fallen = this.fallenNote() + (hearts.length ? `\n\n${hearts.map((h) => `♥ ${h}`).join('\n')}` : '');
-      postBattleRecover(run);
+      postBattleRecover(run, { won: true, sun: this.battle.weather === 'sun' });
       ab.summary = fallen;
       // Wild creatures sometimes leave an Evolution Stone behind.
       // Drops come from the hex (the same for everyone on a shared seed).
@@ -1793,7 +1952,10 @@ export class BattleScene extends Phaser.Scene {
         // Your rival: a word from them, and an Evolution Stone on top.
         const rivalNote = ab.rival ? `${ab.trainer}: “${rivalBeaten(run)}”\n\n◆ Beating your rival earns an extra Evolution Stone.\n\n` : '';
         if (ab.rival) run.evoStones += 1;
-        ab.summary = `${rivalNote}${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
+        // A friend's ghost leaves a souvenir: an Evolution Stone.
+        if (ab.ghost) run.evoStones += 1;
+        const ghostNote = ab.ghost ? `${ab.trainer} fades, leaving a souvenir: an extra Evolution Stone ◆.\n\n` : '';
+        ab.summary = `${rivalNote}${ghostNote}${ab.trainer ?? 'The trainer'} pays out ◉ ${coins} coins, ${stones === 2 ? '2 Evolution Stones ◆◆, ' : stones === 1 ? 'an Evolution Stone ◆, ' : ''}and ${heldName(prize)} (in your bag)\n\n${this.xpLines(grantXp(run, xp, ab.fought))}${fallen}`;
       } else if (this.kind === 'boss') {
         run.bossPending = false;
         earnCoins(run, coins);
@@ -1838,6 +2000,8 @@ export class BattleScene extends Phaser.Scene {
       this.enemySprite.setAlpha(0.85);
     }
     const full = rosterFull(run);
+    // Exiled (a curse): no catching on this floor.
+    const exiled = floorCurse(run, 'exiled');
     const bonusTag = wild ? { species: ' · +★ first catch!', type: ' · +★ type bonus!', none: '' }[catchBonus(run, wild.speciesId) ?? 'none'] : '';
     // Catches keep their prestige stars (plus the bonus).
     const starTag = wild && catchStars(run, wild) > 0 ? ` · ${'★'.repeat(catchStars(run, wild))}` : '';
@@ -1861,7 +2025,7 @@ export class BattleScene extends Phaser.Scene {
         chosen = true;
         if (!full) return this.doCatch(shinyFirst, fallen);
         this.pickRelease(`Catch ${creatureName(shinyFirst)}`, (out) => this.doCatch(shinyFirst, fallen, out), () => (chosen = false));
-      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'GILDED', sub: `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}` });
+      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'GILDED', sub: exiled ? 'Exiled: no catching this floor' : `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}`, enabled: !exiled });
       this.actions.add(btn);
     }
     if (wild) {
@@ -1879,7 +2043,10 @@ export class BattleScene extends Phaser.Scene {
           color: 0x3a4f7a,
           fontSize: shinyFirst ? 15 : 20,
           glyph: 'crystal',
-          sub: shinyFirst
+          enabled: !exiled,
+          sub: exiled
+            ? 'Exiled: no catching this floor'
+            : shinyFirst
             ? `Lv ${level}${starTag}`
             : full
               ? `Party full: release one to make room · Lv ${level}${starTag}${bonusTag}`
@@ -1940,7 +2107,7 @@ export class BattleScene extends Phaser.Scene {
       kind === 'species' || kind === 'type',
       () => {
         cry(c.speciesId, c.stage);
-        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${c.nature ? ` It's ${NATURES[c.nature].name}: it ${NATURES[c.nature].blurb}` : ''}${bonus}${starterNote}${fallen}`, () => this.toMap());
+        showMessage(this, 'Caught!', `${releasedNote}${creatureName(c)} joined your ${where} at Lv ${c.level}.${c.nature ? ` It's ${NATURES[c.nature].name}: it ${NATURES[c.nature].blurb}` : ''}${traitLine(c) ? `\n${traitLine(c)}` : ''}${bonus}${starterNote}${fallen}`, () => this.toMap());
       },
     );
   }
@@ -2014,12 +2181,12 @@ export class BattleScene extends Phaser.Scene {
             onPick: (k) => {
               const c = allCreatures(run)[k];
               const from = creatureName(c);
-              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
+              const fromKey = ensureCreatureTexture(this, c.speciesId, c.stage, colours(c));
               const lv = c.level;
               evolveTracked(run, c);
               const note = releaseNote(c, lv);
               dex.creature(c, true);
-              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny);
+              const toKey = ensureCreatureTexture(this, c.speciesId, c.stage, colours(c));
               playEvolution(this, fromKey, toKey, 5 * SPRITE_FIT, ELEMENT_COLORS[creatureTypes(c)[0]], () => {
                 cry(c.speciesId, c.stage);
                 this.finishFloor(`${from} evolved into ${creatureName(c)}!${note}`);
@@ -2143,6 +2310,8 @@ export class BattleScene extends Phaser.Scene {
       stage: foe.stage,
     };
     run.activeBattle = null;
+    // The Dojo (a surprise) ends with a loss.
+    if (dojoOn(run)) dojoResult(run, false);
     playMusic(null);
     sfx.defeat();
     if (!promoteBench(run)) {

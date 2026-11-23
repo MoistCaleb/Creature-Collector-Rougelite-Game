@@ -17,6 +17,7 @@ create table if not exists public.profiles (
   title text,
   -- The Hexling that sits with you by friends' campfires: { id, stage, shiny }.
   buddy jsonb,
+  ghost jsonb,
   -- "Online now": the game checks in every minute or so while it's open.
   last_seen timestamptz,
   activity text,
@@ -42,7 +43,8 @@ revoke all on public.profiles from anon, authenticated;
 grant select on public.profiles to authenticated;
 -- The username and friend code only change through claim_username().
 alter table public.profiles add column if not exists buddy jsonb;
-grant update (look, title, buddy, last_seen, activity) on public.profiles to authenticated;
+alter table public.profiles add column if not exists ghost jsonb;
+grant update (look, title, buddy, ghost, last_seen, activity) on public.profiles to authenticated;
 
 -- ---------------------------------------------------------------- friendships and blocks
 
@@ -212,9 +214,10 @@ $$;
 -- Your friends and open requests, with what friends can see of each other.
 drop function if exists public.my_friends();
 create or replace function public.my_friends()
-returns table (user_id uuid, username text, friend_code text, look jsonb, title text, buddy jsonb, last_seen timestamptz, activity text, status text, incoming boolean)
+returns table (user_id uuid, username text, friend_code text, look jsonb, title text, buddy jsonb, ghost jsonb, last_seen timestamptz, activity text, status text, incoming boolean)
 language sql stable security definer set search_path = public as $$
   select p.user_id, p.username, p.friend_code, p.look, p.title, p.buddy,
+         case when f.status = 'accepted' then p.ghost end,
          case when f.status = 'accepted' then p.last_seen end,
          case when f.status = 'accepted' then p.activity end,
          f.status, f.addressee = auth.uid()

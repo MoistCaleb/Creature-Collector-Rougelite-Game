@@ -8,18 +8,33 @@ import { state } from '../state';
 import { playMusic } from '../ui/sound';
 import { background, button, COLORS, text, typeChip, LANDSCAPE, W } from '../ui/widgets';
 
+/** Full run or quick run (2.0): remembered while the game is open. */
+let quickPick = false;
+
 /** Choose which map (set of floor elements) to run before picking a starter. */
 export class MapSelectScene extends Phaser.Scene {
   constructor() {
     super('MapSelect');
   }
 
-  create() {
+  create(data: { quick?: boolean } = {}) {
     background(this);
     playMusic('title');
     const meta = state.meta;
-    text(this, W / 2 + 20, 30, 'Choose a map', 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
-    text(this, W / 2 + 20, 60, `Runs won: ${meta.wins}`, 14, COLORS.textDim).setOrigin(0.5);
+    if (data.quick !== undefined) quickPick = data.quick;
+    const quick = quickPick;
+    text(this, W / 2 + 20, 26, 'Choose a map', 24, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    // Full run or quick run: two floors on smaller maps, with its own W/L.
+    const q = meta.quick;
+    const tw = Math.min(170, (W - 140) / 2);
+    const mode = (x: number, label: string, on: boolean, pick: boolean) =>
+      button(this, x, 60, tw, 30, label, () => {
+        if (quickPick === pick) return;
+        quickPick = pick;
+        this.scene.restart({});
+      }, { fontSize: 13, color: on ? 0x3b6d4a : 0x2a2440, oneLine: true });
+    mode(W / 2 + 20 - tw / 2 - 4, `Full run · ${meta.wins} won`, !quick, false);
+    mode(W / 2 + 20 + tw / 2 + 4, `Quick run · ${q ? `${q.wins}–${q.losses}` : '2 floors'}`, quick, true);
     button(this, 40, 28, 64, 36, '', () => this.scene.start('Title', {}), { fontSize: 15, glyph: 'back' });
     const unlocked = meta.heatUnlocked ?? 0;
 
@@ -68,22 +83,24 @@ export class MapSelectScene extends Phaser.Scene {
           meta.lastMap = m.id;
           saveMeta(meta);
           // With Heat unlocked, choose it for this map before the starter.
-          if (unlocked > 0) this.pickHeat(m.id, m.name);
-          else this.scene.start('Starter', { mapId: m.id });
+          if (unlocked > 0) this.pickHeat(m.id, m.name, quick);
+          else this.scene.start('Starter', { mapId: m.id, quick });
         });
       }
     });
   }
 
   /** Choose the Heat for a run on this map, then go pick a starter. */
-  private pickHeat(mapId: string, mapName: string) {
+  private pickHeat(mapId: string, mapName: string, quick: boolean) {
     const meta = state.meta;
     const unlocked = meta.heatUnlocked ?? 0;
     const won = meta.mapHeats?.[mapId] ?? [];
     const last = Math.min(meta.heat ?? 0, unlocked);
     openPicker(this, {
       title: `${mapName}: choose Heat`,
-      subtitle: `Each level adds its rule on top of every level below it. Win at your highest Heat to unlock the next; each Heat won here lights a token.`,
+      subtitle: quick
+        ? 'Each level adds its rule on top of every level below it. Quick runs keep their own record: they don\u2019t unlock Heat or light tokens.'
+        : `Each level adds its rule on top of every level below it. Win at your highest Heat to unlock the next; each Heat won here lights a token.`,
       options: HEAT_LEVELS.map((h, i) => ({
         label: h.name,
         glyph: i > unlocked ? ('lock' as const) : i > 0 ? ('flame' as const) : undefined,
@@ -95,7 +112,7 @@ export class MapSelectScene extends Phaser.Scene {
       onPick: (i) => {
         meta.heat = i;
         saveMeta(meta);
-        this.scene.start('Starter', { mapId });
+        this.scene.start('Starter', { mapId, quick });
       },
       onCancel: () => {},
       cancelLabel: 'Back',

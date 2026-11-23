@@ -264,6 +264,38 @@ describe('shop', () => {
     expect(run.log.graveyard!.length).toBe(0);
     expect(reviveFallen(run, uid)).toBeNull();
   });
+  it('Revival hex with a full party: the one released leaves and the revived Hexling takes its spot', async () => {
+    const { reviveFallen } = await import('../src/logic/run');
+    const run = startRun(mkMeta(), 'emberkit', 21);
+    const fallen = run.team[0];
+    const uid = fallen.uid;
+    fallen.hp = 0;
+    buryFallen(run);
+    while (run.team.length < 4) run.team.push(createCreature('emberkit', 5));
+    while (run.bench.length < 3) run.bench.push(createCreature('emberkit', 5));
+    // Full: no revive without someone to swap out.
+    expect(reviveFallen(run, uid)).toBeNull();
+    const out = run.team[2];
+    out.held = 'band';
+    const bag = (run.bag ?? []).length;
+    const back = reviveFallen(run, uid, out)!;
+    expect(back.uid).toBe(uid);
+    expect(run.team[2]).toBe(back);
+    expect(run.team).not.toContain(out);
+    expect(run.team.length + run.bench.length).toBe(7);
+    expect((run.bag ?? []).length).toBe(bag + 1);
+  });
+  it('stage battles: a fallen team with Hexlings on the bench is never handed in as wiped out', async () => {
+    const { raceTeam } = await import('../src/logic/run');
+    const run = startRun(mkMeta(), 'emberkit', 21);
+    run.bench.push(createCreature('emberkit', 5), createCreature('emberkit', 6));
+    for (const c of run.team) c.hp = 0;
+    const team = raceTeam(run);
+    expect(team.length).toBe(2);
+    expect(team.every((c) => c.hp > 0)).toBe(true);
+    run.bench = [];
+    expect(raceTeam(run)).toEqual([]);
+  });
   it('run W/L: seeded once from recent runs, then every finished or abandoned run', async () => {
     const { seedRunRecord, abandonSavedRun, saveRun, recordRun } = await import('../src/logic/run');
     const m = mkMeta();
@@ -547,7 +579,7 @@ describe('early fairness', () => {
         }
       }
     }
-  });
+  }, 30000); // Builds every starter's first battle: about 4 s alone, so the 5 s default flakes under load.
 });
 
 describe('roster and move variety', () => {
@@ -2036,7 +2068,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2493,6 +2525,10 @@ describe('Bulwark, Time Warp and speed attacks', () => {
   it('speed attacks hit harder the bigger the speed gap their way', () => {
     expect(speedPower(2)).toBeGreaterThan(speedPower(1.2));
     expect(speedPower(0.5)).toBe(40);
+    // 2.0: a gentler curve, never above 90 however big the gap.
+    expect(speedPower(1)).toBe(60);
+    expect(speedPower(1.5)).toBeLessThanOrEqual(80);
+    expect(speedPower(10)).toBe(90);
     const b = pair([fastId('Earth'), slowId('Earth')], ['Fire:0']);
     const fast = b.speedFactor(MOVES[fastId('Earth')], b.p, b.e);
     const slow = b.speedFactor(MOVES[slowId('Earth')], b.p, b.e);
@@ -2504,9 +2540,10 @@ describe('Bulwark, Time Warp and speed attacks', () => {
     const warp = all.filter((a) => a.x.includes(WARP_ID));
     const bulwark = all.filter((a) => a.x.includes(BULWARK_ID));
     expect(warp.length).toBeGreaterThan(4);
-    expect(warp.length).toBeLessThan(20);
+    // A small share of lines (the count grows with the roster).
+    expect(warp.length).toBeLessThan(SPECIES.length * 0.16);
     expect(bulwark.length).toBeGreaterThan(10);
-    expect(bulwark.length).toBeLessThan(40);
+    expect(bulwark.length).toBeLessThan(SPECIES.length / 3);
     for (const a of warp) expect(a.s.types.some((t) => ['Spirit', 'Shadow', 'Light', 'Metal'].includes(t))).toBe(true);
     // Names are unique.
     const names = Object.values(MOVES).map((m) => m.name);
@@ -2748,15 +2785,20 @@ describe('Roaming legendaries and night Hexlings', () => {
     expect(DEX_FORMS).toBe(SPECIES.length * 3 + LEGENDS.length);
   });
   it('roam battle hexes ahead, move as you do, and only in unseeded runs after floor 1', () => {
-    const run = floor2();
-    placeRoamer(run, true);
-    expect(run.roamer).toBeTruthy();
-    expect(run.map.nodes[run.roamer!.node].kind).toBe('battle');
-    const first = run.roamer!.node;
     let moved = false;
-    for (let i = 0; i < 6 && run.roamer; i++) {
-      moveRoamer(run);
-      if (run.roamer && run.roamer.node !== first) moved = true;
+    // (Some hexes have no battle hex next to them: a legendary placed there stays put, cornered.)
+    for (let seed = 21; seed < 31 && !moved; seed++) {
+      const run = floor2(seed);
+      placeRoamer(run, true);
+      expect(run.roamer).toBeTruthy();
+      expect(run.map.nodes[run.roamer!.node].kind).toBe('battle');
+      const first = run.roamer!.node;
+      for (let i = 0; i < 6 && run.roamer && !moved; i++) {
+        const next = run.map.nodes[run.currentId].next.find((id) => id !== run.roamer!.node && run.map.nodes[id].kind !== 'boss');
+        if (!next) break;
+        moveTo(run, next);
+        if (run.roamer && run.roamer.node !== first) moved = true;
+      }
     }
     expect(moved).toBe(true);
     const daily = floor2();
@@ -2767,24 +2809,42 @@ describe('Roaming legendaries and night Hexlings', () => {
     placeRoamer(f1, true);
     expect(f1.roamer).toBeNull();
   });
-  it('hops only 1 or 2 hexes at a time while it can', () => {
-    for (let s = 0; s < 20; s++) {
+  it('moves at most 1 hex at a time, sometimes toward you, and never leaves the floor', () => {
+    let toward = 0;
+    for (let s = 0; s < 30; s++) {
       const run = floor2();
       run.seed = 1000 + s;
       placeRoamer(run, true);
-      while (run.roamer) {
-        const before = run.map.nodes[run.roamer.node];
-        const next = run.map.nodes[run.currentId].next[0];
-        if (!next || run.map.nodes[next].kind === 'boss') break;
-        const room = Object.values(run.map.nodes).some((n) => n.kind === 'battle' && n.id !== before.id && n.y < run.map.nodes[next].y - 1 && n.y > run.map.nodes[run.map.bossId].y + 1 && hexDistance(before, n) <= 2);
+      if (!run.roamer) continue;
+      for (;;) {
+        const next = run.map.nodes[run.currentId].next.find((id) => run.map.nodes[id].kind !== 'boss');
+        if (!next) break;
+        const before = run.map.nodes[run.roamer!.node];
+        const gapBefore = hexDistance(run.map.nodes[next], before);
         moveTo(run, next);
-        if (run.roamer && room && next !== before.id) {
-          const d = hexDistance(before, run.map.nodes[run.roamer.node]);
-          expect(d).toBeGreaterThanOrEqual(1);
-          expect(d).toBeLessThanOrEqual(2);
-        }
+        if (next === before.id) break; // stepped onto it: a meeting
+        expect(run.roamer).toBeTruthy();
+        const after = run.map.nodes[run.roamer!.node];
+        const here = run.map.nodes[run.currentId];
+        if (before.y < here.y) expect(hexDistance(before, after)).toBeLessThanOrEqual(1);
+        if (run.roamer!.cornered) expect(after.id).toBe(before.id);
+        if (hexDistance(here, after) < gapBefore) toward++;
       }
     }
+    expect(toward).toBeGreaterThan(0);
+  });
+  it('cornered with nowhere to step, it stays put instead of vanishing', () => {
+    const run = floor2();
+    placeRoamer(run, true);
+    const r = run.roamer!;
+    const here = run.map.nodes[run.currentId];
+    // Every other battle hex is already visited: it has nowhere to go.
+    for (const n of Object.values(run.map.nodes)) if (n.kind === 'battle' && n.id !== r.node) run.visited.push(n.id);
+    expect(run.map.nodes[r.node].y).toBeLessThan(here.y);
+    moveRoamer(run);
+    expect(run.roamer).toBeTruthy();
+    expect(run.roamer!.node).toBe(r.node);
+    expect(run.roamer!.cornered).toBe(true);
   });
   it('a meeting is the legendary alone; it keeps its damage, and once caught it roams no more', () => {
     const run = floor2();

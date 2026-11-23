@@ -1,7 +1,7 @@
 import type { Element } from '../data/types';
 import { Rng } from './rng';
 
-export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boss';
+export type NodeKind = 'start' | 'battle' | 'elite' | 'levelup' | 'prestige' | 'skill' | 'heal' | 'shop' | 'treasure' | 'event' | 'revive' | 'boon' | 'hidden' | 'boss';
 
 export interface MapNode {
   id: string;
@@ -13,6 +13,8 @@ export interface MapNode {
   next: string[];
   /** 0 at start, 1 at boss. */
   progress: number;
+  /** A treasure hex added by the Pathfinder boon. */
+  pathfinder?: boolean;
 }
 
 export interface FloorMap {
@@ -40,6 +42,12 @@ const FLOOR_SHAPES = [
 
 export const ROUTE_LENGTHS = FLOOR_SHAPES.map((s) => s.routeLength);
 
+/** Quick runs (2.0): two shorter, narrower floors (about 15 minutes in all). */
+const QUICK_SHAPES = [
+  { cols: 8, routeLength: 15, density: 0.88 },
+  { cols: 10, routeLength: 18, density: 0.88 },
+];
+
 const nid = (col: number, y: number) => `${col},${y}`;
 
 /** Forward moves: the two hexes touching this one from the row above. */
@@ -55,13 +63,14 @@ function forward(col: number, y: number): [number, number][] {
  * reachable from the start AND can reach the top. Every route climbs one row per move.
  * Retries until the floor has enough choice.
  */
-export function generateFloor(floor: number, biome: Element, seed: number): FloorMap {
+export function generateFloor(floor: number, biome: Element, seed: number, quick = false): FloorMap {
   const rng = new Rng(seed);
+  const shape = (quick ? QUICK_SHAPES[floor] : undefined) ?? FLOOR_SHAPES[Math.min(floor, FLOOR_SHAPES.length - 1)];
   for (let attempt = 0; attempt < 80; attempt++) {
-    const m = tryFloor(floor, biome, rng);
+    const m = tryFloor(floor, biome, rng, shape);
     if (m && branchiness(m) >= MIN_BRANCHINESS) return m;
   }
-  return tryFloor(floor, biome, rng, 1)!;
+  return tryFloor(floor, biome, rng, shape, 1)!;
 }
 
 /** Each node has at most two moves; this keeps most of them at two. */
@@ -78,8 +87,7 @@ export function stepsToBoss(m: FloorMap, id: string): number {
   return m.nodes[id].y - m.nodes[m.bossId].y;
 }
 
-function tryFloor(floor: number, biome: Element, rng: Rng, forceDensity?: number): FloorMap | null {
-  const shape = FLOOR_SHAPES[floor];
+function tryFloor(floor: number, biome: Element, rng: Rng, shape: (typeof FLOOR_SHAPES)[number], forceDensity?: number): FloorMap | null {
   const { cols } = shape;
   const density = forceDensity ?? shape.density;
   const topY = 2; // the row right below the boss
@@ -179,6 +187,24 @@ function assignKinds(nodes: Record<string, MapNode>, startKey: string, topY: num
     if (mid.length) rng.pick(mid).kind = 'shop';
   }
   placeRevival(nodes, floor);
+  placeBoonHex(nodes, floor);
+}
+
+/**
+ * A Boon hex on about one floor in two (2.0), in place of a battle. Like Revival, picked by a hash of
+ * the floor's layout, so the rest of the map is exactly as before.
+ */
+function placeBoonHex(nodes: Record<string, MapNode>, floor: number) {
+  const spots = Object.values(nodes)
+    .filter((n) => n.kind === 'battle' && n.progress > 0.2 && n.progress < 0.9)
+    .map((n) => n.id)
+    .sort();
+  if (!spots.length) return;
+  let h = 2166136261 + floor * 31 + 7;
+  for (const ch of spots.join('|')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  h >>>= 0;
+  if ((h >>> 9) % 2 === 1) return;
+  nodes[spots[h % spots.length]].kind = 'boon';
 }
 
 /**
@@ -224,5 +250,7 @@ export const NODE_INFO: Record<NodeKind, { label: string; color: number; desc: s
   treasure: { label: 'Treasure', color: 0x9c6b2f, desc: 'A chest: coins or an item.' },
   event: { label: 'Event', color: 0x2f6b9c, desc: 'Something unexpected.' },
   revive: { label: 'Revival', color: 0xc0466e, desc: 'Bring back one fallen Hexling at 60% of the level it fell at. One per floor.' },
+  boon: { label: 'Boon', color: 0xa8842a, desc: 'Choose a boon for the rest of the run.' },
+  hidden: { label: '???', color: 0x6a4a9a, desc: 'Something rare is hidden here.' },
   boss: { label: 'Boss', color: 0x5b2c6f, desc: 'Defeat it to clear the floor.' },
 };

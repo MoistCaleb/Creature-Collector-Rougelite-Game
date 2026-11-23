@@ -37,9 +37,25 @@ export const TIPS = {
     title: 'Trainer titles',
     body: 'You’ve earned a trainer title! Titles show under your name, to your opponent online too, and many unlock gear with special effects.\n\nSee them all in Edit trainer (top-left) › your name › Titles.',
   },
+  boon: {
+    title: 'Boons',
+    body: 'Boons bend the rules for the rest of this run, and they stack. The first card always helps an element on your team.\n\nCurses (red) cost you something but pay you back: read both lines before you take one. Guardians get a little stronger for each boon you hold.',
+  },
   bench: {
     title: 'The bench',
     body: 'Up to 4 Hexlings fight and up to 3 wait on the bench. Bench Hexlings still earn XP, and if your whole team falls, the bench steps in as your second life.',
+  },
+  traits: {
+    title: 'Traits',
+    body: 'Every Hexling has a trait: a passive that works on its own, in battle or on the map. Each line has three, two common and a rare one (◆), and its final form makes the trait stronger.\n\nTap a trait (ⓘ) to read what it does. The Hexlidex shows which of a line’s traits you’ve found.',
+  },
+  camp: {
+    title: 'Camp',
+    body: 'Every run pays embers, win or lose. Spend them here: lasting upgrades in the Workshop, and decorations at the Ember stall.\n\nThe lines you play build a bond with you too, up to 5 hearts each. Hearts evolve them here and give them bonuses as starters.',
+  },
+  surprise: {
+    title: 'Rare surprises',
+    body: 'Now and then a run brings something rare: an omen, a strange floor, an Elder guardian, a hidden hex (???) or a rare encounter.\n\nEvery surprise you find is kept in the Hexlidex (Boons tab), with hints for the ones you haven’t.',
   },
 } as const;
 

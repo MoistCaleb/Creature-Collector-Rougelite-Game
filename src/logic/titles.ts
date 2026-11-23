@@ -1,5 +1,9 @@
 import { DEX_SPECIES } from '../data/legends';
 import { MAPS } from '../data/maps';
+import { ELEMENTS } from '../data/types';
+import { COLLECTABLE, eldersBeaten as elders, maxBondLines, MYTHICS, mythicsFound, surprisesFound as found, workshopOwned } from './feats';
+import { WORKSHOP } from '../data/workshop';
+import { CAMP_HEARTS } from './camp';
 import type { Meta } from './run';
 
 /**
@@ -25,7 +29,7 @@ export interface TitleDef {
   desc: string;
   /** Progress toward it: [have, need]. Earned when have >= need. */
   progress: (meta: Meta) => [number, number];
-  /** Earned from a Gilded milestone (announced with the milestone, not on its own). */
+  /** Earned from a Gilded or Gilded Hunt milestone (announced with the milestone, not on its own). */
   gilded?: boolean;
 }
 
@@ -48,16 +52,22 @@ export const TITLES: TitleDef[] = [
   { name: 'Arena Ace', tier: 'rare', desc: 'Win all 5 Battle Arena rounds.', progress: (m) => [m.arenaBest ?? 0, 5] },
   { name: 'Bracket Buster', tier: 'rare', desc: 'Win an Arena tournament.', progress: (m) => [m.tourneyWins ?? 0, 1] },
   { name: 'Duelist', tier: 'rare', desc: 'Win an online duel or stage battle.', progress: (m) => [m.onlineWins ?? 0, 1] },
+  { name: 'Myth Touched', tier: 'rare', desc: 'Take a mythic boon.', progress: (m) => [Math.min(mythicsFound(m), 1), 1] },
+  { name: 'Kindred', tier: 'rare', desc: 'Reach 3 bond hearts with a line.', progress: (m) => [Object.values(m.camp?.bond ?? {}).some((p) => p >= CAMP_HEARTS[2]) ? 1 : 0, 1] },
   { name: 'Gilded Seeker', tier: 'rare', desc: 'Own 5 Gilded species.', progress: (m) => [gilded(m), 5], gilded: true },
   // Epic
   { name: 'Heatseeker', tier: 'epic', desc: 'Win a run at Heat 4 or higher.', progress: (m) => [Math.min(topHeat(m), 4), 4] },
   { name: 'Unbroken', tier: 'epic', desc: 'Win 5 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 5] },
   { name: 'Cartographer', tier: 'epic', desc: 'Win a run on every map.', progress: (m) => [MAPS.filter((x) => m.clearedMaps.includes(x.id)).length, MAPS.length] },
-  { name: 'Deep Diver', tier: 'epic', desc: 'Reach floor 5 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 5] },
+  { name: 'Deep Diver', tier: 'epic', desc: 'Reach floor 5 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 5], gilded: true },
+  { name: 'Hunt Master', tier: 'epic', desc: 'Reach floor 12 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 12], gilded: true },
   { name: 'Weekly Victor', tier: 'epic', desc: 'Win 3 weekly challenges.', progress: (m) => [weeklyWins(m), 3] },
   { name: 'Rival', tier: 'epic', desc: 'Win 10 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 10] },
   { name: 'Grand Champion', tier: 'epic', desc: 'Win 5 Arena tournaments.', progress: (m) => [m.tourneyWins ?? 0, 5] },
   { name: 'Royale Victor', tier: 'epic', desc: 'Win a battle royale with 4 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 4 ? 1 : 0, 1] },
+  { name: 'Curious', tier: 'epic', desc: 'Find 10 different rare surprises.', progress: (m) => [Math.min(found(m), 10), 10] },
+  { name: 'Tinkerer', tier: 'epic', desc: 'Build 10 Workshop upgrades.', progress: (m) => [Math.min(workshopOwned(m), 10), 10] },
+  { name: 'Soulbound', tier: 'epic', desc: 'Reach all 5 bond hearts with a line.', progress: (m) => [Math.min(maxBondLines(m), 1), 1] },
   { name: 'Gilded Collector', tier: 'epic', desc: 'Own 30 Gilded species.', progress: (m) => [gilded(m), 30], gilded: true },
   // Legendary
   { name: 'Inferno Walker', tier: 'legendary', desc: 'Win a run at Heat 8.', progress: (m) => [Math.min(topHeat(m), 8), 8] },
@@ -65,11 +75,18 @@ export const TITLES: TitleDef[] = [
   { name: 'Hexlidex Master', tier: 'legendary', desc: `Catch all ${DEX_SPECIES.length} species, legendaries included.`, progress: (m) => [m.dex.caught.length, DEX_SPECIES.length] },
   { name: 'Grand Duelist', tier: 'legendary', desc: 'Win 50 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 50] },
   { name: 'Royale Champion', tier: 'legendary', desc: 'Win a battle royale with 6 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 6 ? 1 : 0, 1] },
+  { name: 'Abyss Diver', tier: 'legendary', desc: 'Reach floor 18 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 18], gilded: true },
+  { name: 'Elder Slayer', tier: 'legendary', desc: `Beat the Elder guardian of all ${ELEMENTS.length} lands.`, progress: (m) => [elders(m), ELEMENTS.length] },
+  { name: 'Wonderfinder', tier: 'legendary', desc: `Find all ${COLLECTABLE.length} rare surprises.`, progress: (m) => [found(m), COLLECTABLE.length] },
+  { name: 'Master Builder', tier: 'legendary', desc: `Build all ${WORKSHOP.length} Workshop upgrades.`, progress: (m) => [workshopOwned(m), WORKSHOP.length] },
+  { name: 'Mythweaver', tier: 'legendary', desc: `Take each of the ${MYTHICS.length} mythic boons.`, progress: (m) => [mythicsFound(m), MYTHICS.length] },
   { name: 'Gilded Legend', tier: 'legendary', desc: 'Own 60 Gilded species.', progress: (m) => [gilded(m), 60], gilded: true },
   // Mythic
   { name: 'Unstoppable', tier: 'mythic', desc: 'Win 20 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 20] },
   { name: 'Hexbound', tier: 'mythic', desc: 'Win at Heat 8 on every map.', progress: (m) => [mapsWonAt(m, 8), MAPS.length] },
   { name: 'Battle Monarch', tier: 'mythic', desc: 'Win an 8-player battle royale.', progress: (m) => [(m.royaleBest ?? 0) >= 8 ? 1 : 0, 1] },
+  { name: 'Endless Hunter', tier: 'mythic', desc: 'Reach floor 30 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 30], gilded: true },
+  { name: 'Heart of Camp', tier: 'mythic', desc: 'Reach all 5 bond hearts with 10 lines.', progress: (m) => [Math.min(maxBondLines(m), 10), 10] },
   { name: 'Gilded Master', tier: 'mythic', desc: 'Own 120 Gilded species.', progress: (m) => [gilded(m), 120], gilded: true },
 ];
 

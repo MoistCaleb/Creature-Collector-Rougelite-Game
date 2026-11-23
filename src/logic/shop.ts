@@ -1,3 +1,7 @@
+import { benchMax } from './workshop';
+import { omenPriceMult } from './surprises';
+import { hasBoon, teamMax } from './boons';
+import { rollTrait } from '../data/traits';
 import { BALANCE } from '../data/balance';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { heatRules } from '../data/heat';
@@ -18,7 +22,7 @@ import {
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, maxPotions, placeRng, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, TEAM_MAX, type Run } from './run';
+import { allCreatures, maxPotions, placeRng, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held' | 'relearn' | 'limit';
 
@@ -82,26 +86,41 @@ export interface Shop {
   rerolls: number;
   /** Items this shop always stocks (kept through rerolls). */
   guaranteed: ItemId[];
+  /** Travelling caravan (a surprise): seven items, one free, no rerolls. */
+  caravan?: boolean;
+}
+
+/** Items on the Travelling caravan. */
+export const CARAVAN_SIZE = 7;
+
+/** The Travelling caravan's stock: seven items, one of them free. */
+export function caravanShop(run: Run): Shop {
+  const shop = rollShop(run, 0, [], CARAVAN_SIZE);
+  shop.caravan = true;
+  shop.slots[placeRng(run, 'caravan:free').int(0, shop.slots.length - 1)].price = 0;
+  return shop;
 }
 
 export function priceFor(run: Run, base: number): number {
   const floorMult = 1 + BALANCE.shopFloorMarkup * run.floor;
   const discount = (run.passive === 'haggler' ? 0.75 : 1) * (run.prep === 'haggle' && run.floor === 0 ? 0.75 : 1);
-  return Math.max(1, Math.round((base * floorMult * discount * heatRules(run.heat ?? 0).priceMult) / 5) * 5);
+  return Math.max(1, Math.round((base * floorMult * discount * heatRules(run.heat ?? 0).priceMult * omenPriceMult(run)) / 5) * 5);
 }
 
 export function rerollPrice(run: Run, shop: Shop): number {
+  // Haggler's Mark (a boon): the first reroll in every shop is free.
+  if (shop.rerolls === 0 && hasBoon(run, 'haggler')) return 0;
   return priceFor(run, 10 + shop.rerolls * 10);
 }
 
-export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop {
+export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = [], size = 5): Shop {
   // Each shop's stock (and each reroll) comes from its hex, the same for everyone on a seed.
   const rng = placeRng(run, `shop:${rerolls}`);
   const ids = Object.keys(ITEMS) as ItemId[];
   const chosen: ItemId[] = [...guaranteed];
   // Deep in a Gilded Hunt, every shop (and every reroll) has a Limit Breaker, and only there.
   if (limitShop(run) && !chosen.includes('limit')) chosen.unshift('limit');
-  while (chosen.length < 5) {
+  while (chosen.length < size) {
     const weights: Partial<Record<ItemId, number>> = {};
     for (const id of ids) if (!chosen.includes(id) && ITEMS[id].weight > 0) weights[id] = ITEMS[id].weight;
     chosen.push(rng.weighted(weights));
@@ -112,6 +131,7 @@ export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop
       const pool = speciesWithElement(run.biomes[run.floor]);
       const level = Math.max(1, Math.round(highestLevel(run) * 0.6));
       slot.recruit = createCreature(rng.pick(pool).id, level);
+      slot.recruit.trait = rollTrait(slot.recruit.speciesId, `${run.seed}:shop:${run.floor}:${slot.recruit.speciesId}`);
     }
     if (item === 'held') slot.held = rollHeld(rng);
     return slot;
@@ -204,8 +224,8 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
       return 'Added to your bag. Give it to a Hexling from the Team screen.';
     case 'recruit': {
       const c = slot.recruit!;
-      if (run.team.length < TEAM_MAX) run.team.push(c);
-      else if (run.bench.length < BENCH_MAX) run.bench.push(c);
+      if (run.team.length < teamMax(run)) run.team.push(c);
+      else if (run.bench.length < benchMax(run)) run.bench.push(c);
       return `Joined your ${run.team.includes(c) ? 'team' : 'bench'}.`;
     }
   }

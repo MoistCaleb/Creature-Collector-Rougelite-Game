@@ -321,6 +321,19 @@ const ICONS = {
     '.NNNNNNNNNN.',
     '.nnnnnnnnnn.',
   ],
+  bug: [
+    '..d......d..',
+    '...d....d...',
+    '....dGGd....',
+    '...GGGGGG...',
+    '.d.jGGGGj.d.',
+    '..djjGGjjd..',
+    '...jGjjGj...',
+    '.d.jjGGjj.d.',
+    '..djGjjGjd..',
+    '...jjjjjj...',
+    '....jjjj....',
+  ],
   question: [
     '...WWWWW....',
     '..WW...WW...',
@@ -557,6 +570,8 @@ export const NODE_ICONS: Record<string, IconId> = {
   treasure: 'chest',
   event: 'question',
   revive: 'heart',
+  boon: 'sparkle',
+  hidden: 'question',
   boss: 'skull',
 };
 

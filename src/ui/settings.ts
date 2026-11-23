@@ -10,12 +10,13 @@ import { openCredits } from './credits';
 import { APP_VERSION } from '../data/changelog';
 import { decodeSave, exportSave, importSave, summarize } from '../logic/saveCode';
 import { copyText, openTextBox } from './textBox';
+import { BUG_PLACES, pendingBugReports, submitBugReport } from '../net/bugReport';
 import { openPicker } from './picker';
 import { BATTLE_SPEEDS, prefs } from './prefs';
 import { applyVolumes, isMuted, setMuted, sfx } from './sound';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
 
-const ROW = 50;
+const ROW_H = 50;
 
 /**
  * Settings, as a panel over any screen (title, map, battle): volumes, sound on/off,
@@ -23,7 +24,10 @@ const ROW = 50;
  */
 export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}) {
   const rows = 7;
-  const bigs = 5;
+  // Sideways the board is only 450 tall: slightly shorter rows keep the last one clear of Close.
+  const ROW = LANDSCAPE ? 48 : ROW_H;
+  // Bug reports need the server (not in the claude.ai version).
+  const bigs = accountsAvailable() ? 6 : 5;
   const p = openPanel(scene, 'Settings', {
     w: LANDSCAPE ? 760 : 430,
     h: LANDSCAPE ? 440 : 50 + rows * ROW + 4 + bigs * 54 + 66,
@@ -126,11 +130,66 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
       const u = currentUser();
       big('Account & saves', u ? `Signed in · ${u.email}` : 'Sign in to keep your progress on every device', () => openAccount(scene, { copy: () => void showCode(), load: () => pasteCode(scene) }), 0x2f5a4a, 'phone');
     } else big('Save transfer', 'Move your progress to another device', () => openSaveTransfer(scene), 0x2f5a4a, 'phone');
+    if (accountsAvailable()) big('Report a bug', 'Tell us what went wrong, and where', () => openBugReport(scene), 0x3a5a3a, 'bug');
     big('Credits & version', `v${APP_VERSION} · what’s new`, () => openCredits(scene), 0x3a3352, 'star');
     big('Erase all progress', 'Start over from scratch', () => confirmErase(scene), 0x5a2a2a, 'skull');
   };
   draw();
   return p;
+}
+
+/** Report a bug: where it happened, then what happened (the game adds version, screen, run and device). */
+export function openBugReport(scene: Phaser.Scene) {
+  // The screen under the Settings panel (Settings opens over any screen).
+  const screen = scene.scene.key;
+  const waiting = pendingBugReports();
+  openPicker(scene, {
+    title: 'Report a bug',
+    subtitle: `Where did it happen?${waiting ? `\n(${waiting} earlier report${waiting === 1 ? ' is' : 's are'} waiting to send.)` : ''}`,
+    options: BUG_PLACES.map((p) => ({ label: p.label, sub: p.sub, color: 0x2f4a6b })),
+    rowHeight: 62,
+    onPick: (i) => {
+      const place = BUG_PLACES[i];
+      openTextBox({
+        title: `Report a bug · ${place.label}`,
+        body: 'What happened? What were you doing, and what did you expect instead?\nThe game adds its version, this screen, your run and your device for you.',
+        placeholder: 'e.g. After catching a Hexling on floor 2, the map froze and I couldn’t tap any hex.',
+        prose: true,
+        maxLength: 2000,
+        actions: [
+          {
+            label: 'Send',
+            primary: true,
+            onClick: async (b) => {
+              const text = b.value().trim();
+              if (text.length < 5) {
+                b.setStatus('Write a few words about what happened.', 'error');
+                return false;
+              }
+              b.setStatus('Sending…', 'info');
+              const how = await submitBugReport(place.id, text, screen);
+              b.close();
+              openPicker(scene, {
+                title: how === 'sent' ? 'Thanks!' : 'Saved',
+                subtitle:
+                  how === 'sent'
+                    ? 'Your report is in. It’ll be looked at the next time the game gets worked on.'
+                    : 'It couldn’t be sent right now (no connection?), so it’s saved on this device and will send by itself next time.',
+                options: [],
+                onPick: () => {},
+                onCancel: () => {},
+                cancelLabel: 'OK',
+              });
+              return true;
+            },
+          },
+          { label: 'Cancel', onClick: () => true },
+        ],
+      });
+    },
+    onCancel: () => {},
+    cancelLabel: 'Cancel',
+  });
 }
 
 function confirmErase(scene: Phaser.Scene) {

@@ -5,7 +5,7 @@ import { calm } from './motion';
 import { EYE_COLORS, SKIN_TONES, type TrainerLook } from '../data/trainerLook';
 import type { Creature } from '../logic/creature';
 import { sfx } from './sound';
-import { ensureCreatureTexture } from './sprites';
+import { colours, ensureCreatureTexture } from './sprites';
 import { ensureTrainerTexture } from './trainerSprite';
 import { FONT, fullRect, H, LANDSCAPE, W, ZOOM } from './widgets';
 
@@ -185,7 +185,7 @@ export function trainerCutIn(scene: Phaser.Scene, o: CutInOpts): Promise<void> {
 
     // Strips: the trainer's eyes, then up to 3 of their Hexlings.
     const faces: { key: string; trainer: boolean }[] = [{ key: ensureTrainerTexture(scene, o.look, 'stand'), trainer: true }];
-    for (const c of o.team.slice(0, 2)) faces.push({ key: ensureCreatureTexture(scene, c.speciesId, c.stage, c.shiny), trainer: false });
+    for (const c of o.team.slice(0, 2)) faces.push({ key: ensureCreatureTexture(scene, c.speciesId, c.stage, colours(c)), trainer: false });
     const n = faces.length;
     const sw = LANDSCAPE ? 470 : W - 64;
     const sx = LANDSCAPE ? 40 : (W - sw) / 2;

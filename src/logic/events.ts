@@ -1,3 +1,6 @@
+import { benchMax } from './workshop';
+import { teamMax } from './boons';
+import { rollTrait } from '../data/traits';
 import { elementPool, MAX_TIER, MOVES } from '../data/moves';
 import { HELD, heldName } from '../data/held';
 import { SPECIES } from '../data/species';
@@ -14,7 +17,7 @@ import {
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, earnCoins, eventRng, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, prestigeTracked, registerJoin, releaseNote, rosterFull, TEAM_MAX, type Run } from './run';
+import { allCreatures, earnCoins, eventRng, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, teamTrait, prestigeTracked, registerJoin, releaseNote, rosterFull, type Run } from './run';
 import { speciesWithElement } from '../data/species';
 
 export interface EventResult {
@@ -51,8 +54,8 @@ export interface GameEvent {
 const scale = (run: Run, base: number) => Math.round(base * (1 + run.floor));
 
 function addCreature(run: Run, c: Creature) {
-  if (run.team.length < TEAM_MAX) run.team.push(c);
-  else if (run.bench.length < BENCH_MAX) run.bench.push(c);
+  if (run.team.length < teamMax(run)) run.team.push(c);
+  else if (run.bench.length < benchMax(run)) run.bench.push(c);
   registerJoin(run, c);
 }
 
@@ -334,6 +337,7 @@ export const EVENTS: GameEvent[] = [
         run: (run, c) => {
           const pick = eventRng(run).pick(SPECIES.filter((sp) => sp.id !== c!.speciesId));
           const n = createCreature(pick.id, Math.min(c!.level + 2, 99), c!.stage);
+          n.trait = rollTrait(n.speciesId, `${run.seed}:trade:${c!.uid}`);
           n.level = Math.min(n.level, levelCap(n));
           n.hp = stats(n).hp;
           unequipHeld(run, c!);
@@ -562,15 +566,24 @@ export interface TreasureOffer {
   coins: number;
   item: import('./shop').ItemId;
   held?: import('../data/held').HeldId;
+  /** Treasure Nose: a third choice. */
+  extra?: { item: import('./shop').ItemId; held?: import('../data/held').HeldId };
 }
 
 export function rollTreasure(run: Run): TreasureOffer {
   const items: import('./shop').ItemId[] = ['potion', 'manual', 'scroll', 'stone', 'restore', 'sigil', 'held', 'held'];
   const coins = scale(run, 30) + eventRng(run).int(0, 15);
   const item = eventRng(run).pick(items);
-  return {
+  const offer: TreasureOffer = {
     coins: Math.round(coins * (run.passive === 'explorer' ? 1.5 : 1)),
     item,
     ...(item === 'held' ? { held: rollHeld(eventRng(run)) } : {}),
   };
+  // Treasure Nose: sometimes (final form: always) a third thing to choose from.
+  const nose = teamTrait(run.team, 'treasure');
+  if (nose && eventRng(run).chance(nose)) {
+    const extra = eventRng(run).pick(items.filter((i) => i !== item || i === 'held'));
+    offer.extra = { item: extra, ...(extra === 'held' ? { held: rollHeld(eventRng(run)) } : {}) };
+  }
+  return offer;
 }

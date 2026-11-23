@@ -6,6 +6,7 @@ import { markSeen, newTitles, rewardText } from '../logic/cosmetics';
 import { newTag } from './newTag';
 import { sfx } from './sound';
 import { titleBadge } from './titleBadge';
+import { Scroller } from './scroll';
 import { button, COLORS, LANDSCAPE, text } from './widgets';
 
 /** The tier tab last looked at (kept while you browse). */
@@ -20,7 +21,16 @@ const hexNum = (c: string) => parseInt(c.slice(1), 16);
 export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void) {
   const pw = LANDSCAPE ? 760 : 436;
   const ph = LANDSCAPE ? 440 : 760;
-  const p = openPanel(scene, 'Trainer titles', { w: pw, h: ph, onClose });
+  // The tier's list scrolls when it doesn't fit (one scroller at a time, rebuilt with each tab).
+  let scroller: Scroller | null = null;
+  const p = openPanel(scene, 'Trainer titles', {
+    w: pw,
+    h: ph,
+    onClose: () => {
+      scroller?.dispose();
+      onClose();
+    },
+  });
   const x0 = p.x + 14;
   const w = p.w - 28;
   const earned = earnedTitles(meta);
@@ -41,6 +51,8 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
   const firstNew = TITLES.find((t) => fresh.includes(t.name));
   if (firstNew) shownTier = firstNew.tier;
   const draw = () => {
+    scroller?.dispose();
+    scroller = null;
     body.removeAll(true);
     // Tier tabs, each in its tier's color, with how many you have.
     const tabY = p.top + 30;
@@ -75,6 +87,11 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
     const rowH = LANDSCAPE ? 76 : 78;
     const cw = (w - (cols - 1) * 10) / cols;
     const cur = myTitle(meta);
+    // Only the area between the tabs and the Close button shows; the rest scrolls under it.
+    const bottom = p.y + p.h - 58;
+    const tiles = scene.add.container(0, 0);
+    body.add(tiles);
+    const inView = (y: number) => y >= top - 4 && y <= bottom;
     list.forEach((t, i) => {
       const cx = x0 + (i % cols) * (cw + 10);
       const cy = top + Math.floor(i / cols) * rowH;
@@ -85,36 +102,38 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
         .rectangle(cx, cy, cw, rowH - 6, worn ? 0x3a3360 : COLORS.panelLight, got ? 1 : 0.55)
         .setOrigin(0)
         .setStrokeStyle(2, worn ? hexNum(TIER_INFO[t.tier].color) : COLORS.stroke, worn ? 1 : 0.6);
-      body.add(bg);
+      tiles.add(bg);
       const fs = LANDSCAPE ? 14 : 16;
-      if (got) body.add(titleBadge(scene, cx + 10, cy + 15, t.name, fs, { originX: 0, maxW: cw - 96 }));
+      if (got) tiles.add(titleBadge(scene, cx + 10, cy + 15, t.name, fs, { originX: 0, maxW: cw - 96 }));
       else {
         const nm = text(scene, cx + 10, cy + 15, t.name, fs, '#6d6888', { fontStyle: 'bold' }).setOrigin(0, 0.5);
         if (nm.width > cw - 96) nm.setScale((cw - 96) / nm.width);
-        body.add(nm);
+        tiles.add(nm);
       }
       const desc = text(scene, cx + 10, cy + 29, t.desc, LANDSCAPE ? 11 : 12, got ? COLORS.text : COLORS.textDim);
       if (desc.width > cw - 20) desc.setScale((cw - 20) / desc.width);
-      body.add(desc);
+      tiles.add(desc);
       const reward = rewardText(t.name) || (t.gilded ? 'Unlocks Gilded outfit pieces' : '');
       if (reward) {
         const r = text(scene, cx + 10, cy + 47, `✦ ${reward}`, LANDSCAPE ? 10 : 11, got ? TIER_INFO[t.tier].color : '#8a84a8', { fontStyle: 'bold' });
         if (r.width > cw - 20) r.setScale((cw - 20) / r.width);
-        body.add(r);
+        tiles.add(r);
       }
-      if (fresh.includes(t.name)) body.add(newTag(scene, cx + cw - 10, cy + 30));
+      if (fresh.includes(t.name)) tiles.add(newTag(scene, cx + cw - 10, cy + 30));
       const right = worn ? 'Wearing' : got ? 'Tap to wear' : `${Math.min(have, need)}/${need}`;
-      body.add(text(scene, cx + cw - 10, cy + 15, right, LANDSCAPE ? 11 : 12, worn ? '#8fe08a' : got ? '#ffc94d' : COLORS.textDim, { fontStyle: 'bold' }).setOrigin(1, 0.5));
+      tiles.add(text(scene, cx + cw - 10, cy + 15, right, LANDSCAPE ? 11 : 12, worn ? '#8fe08a' : got ? '#ffc94d' : COLORS.textDim, { fontStyle: 'bold' }).setOrigin(1, 0.5));
       if (!got) {
         // A thin progress bar under the count.
         const bw = LANDSCAPE ? 56 : 70;
         const bx = cx + cw - 10 - bw;
         const by = cy + 23;
-        body.add(scene.add.rectangle(bx, by, bw, 4, 0x15121f).setOrigin(0));
-        body.add(scene.add.rectangle(bx, by, Math.max(0, bw * Math.min(1, have / need)), 4, hexNum(TIER_INFO[t.tier].color), 0.7).setOrigin(0));
+        tiles.add(scene.add.rectangle(bx, by, bw, 4, 0x15121f).setOrigin(0));
+        tiles.add(scene.add.rectangle(bx, by, Math.max(0, bw * Math.min(1, have / need)), 4, hexNum(TIER_INFO[t.tier].color), 0.7).setOrigin(0));
       }
       if (got && !worn) {
-        bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        bg.setInteractive({ useHandCursor: true }).on('pointerup', (ptr: Phaser.Input.Pointer) => {
+          // Not after a drag, nor through the hidden part of the list.
+          if (scroller?.moved || !inView(ptr.worldY)) return;
           meta.trainerTitle = t.name;
           saveMeta(meta);
           sfx.coin();
@@ -122,6 +141,26 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
         });
       }
     });
+
+    const rows = Math.ceil(list.length / cols);
+    const overflow = top + rows * rowH - 6 - bottom;
+    if (overflow > 0) {
+      const shape = scene.make.graphics({}, false).fillRect(p.x, top - 4, p.w, bottom - top + 4);
+      tiles.setMask(shape.createGeometryMask());
+      tiles.once('destroy', () => shape.destroy());
+      const hint = text(scene, p.x + 14, p.y + 20, 'Drag for more', 11, COLORS.textDim);
+      body.add(hint);
+      scroller = new Scroller(scene, {
+        get: () => tiles.y,
+        set: (v) => {
+          tiles.setY(v);
+          hint.setVisible(v > -overflow + 4);
+        },
+        min: () => -overflow - 4,
+        max: () => 0,
+        popup: true,
+      });
+    }
 
     // Looking at a tier counts as seeing its new titles (their NEW tags stay up until you leave it).
     if (markSeen(meta, 'seenTitles', list.filter((t) => fresh.includes(t.name)).map((t) => t.name))) saveMeta(meta);

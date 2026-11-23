@@ -379,9 +379,17 @@ export function weatherShort(w: WeatherId): string {
   return parts.join(', ');
 }
 
-/** Speed attacks: power by how much faster (or slower) the user is than its foe. */
+/** Speed attacks: the most and least power they can have. */
+export const SPEED_POWER_MAX = 90;
+export const SPEED_POWER_MIN = 40;
+
+/**
+ * Speed attacks: power by how much faster (or slower) the user is than its foe. A smooth curve
+ * (2.0): 60 when evenly matched, about 67 at 1.2×, 76 at 1.5×, 90 at twice as fast (the most);
+ * 40 at half (the least).
+ */
 export function speedPower(ratio: number): number {
-  return ratio >= 2 ? 130 : ratio >= 1.5 ? 110 : ratio >= 1.2 ? 90 : ratio >= 1 ? 70 : ratio >= 0.75 ? 50 : 40;
+  return Math.round(Math.max(SPEED_POWER_MIN, Math.min(SPEED_POWER_MAX, 60 * Math.pow(Math.max(0.01, ratio), 0.58))));
 }
 
 const SPEED_WORD: Record<Element, string> = {
@@ -535,7 +543,7 @@ export function moveSummary(m: MoveDef, tier: number): string {
   const pow = Math.round(m.power * TIER_POWER[tier]);
   const parts = [
     m.speedPower
-      ? `Pow ${Math.round(40 * TIER_POWER[tier])}–${Math.round(130 * TIER_POWER[tier])} · best if ${m.speedPower === 'fast' ? 'faster' : 'slower'}`
+      ? `Pow ${Math.round(SPEED_POWER_MIN * TIER_POWER[tier])}–${Math.round(SPEED_POWER_MAX * TIER_POWER[tier])} · best if ${m.speedPower === 'fast' ? 'faster' : 'slower'}`
       : m.hits
         ? `Pow ${pow}×${m.hits}`
         : `Pow ${pow}`,

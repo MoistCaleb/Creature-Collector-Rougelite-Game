@@ -1,3 +1,8 @@
+import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
+import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
+import { SURPRISES } from '../data/surprises';
+import { BOON_COLOR, BOONS } from '../data/boons';
+import { boonCardText, openBoonList, openBoonOffer } from '../ui/boonPick';
 import { BALANCE } from '../data/balance';
 import Phaser from 'phaser';
 import { itemReveal, stoneReveal } from '../ui/stoneReveal';
@@ -24,21 +29,24 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { placeRng, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
+import { caravanAt, fillTeamFromBench, joinParty, placeRng, unequipHeld, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
-import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, prestigeTracked, registerJoin, releaseNote, trackStat } from '../logic/run';
+import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, floorsOf, PASSIVES, earnCoins, encounterKind, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
-import { applyItem, canAfford, eligibleTargets, ITEMS, pay, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
+import { freeRerollReady, reviveShare, useFreeReroll } from '../logic/workshop';
+import { applyItem, canAfford, caravanShop, eligibleTargets, ITEMS, pay, priceFor, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
+import { SPECIES_BY_ID } from '../data/species';
+import { traitName } from '../ui/traitText';
 import { dex, persist, state } from '../state';
 import { announceGilded } from '../ui/gildedUi';
 import { TWISTS } from '../logic/run';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
-import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic, sfx } from '../ui/sound';
 import { ensureGrayTrainerTexture, ensureTrainerTexture } from '../ui/trainerSprite';
 import { trainerFx } from '../ui/trainerFx';
@@ -144,8 +152,12 @@ export class MapScene extends Phaser.Scene {
     const base = Phaser.Display.Color.ValueToColor(ELEMENT_COLORS[map.biome]).darken(82).color;
     background(this, base);
     mapBackdrop(this, map.biome, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, base);
+    // Redrawing with the shop (or an event) still open keeps its music going instead of starting
+    // the map theme and then the shop's again from the top.
     if (run.race?.done) playMusic('showdown');
-    else playMusic('map', map.biome);
+    else if (run.shop) playMusic('shop');
+    else if (run.pendingNode === 'event') playMusic('event');
+    else this.mapMusic();
 
     // ---- map layer
     this.layer = this.add.container(0, 0);
@@ -187,6 +199,12 @@ export class MapScene extends Phaser.Scene {
     }
 
     // nodes
+    // Scout: see who's waiting on the battle hexes ahead (final form: two hexes ahead).
+    const scouted = new Set<string>();
+    const range = scoutRange(run);
+    const fog = hasBoon(run, 'fogofwar');
+    if (range >= 1) for (const id of reachableIds) scouted.add(id);
+    if (range >= 2) for (const id of [...reachableIds]) for (const nx of map.nodes[id]?.next ?? []) scouted.add(nx);
     for (const n of nodes) {
       const p = pos(n);
       const info = NODE_INFO[n.kind];
@@ -202,9 +220,25 @@ export class MapScene extends Phaser.Scene {
         isCurrent || canGo ? 1 : 0.5,
       );
       const iconSize = n.kind === 'boss' ? 34 : pointy ? Math.round(Math.min(26, hexW * 0.42)) : 26;
-      const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), NODE_ICONS[n.kind] ?? 'question', Math.round(iconSize * 1.05));
-      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      // Fog of War (a curse): only the hexes next to you (and the guardian's) show what they are.
+      const fogged = fog && !canGo && !isCurrent && !visited && n.kind !== 'boss';
+      const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), fogged ? 'question' : (NODE_ICONS[n.kind] ?? 'question'), Math.round(iconSize * 1.05));
+      const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), fogged ? '?' : n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
+      if (fogged) hex.setFillStyle(0x3a3650);
       this.layer.add([hex, icon, label]);
+      // A rare encounter or hidden hex: a twinkle in the corner.
+      const fsx = floorSurprise(run);
+      if ((fsx.encNode === n.id || fsx.hexNode === n.id) && !visited) {
+        const tw = pixelIcon(this, p.x - hw * 0.36, p.y - hh * 0.34, 'sparkle', 14);
+        this.layer.add(tw);
+        this.tweens.add({ targets: tw, alpha: 0.35, yoyo: true, repeat: -1, duration: 700 });
+      }
+      const peek = scouted.has(n.id) ? peekEncounter(run, n) : null;
+      if (peek) {
+        const img = this.add.image(p.x + hw * 0.36, p.y - hh * 0.34, ensureCreatureTexture(this, peek.speciesId, run.hunt ? 2 : Math.min(2, run.floor))).setScale(0.75 * SPRITE_FIT);
+        this.layer.add(img);
+        if (peek.count > 1) this.layer.add(text(this, p.x + hw * 0.36 + 12, p.y - hh * 0.34 + 8, `+${peek.count - 1}`, 10, '#ffe9a8', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5));
+      }
       // Your token stands on the current hex: fade what's under it (it comes back as you hop away).
       if (isCurrent) {
         icon.setAlpha(0.15);
@@ -274,8 +308,10 @@ export class MapScene extends Phaser.Scene {
 
     for (const c of allCreatures(run)) dex.creature(c, true);
     persist();
-    const resume = () =>
+    const resumeNode = () =>
       run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
+    // A boon on offer (after a guardian, or from a curse) comes first; then a redraw shows its effects.
+    const resume = () => (run.boons?.offer ? openBoonOffer(this, run, () => this.scene.restart({})) : resumeNode());
     // First-time tips come before anything that's waiting.
     const after = () => tip(this, 'map', () => (run.bench.length ? tip(this, 'bench', resume) : resume()));
     // Announce any achievements earned since the last time the map was shown.
@@ -290,7 +326,10 @@ export class MapScene extends Phaser.Scene {
       });
       showMessage(this, 'Achievement unlocked!', lines.join('\n\n') + '\n\nEquip passives from the title screen.', () => announceGilded(this, meta, after));
     };
-    const afterBanner = () => (data.banner ? showMessage(this, run.race?.done ? (run.race.done.won ? 'Stage cleared!' : 'Stage over') : run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
+    const afterFloorBanner = () => (data.banner ? showMessage(this, run.race?.done ? (run.race.done.won ? 'Stage cleared!' : 'Stage over') : run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
+    // Rare surprises announce themselves once: the run's omen, then this floor's.
+    // The Hatchery's egg hatches on the map, once it has seen enough battles.
+    const afterBanner = () => this.announceSurprises(() => this.hatchIfReady(afterFloorBanner));
     // New held items and Evolution Stones since the map was last shown get their own moments.
     const items = run.newItems ?? [];
     run.newItems = [];
@@ -371,7 +410,7 @@ export class MapScene extends Phaser.Scene {
     if (run.race) this.drawRaceStatus();
     if (LANDSCAPE) return this.drawSideInfo();
     this.add.rectangle(-OX, -OY, FW, TOP_BAR + OY, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 10, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 10, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${floorsOf(run)}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     // Heat and daily markers after the land name.
     let mx = 14 + biome.width + 12;
@@ -391,11 +430,14 @@ export class MapScene extends Phaser.Scene {
     text(this, 150, 10, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 158, 45, 'stone', 16);
     text(this, 170, 36, `${run.evoStones}`, 14, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
+    this.boonChip(204, 45);
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 67, 'skull', 14);
       const foe = run.race ? run.race.opponent : 'Boss';
-      text(this, 32, 60, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd');
+      const st = text(this, 32, 60, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd');
+      // A quick run: tagged after the steps line (the rows above are full).
+      if (run.quick) text(this, 32 + st.width + 10, 60, 'QUICK RUN', 11, '#8fd6ff', { fontStyle: 'bold' });
     }
     button(this, W - 226, TOP_BAR / 2, 40, 44, '', () => openGameMenu(this), { glyph: 'menu' });
     button(this, W - 170, TOP_BAR / 2, 60, 44, 'Hexlidex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 12 });
@@ -405,11 +447,21 @@ export class MapScene extends Phaser.Scene {
     button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
   }
 
+  /** Boons held: a sparkle and a count; tap for the list. */
+  private boonChip(x: number, y: number) {
+    const run = state.run!;
+    const n = run.boons?.held.length ?? 0;
+    if (!n) return;
+    const ic = pixelIcon(this, x, y, 'sparkle', 16);
+    const t = text(this, x + 11, y - 9, String(n), 14, '#ffe9a8', { fontStyle: 'bold' });
+    for (const o of [ic, t]) o.setInteractive({ useHandCursor: true }).on('pointerup', () => openBoonList(this, run));
+  }
+
   /** Sideways: floor, land, coins, stones, steps to the boss and the buttons, in a left column. */
   private drawSideInfo() {
     const run = state.run!;
     this.add.rectangle(-OX, -OY, SIDE_L + OX, FH, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 12, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 12, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${floorsOf(run)}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 40, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     let mx = 14 + biome.width + 12;
     if (run.heat) {
@@ -417,6 +469,7 @@ export class MapScene extends Phaser.Scene {
       const t = text(this, mx + 10, 40, String(run.heat), 14, '#ff8a3a', { fontStyle: 'bold' });
       mx += 22 + t.width;
     }
+    if (run.quick) text(this, mx - 2, 41, 'QUICK', 12, '#8fd6ff', { fontStyle: 'bold' });
     if (run.daily) pixelIcon(this, mx, 48, 'calendar', 16);
     if (run.weekly && run.twist) {
       // The weekly twist: tap the crown to read it again.
@@ -428,6 +481,7 @@ export class MapScene extends Phaser.Scene {
     text(this, 14, 70, `◉ ${run.coins}`, 16, '#ffc94d', { fontStyle: 'bold' });
     pixelIcon(this, 100, 80, 'stone', 16);
     text(this, 112, 70, `${run.evoStones}`, 16, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
+    this.boonChip(150, 80);
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 109, 'skull', 14);
@@ -509,7 +563,7 @@ export class MapScene extends Phaser.Scene {
       const slotH = (H - 20) / 4;
       run.team.forEach((c, i) => {
         const y = 10 + slotH * i;
-        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.6 * SPRITE_FIT);
+        const img = this.add.image(x0 + 40, y + slotH / 2 - 4, ensureCreatureTexture(this, c.speciesId, c.stage, colours(c))).setScale(1.6 * SPRITE_FIT);
         img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
         text(this, x0 + 76, y + slotH / 2 - 18, `Lv ${c.level}`, 13, COLORS.text, { fontStyle: 'bold' });
         new HpBar(this, x0 + 76, y + slotH / 2 + 4, SIDE_R - 88, 7, false).set(c.hp, stats(c).hp);
@@ -522,7 +576,7 @@ export class MapScene extends Phaser.Scene {
     const slotW = W / 4;
     run.team.forEach((c, i) => {
       const x = slotW * i + slotW / 2;
-      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.6 * SPRITE_FIT);
+      const img = this.add.image(x, y0 + 36, ensureCreatureTexture(this, c.speciesId, c.stage, colours(c))).setScale(1.6 * SPRITE_FIT);
       img.setInteractive({ useHandCursor: true }).on('pointerup', () => this.scene.start('Team', {}));
       text(this, x, y0 + 64, `Lv ${c.level}`, 12, COLORS.textDim).setOrigin(0.5);
       new HpBar(this, x - 36, y0 + 84, 72, 7, false).set(c.hp, stats(c).hp);
@@ -642,14 +696,23 @@ export class MapScene extends Phaser.Scene {
     }
     const p = this.posOf(r.node);
     const at = { x: p.x, y: p.y - 6 };
+    // Cornered (nowhere to step), it stays put with a "!" over its head instead of the usual "?".
+    const markFor = () => (r.cornered ? '!' : '?');
     if (this.roamerSprite?.active) {
       this.tweens.add({ targets: this.roamerSprite, x: at.x, y: at.y, duration: 900, ease: 'Sine.easeInOut' });
+      const m = this.roamerSprite.getByName('mark') as Phaser.GameObjects.Text | null;
+      if (m && m.text !== markFor()) {
+        m.setText(markFor()).setColor(r.cornered ? '#ffd84d' : '#e0c8ff').setFontSize(r.cornered ? 22 : 16);
+        if (r.cornered) this.tweens.add({ targets: m, scale: 1.35, yoyo: true, duration: 180, repeat: 2 });
+      }
       return;
     }
     const c = this.add.container(at.x, at.y);
     const glow = this.add.ellipse(0, 4, 64, 22, 0xb48aff, 0.25);
     const body = this.add.image(0, 0, ensureGrayTexture(this, r.id, 2, true)).setOrigin(0.5, 0.85).setScale(1.9 * SPRITE_FIT).setTint(0x2a1a4a).setAlpha(0.9);
-    const mark = text(this, 0, -62, '?', 16, '#e0c8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5);
+    const mark = text(this, 0, -62, markFor(), r.cornered ? 22 : 16, r.cornered ? '#ffd84d' : '#e0c8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 })
+      .setOrigin(0.5)
+      .setName('mark');
     c.add([glow, body, mark]);
     this.layer.add(c);
     this.roamerSprite = c;
@@ -709,7 +772,7 @@ export class MapScene extends Phaser.Scene {
     w.f?.destroy();
     const f = this.add.container(w.c.x + FOLLOW.x * w.side, w.c.y + FOLLOW.y);
     const fShadow = this.add.ellipse(0, 0, 22, 7, 0x000000, w.ghost ? 0.25 : 0.4);
-    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage, true) : ensureCreatureTexture(this, lead.speciesId, lead.stage, lead.shiny);
+    const key = w.ghost ? ensureGrayTexture(this, lead.speciesId, lead.stage, true) : ensureCreatureTexture(this, lead.speciesId, lead.stage, colours(lead));
     const fBody = this.add
       .image(0, 0, key)
       .setOrigin(0.5, 0.92)
@@ -974,7 +1037,10 @@ export class MapScene extends Phaser.Scene {
     this.drawRoamer();
     // The other player sees you hop there.
     this.shareProgress();
-    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive'].includes(n.kind)) {
+    // A rare encounter on this hex: it's found now.
+    const fsur = floorSurprise(run);
+    if (fsur.enc && fsur.encNode === n.id && findSurprise(state.meta, fsur.enc)) persist();
+    if (['levelup', 'skill', 'prestige', 'treasure', 'event', 'revive', 'boon', 'hidden'].includes(n.kind)) {
       // Remember the unresolved choice so a reload offers it again.
       run.pendingNode = n.kind;
       persist();
@@ -991,7 +1057,14 @@ export class MapScene extends Phaser.Scene {
         return;
       case 'battle':
       case 'elite':
-        this.scene.start('Battle', { kind: n.kind });
+        // Travelling caravan (a surprise): a shop on wheels instead of a battle.
+        if (caravanAt(run, n)) {
+          run.shop = caravanShop(run);
+          persist();
+          return this.openShop();
+        }
+        // Haunted Floor (a curse): every battle on this floor is a trainer.
+        this.scene.start('Battle', { kind: encounterKind(run, n) });
         return;
       case 'heal':
         return this.doHeal();
@@ -1026,7 +1099,294 @@ export class MapScene extends Phaser.Scene {
         return this.doEvent();
       case 'revive':
         return this.doRevive();
+      case 'boon':
+        return this.doBoonHex();
+      case 'hidden':
+        return this.doHidden();
     }
+  }
+
+  /** The map's song: the land's own, or a rare floor's (2.0). */
+  private mapMusic() {
+    const run = state.run!;
+    const rare = floorSurprise(run).floor;
+    if (rare) playMusic('rare', rare);
+    else playMusic('map', run.map.biome);
+  }
+
+  /** Banners for the run's omen (once a run) and this floor's rare floor and Elder (once a floor). */
+  private announceSurprises(then: () => void) {
+    const run = state.run!;
+    const rs = run.surprises;
+    if (!rs) return then();
+    const fs = floorSurprise(run);
+    const lines: string[] = [];
+    if (rs.omen && !rs.omenAnnounced) {
+      rs.omenAnnounced = true;
+      findSurprise(state.meta, rs.omen);
+      lines.push(`Omen: ${SURPRISES[rs.omen].name}\n${SURPRISES[rs.omen].desc}`);
+    }
+    if (!fs.announced && (fs.floor || fs.elder || fs.hex)) {
+      fs.announced = true;
+      if (fs.floor) {
+        findSurprise(state.meta, fs.floor);
+        lines.push(`${SURPRISES[fs.floor].name}!\n${SURPRISES[fs.floor].desc}${fs.floor === 'shattered' && fs.second ? ` (${run.map.biome} and ${fs.second})` : ''}`);
+      }
+      if (fs.elder) {
+        findSurprise(state.meta, 'elder');
+        lines.push(`An Elder guardian waits at the top of this floor.\n${SURPRISES.elder.desc}`);
+      }
+      if (fs.hex) lines.push('Something glitters on a hex ahead (???).');
+    }
+    if (!lines.length) return then();
+    persist();
+    sfx.shinyReveal();
+    // An omen gets its own ominous song while it's announced; the map's comes back after.
+    const omen = lines[0].startsWith('Omen:');
+    if (omen) playMusic('omen');
+    showMessage(this, 'A rare surprise!', lines.join('\n\n'), () => {
+      if (omen) this.mapMusic();
+      tip(this, 'surprise', then);
+    });
+  }
+
+  /** Hatchery (a surprise): the egg hatches once it's seen enough battles (it waits if the party is full). */
+  private hatchIfReady(then: () => void) {
+    const run = state.run!;
+    if (!eggReady(run)) return then();
+    const name = SPECIES_BY_ID[run.surprises!.egg!.speciesId]?.names[0] ?? 'a Hexling';
+    const hatch = (release?: Creature) => {
+      const gone = release ? creatureName(release) : '';
+      const c = hatchEgg(run);
+      if (!c) return then();
+      joinParty(run, c, release);
+      dex.creature(c, true);
+      sfx.shinyReveal();
+      persist();
+      showMessage(
+        this,
+        'The egg hatches!',
+        `${release ? `${gone} was released.\n\n` : ''}Out pops ${creatureName(c)} (Lv ${c.level}), with its rare trait${c.trait ? `: ${traitName(c.speciesId, c.trait)}` : ''}. It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`,
+        then,
+      );
+    };
+    if (!rosterFull(run)) return hatch();
+    const all = allCreatures(run);
+    openPicker(this, {
+      title: 'The egg is hatching!',
+      subtitle: `A ${name} is about to hatch, but your party is full. Release one to make room, or let it wait (it hatches the next time there's room).`,
+      options: all.map((c) => ({ creature: c, note: run.team.includes(c) ? 'Team' : 'Bench' })),
+      onPick: (k) => hatch(all[k]),
+      onCancel: then,
+      cancelLabel: 'Not yet',
+    });
+  }
+
+  /** Hidden hexes (surprises): a wishing well, a cursed altar, a hidden shop, a hatchery or a dojo. */
+  private doHidden() {
+    const run = state.run!;
+    const fs = floorSurprise(run);
+    const id = fs.hex ?? 'well';
+    if (findSurprise(state.meta, id)) persist();
+    sfx.discover();
+    if (id === 'hatchery') {
+      if (run.surprises?.egg)
+        return showMessage(this, 'Hatchery', 'An empty nest. You already carry an egg, warm in your bag.', this.done);
+      return openPicker(this, {
+        title: 'Hatchery',
+        subtitle: `A warm nest, left alone, with one speckled egg in it. Carry it for ${EGG_WINS} won battles and it hatches into a line you haven't caught yet, always with its rare ◆ trait.`,
+        options: [
+          { label: 'Take the egg', color: 0x2f6b4a },
+          { label: 'Leave it', color: 0x3a3450 },
+        ],
+        onPick: (i) => {
+          if (i === 1) return this.done();
+          layEgg(run);
+          persist();
+          showMessage(this, 'Hatchery', `You tuck the egg into your bag. It hatches after ${EGG_WINS} won battles.`, this.done);
+        },
+      });
+    }
+    if (id === 'dojo') return this.doDojo();
+    if (id === 'fossil') return this.doFossil();
+    // A boon gained here: open it as an offer of one (or a mythic offer), then move on.
+    const offerAndGo = (mode: 'normal' | 'mythic') => {
+      openOffer(run, `hidden${run.floor}:${id}:${mode}`, mode);
+      persist();
+      openBoonOffer(this, run, this.done);
+    };
+    if (id === 'well') {
+      const toss = (amount: number) => {
+        pay(run, amount);
+        const r = placeRng(run, `well:${amount}`).next() + (amount >= 60 ? 0.15 : 0);
+        if (r < 0.3) return showMessage(this, 'Wishing Well', 'Plink... nothing happens. The coins are gone.', this.done);
+        if (r < 0.55) {
+          earnCoins(run, amount * 2);
+          return showMessage(this, 'Wishing Well', `The well coughs up ◉ ${amount * 2}!`, this.done);
+        }
+        if (r < 0.92) return showMessage(this, 'Wishing Well', 'Your wish is heard: a boon!', () => offerAndGo('normal'));
+        return showMessage(this, 'Wishing Well', 'The water glows gold: a mythic boon!', () => offerAndGo('mythic'));
+      };
+      return openPicker(this, {
+        title: 'Wishing Well',
+        subtitle: 'Toss in coins and make a wish. Anything could happen, including nothing. Bigger wishes are luckier.',
+        options: [
+          { label: 'Toss ◉ 25', disabled: run.coins < 25, color: 0x2f4a6b },
+          { label: 'Toss ◉ 60', sub: 'Better odds', disabled: run.coins < 60, color: 0x4a3a7a },
+          { label: 'Walk away', color: 0x3a3450 },
+        ],
+        onPick: (i) => (i === 0 ? toss(25) : i === 1 ? toss(60) : this.done()),
+      });
+    }
+    if (id === 'altar') {
+      const list = allCreatures(run);
+      return openPicker(this, {
+        title: 'Cursed Altar',
+        subtitle: 'The altar wants something precious. Give it, and it gives back a mythic boon.',
+        options: [
+          { label: 'Offer a Hexling', sub: 'It leaves your team for good', disabled: list.length < 2, color: 0x6a2a3a },
+          { label: `Offer half your coins (◉ ${Math.floor(run.coins / 2)})`, disabled: run.coins < 20, color: 0x6b5a1c },
+          { label: 'Walk away', color: 0x3a3450 },
+        ],
+        onPick: (i) => {
+          if (i === 2) return this.done();
+          if (i === 1) {
+            run.coins -= Math.floor(run.coins / 2);
+            return offerAndGo('mythic');
+          }
+          openPicker(this, {
+            title: 'Offer which Hexling?',
+            options: list.map((c) => ({ creature: c })),
+            onPick: (k) => {
+              const c = list[k];
+              unequipHeld(run, c);
+              run.team = run.team.filter((x) => x !== c);
+              run.bench = run.bench.filter((x) => x !== c);
+              fillTeamFromBench(run);
+              offerAndGo('mythic');
+            },
+            onCancel: () => this.doHidden(),
+            cancelLabel: 'Back',
+          });
+        },
+      });
+    }
+    // The hidden shop: three boons for coins.
+    const ids = rollOffer(run, `hiddenshop${run.floor}`).filter((b) => BOONS[b].rarity !== 'curse' && !hasBoon(run, b));
+    const price = priceFor(run, 120);
+    return openPicker(this, {
+      title: `Hidden Shop   ◉ ${run.coins}`,
+      subtitle: 'A cloaked stranger sells boons, not items.',
+      options: [
+        ...ids.map((b) => ({ ...boonCardText(b), label: `${BOONS[b].name}   ◉ ${price}`, disabled: run.coins < price, color: BOON_COLOR[BOONS[b].rarity] })),
+        { label: 'Leave', color: 0x3a3450 },
+      ],
+      rowHeight: 86,
+      onPick: (i) => {
+        if (i >= ids.length) return this.done();
+        pay(run, price);
+        runBoons(run).offer = { ids: [ids[i]], picks: 1, mode: 'normal', tag: 'hiddenshop' };
+        takeBoon(run, ids[i]);
+        sfx.boonPick(BOONS[ids[i]].rarity);
+        persist();
+        showMessage(this, `${BOONS[ids[i]].name}!`, BOONS[ids[i]].desc, this.done);
+      },
+    });
+  }
+
+  /** Fossil Site (a surprise): bring back one of three ancient forms (swap someone out if the party is full). */
+  private doFossil() {
+    const run = state.run!;
+    const forms = fossilChoices(run);
+    const full = rosterFull(run);
+    openPicker(this, {
+      title: 'Fossil Site',
+      subtitle: `Three fossils in the rock. Bring one back as an ancient form: its line in amber stone, for good in your Hexlidex.${full ? '\nYour party is full: you\u2019ll pick someone to swap out.' : ''}`,
+      options: forms.map((c) => ({ creature: c, note: `Ancient form · Lv ${c.level}` })),
+      onPick: (i) => {
+        const c = forms[i];
+        const take = (release?: Creature) => {
+          const gone = release ? creatureName(release) : '';
+          if (!joinParty(run, c, release)) return this.done();
+          const fresh = noteAncient(state.meta, c.speciesId);
+          dex.creature(c, true);
+          sfx.shinyReveal();
+          persist();
+          showMessage(
+            this,
+            'An ancient form!',
+            `${release ? `${gone} was released.\n\n` : ''}${creatureName(c)} shakes off the dust of ages and joins your ${run.team.includes(c) ? 'team' : 'bench'}.${fresh ? '\n\nNew in your Hexlidex: its ancient form.' : ''}`,
+            this.done,
+          );
+        };
+        if (!full) return take();
+        const all = allCreatures(run);
+        openPicker(this, {
+          title: `Swap out for ${creatureName(c)}?`,
+          subtitle: 'Your party is full. Release one to make room; it leaves for good. Held items go back to your bag.',
+          options: all.map((x) => ({ creature: x, note: run.team.includes(x) ? 'Team' : 'Bench' })),
+          onPick: (k) => take(all[k]),
+          onCancel: () => this.doFossil(),
+          cancelLabel: 'Back',
+        });
+      },
+      onCancel: this.done,
+      cancelLabel: 'Leave them',
+    });
+  }
+
+  /** Dojo (a surprise): three trainers in a row, no healing between; win them all for a boon and a Limit Breaker. */
+  private doDojo() {
+    const run = state.run!;
+    const d = run.surprises?.dojo;
+    const fight = () => this.scene.start('Battle', { kind: 'elite' });
+    if (d?.lost) {
+      leaveDojo(run);
+      persist();
+      return showMessage(this, 'Dojo', 'The Dojo Master bows. "Come back stronger."', this.done);
+    }
+    if (d && d.wins >= DOJO_ROUNDS) {
+      // The prize: a boon, then a Limit Breaker for one Hexling.
+      leaveDojo(run);
+      openOffer(run, `dojo${run.floor}`);
+      persist();
+      sfx.victory();
+      const limit = (): void =>
+        this.buy({ item: 'limit', price: 0, sold: false }, () => limit());
+      return showMessage(this, 'Dojo cleared!', 'The Dojo Master bows low. "Take these. You\u2019ve earned them."\n\nA boon, and a Limit Breaker.', () =>
+        openBoonOffer(this, run, limit),
+      );
+    }
+    if (d) return showMessage(this, 'Dojo', `Round ${d.wins + 1} of ${DOJO_ROUNDS}. No time to rest: the next challenger steps up.`, fight);
+    openPicker(this, {
+      title: 'Dojo',
+      subtitle: `A hall of polished wood. ${DOJO_ROUNDS} trainers wait, one after another, with no healing between. Beat all ${DOJO_ROUNDS} for a boon and a Limit Breaker. Lose, and the run goes on without them.`,
+      options: [
+        { label: 'Step onto the mat', color: 0x6a2a3a },
+        { label: 'Walk away', color: 0x3a3450 },
+      ],
+      onPick: (i) => {
+        if (i === 1) return this.done();
+        enterDojo(run);
+        persist();
+        fight();
+      },
+    });
+  }
+
+  /** Boon hex: an offer of boons (the same one after a reload). */
+  private doBoonHex() {
+    const run = state.run!;
+    const key = `${run.floor}:${run.currentId}`;
+    const rb = runBoons(run);
+    // Each Boon hex offers once (a reload brings back the same offer, then moves on).
+    if (rb.hexDone === key && !rb.offer) return this.done();
+    if (rb.hexDone !== key) {
+      rb.hexDone = key;
+      openOffer(run, `hex${key}`);
+    }
+    persist();
+    openBoonOffer(this, run, this.done);
   }
 
   /** Revival hex: bring back one fallen Hexling at 60% of the level it fell at. */
@@ -1036,18 +1396,32 @@ export class MapScene extends Phaser.Scene {
     if (!grave.length)
       return showMessage(this, 'Revival', 'A warm glow, but no one to bring back: none of your Hexlings has fallen this run. Lucky you.', this.done);
     const full = rosterFull(run);
-    const forms = grave.map(revivedForm);
+    const forms = grave.map((c) => revivedForm(c, run));
     openPicker(this, {
       title: 'Revival',
-      subtitle: `Bring back one fallen Hexling at ${Math.round(REVIVE_LEVEL * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: release someone first to make room.' : ''}`,
-      options: forms.map((c, i) => ({ creature: c, disabled: full, note: `Fell at Lv ${grave[i].level} → returns at Lv ${c.level}` })),
+      subtitle: `Bring back one fallen Hexling at ${Math.round(reviveShare(run) * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: you\u2019ll pick someone to swap out.' : ''}`,
+      options: forms.map((c, i) => ({ creature: c, note: `Fell at Lv ${grave[i].level} → returns at Lv ${c.level}${full ? ' · swap someone out' : ''}` })),
       onPick: (i) => {
-        const c = reviveFallen(run, grave[i].uid);
-        if (!c) return this.done();
-        sfx.levelUp();
-        dex.creature(c, true);
-        persist();
-        showMessage(this, 'Revival', `${creatureName(c)} is back, at Lv ${c.level}! It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`, this.done);
+        const back = (release?: Creature) => {
+          const name = release ? creatureName(release) : '';
+          const c = reviveFallen(run, grave[i].uid, release);
+          if (!c) return this.done();
+          sfx.levelUp();
+          dex.creature(c, true);
+          persist();
+          showMessage(this, 'Revival', `${release ? `${name} was released.\n\n` : ''}${creatureName(c)} is back, at Lv ${c.level}! It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`, this.done);
+        };
+        if (!full) return back();
+        // Party full: swap someone out (they leave for good) or go back to the list.
+        const all = allCreatures(run);
+        openPicker(this, {
+          title: `Swap out for ${creatureName(forms[i])}?`,
+          subtitle: 'Your party is full. Release one to make room; it leaves for good and the revived Hexling takes its spot. Held items go back to your bag.',
+          options: all.map((c) => ({ creature: c, note: run.team.includes(c) ? 'Team' : 'Bench' })),
+          onPick: (k) => back(all[k]),
+          onCancel: () => this.doRevive(),
+          cancelLabel: 'Back',
+        });
       },
       onCancel: this.done,
       cancelLabel: 'Leave',
@@ -1063,14 +1437,18 @@ export class MapScene extends Phaser.Scene {
       persist();
     }
     const offer = run.treasure;
-    const slot: ShopSlot = { item: offer.item, price: 0, sold: false, held: offer.held };
-    const reason = unusableReason(run, slot);
+    const slots: ShopSlot[] = [{ item: offer.item, price: 0, sold: false, held: offer.held }];
+    // Treasure Nose sniffed out a third thing.
+    if (offer.extra) slots.push({ item: offer.extra.item, price: 0, sold: false, held: offer.extra.held });
     openPicker(this, {
       title: 'Treasure',
-      subtitle: 'The chest holds two things. You can only carry one.',
+      subtitle: offer.extra ? 'Treasure Nose found a third thing! You can only carry one.' : 'The chest holds two things. You can only carry one.',
       options: [
         { label: `${offer.coins} coins`, color: 0x6b5a1c, glyph: 'coin' },
-        { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c, glyph: slotGlyph(slot) },
+        ...slots.map((slot) => {
+          const reason = unusableReason(run, slot);
+          return { label: slotName(slot), sub: reason ?? slotDesc(slot), disabled: !!reason, color: 0x4a3a1c, glyph: slotGlyph(slot) };
+        }),
       ],
       onPick: (i) => {
         if (i === 0) {
@@ -1079,7 +1457,7 @@ export class MapScene extends Phaser.Scene {
           return showMessage(this, 'Treasure', `You take ◉ ${offer.coins}.`, this.done);
         }
         trackStat(run, 'treasures');
-        this.buy(slot, () => this.doTreasure());
+        this.buy(slots[i - 1], () => this.doTreasure());
       },
     });
   }
@@ -1153,15 +1531,23 @@ export class MapScene extends Phaser.Scene {
 
   private doHeal() {
     const run = state.run!;
-    const frac = run.passive === 'medic' ? 1 : 0.5;
+    // Boons: Bloom heals everyone to full; Blood Price (a curse) stops rests healing.
+    const frac = hasBoon(run, 'bloodprice') ? 0 : run.passive === 'medic' || hasBoon(run, 'bloom') ? 1 : 0.5;
     trackStat(run, 'rests');
     for (const c of allCreatures(run)) {
-      healFraction(c, frac);
+      if (frac) healFraction(c, frac);
       c.status = undefined;
       restoreUses(c);
     }
     sfx.heal();
-    showMessage(this, 'Rest', `Your Hexlings recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`, this.done);
+    showMessage(
+      this,
+      'Rest',
+      frac
+        ? `Your Hexlings recover ${frac * 100}% of their HP, shake off any status conditions and get every move's uses back.`
+        : "Blood Price: no healing here. Your Hexlings shake off any status conditions and get every move's uses back.",
+      this.done,
+    );
   }
 
   private doLevelUp() {
@@ -1323,27 +1709,35 @@ export class MapScene extends Phaser.Scene {
       const name = hasSeenForm(state.meta.dex, c.speciesId, c.stage) ? creatureName(c) : 'Mystery Hexling';
       return `Recruit: ${name} Lv ${c.level}`;
     };
-    const reroll = rerollPrice(run, shop);
+    const rerollFree = freeRerollReady(run) && rerollPrice(run, shop) > 0;
+    const reroll = rerollFree ? 0 : rerollPrice(run, shop);
+    const wagon = !!shop.caravan;
     openPicker(this, {
-      title: `Shop   ◉ ${run.coins}`,
-      subtitle: `${shopTalk(run)}\nItems take effect right away.`,
+      title: `${wagon ? 'Travelling caravan' : 'Shop'}   ◉ ${run.coins}`,
+      subtitle: wagon
+        ? 'A painted wagon rolls up, piled high. "One thing on the house, friend. The rest, you pay for."'
+        : `${shopTalk(run)}\nItems take effect right away.`,
       options: [
         ...shop.slots.map((sl) => {
           const reason = sl.sold ? 'Sold' : unusableReason(run, sl);
           const poor = !canAfford(run, sl.price);
           return {
-            label: `${label(sl)}   ◉ ${sl.price}`,
+            label: `${label(sl)}   ${sl.price === 0 && wagon ? 'FREE' : `◉ ${sl.price}`}`,
             sub: reason ?? (poor ? `${slotDesc(sl)} · not enough coins` : slotDesc(sl)),
             disabled: sl.sold || !!reason || poor,
             color: 0x4a3a1c,
             glyph: slotGlyph(sl),
           };
         }),
-        { label: `Reroll stock   ◉ ${reroll}`, sub: 'New items, same shop', disabled: !canAfford(run, reroll) },
+        ...(wagon
+          ? []
+          : [{ label: `Reroll stock   ◉ ${reroll}`, sub: rerollFree ? 'Free once this floor (Restocker)' : 'New items, same shop', disabled: !canAfford(run, reroll) }]),
       ],
       onPick: (i) => {
-        if (i === shop.slots.length) {
-          pay(run, reroll);
+        if (i === shop.slots.length && !wagon) {
+          // Restocker (Workshop): the first reroll on each floor is free.
+          if (rerollFree) useFreeReroll(run);
+          else pay(run, reroll);
           run.shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
           return this.scene.restart({});
         }

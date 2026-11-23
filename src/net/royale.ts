@@ -1,5 +1,7 @@
+import { cleanBoonIds } from './duel';
 import { champion, cleanBracket, makeBracket, readyMatches, setWinner, type Bracket } from '../logic/bracket';
 import type { Creature } from '../logic/creature';
+import type { BattleEvent } from '../logic/battle';
 import { Rng } from '../logic/rng';
 import { activeTeam, ARENA_POTIONS, makeArenaCreature } from '../logic/arena';
 import { state } from '../state';
@@ -18,16 +20,21 @@ import { beginDuel, cleanCreatures, cleanLead, cleanNodeId, cleanRoster, duel, g
  */
 
 /** How long a player whose link dropped has to come back before they're out. */
-const GRACE = 20000;
+// Long enough to lock a phone or switch apps for a moment and come back (it was 20 s).
+const GRACE = 45000;
 
 interface HostRacer {
   progress: RaceProgress | null;
   /** Their finished team (empty: wiped out). */
   team: Creature[] | null;
   gone: boolean;
+  /** They chose to leave (gone for good, even if they reconnect). */
+  quit?: boolean;
   /** Potions left for the bracket, and how much one heals. */
   potions: number;
   heal: number;
+  /** Boons from their climb (2.0). */
+  boons?: string[];
   timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -57,6 +64,8 @@ export const royale = {
   infos: new Map<string, StartInfo>(),
   lastStep: new Map<string, { snap: Snap; next: Next }>(),
   watchers: new Map<string, Set<string>>(),
+  /** Host: battles going on right now on racers' climbs, by player (for spectators who are out). */
+  climbs: new Map<string, { info: StartInfo; snap: Snap; next: Next; wild?: boolean }>(),
   /** The match you're watching was decided (the battle screen winds down). */
   onWatchOver: null as (() => void) | null,
   /** An online tournament (Arena teams, no stage race) rather than a battle royale. */
@@ -64,6 +73,7 @@ export const royale = {
   /** Redraw hook for whichever screen shows the royale. */
   onChange: null as (() => void) | null,
   reset() {
+    lastProgress = null;
     for (const r of this.racers.values()) if (r.timer) clearTimeout(r.timer);
     this.active = false;
     this.tourney = false;
@@ -82,6 +92,7 @@ export const royale = {
     this.infos = new Map();
     this.lastStep = new Map();
     this.watchers = new Map();
+    this.climbs = new Map();
   },
 };
 
@@ -93,8 +104,10 @@ export function royaleSummary(): string {
   if (!s.length) return 'starting';
   const racing = s.filter((x) => !x.finished && !x.gone).length;
   const ready = s.filter((x) => x.finished && x.alive).length;
-  const out = s.filter((x) => !x.alive || x.gone).length;
-  return [`${racing} racing`, ready ? `${ready} at the boss` : '', out ? `${out} out` : ''].filter(Boolean).join(' · ');
+  // A dropped link isn't a wiped team: say which it is.
+  const out = s.filter((x) => !x.alive && !x.gone).length;
+  const lost = s.filter((x) => x.gone).length;
+  return [`${racing} racing`, ready ? `${ready} at the boss` : '', out ? `${out} out` : '', lost ? `${lost} disconnected` : ''].filter(Boolean).join(' · ');
 }
 
 // ---------------------------------------------------------------- starting
@@ -146,9 +159,13 @@ function enterRoyale(race: RaceInfo, players: RosterEntry[]) {
 
 /** Share where you are (or your finished team). */
 export function royaleProgress(p: RaceProgress) {
+  lastProgress = p;
   if (session.role === 'host') onProgress(myPid, p);
   else session.send({ t: 'progress', p });
 }
+
+/** What this guest last shared, so it can be sent again if the host missed it while the link was down. */
+let lastProgress: RaceProgress | null = null;
 
 function onProgress(pid: string | undefined, p: RaceProgress) {
   const r = pid ? royale.racers.get(pid) : undefined;
@@ -163,7 +180,9 @@ function onProgress(pid: string | undefined, p: RaceProgress) {
     lead: cleanLead(p.lead) ?? r.progress?.lead,
   };
   if (p.finished) {
+    endClimb(pid!);
     r.team = pid === myPid ? (p.team ?? []) : cleanCreatures(p.team);
+    r.boons = royale.tourney ? [] : cleanBoonIds(p.boons);
     // Battle royale: the potions you finished the stage with. Tournament: a set supply.
     r.potions = royale.tourney ? ARENA_POTIONS : Math.max(0, Math.min(99, Math.round(Number(p.potions) || 0)));
     const heal = Number(p.heal);
@@ -185,6 +204,7 @@ function shareStandings() {
       finished,
       alive: !r?.gone && (!r?.progress?.finished || !!r?.team?.length),
       ...(r?.gone ? { gone: true } : {}),
+      ...(royale.climbs.has(p.pid) && !r?.gone && !r?.progress?.finished ? { fighting: true } : {}),
       ...(r?.progress?.at ? { at: r.progress.at } : {}),
       ...(r?.progress?.lead ? { lead: r.progress.lead } : {}),
     };
@@ -238,6 +258,8 @@ function schedule() {
         guestTeam: [],
         hostCreatures: ra.team ?? [],
         guestCreatures: rb.team ?? [],
+        hostBoons: ra.boons ?? [],
+        guestBoons: rb.boons ?? [],
         potions: { host: ra.potions, guest: rb.potions, hostHeal: ra.heal, guestHeal: rb.heal },
       };
       royale.infos.set(id, info);
@@ -371,6 +393,14 @@ function sendWatchStep(msg: Extract<DuelMsg, { t: 'wstep' }>) {
 function onWatch(pid: string | undefined, id: string) {
   if (!pid) return;
   for (const set of royale.watchers.values()) set.delete(pid);
+  if (id.startsWith(CLIMB)) {
+    const c = royale.climbs.get(id.slice(CLIMB.length));
+    if (!c || id === CLIMB + pid) return;
+    if (!royale.watchers.has(id)) royale.watchers.set(id, new Set());
+    royale.watchers.get(id)!.add(pid);
+    deliver(pid, { t: 'wstart', match: id, info: c.info, snap: c.snap, next: c.next, wild: c.wild });
+    return;
+  }
   const info = royale.infos.get(id);
   const [round, index] = id.split('-').map(Number);
   const m = royale.bracket?.rounds[round]?.[index];
@@ -390,20 +420,120 @@ function onWatchStep(pid: string | undefined, msg: Extract<DuelMsg, { t: 'wstep'
   for (const w of royale.watchers.get(msg.match) ?? []) deliver(w, msg);
 }
 
+// ---------------------------------------------------------------- watching climbs
+
+/** Watch ids for battles on a racer's climb: "climb:<pid>". */
+const CLIMB = 'climb:';
+
+/** Racer: a battle on my climb starts (only shared in a battle royale with more than 2 players). */
+export function climbStart(info: StartInfo, snap: Snap, next: Next, wild: boolean) {
+  if (!climbShared()) return;
+  const msg: DuelMsg = { t: 'cstart', info, snap, next, wild };
+  if (session.role === 'host') onClimb(myPid, msg);
+  else session.send(msg);
+}
+
+/** Racer: a turn of that battle. */
+export function climbStep(events: BattleEvent[], snap: Snap, next: Next) {
+  if (!climbShared()) return;
+  const msg: DuelMsg = { t: 'cstep', events, snap, next };
+  if (session.role === 'host') onClimb(myPid, msg);
+  else session.send(msg);
+}
+
+/** Racer: the battle screen closed. */
+export function climbEnd() {
+  if (!climbShared()) return;
+  if (session.role === 'host') onClimb(myPid, { t: 'cend' });
+  else session.send({ t: 'cend' });
+}
+
+const climbShared = () => royale.active && !royale.tourney && !royale.bracket && royale.players.length > 2;
+
+/** Host: keep each racer's battle and pass its turns to whoever is watching it. */
+function onClimb(pid: string | undefined, msg: DuelMsg) {
+  const r = pid ? royale.racers.get(pid) : undefined;
+  if (!pid || !r || r.gone || r.progress?.finished) return;
+  const id = CLIMB + pid;
+  if (msg.t === 'cstart') {
+    const info = cleanClimbInfo(msg.info);
+    if (!info || !msg.snap) return;
+    info.hostName = nameIn(pid);
+    const had = royale.climbs.has(pid);
+    royale.climbs.set(pid, { info, snap: msg.snap, next: msg.next, wild: !!msg.wild });
+    // Anyone already watching sees the new battle from its start.
+    for (const w of royale.watchers.get(id) ?? []) deliver(w, { t: 'wstart', match: id, info, snap: msg.snap, next: msg.next, wild: !!msg.wild });
+    if (!had) shareStandings();
+  } else if (msg.t === 'cstep') {
+    const c = royale.climbs.get(pid);
+    if (!c || !msg.snap || !Array.isArray(msg.events)) return;
+    c.snap = msg.snap;
+    c.next = msg.next;
+    for (const w of royale.watchers.get(id) ?? []) deliver(w, { t: 'wstep', match: id, events: msg.events, snap: msg.snap, next: msg.next });
+  } else if (msg.t === 'cend') endClimb(pid);
+}
+
+/** Host: a racer's battle is over (or they left): its watchers wind down. */
+function endClimb(pid: string) {
+  const id = CLIMB + pid;
+  if (!royale.climbs.delete(pid)) return;
+  for (const w of royale.watchers.get(id) ?? []) deliver(w, { t: 'wover', match: id });
+  royale.watchers.delete(id);
+  shareStandings();
+}
+
+function cleanClimbInfo(x: StartInfo | undefined): StartInfo | null {
+  if (!x || typeof x !== 'object') return null;
+  const hostCreatures = cleanCreatures(x.hostCreatures);
+  const guestCreatures = cleanCreatures(x.guestCreatures);
+  if (!hostCreatures.length || !guestCreatures.length) return null;
+  return {
+    seed: Number(x.seed) || 1,
+    hostName: String(x.hostName ?? 'Player').slice(0, 24),
+    guestName: String(x.guestName ?? 'Wild Hexlings').slice(0, 40),
+    hostTeam: [],
+    guestTeam: [],
+    hostCreatures,
+    guestCreatures,
+    hostBoons: cleanBoonIds(x.hostBoons),
+    guestBoons: [],
+  };
+}
+
+/** Battles you can watch on others' climbs right now (you're out of a battle royale with 3 or more). */
+export function climbsToWatch(): { pid: string; name: string }[] {
+  if (!royale.active || royale.tourney || royale.bracket || royale.players.length <= 2) return [];
+  return royale.standings.filter((x) => x.fighting && !x.gone && !x.finished && x.pid !== myPid).map((x) => ({ pid: x.pid, name: x.name }));
+}
+
+/** Ask to watch a racer's battle on their climb (the battle screen opens once the host answers). */
+export function watchClimb(pid: string) {
+  if (royale.match || pid === myPid) return;
+  const id = CLIMB + pid;
+  royale.watching = id;
+  if (session.role === 'host') onWatch(myPid, id);
+  else session.send({ t: 'watch', match: id });
+}
+
+/** Watching a climb (not a bracket match). */
+export const watchingClimb = () => !!royale.watching?.startsWith(CLIMB);
+
 /** Spectator: the match you asked for, ready to show. */
 let watchCtl: DuelController | null = null;
 
 function onWatchStart(msg: Extract<DuelMsg, { t: 'wstart' }>) {
   if (royale.watching !== msg.match || royale.match) return;
-  const info = { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures) };
+  const info = { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures), hostBoons: cleanBoonIds(msg.info.hostBoons), guestBoons: cleanBoonIds(msg.info.guestBoons) };
   // The runner's side is "yours" on screen; the other player is the opponent.
   const battle = duelBattle(info, 'host');
   if (msg.snap) applySnap(battle, msg.snap);
   watchCtl = new DuelController('guest', info, { send: () => {} }, battle);
+  // A battle on someone's climb: they're the near side; the other side is wild Hexlings or a trainer.
+  const climber = msg.match.startsWith(CLIMB) ? msg.match.slice(CLIMB.length) : null;
   const [round, index] = msg.match.split('-').map(Number);
-  const m = royale.bracket?.rounds[round]?.[index];
-  const a = royale.players.find((p) => p.pid === m?.a);
-  const b = royale.players.find((p) => p.pid === m?.b);
+  const m = climber ? null : royale.bracket?.rounds[round]?.[index];
+  const a = royale.players.find((p) => p.pid === (climber ?? m?.a));
+  const b = climber ? undefined : royale.players.find((p) => p.pid === m?.b);
   goTo('Battle', {
     kind: 'elite',
     match: {
@@ -418,7 +548,7 @@ function onWatchStart(msg: Extract<DuelMsg, { t: 'wstart' }>) {
       background: 0x14223a,
       duel: watchCtl,
       initialNext: msg.next?.phase === 'end' ? { phase: 'choose' } : msg.next,
-      spectate: { player: info.hostName, playerLook: a?.look },
+      spectate: { player: info.hostName, playerLook: a?.look, ...(climber ? { climb: true, wild: !!msg.wild } : {}) },
       onEnd: () => {},
     },
   });
@@ -451,6 +581,11 @@ export function royaleBack(pid: string) {
   const r = royale.racers.get(pid);
   if (r?.timer) clearTimeout(r.timer);
   if (r) r.timer = undefined;
+  // Back after the grace period, but before the bracket is set: they're still in it.
+  if (r?.gone && !r.quit && !royale.bracket && !royale.champion && !royale.ended) {
+    r.gone = false;
+    shareStandings();
+  }
   // Bring them up to date.
   const peer = duel.peers.get(pid);
   if (!peer) return;
@@ -463,6 +598,7 @@ function goneFor(pid: string) {
   if (!r || r.gone) return;
   r.gone = true;
   r.timer = undefined;
+  endClimb(pid);
   // Mid-match: their opponent wins.
   const b = royale.bracket;
   if (b)
@@ -495,8 +631,11 @@ function onMessage(msg: DuelMsg, from: string) {
           .map((x) => {
             const at = cleanNodeId(x.at);
             const lead = cleanLead(x.lead);
-            return { pid: x.pid, name: nameIn(x.pid), floor: Number(x.floor) || 0, steps: typeof x.steps === 'number' ? x.steps : undefined, finished: !!x.finished, alive: !!x.alive, ...(x.gone ? { gone: true } : {}), ...(at ? { at } : {}), ...(lead ? { lead } : {}) };
+            return { pid: x.pid, name: nameIn(x.pid), floor: Number(x.floor) || 0, steps: typeof x.steps === 'number' ? x.steps : undefined, finished: !!x.finished, alive: !!x.alive, ...(x.gone ? { gone: true } : {}), ...(x.fighting ? { fighting: true } : {}), ...(at ? { at } : {}), ...(lead ? { lead } : {}) };
           });
+        // Back from a dropped link: if the host doesn't have our finished team yet, send it again.
+        const me = royale.standings.find((x) => x.pid === myPid);
+        if (me && !me.gone && !me.finished && lastProgress?.finished) session.send({ t: 'progress', p: lastProgress });
         changed();
       }
       return;
@@ -512,11 +651,20 @@ function onMessage(msg: DuelMsg, from: string) {
     case 'progress':
       if (host && royale.active) onProgress(pidOf(from), msg.p);
       return;
+    case 'cstart':
+    case 'cstep':
+    case 'cend':
+      if (host && royale.active && from) onClimb(pidOf(from), msg);
+      return;
+    case 'wover':
+      if (!royale.active || (host && from)) return;
+      if (royale.watching === msg.match) royale.onWatchOver?.();
+      return;
     case 'mstart':
       if (!royale.active || (host && from)) return;
       startMatch(
         String(msg.match),
-        { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures) },
+        { ...msg.info, hostTeam: [], guestTeam: [], hostCreatures: cleanCreatures(msg.info.hostCreatures), guestCreatures: cleanCreatures(msg.info.guestCreatures), hostBoons: cleanBoonIds(msg.info.hostBoons), guestBoons: cleanBoonIds(msg.info.guestBoons) },
         msg.role === 'host' ? 'host' : 'guest',
         String(msg.opp),
       );
@@ -545,6 +693,8 @@ function onMessage(msg: DuelMsg, from: string) {
     case 'quit':
       if (host && royale.active) {
         const pid = pidOf(from);
+        const r = pid ? royale.racers.get(pid) : undefined;
+        if (r) r.quit = true;
         if (pid) goneFor(pid);
       }
       return;
