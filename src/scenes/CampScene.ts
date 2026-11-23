@@ -708,20 +708,49 @@ export class CampScene extends Phaser.Scene {
       const img = this.add.image(x, y, ensureTrainerTexture(this, look, 'stand')).setOrigin(0.5, 0.94).setScale(1.6).setDepth(y / 1000).setFlipX(x > this.fx);
       const short = i === 1 ? 'Alder' : i === 2 ? (this.prep && run?.rival ? run.rival.name : 'Rival') : v.name;
       text(this, x, y + 4, short, 10, '#e8e0ff', { stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5, 0).setDepth(2);
-      // "!" when they have something for you.
+      // A speech bubble when they have something for you: gold "!" for something to claim or big
+      // news, white "?" for today's challenge, "…" for a word before the run. It bobs, and a
+      // glow under their feet draws the eye; it clears once you've heard them out.
       const ch = list[v.tier];
       const news = this.prep ? this.newsFrom(i) : null;
-      const flag = this.prep ? (i === 1 && legendFloors(run!, floorsOf(run!)).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
-      if (flag) {
-        const f = text(this, x, y - 66, flag, 18, flag === '!' ? '#ffd04a' : '#c8d8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5).setDepth(3);
-        if (!calm()) this.tweens.add({ targets: f, y: f.y - 5, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
-      }
+      const flag = this.prep ? (i === 1 && legendFloors(run!, floorsOf(run!)).length ? '!' : news ? '…' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
+      const bubble = flag ? this.talkBubble(x, y, flag) : null;
       img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         sfx.click();
-        if (news) showMessage(this, short === 'Alder' ? 'Professor Alder' : short, news);
-        else if (!this.prep) this.challengeFrom(i, ch);
+        if (news) {
+          bubble?.destroy();
+          showMessage(this, short === 'Alder' ? 'Professor Alder' : short, news);
+        } else if (!this.prep) this.challengeFrom(i, ch);
       });
     });
+  }
+
+  /** A speech bubble over a visitor (and a glow at their feet). Destroying it clears both. */
+  private talkBubble(x: number, y: number, mark: string): Phaser.GameObjects.Container {
+    const urgent = mark === '!';
+    const fill = urgent ? 0xffd04a : 0xf4f0ff;
+    const glow = this.add.ellipse(x, y, 46, 14, urgent ? 0xffd04a : 0xc8d8ff, 0.35).setDepth(y / 1000 - 0.001).setBlendMode(Phaser.BlendModes.ADD);
+    const c = this.add.container(x, y - 76).setDepth(4);
+    const g = this.add.graphics();
+    g.fillStyle(0x14101e, 1).fillRoundedRect(-17, -15, 34, 28, 9);
+    g.fillStyle(fill, 1).fillRoundedRect(-15, -13, 30, 24, 8);
+    // The tail, pointing down at their head.
+    g.fillStyle(0x14101e, 1).fillTriangle(-7, 9, 7, 9, 0, 21);
+    g.fillStyle(fill, 1).fillTriangle(-5, 8, 5, 8, 0, 17);
+    const t = text(this, 0, -2, mark, mark === '…' ? 16 : 18, '#2a1a08', { fontStyle: 'bold' }).setOrigin(0.5);
+    c.add([g, t]);
+    c.once('destroy', () => glow.destroy());
+    if (!calm()) {
+      this.tweens.add({ targets: c, y: c.y - 6, yoyo: true, repeat: -1, duration: 560, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: glow, alpha: 0.1, scaleX: 1.25, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+      // Every few seconds the bubble pops, so it catches the eye.
+      this.time.addEvent({
+        delay: urgent ? 1800 : 3200,
+        loop: true,
+        callback: () => c.active && this.tweens.add({ targets: c, scale: { from: 1.25, to: 1 }, duration: 320, ease: 'Back.easeOut' }),
+      });
+    }
+    return c;
   }
 
   /** What a visitor has to say before a run. */
