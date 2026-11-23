@@ -264,6 +264,38 @@ describe('shop', () => {
     expect(run.log.graveyard!.length).toBe(0);
     expect(reviveFallen(run, uid)).toBeNull();
   });
+  it('Revival hex with a full party: the one released leaves and the revived Hexling takes its spot', async () => {
+    const { reviveFallen } = await import('../src/logic/run');
+    const run = startRun(mkMeta(), 'emberkit', 21);
+    const fallen = run.team[0];
+    const uid = fallen.uid;
+    fallen.hp = 0;
+    buryFallen(run);
+    while (run.team.length < 4) run.team.push(createCreature('emberkit', 5));
+    while (run.bench.length < 3) run.bench.push(createCreature('emberkit', 5));
+    // Full: no revive without someone to swap out.
+    expect(reviveFallen(run, uid)).toBeNull();
+    const out = run.team[2];
+    out.held = 'band';
+    const bag = (run.bag ?? []).length;
+    const back = reviveFallen(run, uid, out)!;
+    expect(back.uid).toBe(uid);
+    expect(run.team[2]).toBe(back);
+    expect(run.team).not.toContain(out);
+    expect(run.team.length + run.bench.length).toBe(7);
+    expect((run.bag ?? []).length).toBe(bag + 1);
+  });
+  it('stage battles: a fallen team with Hexlings on the bench is never handed in as wiped out', async () => {
+    const { raceTeam } = await import('../src/logic/run');
+    const run = startRun(mkMeta(), 'emberkit', 21);
+    run.bench.push(createCreature('emberkit', 5), createCreature('emberkit', 6));
+    for (const c of run.team) c.hp = 0;
+    const team = raceTeam(run);
+    expect(team.length).toBe(2);
+    expect(team.every((c) => c.hp > 0)).toBe(true);
+    run.bench = [];
+    expect(raceTeam(run)).toEqual([]);
+  });
   it('run W/L: seeded once from recent runs, then every finished or abandoned run', async () => {
     const { seedRunRecord, abandonSavedRun, saveRun, recordRun } = await import('../src/logic/run');
     const m = mkMeta();
@@ -2753,15 +2785,20 @@ describe('Roaming legendaries and night Hexlings', () => {
     expect(DEX_FORMS).toBe(SPECIES.length * 3 + LEGENDS.length);
   });
   it('roam battle hexes ahead, move as you do, and only in unseeded runs after floor 1', () => {
-    const run = floor2();
-    placeRoamer(run, true);
-    expect(run.roamer).toBeTruthy();
-    expect(run.map.nodes[run.roamer!.node].kind).toBe('battle');
-    const first = run.roamer!.node;
     let moved = false;
-    for (let i = 0; i < 6 && run.roamer; i++) {
-      moveRoamer(run);
-      if (run.roamer && run.roamer.node !== first) moved = true;
+    // (Some hexes have no battle hex next to them: a legendary placed there stays put, cornered.)
+    for (let seed = 21; seed < 31 && !moved; seed++) {
+      const run = floor2(seed);
+      placeRoamer(run, true);
+      expect(run.roamer).toBeTruthy();
+      expect(run.map.nodes[run.roamer!.node].kind).toBe('battle');
+      const first = run.roamer!.node;
+      for (let i = 0; i < 6 && run.roamer && !moved; i++) {
+        const next = run.map.nodes[run.currentId].next.find((id) => id !== run.roamer!.node && run.map.nodes[id].kind !== 'boss');
+        if (!next) break;
+        moveTo(run, next);
+        if (run.roamer && run.roamer.node !== first) moved = true;
+      }
     }
     expect(moved).toBe(true);
     const daily = floor2();
@@ -2772,24 +2809,42 @@ describe('Roaming legendaries and night Hexlings', () => {
     placeRoamer(f1, true);
     expect(f1.roamer).toBeNull();
   });
-  it('hops only 1 or 2 hexes at a time while it can', () => {
-    for (let s = 0; s < 20; s++) {
+  it('moves at most 1 hex at a time, sometimes toward you, and never leaves the floor', () => {
+    let toward = 0;
+    for (let s = 0; s < 30; s++) {
       const run = floor2();
       run.seed = 1000 + s;
       placeRoamer(run, true);
-      while (run.roamer) {
-        const before = run.map.nodes[run.roamer.node];
-        const next = run.map.nodes[run.currentId].next[0];
-        if (!next || run.map.nodes[next].kind === 'boss') break;
-        const room = Object.values(run.map.nodes).some((n) => n.kind === 'battle' && n.id !== before.id && n.y < run.map.nodes[next].y - 1 && n.y > run.map.nodes[run.map.bossId].y + 1 && hexDistance(before, n) <= 2);
+      if (!run.roamer) continue;
+      for (;;) {
+        const next = run.map.nodes[run.currentId].next.find((id) => run.map.nodes[id].kind !== 'boss');
+        if (!next) break;
+        const before = run.map.nodes[run.roamer!.node];
+        const gapBefore = hexDistance(run.map.nodes[next], before);
         moveTo(run, next);
-        if (run.roamer && room && next !== before.id) {
-          const d = hexDistance(before, run.map.nodes[run.roamer.node]);
-          expect(d).toBeGreaterThanOrEqual(1);
-          expect(d).toBeLessThanOrEqual(2);
-        }
+        if (next === before.id) break; // stepped onto it: a meeting
+        expect(run.roamer).toBeTruthy();
+        const after = run.map.nodes[run.roamer!.node];
+        const here = run.map.nodes[run.currentId];
+        if (before.y < here.y) expect(hexDistance(before, after)).toBeLessThanOrEqual(1);
+        if (run.roamer!.cornered) expect(after.id).toBe(before.id);
+        if (hexDistance(here, after) < gapBefore) toward++;
       }
     }
+    expect(toward).toBeGreaterThan(0);
+  });
+  it('cornered with nowhere to step, it stays put instead of vanishing', () => {
+    const run = floor2();
+    placeRoamer(run, true);
+    const r = run.roamer!;
+    const here = run.map.nodes[run.currentId];
+    // Every other battle hex is already visited: it has nowhere to go.
+    for (const n of Object.values(run.map.nodes)) if (n.kind === 'battle' && n.id !== r.node) run.visited.push(n.id);
+    expect(run.map.nodes[r.node].y).toBeLessThan(here.y);
+    moveRoamer(run);
+    expect(run.roamer).toBeTruthy();
+    expect(run.roamer!.node).toBe(r.node);
+    expect(run.roamer!.cornered).toBe(true);
   });
   it('a meeting is the legendary alone; it keeps its damage, and once caught it roams no more', () => {
     const run = floor2();

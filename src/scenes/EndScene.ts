@@ -8,7 +8,7 @@ import { takeNewMilestones } from '../logic/gilded';
 import { takeNewTitles } from '../logic/titles';
 import { unlocksOf } from '../logic/cosmetics';
 import { finishRunClock, formatDuration } from '../logic/runClock';
-import { recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
+import { promoteBench, recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
 import { persist, state } from '../state';
@@ -41,6 +41,13 @@ export class EndScene extends Phaser.Scene {
     // others still climbing until the final duel or the bracket.
     const r = state.run;
     if (r?.race) {
+      // A loss with Hexlings still on the bench isn't the end of the climb: they step up and the
+      // run goes on. (The battle screen already does this; this catches any other way here.)
+      if (!data.won && !r.race.done && promoteBench(r)) {
+        persist();
+        this.scene.start('Map', { banner: 'Your team fell, but your bench stepped up. The climb goes on!' });
+        return;
+      }
       r.race.done ??= { won: data.won, byDefault: data.byDefault };
       if (data.won) sfx.victory();
       else sfx.defeat();

@@ -40,10 +40,10 @@ import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
 import { Battle, stageMult, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { openPanel } from '../ui/panel';
 import { Rng } from '../logic/rng';
-import type { DuelController, Next } from '../net/duel';
+import { snapshot, type DuelController, type Next } from '../net/duel';
 import { session } from '../net/session';
 import { afterSeriesGame, duel, endRace, leaveDuel, recordSeriesGame, sendHello } from '../net/runtime';
-import { countRoyaleLoss, reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
+import { climbEnd, climbStart, climbStep, countRoyaleLoss, reportMatch, royale, royaleLabel, stopWatching } from '../net/royale';
 import {
   canEvolve,
   getFloorCeiling,
@@ -162,7 +162,7 @@ export interface BattleMatch {
   /** Their trainer title (online), shown in the cut-in. */
   opponentTitle?: string;
   /** Watching someone else's bracket match: the "near side" trainer, shown where you'd be. */
-  spectate?: { player: string; playerLook?: TrainerLook };
+  spectate?: { player: string; playerLook?: TrainerLook; climb?: boolean; wild?: boolean };
 }
 
 /** Where everything goes on the battle screen: upright (450x800) or wide (800x450). */
@@ -259,6 +259,11 @@ export class BattleScene extends Phaser.Scene {
     // Only this fight counts (kept with a run's saved battle, so a reload remembers them).
     this.foeSeen = new Set(state.run?.activeBattle?.seenMoves ?? []);
     this.panelPress = null;
+    // Scene instances are reused: a second spectated match (or duel) must not inherit the last one's
+    // "already wrapped up" flag, queued next step or fast-forward.
+    this.watchEnded = false;
+    this.duelNext = null;
+    this.fast = false;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
     const run = state.run!;
@@ -408,6 +413,26 @@ export class BattleScene extends Phaser.Scene {
       this.battle.restoreState(run.activeBattle.state);
       this.refreshEnemy();
       this.refreshPlayer();
+    }
+    // Battle royale with 3 or more: others who are out can watch this battle live.
+    if (run.race?.royale) {
+      const foe = boss ? boss.name : this.kind === 'elite' ? trainer : `Wild ${this.enemies.map((e) => creatureName(e)).join(' & ')}`;
+      climbStart(
+        {
+          seed: 1,
+          hostName: myName(state.meta),
+          guestName: foe,
+          hostTeam: [],
+          guestTeam: [],
+          hostCreatures: this.battle.player.map((x) => x.c),
+          guestCreatures: this.battle.enemy.map((x) => x.c),
+          hostBoons: run.boons?.held ?? [],
+        },
+        snapshot(this.battle),
+        this.climbNext(),
+        this.kind === 'battle',
+      );
+      this.events.once('shutdown', () => climbEnd());
     }
     const begin = () => {
       if (boss && !resuming) this.bossEntrance();
@@ -708,7 +733,8 @@ export class BattleScene extends Phaser.Scene {
       arenaPad(this, PLAYER_POS.x, PLAYER_POS.y + 72);
     }
     else this.drawField(el, m.stage);
-    this.drawTrainers(m.opponentLook ?? lookForName(m.opponent), m.opponent);
+    // Watching a wild battle on someone's climb: no trainer on the far side.
+    this.drawTrainers(m.spectate?.wild ? null : (m.opponentLook ?? lookForName(m.opponent)), m.spectate?.wild ? null : m.opponent);
     this.enemySprite = this.add.image(ENEMY_POS.x, ENEMY_POS.y, '__DEFAULT').setScale(5);
     this.playerSprite = this.add.image(PLAYER_POS.x, PLAYER_POS.y, '__DEFAULT').setScale(5 * SPRITE_FIT).setFlipX(true);
     this.trainerInFront();
@@ -739,7 +765,8 @@ export class BattleScene extends Phaser.Scene {
     this.busy = true;
     void (async () => {
       // Online duels and Arena battles open with the cut-in too: their trainer, name and Hexlings.
-      {
+      // (Not a wild battle on someone's climb: there's no trainer to show.)
+      if (!m.spectate?.wild) {
         await trainerCutIn(this, {
           name: m.opponent,
           sub: m.spectate ? `Watching · ${m.spectate.player} vs ${m.opponent}` : m.duel ? 'Online duel' : m.sub ?? `Battle Arena · ${m.title.replace(/^ARENA (\d+)\/(\d+)$/, 'Round $1 of $2')}`,
@@ -773,7 +800,7 @@ export class BattleScene extends Phaser.Scene {
     if (!m.duel && this.busy) return;
     this.cancelAuto();
     const giveUp = m.spectate ? 'Stop watching' : m.duel ? 'Forfeit this battle' : 'Leave the ladder';
-    const sub = m.spectate ? 'Back to the bracket' : m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
+    const sub = m.spectate ? (m.spectate.climb ? 'Back to the map' : 'Back to the bracket') : m.duel ? `${m.opponent} wins this battle` : 'Counts as losing this round';
     openPicker(this, {
       title: 'Menu',
       options: [
@@ -788,7 +815,7 @@ export class BattleScene extends Phaser.Scene {
         if (i === 2) return void openElementChart(this, this.shownEnemy ? creatureTypes(this.shownEnemy) : [], () => this.maybeAuto());
         if (m.spectate) {
           stopWatching();
-          return void this.scene.start('Bracket', {});
+          return void this.scene.start(m.spectate.climb ? 'Map' : 'Bracket', {});
         }
         openPicker(this, {
           title: `${giveUp}?`,
@@ -835,6 +862,8 @@ export class BattleScene extends Phaser.Scene {
     if (this.match!.spectate) {
       this.actions.setVisible(false);
       if (next.phase === 'end') return this.endSpectate(next.won);
+      const sp = this.match!.spectate;
+      if (sp.climb) return this.showWaiting(next.phase === 'choose' ? `${sp.player} is choosing a move.` : `${sp.player} is choosing their next Hexling.`);
       return this.showWaiting(next.phase === 'choose' ? 'Both trainers are choosing their moves.' : 'A trainer is choosing their next Hexling.');
     }
     switch (next.phase) {
@@ -1448,7 +1477,15 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.timeScale = k;
   }
 
+  /** What a spectator of this run battle waits on next (battle royale climbs). */
+  private climbNext(): Next {
+    const o = this.battle.outcome();
+    return o === 'win' ? { phase: 'end', won: true } : o === 'lose' ? { phase: 'end', won: false } : o === 'needSwitch' ? { phase: 'switch' } : { phase: 'choose' };
+  }
+
   private async play(events: BattleEvent[]) {
+    // A run battle in a battle royale: share the turn with anyone watching.
+    if (!this.match && state.run?.race?.royale) climbStep(events, snapshot(this.battle), this.climbNext());
     this.busy = true;
     this.fast = false;
     this.actions.setVisible(false);
@@ -1719,6 +1756,12 @@ export class BattleScene extends Phaser.Scene {
       this.crowd?.cheer(3);
     }
     stopWatching();
+    if (sp.climb) {
+      // A battle on someone's climb: back to the map (and the others still climbing).
+      const title = won === null ? 'Battle over' : won ? `${sp.player} wins!` : 'Battle lost';
+      const body = won === null ? `${sp.player}’s battle has ended.` : won ? `${sp.player} climbs on.` : `${sp.player} lost this battle. With Hexlings on the bench, the climb goes on.`;
+      return void showMessage(this, title, body, () => this.scene.start('Map', {}));
+    }
     showMessage(this, winner ? `${winner} wins!` : 'Match over', winner ? `${winner} goes through in the bracket.` : 'The match has ended.', () => this.scene.start('Bracket', {}));
   }
 

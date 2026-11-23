@@ -16,6 +16,18 @@ import { background, button, clipList, COLORS, H, LANDSCAPE, text, W } from '../
 
 const TOP = 72;
 
+/** Keeps a line of text within `max` pixels: shrinks it a little first, then trims it with an ellipsis. */
+function fit(t: Phaser.GameObjects.Text, max: number, minScale = 0.8): Phaser.GameObjects.Text {
+  if (max <= 0 || t.width <= max) return t;
+  const scale = Math.max(minScale, max / t.width);
+  t.setScale(scale);
+  if (t.width * scale <= max) return t;
+  const full = t.text;
+  let n = full.length;
+  while (n > 1 && t.width * scale > max) t.setText(full.slice(0, --n).trimEnd() + '…');
+  return t;
+}
+
 /** Lifetime records: wins and streaks, your most-used Hexling, lifetime counts and recent runs. */
 export class RecordsScene extends Phaser.Scene {
   constructor() {
@@ -61,8 +73,8 @@ export class RecordsScene extends Phaser.Scene {
       const x = x0 + (i % 3) * (tw + 4);
       const yy = y + Math.floor(i / 3) * 62;
       list.add(this.add.rectangle(x, yy, tw, 56, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
-      list.add(text(this, x + tw / 2, yy + 22, value, 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5));
-      list.add(text(this, x + tw / 2, yy + 44, label, 11, COLORS.textDim).setOrigin(0.5));
+      list.add(fit(text(this, x + tw / 2, yy + 22, value, 22, COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5), tw - 10, 0.6));
+      list.add(fit(text(this, x + tw / 2, yy + 44, label, 11, COLORS.textDim).setOrigin(0.5), tw - 8));
     });
     y += Math.ceil(tiles.length / 3) * 62 + 8;
 
@@ -117,8 +129,17 @@ export class RecordsScene extends Phaser.Scene {
       const x = x0 + (i % 2) * (hw + 4);
       const yy = y + Math.floor(i / 2) * 38;
       list.add(this.add.rectangle(x, yy, hw, 34, i % 4 < 2 ? COLORS.panelLight : COLORS.panel).setOrigin(0));
-      list.add(text(this, x + 10, yy + 17, label, 12, COLORS.textDim).setOrigin(0, 0.5));
-      list.add(text(this, x + hw - 10, yy + 17, value, 14, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5));
+      const l = text(this, x + 10, yy + 17, label, 12, COLORS.textDim).setOrigin(0, 0.5);
+      const v = text(this, x + hw - 10, yy + 17, value, 14, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5);
+      // Long pairs (Deepest Gilded Hunt, Closest camp bond…) stack instead of running into each other:
+      // the label along the top, the value under it on the right.
+      if (l.width + v.width + 28 > hw) {
+        l.setFontSize(11).setY(yy + 9);
+        v.setFontSize(13).setY(yy + 24);
+        fit(l, hw - 20);
+        fit(v, hw - 20, 0.85);
+      }
+      list.add([l, v]);
     });
     y += Math.ceil(counts.length / 2) * 38 + 10;
     let bottom = y;
@@ -155,13 +176,10 @@ export class RecordsScene extends Phaser.Scene {
     const map = MAP_BY_ID[r.mapId]?.name ?? r.mapId;
     list.add(text(this, x + 16, y + 8, r.won ? 'WON' : `Floor ${r.floor}`, 15, r.won ? '#8fe08a' : '#ff8a7a', { fontStyle: 'bold' }));
     const date = new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    list.add(text(this, x + 16, y + 28, `${map}${r.heat ? ` · Heat ${r.heat}` : ''}${r.daily ? ' · Daily' : ''}${r.weekly ? ' · Weekly' : ''}`, 12, COLORS.text));
-    list.add(
-      text(this, x + 16, y + 46, `${date} · ${r.battlesWon} wins · ${r.caught} caught${r.endedBy ? ` · ${r.endedBy}` : ''}`, 11, COLORS.textDim, {
-        wordWrap: { width: w - 24 - Math.min(4, r.team.length) * 40 },
-        maxLines: 1,
-      }),
-    );
+    // Text stops short of the team sprites on the right.
+    const room = w - 24 - Math.min(4, r.team.length) * 40;
+    list.add(fit(text(this, x + 16, y + 28, `${map}${r.heat ? ` · Heat ${r.heat}` : ''}${r.daily ? ' · Daily' : ''}${r.weekly ? ' · Weekly' : ''}`, 12, COLORS.text), room));
+    list.add(fit(text(this, x + 16, y + 46, `${date} · ${r.battlesWon} wins · ${r.caught} caught${r.endedBy ? ` · ${r.endedBy}` : ''}`, 11, COLORS.textDim), room, 0.9));
     // The team that finished the run (up to 4 shown).
     r.team.slice(0, 4).forEach((c, i) => {
       const sx = x + w - 24 - i * 40;

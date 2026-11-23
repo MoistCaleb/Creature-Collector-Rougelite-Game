@@ -1,13 +1,12 @@
 import type Phaser from 'phaser';
 import { titleNews } from '../logic/cosmetics';
-import { isAlive } from '../logic/creature';
-import { potionHeal, saveMeta, type Run } from '../logic/run';
+import { potionHeal, raceTeam, saveMeta, type Run } from '../logic/run';
 import { addOnlineLoss, addOnlineWin, addRoyaleWin } from '../logic/titles';
 import { duel, endRace, leaveDuelRoyale, raceVerdict, sendProgress } from '../net/runtime';
-import { countRoyaleLoss, royale, royaleQuit, royaleSummary } from '../net/royale';
+import { climbsToWatch, countRoyaleLoss, royale, royaleQuit, royaleSummary, watchClimb } from '../net/royale';
 import { myPid, session } from '../net/session';
 import { state } from '../state';
-import { showMessage } from './picker';
+import { openPicker, showMessage } from './picker';
 import { playMusic } from './sound';
 import { button, text } from './widgets';
 
@@ -25,7 +24,7 @@ const winNews = new WeakMap<object, string>();
 function handIn(run: Run, won: boolean) {
   if (handedIn.has(run)) return;
   handedIn.add(run);
-  const team = run.team.filter(isAlive).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
+  const team = raceTeam(run).map((c) => JSON.parse(JSON.stringify(c)) as typeof c);
   sendProgress({ floor: run.floor, finished: true, won, team, potions: run.potions ?? 0, heal: potionHeal(run), boons: run.boons?.held ?? [] });
 }
 
@@ -71,11 +70,28 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
   const status = text(scene, box.x + box.w / 2, box.y + 10, '', 13, '#8fd0ff', { align: 'center', wordWrap: { width: box.w - 24 } }).setOrigin(0.5, 0).setDepth(depth);
   let btn: Phaser.GameObjects.Container | null = null;
   let label = '';
-  const setButton = (l: string | null, onClick: () => void = () => {}) => {
-    if (label === (l ?? '')) return;
+  // Out of a battle royale with others still climbing: a second button to watch their battles.
+  let watchBtn: Phaser.GameObjects.Container | null = null;
+  let watchLabel = '';
+  const setButton = (l: string | null, onClick: () => void = () => {}, force = false) => {
+    if (label === (l ?? '') && !force) return;
     label = l ?? '';
     btn?.destroy();
-    btn = l ? button(scene, box.x + box.w / 2, box.y + box.h - 28, Math.min(280, box.w - 24), 40, l, onClick, { color: 0x3b6d4a, fontSize: 16 }).setDepth(depth) : null;
+    const half = !!watchBtn;
+    const w = half ? Math.min(200, (box.w - 36) / 2) : Math.min(280, box.w - 24);
+    const x = half ? box.x + box.w / 2 + w / 2 + 6 : box.x + box.w / 2;
+    btn = l ? button(scene, x, box.y + box.h - 28, w, 40, l, onClick, { color: 0x3b6d4a, fontSize: 16 }).setDepth(depth) : null;
+  };
+  /** Show (n > 0) or hide the watch button. True if it appeared or went away (the other button moves). */
+  const setWatch = (n: number, onClick: () => void): boolean => {
+    const l = n ? `Watch a battle (${n})` : '';
+    if (watchLabel === l) return false;
+    const moved = !watchLabel !== !l;
+    watchLabel = l;
+    watchBtn?.destroy();
+    const w = Math.min(200, (box.w - 36) / 2);
+    watchBtn = l ? button(scene, box.x + box.w / 2 - w / 2 - 6, box.y + box.h - 28, w, 40, l, onClick, { color: 0x2a4a7a, fontSize: 15, glyph: 'swords' }).setDepth(depth) : null;
+    return moved;
   };
   const toLobby = () => {
     state.run = null;
@@ -113,8 +129,23 @@ export function raceWaitPanel(scene: Phaser.Scene, run: Run, won: boolean, box: 
       } else {
         if (!won) countRoyaleLoss();
         status.setText(`${won ? 'Your team is ready for the bracket.' : 'Your team fell, but you can watch the bracket.'} Watching the others climb: ${royaleSummary()}`);
-        setButton(won ? 'Give up the battle royale' : 'Leave', leave(true));
+        // Out during the climb (3 or more players): watch any battle still going on.
+        const moved = setWatch(won ? 0 : climbsToWatch().length, () => pickClimb());
+        setButton(won ? 'Give up the battle royale' : 'Leave', leave(true), moved);
+        return;
       }
+      if (setWatch(0, () => {}) && label) setButton(label, leave(false), true);
+    };
+    const pickClimb = () => {
+      const list = climbsToWatch();
+      if (!list.length) return draw();
+      openPicker(scene, {
+        title: 'Watch a battle',
+        subtitle: 'Battles going on right now on the others’ climbs.',
+        options: list.map((c) => ({ label: c.name, sub: 'In a battle', glyph: 'swords' })),
+        onPick: (i) => watchClimb(list[i].pid),
+        onCancel: () => {},
+      });
     };
     draw();
     const prev = royale.onChange;

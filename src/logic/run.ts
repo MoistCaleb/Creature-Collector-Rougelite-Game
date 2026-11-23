@@ -516,7 +516,7 @@ export interface Run {
   /** The open treasure chest's contents, fixed once rolled. */
   treasure: import('./events').TreasureOffer | null;
   /** A legendary roaming this floor, on a battle hex ahead (see data/legends). */
-  roamer?: { id: string; node: string; announced?: boolean } | null;
+  roamer?: { id: string; node: string; announced?: boolean; cornered?: boolean } | null;
   /**
    * Your rival this run: a trainer with a team that grows each floor. They wait on one trainer
    * hex a floor (`node`), and `beaten` lists the floors you beat them on.
@@ -1057,26 +1057,58 @@ export function hexDistance(a: MapNode, b: MapNode): number {
   return dy + Math.max(0, (dc - dy) / 2);
 }
 
-/** How far a roaming legendary can jump each time you move. */
-export const ROAM_JUMP = 2;
+/** How far a roaming legendary can move each time you move: 1 hex, the same as you. */
+export const ROAM_JUMP = 1;
+
+/** How often (out of 100) the legendary steps toward you instead of wandering. */
+export const ROAM_APPROACH = 40;
+
+/** Battle hexes ahead of you that a roaming legendary can step onto (or slip back to). */
+function roamTargets(run: Run): string[] {
+  const here = run.map.nodes[run.currentId];
+  const bossY = run.map.nodes[run.map.bossId].y;
+  return Object.values(run.map.nodes)
+    .filter((n) => n.kind === 'battle' && n.id !== here.id && n.y < here.y && n.y > bossY + 1 && !run.visited.includes(n.id))
+    .map((n) => n.id);
+}
 
 /**
- * The legendary hops 1 or 2 hexes to another battle hex ahead. If none is that close (you've
- * caught up with it), it slips to the nearest one; it leaves the floor when there's none.
+ * The legendary moves 1 hex (as you do) to a battle hex ahead of you. Now and then it steps toward
+ * you (ROAM_APPROACH), so it can be caught up with. With nowhere to go it stays put, cornered (the
+ * map shows a "!" over it) instead of leaving the floor. Only if you've passed it, or it just fled
+ * a battle with nowhere to step, does it slip to the nearest hex ahead.
  */
-export function moveRoamer(run: Run) {
-  if (!run.roamer) return;
-  const from = run.map.nodes[run.roamer.node];
-  const spots = roamSpots(run).filter((id) => id !== run.roamer!.node);
-  if (!spots.length || !from) {
-    run.roamer = null;
+export function moveRoamer(run: Run, fled = false) {
+  const r = run.roamer;
+  if (!r) return;
+  const from = run.map.nodes[r.node];
+  const here = run.map.nodes[run.currentId];
+  if (!from || !here) return;
+  const targets = roamTargets(run).filter((id) => id !== r.node);
+  const dist = (id: string) => hexDistance(from, run.map.nodes[id]);
+  const steps = targets.filter((id) => dist(id) <= ROAM_JUMP);
+  const pick = (pool: string[], salt: string) => pool[hashString(`${run.seed}:roam:${run.floor}:${run.visited.length}:${salt}`) % pool.length];
+  if (steps.length) {
+    r.cornered = false;
+    const toward = hashString(`${run.seed}:approach:${run.floor}:${run.visited.length}`) % 100 < ROAM_APPROACH;
+    if (toward) {
+      const gap = (id: string) => hexDistance(here, run.map.nodes[id]);
+      const best = Math.min(...steps.map(gap));
+      r.node = pick(steps.filter((id) => gap(id) === best), 'toward');
+    } else r.node = pick(steps, 'wander');
     return;
   }
-  const dist = (id: string) => hexDistance(from, run.map.nodes[id]);
-  const near = spots.filter((id) => dist(id) <= ROAM_JUMP);
-  const closest = Math.min(...spots.map(dist));
-  const pool = near.length ? near : spots.filter((id) => dist(id) === closest);
-  run.roamer.node = pool[hashString(`${run.seed}:roam:${run.floor}:${run.visited.length}`) % pool.length];
+  // Behind you, level with you, or on your hex after fleeing: it can't be reached from here, so it
+  // slips to the nearest battle hex ahead.
+  const passed = from.y >= here.y || r.node === here.id;
+  if ((passed || fled) && targets.length) {
+    const closest = Math.min(...targets.map(dist));
+    r.node = pick(targets.filter((id) => dist(id) === closest), 'slip');
+    r.cornered = false;
+    return;
+  }
+  // Nowhere to go: it stays where it is, cornered.
+  r.cornered = true;
 }
 
 /**
@@ -1099,7 +1131,7 @@ export function legendFled(run: Run, foe: Creature) {
   rec.hp = Math.max(0.1, foe.hp / stats(foe).hp);
   run.meta.legends[foe.speciesId] = rec;
   saveMeta(run.meta);
-  if (run.roamer?.id === foe.speciesId) moveRoamer(run);
+  if (run.roamer?.id === foe.speciesId) moveRoamer(run, true);
 }
 
 /** Beaten: it leaves this run, and comes back another day only partly recovered (unless caught). */
@@ -1220,18 +1252,34 @@ export function revivedForm(c: Creature, run?: Run | null): Creature {
 }
 
 /** Revival hex: bring a fallen Hexling back (team if there's room, else the bench). */
-export function reviveFallen(run: Run, uid: number): Creature | null {
+export function reviveFallen(run: Run, uid: number, release?: Creature): Creature | null {
   const grave = run.log.graveyard ?? [];
   const i = grave.findIndex((c) => c.uid === uid);
-  if (i < 0 || rosterFull(run)) return null;
+  if (i < 0 || !canMakeRoom(run, release)) return null;
   const c = revivedForm(grave[i], run);
   grave.splice(i, 1);
   // It's no longer among the fallen in the run summary.
   const f = (run.log.fallen ?? []).findIndex((x) => x.uid === uid);
   if (f >= 0) run.log.fallen!.splice(f, 1);
-  if (run.team.length < teamMax(run)) run.team.push(c);
+  // A full party: the one released leaves for good (its item back to the bag), and the revived
+  // Hexling takes its exact spot.
+  const list = release && rosterFull(run) ? (run.team.includes(release) ? run.team : run.bench) : null;
+  if (list && release) {
+    unequipHeld(run, release);
+    list[list.indexOf(release)] = c;
+  } else if (run.team.length < teamMax(run)) run.team.push(c);
   else run.bench.push(c);
   return c;
+}
+
+/**
+ * The team you finish the stage with: your Hexlings still standing, topped up from the bench. A
+ * fallen main team with Hexlings on the bench is never handed in as "wiped out".
+ */
+export function raceTeam(run: Run): Run['team'] {
+  const team = run.team.filter(isAlive);
+  for (const c of run.bench) if (team.length < teamMax(run) && isAlive(c)) team.push(c);
+  return team;
 }
 
 /** Fill empty main-team slots from the front of the bench. Returns who stepped up. */
