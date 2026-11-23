@@ -137,6 +137,8 @@ export interface Standing {
   alive: boolean;
   /** Lost the connection for good. */
   gone?: boolean;
+  /** In a battle on their climb right now (battle royale: others who are out can watch it). */
+  fighting?: boolean;
   /** Map hex they're on, and their lead Hexling (drawn grayed out on everyone's map). */
   at?: string;
   lead?: { speciesId: string; stage: number; shiny?: boolean };
@@ -179,9 +181,17 @@ export type DuelMsg =
   /** Spectator to host: watch this bracket match ('' to stop watching). */
   | { t: 'watch'; match: string }
   /** Host to spectator: the match you asked to watch, as it stands. */
-  | { t: 'wstart'; match: string; info: StartInfo; snap?: Snap; next?: Next }
+  | { t: 'wstart'; match: string; info: StartInfo; snap?: Snap; next?: Next; wild?: boolean }
   /** A turn of a bracket match, from its runner's side (runner to host, host to spectators). */
   | { t: 'wstep'; match: string; events: BattleEvent[]; snap: Snap; next: Next }
+  /** Battle royale climb (racer to host): a battle on my climb starts, as it stands. */
+  | { t: 'cstart'; info: StartInfo; snap: Snap; next: Next; wild?: boolean }
+  /** A turn of that battle (racer to host). */
+  | { t: 'cstep'; events: BattleEvent[]; snap: Snap; next: Next }
+  /** That battle's screen closed (racer to host). */
+  | { t: 'cend' }
+  /** Host to spectators: the battle you're watching is over (or its player left). */
+  | { t: 'wover'; match: string }
   /** The sender gives up this battle. */
   | { t: 'forfeit' }
   | { t: 'lobby' };
