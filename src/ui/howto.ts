@@ -77,6 +77,18 @@ export const HOW_TO_PLAY: Page[] = [
     ],
   },
   {
+    title: 'Rare surprises',
+    glyph: 'star',
+    lines: [
+      'Now and then a run brings a surprise: an omen for the whole run, a strange floor, an Elder guardian, a hidden hex (???) or a rare encounter.',
+      'About half of runs meet at least one, and you never go more than 3 runs in a row without.',
+      'Elder guardians are older and tougher, with every Hexling carrying its rare ◆ trait. Beat one for a mythic boon offer.',
+      'Hidden hexes include a wishing well, a cursed altar, a secret boon shop, a hatchery egg and a three-trainer dojo.',
+      'Daily and weekly runs and online races share the same surprises for everyone; their omen shows at the starter pick.',
+      'The Hexlidex lists the surprises you’ve found, with hints for the rest.',
+    ],
+  },
+  {
     title: 'Embers and the Workshop',
     glyph: 'flame',
     lines: [

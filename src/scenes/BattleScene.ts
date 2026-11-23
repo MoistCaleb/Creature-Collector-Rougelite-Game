@@ -2,7 +2,7 @@ import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
 import { traitLine } from '../ui/traitText';
-import { GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
+import { ELDER_TAUNTS, GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
 import { isLegend, LEGEND_DAMAGE, LEGEND_FLEE_TURNS } from '../data/legends';
 import { bondHearts, natureShort, NATURES } from '../data/natures';
 import { titleBadge } from '../ui/titleBadge';
@@ -480,7 +480,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.kind === 'battle') this.msg.setText(intro);
         // Trainers, your rival and guardians say something as the fight starts.
         const said = boss
-          ? `${boss.name}: “${pickLine(GUARDIAN_TAUNTS[boss.element], `${run.seed}:${run.floor}:${run.hunt?.depth ?? 0}:taunt`)}”`
+          ? `${elderHere(run) ? 'Elder ' : ''}${boss.name}: “${pickLine((elderHere(run) ? ELDER_TAUNTS : GUARDIAN_TAUNTS)[boss.element], `${run.seed}:${run.floor}:${run.hunt?.depth ?? 0}:taunt`)}”`
           : run.activeBattle?.rival
             ? `${trainer}: “${rivalHello(run)}”`
             : this.kind === 'elite'

@@ -42,6 +42,22 @@ export const GUARDIAN_TAUNTS: Record<Element, string[]> = {
   Dragon: ['Kneel, or be made to.', 'I have outlived every challenger. I’ll outlive you.'],
 };
 
+/** Elder guardians (a rare surprise): older, slower to speak, and far more sure of themselves. */
+export const ELDER_TAUNTS: Record<Element, string[]> = {
+  Fire: ['I lit the first flame on this floor. I will see it out.', 'Young fire burns fast. Old fire burns long.'],
+  Frost: ['I have watched glaciers be born. You are a snowflake.', 'Winter came before you. It will be here after.'],
+  Nature: ['This forest grew from seeds I planted. Mind your step.', 'I have pruned a thousand challengers.'],
+  Earth: ['These mountains were pebbles when I was young.', 'I am the floor beneath every floor.'],
+  Storm: ['I was the first thunder. Listen closely.', 'Every storm since has been my echo.'],
+  Water: ['I carved this valley one drop at a time.', 'Every river remembers me.'],
+  Metal: ['I forged the first gear in these halls. I know your every flaw.', 'Rust takes everyone. It has not taken me.'],
+  Toxic: ['My mist was old when the world was new.', 'Patience. The venom always finishes.'],
+  Shadow: ['I was here before the first light. I will be here after.', 'The oldest dark does not blink.'],
+  Light: ['I was the dawn before the first dawn.', 'Stand in my light, little one, if you can.'],
+  Spirit: ['The spirits here bow to me. Soon, so will you.', 'I have outlasted every soul who came this far.'],
+  Dragon: ['I have slept a thousand years. You woke me.', 'Bow, or be remembered as the one who did not.'],
+};
+
 // ---------------------------------------------------------------- your rival
 
 /** Before each floor's rival battle. `{ace}` is their lead Hexling. */
