@@ -25,7 +25,7 @@ export interface TitleDef {
   desc: string;
   /** Progress toward it: [have, need]. Earned when have >= need. */
   progress: (meta: Meta) => [number, number];
-  /** Earned from a Gilded milestone (announced with the milestone, not on its own). */
+  /** Earned from a Gilded or Gilded Hunt milestone (announced with the milestone, not on its own). */
   gilded?: boolean;
 }
 
@@ -53,7 +53,8 @@ export const TITLES: TitleDef[] = [
   { name: 'Heatseeker', tier: 'epic', desc: 'Win a run at Heat 4 or higher.', progress: (m) => [Math.min(topHeat(m), 4), 4] },
   { name: 'Unbroken', tier: 'epic', desc: 'Win 5 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 5] },
   { name: 'Cartographer', tier: 'epic', desc: 'Win a run on every map.', progress: (m) => [MAPS.filter((x) => m.clearedMaps.includes(x.id)).length, MAPS.length] },
-  { name: 'Deep Diver', tier: 'epic', desc: 'Reach floor 5 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 5] },
+  { name: 'Deep Diver', tier: 'epic', desc: 'Reach floor 5 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 5], gilded: true },
+  { name: 'Hunt Master', tier: 'epic', desc: 'Reach floor 12 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 12], gilded: true },
   { name: 'Weekly Victor', tier: 'epic', desc: 'Win 3 weekly challenges.', progress: (m) => [weeklyWins(m), 3] },
   { name: 'Rival', tier: 'epic', desc: 'Win 10 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 10] },
   { name: 'Grand Champion', tier: 'epic', desc: 'Win 5 Arena tournaments.', progress: (m) => [m.tourneyWins ?? 0, 5] },
@@ -65,11 +66,13 @@ export const TITLES: TitleDef[] = [
   { name: 'Hexlidex Master', tier: 'legendary', desc: `Catch all ${DEX_SPECIES.length} species, legendaries included.`, progress: (m) => [m.dex.caught.length, DEX_SPECIES.length] },
   { name: 'Grand Duelist', tier: 'legendary', desc: 'Win 50 online duels or stage battles.', progress: (m) => [m.onlineWins ?? 0, 50] },
   { name: 'Royale Champion', tier: 'legendary', desc: 'Win a battle royale with 6 or more players.', progress: (m) => [(m.royaleBest ?? 0) >= 6 ? 1 : 0, 1] },
+  { name: 'Abyss Diver', tier: 'legendary', desc: 'Reach floor 18 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 18], gilded: true },
   { name: 'Gilded Legend', tier: 'legendary', desc: 'Own 60 Gilded species.', progress: (m) => [gilded(m), 60], gilded: true },
   // Mythic
   { name: 'Unstoppable', tier: 'mythic', desc: 'Win 20 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 20] },
   { name: 'Hexbound', tier: 'mythic', desc: 'Win at Heat 8 on every map.', progress: (m) => [mapsWonAt(m, 8), MAPS.length] },
   { name: 'Battle Monarch', tier: 'mythic', desc: 'Win an 8-player battle royale.', progress: (m) => [(m.royaleBest ?? 0) >= 8 ? 1 : 0, 1] },
+  { name: 'Endless Hunter', tier: 'mythic', desc: 'Reach floor 30 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 30], gilded: true },
   { name: 'Gilded Master', tier: 'mythic', desc: 'Own 120 Gilded species.', progress: (m) => [gilded(m), 120], gilded: true },
 ];
 

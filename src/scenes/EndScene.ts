@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { workshopProgress } from '../logic/workshop';
+import { huntRewardLines, nextHuntMilestone } from '../logic/huntMilestones';
 import { camp, payRunEmbers } from '../logic/camp';
 import { BOONS } from '../data/boons';
 import { takeNewMilestones } from '../logic/gilded';
@@ -218,6 +219,11 @@ export class EndScene extends Phaser.Scene {
       const next = workshopProgress(state.meta).next;
       const goal = next ? (have >= next.cost ? ` · ready to build ${next.name} in the Workshop` : ` · ${have}/${next.cost} to ${next.name}`) : '';
       if (em.total) extra.unshift(`Embers +${em.total} (${em.lines.join(', ')}) · ${have} at camp${goal}`);
+    }
+    // Gilded Hunt (2.0): the next milestone to dive for.
+    if (hunt) {
+      const nm = nextHuntMilestone(state.meta);
+      extra.push(`Next Gilded Hunt milestone: floor ${nm.floor} (${huntRewardLines(nm).join(', ')})`);
     }
     // The boons this run was built on.
     const held = run.boons?.held ?? [];

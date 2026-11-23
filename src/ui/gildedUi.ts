@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { GILDED_MILESTONES, gildedCount, milestoneText, takeNewMilestones } from '../logic/gilded';
 import { myTitle, takeNewTitles } from '../logic/titles';
+import { huntNewsText, huntRewardLines, nextHuntMilestone, takeHuntNews } from '../logic/huntMilestones';
 import { saveMeta, type Meta } from '../logic/run';
 import { SPECIES } from '../data/species';
 import { openPanel } from './panel';
@@ -10,7 +11,9 @@ import { sfx } from './sound';
 import { COLORS, H, LANDSCAPE, text, W } from './widgets';
 
 /** Announce Gilded milestones reached since the last announcement, then continue. */
-export function announceGilded(scene: Phaser.Scene, meta: Meta, then: () => void) {
+export function announceGilded(scene: Phaser.Scene, meta: Meta, after: () => void) {
+  // Gilded Hunt milestones (2.0) follow the Gilded species ones.
+  const then = () => announceHunt(scene, meta, after);
   const ms = takeNewMilestones(meta);
   if (!ms.length) return then();
   takeNewTitles(meta);
@@ -18,6 +21,18 @@ export function announceGilded(scene: Phaser.Scene, meta: Meta, then: () => void
   sfx.shinyReveal();
   shinyBurst(scene, W / 2, H / 2 - 120);
   showMessage(scene, '✦ Gilded milestone! ✦', `${milestoneText(ms)}\n\nWear your rewards from Edit trainer on the title screen.`, then);
+}
+
+/** Announce Gilded Hunt milestones paid since the last announcement (2.0), then continue. */
+export function announceHunt(scene: Phaser.Scene, meta: Meta, then: () => void) {
+  const news = takeHuntNews(meta);
+  if (!news.length) return then();
+  takeNewTitles(meta);
+  saveMeta(meta);
+  sfx.shinyReveal();
+  shinyBurst(scene, W / 2, H / 2 - 120);
+  const next = nextHuntMilestone(meta);
+  showMessage(scene, '✦ Gilded Hunt milestone! ✦', `${huntNewsText(news)}\n\nNext: floor ${next.floor} (${huntRewardLines(next).join(', ')}).`, then);
 }
 
 /** Every milestone, what it gives, and how close you are. */

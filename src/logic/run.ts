@@ -52,6 +52,7 @@ import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
 import { hashString, Rng } from './rng';
+import { payHuntMilestones } from './huntMilestones';
 import { benchMax, benchShareBase, extraPouch, gildedBoost, reviveShare, startCoins, startPotions, starterBonus, workshopSnapshot, wsHas } from './workshop';
 
 export const TEAM_MAX = 4;
@@ -171,6 +172,9 @@ export interface Meta {
   /** The Heat of that deepest hunt (the higher Heat wins a tie in depth). */
   bestHuntHeat?: number;
   bestHuntShinies?: number;
+  /** Gilded Hunt milestones (2.0): paid up to this floor, and the ones still to announce. */
+  huntPaid?: number;
+  huntNews?: import('./huntMilestones').PaidMilestone[];
   /**
    * Species you've caught (or claimed) shiny, in any form: every form of the line is unlocked shiny
    * (as a starter, in the Arena and in online duels).
@@ -1455,6 +1459,8 @@ export function noteHunt(meta: Meta, depth: number, heat: number) {
     meta.bestHunt = depth;
     meta.bestHuntHeat = heat;
   }
+  // Gilded Hunt milestones (2.0): one-time rewards for each new deepest floor.
+  payHuntMilestones(meta);
 }
 /** Shiny Hunting enemies can carry one more star than yours can. */
 export const HUNT_MAX_STARS = 6;
