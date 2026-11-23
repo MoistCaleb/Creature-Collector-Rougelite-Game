@@ -78,7 +78,7 @@ export function rollFloorSurprises(run: Run) {
   let enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter', run)) : undefined;
   // Echo of yourself can't be the same for everyone, and needs a winning team to copy: seeded runs
   // (and players without a win yet) meet a Gilded trainer instead.
-  if (enc === 'echo' && (run.workshop?.full || run.daily || run.weekly || !lastWinTeam(run.meta))) enc = 'gildedtrainer';
+  if (enc === 'echo' && (run.workshop?.full || run.daily || run.weekly || !lastWinTeam(run.meta))) enc = surpriseInPool(run, 'gildedtrainer') ? 'gildedtrainer' : undefined;
   // Drought protection: the first floor gets a hidden hex if nothing else turned up.
   if (rs.forced && !rs.omen && !fs.floor && !fs.elder && !hex && !enc) hex = rng.pick(of('hex', run));
   rs.forced = false;
