@@ -206,6 +206,7 @@ export class MapScene extends Phaser.Scene {
     const fog = hasBoon(run, 'fogofwar');
     if (range >= 1) for (const id of reachableIds) scouted.add(id);
     if (range >= 2) for (const id of [...reachableIds]) for (const nx of map.nodes[id]?.next ?? []) scouted.add(nx);
+    const auras = this.add.container(0, 0);
     for (const n of nodes) {
       const p = pos(n);
       const info = NODE_INFO[n.kind];
@@ -226,7 +227,32 @@ export class MapScene extends Phaser.Scene {
       const icon = pixelIcon(this, p.x, p.y - (pointy ? 6 : 8), fogged ? 'question' : (NODE_ICONS[n.kind] ?? 'question'), Math.round(iconSize * 1.05));
       const label = text(this, p.x, p.y + hh * (pointy ? 0.2 : 0.26), fogged ? '?' : n.kind === 'boss' ? (run.race ? `vs ${run.race.opponent}` : BOSSES[map.biome].name) : rivalHere(run, n.id) ? 'Rival' : info.label, pointy && hexW < 64 ? 10 : 11, '#ffffff').setOrigin(0.5);
       if (fogged) hex.setFillStyle(0x3a3650);
+      // A Boon hex still to take: a golden aura (drawn above the other hexes so it spills over
+      // them), a bright rim and rising motes.
+      const boonGlow = n.kind === 'boon' && !visited && !fogged;
       this.layer.add([hex, icon, label]);
+      if (boonGlow) {
+        hex.setFillStyle(0xc9962a);
+        if (!isCurrent) hex.setStrokeStyle(3, 0xfff1b8, 1);
+        const ring = (k: number, w: number, a: number) => this.add.polygon(p.x, p.y, hexPoints(hw * k, hh * k, pointy)).setStrokeStyle(w, 0xffd36a, a).setBlendMode(Phaser.BlendModes.ADD);
+        const outer = ring(1.22, 6, 0.35);
+        const inner = ring(1.08, 4, 0.7);
+        auras.add([outer, inner]);
+        if (!calm()) {
+          this.tweens.add({ targets: outer, scale: { from: 0.96, to: 1.08 }, alpha: { from: 0.6, to: 0.15 }, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+          this.tweens.add({ targets: inner, alpha: { from: 1, to: 0.45 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+          for (let k = 0; k < 3; k++) {
+            const mote = pixelIcon(this, p.x, p.y, 'sparkle', 11).setAlpha(0);
+            auras.add(mote);
+            const rise = () => {
+              if (!mote.active) return;
+              mote.setPosition(p.x + Phaser.Math.Between(-hw * 0.4, hw * 0.4), p.y + hh * 0.3).setAlpha(0);
+              this.tweens.add({ targets: mote, y: p.y - hh * 0.62, alpha: { from: 1, to: 0 }, duration: 1500, ease: 'Sine.easeOut', onComplete: rise });
+            };
+            this.time.delayedCall(k * 500, rise);
+          }
+        }
+      }
       // A rare encounter or hidden hex: a twinkle in the corner.
       const fsx = floorSurprise(run);
       if ((fsx.encNode === n.id || fsx.hexNode === n.id) && !visited) {
@@ -279,6 +305,8 @@ export class MapScene extends Phaser.Scene {
         return new Set([here, r.map.bossId, ...(r.map.nodes[here]?.next ?? []), ...(r.roamer ? [r.roamer.node] : []), ...(r.rival?.node ? [r.rival.node] : [])]);
       },
     });
+
+    this.layer.add(auras);
 
     // Your token: your trainer standing on the hex you're on (see hopTo).
     this.posOf = (id: string) => {
