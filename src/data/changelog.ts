@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.0';
+export const APP_VERSION = '2.01';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,18 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.01',
+    title: 'Easier to see',
+    items: [
+      'Your boons now show as a glowing badge of gems on the map and in battle (it flashes when one kicks in). Tap it for the list. On phones the old boon counter was hidden under the Menu button.',
+      'Boon offers are dealt as cards, framed in their rarity\u2019s colour. Mythics shimmer gold and curses smoulder red.',
+      'Boon hexes glow gold with rising sparkles until you take them.',
+      'The Workshop is now a tech tree: four branches growing from the anvil. Tap any upgrade to read it, and build the next from the panel.',
+      'At camp, visitors with something to say get a speech bubble.',
+      'The Team screen\u2019s trait is now a button: tap it to read what it does.',
+    ],
+  },
   {
     version: '2.0',
     title: 'Hexbound 2.0',
