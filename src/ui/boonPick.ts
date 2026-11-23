@@ -54,8 +54,8 @@ export function openBoonOffer(scene: Phaser.Scene, run: Run, onDone: () => void)
 }
 
 /** Your boons this run (and curses), from the map bar or the menu. */
-export function openBoonList(scene: Phaser.Scene, run: Run, onClose: () => void = () => {}) {
-  const held = run.boons?.held ?? [];
+export function openBoonList(scene: Phaser.Scene, src: Run | readonly string[], onClose: () => void = () => {}) {
+  const held = Array.isArray(src) ? [...(src as readonly string[])] : ((src as Run).boons?.held ?? []);
   openPicker(scene, {
     title: `Boons (${held.length})`,
     subtitle: held.length ? 'They last for the rest of this run.' : 'No boons yet. Beat a guardian or find a Boon hex to choose one.',

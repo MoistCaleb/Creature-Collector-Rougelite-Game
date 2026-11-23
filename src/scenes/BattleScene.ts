@@ -1,6 +1,8 @@
 import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../logic/surprises';
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
+import { boonBadge } from '../ui/boonUi';
+import { openBoonList } from '../ui/boonPick';
 import { traitLine } from '../ui/traitText';
 import { TRAITS, type TraitId } from '../data/traits';
 import { ELDER_TAUNTS, GUARDIAN_TAUNTS, pickLine, TRAINER_LINES } from '../data/dialogue';
@@ -398,6 +400,7 @@ export class BattleScene extends Phaser.Scene {
       // Settings may change the battle speed: redraw the controls on the way back.
       openGameMenu(this, () => this.afterMenu(), this.shownEnemy ? creatureTypes(this.shownEnemy) : []);
     }, { glyph: 'menu' }).setDepth(5);
+    this.drawBoonBadge();
 
     this.refreshEnemy();
     this.refreshPlayer();
@@ -765,6 +768,7 @@ export class BattleScene extends Phaser.Scene {
     this.controls = this.add.container(0, 0);
     this.drawControls();
     button(this, L.menu.x, L.menu.y, 48, 36, '', () => this.openMatchMenu(), { glyph: 'menu' }).setDepth(5);
+    this.drawBoonBadge();
     this.refreshEnemy();
     this.refreshPlayer();
     this.drawTeamFx();
@@ -1136,12 +1140,27 @@ export class BattleScene extends Phaser.Scene {
 
   /** Callouts still on screen, per side, so a busy turn stacks them instead of piling them up. */
   private callouts: Record<'player' | 'enemy', number> = { player: 0, enemy: 0 };
+  private boonBadge: ReturnType<typeof boonBadge> = null;
+
+  /** Your side's boons: a glowing badge beside the menu button (tap for the list). */
+  private drawBoonBadge() {
+    const ids = [...((this.battle as unknown as { boonSets?: Record<string, Set<string>> }).boonSets?.player ?? [])];
+    const b = boonBadge(this, 0, L.menu.y, ids, () => {
+      if (this.busy) return;
+      this.cancelAuto();
+      openBoonList(this, ids);
+    }, { maxW: LANDSCAPE ? 200 : 170, h: 32 });
+    if (!b) return;
+    b.setX(L.menu.x - 24 - 8 - b.width).setDepth(5);
+    this.boonBadge = b;
+  }
 
   /** A boon kicked in: a ribbon with its name slides in by that side's panel, with a chime. */
   private async boonCallout(side: 'player' | 'enemy', id: string, more: boolean) {
     const b = BOONS[id];
     if (!b) return;
     sfx.boonFire();
+    if (side === 'player') this.boonBadge?.pulse();
     await this.callout(side, `✦ ${b.name}`, BOON_COLOR[b.rarity], 0xffe9a8, more);
   }
 
