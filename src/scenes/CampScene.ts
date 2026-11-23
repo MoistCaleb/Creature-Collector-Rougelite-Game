@@ -33,6 +33,8 @@ import {
 import { createCreature } from '../logic/creature';
 import { branchUpgrades, WORKSHOP_BRANCHES, type WorkshopBranch } from '../data/workshop';
 import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
+import { payHuntMilestones } from '../logic/huntMilestones';
+import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
@@ -212,6 +214,10 @@ export class CampScene extends Phaser.Scene {
     if (this.prep) this.prepPanel();
     else {
       this.campButtons();
+      // Gilded Hunt milestones (2.0): saves that went deep before 2.0 are paid here, once.
+      payHuntMilestones(meta);
+      saveMeta(meta);
+      announceHunt(this, meta, () => {});
       if (this.reopen) {
         const b = this.reopen;
         this.reopen = null;
@@ -462,6 +468,17 @@ export class CampScene extends Phaser.Scene {
       const c = this.add.polygon(x, y, [0, -24, 9, -6, 0, 6, -9, -6], 0x6ae0f0).setStrokeStyle(2, 0xd0f8ff).setDepth(depth(y));
       const halo = this.add.circle(x, y - 10, 18, 0x6ae0f0, 0.15);
       if (!calm()) this.tweens.add({ targets: [c, halo], alpha: 0.6, yoyo: true, repeat: -1, duration: 1400 });
+    }
+    // The Gilded Hunt totem (floor 10 milestone): a carved post with a gilded crest.
+    if (owned.includes('hunt-totem')) {
+      const x = x1 * 0.76;
+      const y = groundY + 26;
+      const d = depth(y);
+      this.add.rectangle(x, y, 10, 58, 0x6a4a2a).setOrigin(0.5, 1).setStrokeStyle(1, 0x2a1a10).setDepth(d);
+      for (const k of [0, 1, 2]) this.add.rectangle(x, y - 12 - k * 15, 14, 4, 0xb07a10).setDepth(d);
+      const crest = this.add.polygon(x, y - 66, [0, -12, 11, 0, 0, 12, -11, 0], 0xffc94d).setStrokeStyle(2, 0xfff4b0).setDepth(d);
+      const glow = this.add.circle(x, y - 66, 16, 0xffc94d, 0.18).setDepth(d);
+      if (!calm()) this.tweens.add({ targets: [crest, glow], alpha: 0.65, yoyo: true, repeat: -1, duration: 1200 });
     }
     if (owned.includes('flag')) {
       const x = x1 * 0.42;
@@ -753,7 +770,9 @@ export class CampScene extends Phaser.Scene {
   private stall() {
     const meta = state.meta;
     const c = camp(meta);
-    const opts = CAMP_ITEMS.map((it) => {
+    // Rewards (the Gilded Hunt totem) only show once they're yours.
+    const items = CAMP_ITEMS.filter((it) => !it.reward || c.owned.includes(it.id));
+    const opts = items.map((it) => {
       const own = c.owned.includes(it.id);
       const inUse = it.kind === 'fire' && c.fire === it.id;
       return {
@@ -772,9 +791,9 @@ export class CampScene extends Phaser.Scene {
       cancelLabel: 'Back',
       onCancel: () => {},
       onPick: (i) => {
-        if (i >= CAMP_ITEMS.length) c.fire = undefined;
+        if (i >= items.length) c.fire = undefined;
         else {
-          const it = CAMP_ITEMS[i];
+          const it = items[i];
           if (c.owned.includes(it.id)) c.fire = it.id;
           else if (buyCampItem(meta, it.id) === null) sfx.coin();
         }

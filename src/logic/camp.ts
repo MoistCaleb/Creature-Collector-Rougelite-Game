@@ -160,6 +160,8 @@ export interface CampItem {
   kind: 'decor' | 'fire';
   /** Fire colours: the flame's three colours, outside to in. */
   flame?: [number, number, number];
+  /** Not for sale: only a reward gives it (a Gilded Hunt milestone). */
+  reward?: boolean;
 }
 
 export const CAMP_ITEMS: CampItem[] = [
@@ -175,13 +177,14 @@ export const CAMP_ITEMS: CampItem[] = [
   { id: 'fire-green', name: 'Green fire', desc: 'An eerie green campfire.', cost: 20, kind: 'fire', flame: [0x1a8a3a, 0x3ad06a, 0xb0ffb0] },
   { id: 'fire-violet', name: 'Violet fire', desc: 'A mystic violet campfire.', cost: 24, kind: 'fire', flame: [0x6a1aa0, 0xa04ae0, 0xe0b0ff] },
   { id: 'fire-gold', name: 'Gilded fire', desc: 'A golden campfire, fit for a champion.', cost: 40, kind: 'fire', flame: [0xb07a10, 0xffc94d, 0xfff4b0] },
+  { id: 'hunt-totem', name: 'Gilded Hunt totem', desc: 'From floor 10 of a Gilded Hunt.', cost: 0, kind: 'decor', reward: true },
 ];
 export const CAMP_ITEM = Object.fromEntries(CAMP_ITEMS.map((i) => [i.id, i])) as Record<string, CampItem>;
 
 export function buyCampItem(m: Meta, id: string): string | null {
   const c = camp(m);
   const item = CAMP_ITEM[id];
-  if (!item) return 'Not for sale.';
+  if (!item || item.reward) return 'Not for sale.';
   if (c.owned.includes(id)) return 'You already have it.';
   if (c.embers < item.cost) return `You need ${item.cost - c.embers} more embers.`;
   c.embers -= item.cost;

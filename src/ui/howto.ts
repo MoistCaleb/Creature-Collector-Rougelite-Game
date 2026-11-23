@@ -21,6 +21,7 @@ export const HOW_TO_PLAY: Page[] = [
       'A Hexling that faints is gone for the rest of the run. If your whole team falls, the run is over.',
       'Between runs you keep what you unlocked: starters, Hexlidex entries, maps and trainer passives.',
       'Win a run and you can go on a Gilded Hunt: endless floors where gilded Hexlings are everywhere and enemies keep getting stronger.',
+      'Each new deepest hunt floor can pay a one-time milestone: embers on floor 3, the Gilded campfire on 5, Gilded starter offers on 7, a camp totem on 10, then more embers and titles every few floors.',
     ],
   },
   {

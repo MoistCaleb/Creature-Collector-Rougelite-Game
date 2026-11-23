@@ -6,7 +6,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { addPartner, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
+import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -20,6 +20,7 @@ import { icon as pixelIcon } from '../ui/icons';
 import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
 import { openPicker, showMessage } from '../ui/picker';
 import { wsHas } from '../logic/workshop';
+import { gildedStarterOffer } from '../logic/huntMilestones';
 
 /** This visit's three random starters. */
 let rolled: string[] | null = null;
@@ -35,6 +36,8 @@ export class StarterScene extends Phaser.Scene {
   private daily: string | null = null;
   private weekly: string | null = null;
   private race: RaceInfo | null = null;
+  /** Gilded Hunt milestone (floor 7): the starter offered Gilded at this pick, if any. */
+  private gold: string | null = null;
 
   create(data: { mapId?: string; daily?: string; weekly?: string; race?: RaceInfo } = {}) {
     this.daily = data.daily ?? null;
@@ -70,6 +73,7 @@ export class StarterScene extends Phaser.Scene {
     const choices = this.race ? this.race.starters : week ? week.starters : this.daily ? dailyStarters(this.daily) : rolled;
     // Daily runs and weekly challenges: each starter comes with a passive that suits it.
     const passives = this.race ? racePassives(this.race.seed, this.race.starters) : week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
+    this.gold = !this.race && !week && !this.daily ? gildedStarterOffer(state.meta, choices) : null;
     traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : (traitKey ?? `free:${Math.random()}`);
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
@@ -86,8 +90,9 @@ export class StarterScene extends Phaser.Scene {
         const mid = x + cw / 2;
         const card = this.add.rectangle(x, y, cw, 350, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
         card.setInteractive({ useHandCursor: true }).on('pointerup', () => this.pick(id));
-        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id))).setScale(3.4 * SPRITE_FIT);
+        const img = this.add.image(mid, y + 66, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id) || id === this.gold)).setScale(3.4 * SPRITE_FIT);
         this.shinyToggle(id, x + cw - 50, y + 18, 84);
+        if (id === this.gold) this.goldTag(x + cw - 50, y + 18);
         this.tweens.add({ targets: img, y: y + 60, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
         if (!this.daily && !week && state.meta.favorite === id) {
           pixelIcon(this, x + 18, y + 16, 'star', 16);
@@ -112,8 +117,9 @@ export class StarterScene extends Phaser.Scene {
       card.setInteractive({ useHandCursor: true });
       card.on('pointerup', () => this.pick(id));
 
-      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id))).setScale(4 * SPRITE_FIT);
+      const img = this.add.image(90, y + 85, ensureCreatureTexture(this, id, 0, starterShiny(state.meta, id) || id === this.gold)).setScale(4 * SPRITE_FIT);
       this.shinyToggle(id, 82, y + 20, 100);
+      if (id === this.gold) this.goldTag(82, y + 20);
       this.tweens.add({ targets: img, y: y + 79, yoyo: true, repeat: -1, duration: 800 + i * 120, ease: 'Sine.easeInOut' });
       text(this, 175, y + 16, sp.names[0], 24, COLORS.text, { fontStyle: 'bold' });
       if (!this.daily && !week && state.meta.favorite === id) {
@@ -150,6 +156,15 @@ export class StarterScene extends Phaser.Scene {
     }
   }
 
+  /** The Gilded offer's tag: pick it and the line is yours Gilded (a Gilded Hunt milestone). */
+  private goldTag(x: number, y: number) {
+    const t = text(this, x, y, '✦ Gilded offer', 12, '#ffd86b', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 3 }).setOrigin(0.5);
+    t.setInteractive({ useHandCursor: true }).on('pointerup', (_p: unknown, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+      e?.stopPropagation?.();
+      showMessage(this, '✦ Gilded offer', 'A reward from floor 7 of the Gilded Hunt: now and then, one of your starters is offered Gilded. Pick it and you own its line Gilded for good.');
+    });
+  }
+
   /** Shiny unlocked for this line: start it shiny (tap to switch to its normal colours and back). */
   private shinyToggle(id: string, x: number, y: number, w: number) {
     const meta = state.meta;
@@ -164,6 +179,8 @@ export class StarterScene extends Phaser.Scene {
   private pick(id: string) {
     // Partner (a Workshop capstone): the other two starters, with the traits their cards showed.
     const key = traitKey;
+    const gold = this.gold === id;
+    this.gold = null;
     const others = !this.race && !this.daily && !this.weekly ? (rolled ?? []).filter((x) => x !== id) : [];
     rolled = null;
     const trait = traitKey ? rollTrait(id, traitKey) : undefined;
@@ -185,6 +202,12 @@ export class StarterScene extends Phaser.Scene {
     }
     // The starter keeps the trait it showed on its card.
     if (trait && state.run.team[0]) state.run.team[0].trait = trait;
+    // The Gilded offer (a Gilded Hunt milestone): it starts Gilded, and its line is yours Gilded.
+    if (gold && state.run.team[0]) {
+      state.run.team[0].shiny = true;
+      noteShinyOwned(state.meta, id);
+      saveMeta(state.meta);
+    }
     const run = state.run;
     // Every run but dailies and weeklies stops at camp first: one thing for the road, and the news.
     const go = () => (prepsAvailable(run) ? this.scene.start('Camp', { prep: true }) : this.scene.start('Map', {}));
