@@ -25,6 +25,10 @@ export function openTextBox(opts: {
   value?: string;
   readOnly?: boolean;
   placeholder?: string;
+  /** Writing, not a code: a normal font, spellcheck and autocorrect, wrapped by word. */
+  prose?: boolean;
+  /** Most characters allowed. */
+  maxLength?: number;
   actions: TextBoxAction[];
 }): TextBoxHandle {
   const font = 'system-ui,-apple-system,sans-serif';
@@ -44,12 +48,13 @@ export function openTextBox(opts: {
   ta.value = opts.value ?? '';
   ta.readOnly = !!opts.readOnly;
   ta.placeholder = opts.placeholder ?? '';
-  ta.spellcheck = false;
-  ta.autocapitalize = 'off';
-  ta.setAttribute('autocorrect', 'off');
+  ta.spellcheck = !!opts.prose;
+  ta.autocapitalize = opts.prose ? 'sentences' : 'off';
+  ta.setAttribute('autocorrect', opts.prose ? 'on' : 'off');
+  if (opts.maxLength) ta.maxLength = opts.maxLength;
   ta.style.cssText =
-    'width:100%;height:120px;box-sizing:border-box;resize:none;border-radius:8px;border:1px solid #4a3f66;background:#15111f;color:#e8e0ff;' +
-    'font:12px ui-monospace,Menlo,monospace;padding:8px;word-break:break-all';
+    `width:100%;height:${opts.prose ? 160 : 120}px;box-sizing:border-box;resize:none;border-radius:8px;border:1px solid #4a3f66;background:#15111f;color:#e8e0ff;` +
+    (opts.prose ? `font:16px ${font};padding:10px;line-height:1.4` : 'font:12px ui-monospace,Menlo,monospace;padding:8px;word-break:break-all');
   const status = document.createElement('div');
   status.style.cssText = 'min-height:18px;margin:8px 0 4px;text-align:center;font-weight:600';
   const row = document.createElement('div');
