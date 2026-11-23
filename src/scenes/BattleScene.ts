@@ -1,4 +1,4 @@
-import { elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../logic/surprises';
+import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../logic/surprises';
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
 import { traitLine } from '../ui/traitText';
@@ -23,7 +23,7 @@ import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprit
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
 import { calm } from '../ui/motion';
 import { accText, attackEl, MAX_STAGE, maxUses, moveColor, MOVES, moveSummary, TEAM_FX, WEATHER, type TeamFxId } from '../data/moves';
-import { BOSSES, guardianRules, trainerName } from '../data/trainers';
+import { BOSSES, guardianRules, trainerName, TRAINER_NAMES } from '../data/trainers';
 import { BALANCE } from '../data/balance';
 import { cry } from '../ui/cries';
 import { emergeFrom, recallToHex, releaseFromHex } from '../ui/entrance';
@@ -285,7 +285,11 @@ export class BattleScene extends Phaser.Scene {
         const fsx = floorSurprise(run);
         // Surprises: an Echo of yourself, or a Gilded trainer.
         const enc = fsx.encNode === run.currentId ? fsx.enc : undefined;
-        run.activeBattle.trainer = enc === 'echo' ? 'Your Echo' : enc === 'gildedtrainer' ? `Gilded ${trainerName((xs) => r.pick(xs))}` : trainerName((xs) => r.pick(xs));
+        const dojo = dojoOn(run) ? run.surprises!.dojo!.wins : -1;
+        run.activeBattle.trainer =
+          dojo >= 0
+            ? `${dojo === DOJO_ROUNDS - 1 ? 'Dojo Master' : 'Dojo student'} ${placeRng(run, `trainer:dojo${dojo}`).pick(TRAINER_NAMES)}`
+            : enc === 'echo' ? 'Your Echo' : enc === 'gildedtrainer' ? `Gilded ${trainerName((xs) => r.pick(xs))}` : trainerName((xs) => r.pick(xs));
       }
       persist();
     }
@@ -2252,6 +2256,8 @@ export class BattleScene extends Phaser.Scene {
       stage: foe.stage,
     };
     run.activeBattle = null;
+    // The Dojo (a surprise) ends with a loss.
+    if (dojoOn(run)) dojoResult(run, false);
     playMusic(null);
     sfx.defeat();
     if (!promoteBench(run)) {

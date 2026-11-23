@@ -5,8 +5,23 @@ import { traitsOf } from '../src/data/traits';
 import { emptyStats } from '../src/logic/achievements';
 import { setFloorCeiling } from '../src/logic/creature';
 import { emptyDex } from '../src/logic/dex';
-import { encounterKind, makeEncounter, peekEncounter, startRun, type Meta } from '../src/logic/run';
-import { DROUGHT_MAX, floorSurprise, hadSurprise, noteRunSurprises, runSurprises } from '../src/logic/surprises';
+import { allCreatures, caravanAt, encounterKind, joinParty, makeEncounter, peekEncounter, postBattleRecover, startRun, type Meta } from '../src/logic/run';
+import {
+  DOJO_ROUNDS,
+  dojoOn,
+  dojoResult,
+  DROUGHT_MAX,
+  EGG_WINS,
+  eggReady,
+  enterDojo,
+  floorSurprise,
+  hadSurprise,
+  hatchEgg,
+  layEgg,
+  noteRunSurprises,
+  runSurprises,
+} from '../src/logic/surprises';
+import { stats } from '../src/logic/creature';
 
 beforeEach(() => setFloorCeiling(Infinity));
 
@@ -94,6 +109,73 @@ describe('rare surprises', () => {
     for (const c of makeEncounter(run, node)) expect(c.trait).toBe(traitsOf(c.speciesId)[2]);
     runSurprises(run).omen = 'goldenage';
     expect(priceFor(run, 100)).toBeGreaterThan(before);
+  });
+});
+
+describe('hatchery, dojo and caravan (2.0)', () => {
+  it('the egg is a line you have not caught, hatches after 5 wins with its rare trait', () => {
+    const meta = mkMeta();
+    meta.dex.caught = ['emberkit'];
+    const run = startRun(meta, 'emberkit', 21);
+    const egg = layEgg(run);
+    expect(egg.speciesId).not.toBe('emberkit');
+    expect(layEgg(run)).toBe(egg);
+    for (let i = 0; i < EGG_WINS - 1; i++) postBattleRecover(run, { won: true });
+    postBattleRecover(run, {});
+    expect(eggReady(run)).toBe(false);
+    postBattleRecover(run, { won: true });
+    expect(eggReady(run)).toBe(true);
+    const c = hatchEgg(run)!;
+    expect(c.speciesId).toBe(egg.speciesId);
+    expect(c.trait).toBe(traitsOf(c.speciesId)[2]);
+    expect(joinParty(run, c)).toBe(true);
+    expect(allCreatures(run)).toContain(c);
+    expect(runSurprises(run).egg).toBeUndefined();
+    expect(hatchEgg(run)).toBeNull();
+  });
+
+  it('the dojo is three different trainers with no healing between, and ends on a loss', () => {
+    const run = startRun(mkMeta(), 'emberkit', 31);
+    const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
+    node.kind = 'hidden';
+    run.currentId = node.id;
+    expect(encounterKind(run, node)).toBe('hidden');
+    enterDojo(run);
+    expect(encounterKind(run, node)).toBe('elite');
+    const teams: string[] = [];
+    const lead = run.team[0];
+    for (let i = 0; i < DOJO_ROUNDS; i++) {
+      teams.push(makeEncounter(run, node).map((c) => c.speciesId).join());
+      lead.hp = Math.ceil(stats(lead).hp / 2);
+      postBattleRecover(run, { won: true });
+      expect(lead.hp).toBe(Math.ceil(stats(lead).hp / 2));
+    }
+    expect(runSurprises(run).dojo!.wins).toBe(DOJO_ROUNDS);
+    expect(new Set(teams).size).toBeGreaterThan(1);
+    enterDojo(run);
+    dojoResult(run, false);
+    expect(dojoOn(run)).toBe(false);
+    // Out of the dojo, wins heal again.
+    runSurprises(run).dojo = undefined;
+    postBattleRecover(run, { won: true });
+    expect(lead.hp).toBeGreaterThan(Math.ceil(stats(lead).hp / 2));
+  });
+
+  it('the caravan sells seven things, one of them free, and Scout sees no wild there', async () => {
+    const { caravanShop } = await import('../src/logic/shop');
+    const run = startRun(mkMeta(), 'emberkit', 41);
+    const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
+    const fs = runSurprises(run).floors['0'];
+    fs.enc = 'caravan';
+    fs.encNode = node.id;
+    expect(caravanAt(run, node)).toBe(true);
+    expect(peekEncounter(run, node)).toBeNull();
+    run.currentId = node.id;
+    const shop = caravanShop(run);
+    expect(shop.slots.length).toBe(7);
+    expect(shop.slots.filter((s) => s.price === 0).length).toBe(1);
+    const sum = (sh: typeof shop) => sh.slots.map((s) => `${s.item}:${s.price}`).join();
+    expect(sum(caravanShop(run))).toBe(sum(shop));
   });
 });
 

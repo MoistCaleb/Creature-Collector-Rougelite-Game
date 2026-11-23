@@ -8,7 +8,7 @@ import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
-import { elderHere, floorSurprise, lastWinTeam, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
+import { dojoOn, dojoResult, elderHere, floorSurprise, lastWinTeam, tickEgg, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
 import { NIGHT_SHARE, nightOut } from './ambience';
@@ -1184,7 +1184,15 @@ export function teamTrait(list: Creature[], id: TraitId): number {
 }
 
 export function postBattleRecover(run: Run, opts: { won?: boolean; sun?: boolean } = {}) {
-  if (opts.won) afterWinBoons(run, !!opts.sun);
+  if (opts.won) {
+    afterWinBoons(run, !!opts.sun);
+    tickEgg(run);
+  }
+  // The Dojo (a surprise): no healing between its battles.
+  if (dojoOn(run)) {
+    dojoResult(run, !!opts.won);
+    return;
+  }
   const frac =
     (run.passive === 'ironwill' ? BALANCE.ironWillHeal : BALANCE.postBattleHeal) * heatRules(run.heat ?? 0).healMult * (run.twist === 'lean' ? 0.5 : 1);
   // Healer's Touch: the whole team heals a little more; Forager: it heals itself a little more.
@@ -1382,12 +1390,17 @@ function encounterPool(run: Run, kind: EncounterKind, i: number, count: number, 
  * battle into a trainer's.
  */
 export function encounterKind(run: Run, node: MapNode): EncounterKind {
+  // The Dojo (a surprise): three trainers on its hidden hex.
+  if (node.kind === 'hidden' && dojoOn(run)) return 'elite';
   const k = node.kind as EncounterKind;
   if (k !== 'battle') return k;
   const fs = floorSurprise(run);
   if (floorCurse(run, 'hauntedfloor') || ((fs.enc === 'gildedtrainer' || fs.enc === 'echo') && fs.encNode === node.id)) return 'elite';
   return k;
 }
+
+/** Travelling caravan (a surprise): this battle hex is a shop on wheels instead. */
+export const caravanAt = (run: Run, node: MapNode) => floorSurprise(run).enc === 'caravan' && floorSurprise(run).encNode === node.id;
 
 /** Twin wilds (a surprise): this battle hex holds two of the same line. */
 const twinsAt = (run: Run, node: MapNode) => floorSurprise(run).enc === 'twinwilds' && floorSurprise(run).encNode === node.id;
@@ -1405,6 +1418,7 @@ function encounterCount(run: Run, kind: EncounterKind, rng: Rng, node?: MapNode)
 export function peekEncounter(run: Run, node: MapNode): { speciesId: string; count: number } | null {
   if (node.kind !== 'battle' && node.kind !== 'elite') return null;
   if (node.kind === 'battle' && run.roamer && run.roamer.node === node.id) return { speciesId: run.roamer.id, count: 1 };
+  if (caravanAt(run, node)) return null;
   const kind = encounterKind(run, node);
   const rng = placeRng(run, 'encounter', node.id);
   const count = encounterCount(run, kind, rng, node);
@@ -1418,7 +1432,8 @@ export const scoutRange = (run: Run): number => Math.max(teamTrait(run.team, 'sc
 
 export function makeEncounter(run: Run, node: MapNode): Creature[] {
   const kind = encounterKind(run, node);
-  const rng = placeRng(run, 'encounter', node.id);
+  // Each of the Dojo's trainers is someone new.
+  const rng = placeRng(run, dojoOn(run) ? `encounter:dojo${run.surprises!.dojo!.wins}` : 'encounter', node.id);
   if (kind === 'battle' && run.roamer && run.roamer.node === node.id) {
     run.log.fights += 1;
     return [legendFoe(run, run.roamer.id)];
@@ -1753,6 +1768,13 @@ function addToParty(run: Run, c: Creature, release?: Creature) {
   } else if (run.team.length < teamMax(run)) run.team.push(c);
   else run.bench.push(c);
   registerJoin(run, c);
+}
+
+/** Hatchery eggs and the like: join the party (releasing someone if it's full). False if there's no room. */
+export function joinParty(run: Run, c: Creature, release?: Creature): boolean {
+  if (!canMakeRoom(run, release)) return false;
+  addToParty(run, c, release);
+  return true;
 }
 
 /** Room for one more, either free or by releasing someone. */

@@ -1,5 +1,5 @@
 import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
-import { findSurprise, floorSurprise } from '../logic/surprises';
+import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, hatchEgg, layEgg, leaveDojo } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { boonCardText, openBoonList, openBoonOffer } from '../ui/boonPick';
@@ -29,7 +29,7 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { fillTeamFromBench, placeRng, unequipHeld, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
+import { caravanAt, fillTeamFromBench, joinParty, placeRng, unequipHeld, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
@@ -37,8 +37,10 @@ import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { freeRerollReady, reviveShare, useFreeReroll } from '../logic/workshop';
-import { applyItem, canAfford, eligibleTargets, ITEMS, pay, priceFor, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
+import { applyItem, canAfford, caravanShop, eligibleTargets, ITEMS, pay, priceFor, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
+import { SPECIES_BY_ID } from '../data/species';
+import { traitName } from '../ui/traitText';
 import { dex, persist, state } from '../state';
 import { announceGilded } from '../ui/gildedUi';
 import { TWISTS } from '../logic/run';
@@ -326,7 +328,8 @@ export class MapScene extends Phaser.Scene {
     };
     const afterFloorBanner = () => (data.banner ? showMessage(this, run.race?.done ? (run.race.done.won ? 'Stage cleared!' : 'Stage over') : run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt · floor ${run.hunt.depth}` : `Floor ${run.floor + 1}`, data.banner, next) : next());
     // Rare surprises announce themselves once: the run's omen, then this floor's.
-    const afterBanner = () => this.announceSurprises(afterFloorBanner);
+    // The Hatchery's egg hatches on the map, once it has seen enough battles.
+    const afterBanner = () => this.announceSurprises(() => this.hatchIfReady(afterFloorBanner));
     // New held items and Evolution Stones since the map was last shown get their own moments.
     const items = run.newItems ?? [];
     run.newItems = [];
@@ -1051,6 +1054,12 @@ export class MapScene extends Phaser.Scene {
         return;
       case 'battle':
       case 'elite':
+        // Travelling caravan (a surprise): a shop on wheels instead of a battle.
+        if (caravanAt(run, n)) {
+          run.shop = caravanShop(run);
+          persist();
+          return this.openShop();
+        }
         // Haunted Floor (a curse): every battle on this floor is a trainer.
         this.scene.start('Battle', { kind: encounterKind(run, n) });
         return;
@@ -1124,12 +1133,62 @@ export class MapScene extends Phaser.Scene {
     showMessage(this, 'A rare surprise!', lines.join('\n\n'), then);
   }
 
-  /** Hidden hexes (surprises): a wishing well, a cursed altar or a hidden shop. */
+  /** Hatchery (a surprise): the egg hatches once it's seen enough battles (it waits if the party is full). */
+  private hatchIfReady(then: () => void) {
+    const run = state.run!;
+    if (!eggReady(run)) return then();
+    const name = SPECIES_BY_ID[run.surprises!.egg!.speciesId]?.names[0] ?? 'a Hexling';
+    const hatch = (release?: Creature) => {
+      const gone = release ? creatureName(release) : '';
+      const c = hatchEgg(run)!;
+      joinParty(run, c, release);
+      dex.creature(c, true);
+      sfx.shinyReveal();
+      persist();
+      showMessage(
+        this,
+        'The egg hatches!',
+        `${release ? `${gone} was released.\n\n` : ''}Out pops ${creatureName(c)} (Lv ${c.level}), with its rare ◆ trait${c.trait ? `: ${traitName(c.speciesId, c.trait)}` : ''}. It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`,
+        then,
+      );
+    };
+    if (!rosterFull(run)) return hatch();
+    const all = allCreatures(run);
+    openPicker(this, {
+      title: 'The egg is hatching!',
+      subtitle: `A ${name} is about to hatch, but your party is full. Release one to make room, or let it wait (it hatches the next time there's room).`,
+      options: all.map((c) => ({ creature: c, note: run.team.includes(c) ? 'Team' : 'Bench' })),
+      onPick: (k) => hatch(all[k]),
+      onCancel: then,
+      cancelLabel: 'Not yet',
+    });
+  }
+
+  /** Hidden hexes (surprises): a wishing well, a cursed altar, a hidden shop, a hatchery or a dojo. */
   private doHidden() {
     const run = state.run!;
     const fs = floorSurprise(run);
     const id = fs.hex ?? 'well';
     if (findSurprise(state.meta, id)) persist();
+    if (id === 'hatchery') {
+      if (run.surprises?.egg)
+        return showMessage(this, 'Hatchery', 'An empty nest. You already carry an egg, warm in your bag.', this.done);
+      return openPicker(this, {
+        title: 'Hatchery',
+        subtitle: `A warm nest, left alone, with one speckled egg in it. Carry it for ${EGG_WINS} won battles and it hatches into a line you haven't caught yet, always with its rare ◆ trait.`,
+        options: [
+          { label: 'Take the egg', color: 0x2f6b4a },
+          { label: 'Leave it', color: 0x3a3450 },
+        ],
+        onPick: (i) => {
+          if (i === 1) return this.done();
+          layEgg(run);
+          persist();
+          showMessage(this, 'Hatchery', `You tuck the egg into your bag. It hatches after ${EGG_WINS} won battles.`, this.done);
+        },
+      });
+    }
+    if (id === 'dojo') return this.doDojo();
     // A boon gained here: open it as an offer of one (or a mythic offer), then move on.
     const offerAndGo = (mode: 'normal' | 'mythic') => {
       openOffer(run, `hidden${run.floor}:${id}:${mode}`, mode);
@@ -1211,6 +1270,45 @@ export class MapScene extends Phaser.Scene {
         sfx.boonPick(BOONS[ids[i]].rarity);
         persist();
         showMessage(this, `${BOONS[ids[i]].name}!`, BOONS[ids[i]].desc, this.done);
+      },
+    });
+  }
+
+  /** Dojo (a surprise): three trainers in a row, no healing between; win them all for a boon and a Limit Breaker. */
+  private doDojo() {
+    const run = state.run!;
+    const d = run.surprises?.dojo;
+    const fight = () => this.scene.start('Battle', { kind: 'elite' });
+    if (d?.lost) {
+      leaveDojo(run);
+      persist();
+      return showMessage(this, 'Dojo', 'The Dojo Master bows. "Come back stronger."', this.done);
+    }
+    if (d && d.wins >= DOJO_ROUNDS) {
+      // The prize: a boon, then a Limit Breaker for one Hexling.
+      leaveDojo(run);
+      openOffer(run, `dojo${run.floor}`);
+      persist();
+      sfx.victory();
+      const limit = (): void =>
+        this.buy({ item: 'limit', price: 0, sold: false }, () => limit());
+      return showMessage(this, 'Dojo cleared!', 'The Dojo Master bows low. "Take these. You\u2019ve earned them."\n\nA boon, and a Limit Breaker.', () =>
+        openBoonOffer(this, run, limit),
+      );
+    }
+    if (d) return showMessage(this, 'Dojo', `Round ${d.wins + 1} of ${DOJO_ROUNDS}. No time to rest: the next challenger steps up.`, fight);
+    openPicker(this, {
+      title: 'Dojo',
+      subtitle: `A hall of polished wood. ${DOJO_ROUNDS} trainers wait, one after another, with no healing between. Beat all ${DOJO_ROUNDS} for a boon and a Limit Breaker. Lose, and the run goes on without them.`,
+      options: [
+        { label: 'Step onto the mat', color: 0x6a2a3a },
+        { label: 'Walk away', color: 0x3a3450 },
+      ],
+      onPick: (i) => {
+        if (i === 1) return this.done();
+        enterDojo(run);
+        persist();
+        fight();
       },
     });
   }
@@ -1552,25 +1650,30 @@ export class MapScene extends Phaser.Scene {
     };
     const rerollFree = freeRerollReady(run) && rerollPrice(run, shop) > 0;
     const reroll = rerollFree ? 0 : rerollPrice(run, shop);
+    const wagon = !!shop.caravan;
     openPicker(this, {
-      title: `Shop   ◉ ${run.coins}`,
-      subtitle: `${shopTalk(run)}\nItems take effect right away.`,
+      title: `${wagon ? 'Travelling caravan' : 'Shop'}   ◉ ${run.coins}`,
+      subtitle: wagon
+        ? 'A painted wagon rolls up, piled high. "One thing on the house, friend. The rest, you pay for."'
+        : `${shopTalk(run)}\nItems take effect right away.`,
       options: [
         ...shop.slots.map((sl) => {
           const reason = sl.sold ? 'Sold' : unusableReason(run, sl);
           const poor = !canAfford(run, sl.price);
           return {
-            label: `${label(sl)}   ◉ ${sl.price}`,
+            label: `${label(sl)}   ${sl.price === 0 && wagon ? 'FREE' : `◉ ${sl.price}`}`,
             sub: reason ?? (poor ? `${slotDesc(sl)} · not enough coins` : slotDesc(sl)),
             disabled: sl.sold || !!reason || poor,
             color: 0x4a3a1c,
             glyph: slotGlyph(sl),
           };
         }),
-        { label: `Reroll stock   ◉ ${reroll}`, sub: rerollFree ? 'Free once this floor (Restocker)' : 'New items, same shop', disabled: !canAfford(run, reroll) },
+        ...(wagon
+          ? []
+          : [{ label: `Reroll stock   ◉ ${reroll}`, sub: rerollFree ? 'Free once this floor (Restocker)' : 'New items, same shop', disabled: !canAfford(run, reroll) }]),
       ],
       onPick: (i) => {
-        if (i === shop.slots.length) {
+        if (i === shop.slots.length && !wagon) {
           // Restocker (Workshop): the first reroll on each floor is free.
           if (rerollFree) useFreeReroll(run);
           else pay(run, reroll);

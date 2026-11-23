@@ -2,7 +2,10 @@ import { SURPRISE_LIST, SURPRISES } from '../data/surprises';
 import { ELEMENTS, type Element } from '../data/types';
 import type { WeatherId } from '../data/moves';
 import { hashString, Rng } from './rng';
-import { placeRoamer, saveMeta, type Meta, type Run } from './run';
+import { highestLevel, placeRng, placeRoamer, saveMeta, type Meta, type Run } from './run';
+import { SPECIES } from '../data/species';
+import { traitsOf } from '../data/traits';
+import { createCreature, stats, type Creature } from './creature';
 import { hiddenBoost, surpriseInPool } from './workshop';
 
 /**
@@ -34,7 +37,21 @@ export interface RunSurprises {
   floors: Record<string, FloorSurprise>;
   /** A surprise is guaranteed on the first floor (drought protection; unseeded runs only). */
   forced?: boolean;
+  /** Hatchery: an egg you carry, and the battles it has seen. */
+  egg?: Egg;
+  /** Dojo: three trainers in a row, under way. */
+  dojo?: { wins: number; lost?: boolean };
 }
+
+export interface Egg {
+  speciesId: string;
+  wins: number;
+}
+
+/** Hatchery: battles won before the egg hatches. */
+export const EGG_WINS = 5;
+/** Dojo: trainers in a row. */
+export const DOJO_ROUNDS = 3;
 
 /** Odds per floor (and per run for omens), tuned so about 1 run in 2 has at least one. */
 const ODDS = { omen: 1 / 15, floor: 1 / 30, elder: 1 / 20, hex: 1 / 12, enc: 1 / 20 };
@@ -159,3 +176,58 @@ export const elderHere = (run: Run): boolean => !!floorSurprise(run).elder;
 /** Golden Age: coins and prices. */
 export const omenCoinMult = (run: Run): number => (omenOf(run) === 'goldenage' ? 2 : 1);
 export const omenPriceMult = (run: Run): number => (omenOf(run) === 'goldenage' ? 1.5 : 1);
+
+// ---------------------------------------------------------------- Hatchery
+
+/** Take the Hatchery's egg: a line you haven't caught yet (any line once you've caught them all). */
+export function layEgg(run: Run): Egg {
+  const rs = runSurprises(run);
+  if (rs.egg) return rs.egg;
+  const caught = run.meta.dex.caught;
+  const fresh = SPECIES.filter((sp) => !caught.includes(sp.id));
+  const pool = (fresh.length ? fresh : SPECIES).map((sp) => sp.id).sort();
+  return (rs.egg = { speciesId: placeRng(run, 'hatchery').pick(pool), wins: 0 });
+}
+
+/** The egg is ready to hatch. */
+export const eggReady = (run: Run | null | undefined): boolean => !!run?.surprises?.egg && run.surprises.egg.wins >= EGG_WINS;
+
+/** A battle won: the egg gets closer to hatching. */
+export function tickEgg(run: Run) {
+  const egg = run.surprises?.egg;
+  if (egg && egg.wins < EGG_WINS) egg.wins += 1;
+}
+
+/** Hatch the egg: its line at a level near your best, always with its rare ◆ trait. Null if no egg is ready. */
+export function hatchEgg(run: Run): Creature | null {
+  if (!eggReady(run)) return null;
+  const egg = run.surprises!.egg!;
+  const c = createCreature(egg.speciesId, Math.max(1, Math.round(highestLevel(run) * 0.85)), Math.min(2, run.floor));
+  c.trait = traitsOf(c.speciesId)[2] ?? c.trait;
+  c.hp = stats(c).hp;
+  delete run.surprises!.egg;
+  return c;
+}
+
+// ---------------------------------------------------------------- Dojo
+
+/** The Dojo's three battles are under way. */
+export const dojoOn = (run: Run | null | undefined): boolean => !!run?.surprises?.dojo && !run.surprises.dojo.lost;
+
+/** Step into the Dojo. */
+export function enterDojo(run: Run) {
+  runSurprises(run).dojo = { wins: 0 };
+}
+
+/** A battle in the Dojo ended. */
+export function dojoResult(run: Run, won: boolean) {
+  const d = run.surprises?.dojo;
+  if (!d || d.lost) return;
+  if (won) d.wins += 1;
+  else d.lost = true;
+}
+
+/** Leave the Dojo (finished, lost or reloaded past it). */
+export function leaveDojo(run: Run) {
+  if (run.surprises) delete run.surprises.dojo;
+}

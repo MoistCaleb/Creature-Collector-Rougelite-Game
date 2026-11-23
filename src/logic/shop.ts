@@ -86,6 +86,19 @@ export interface Shop {
   rerolls: number;
   /** Items this shop always stocks (kept through rerolls). */
   guaranteed: ItemId[];
+  /** Travelling caravan (a surprise): seven items, one free, no rerolls. */
+  caravan?: boolean;
+}
+
+/** Items on the Travelling caravan. */
+export const CARAVAN_SIZE = 7;
+
+/** The Travelling caravan's stock: seven items, one of them free. */
+export function caravanShop(run: Run): Shop {
+  const shop = rollShop(run, 0, [], CARAVAN_SIZE);
+  shop.caravan = true;
+  shop.slots[placeRng(run, 'caravan:free').int(0, shop.slots.length - 1)].price = 0;
+  return shop;
 }
 
 export function priceFor(run: Run, base: number): number {
@@ -100,14 +113,14 @@ export function rerollPrice(run: Run, shop: Shop): number {
   return priceFor(run, 10 + shop.rerolls * 10);
 }
 
-export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = []): Shop {
+export function rollShop(run: Run, rerolls = 0, guaranteed: ItemId[] = [], size = 5): Shop {
   // Each shop's stock (and each reroll) comes from its hex, the same for everyone on a seed.
   const rng = placeRng(run, `shop:${rerolls}`);
   const ids = Object.keys(ITEMS) as ItemId[];
   const chosen: ItemId[] = [...guaranteed];
   // Deep in a Gilded Hunt, every shop (and every reroll) has a Limit Breaker, and only there.
   if (limitShop(run) && !chosen.includes('limit')) chosen.unshift('limit');
-  while (chosen.length < 5) {
+  while (chosen.length < size) {
     const weights: Partial<Record<ItemId, number>> = {};
     for (const id of ids) if (!chosen.includes(id) && ITEMS[id].weight > 0) weights[id] = ITEMS[id].weight;
     chosen.push(rng.weighted(weights));
