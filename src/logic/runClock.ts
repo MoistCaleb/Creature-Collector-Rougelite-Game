@@ -46,6 +46,13 @@ export function finishRunClock(meta: Meta, run: Run, won: boolean): boolean {
   run.endedAt = Date.now();
   const t = run.playMs ?? 0;
   if (!won || run.race || t < 60_000) return false;
+  // Quick runs keep their own fastest win.
+  if (run.quick) {
+    const q = (meta.quick ??= { wins: 0, losses: 0, streak: 0, best: 0 });
+    if (q.fastest && q.fastest <= t) return false;
+    q.fastest = t;
+    return true;
+  }
   if (meta.fastestWin && meta.fastestWin <= t) return false;
   meta.fastestWin = t;
   return true;

@@ -44,7 +44,7 @@ import { payHuntMilestones } from '../logic/huntMilestones';
 import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
 import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
-import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
+import { applyPrep, clearSavedRun, floorsOf, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
 import { friendsAvailable, listFriends, type Friend } from '../net/friends';
 import { state } from '../state';
@@ -707,7 +707,7 @@ export class CampScene extends Phaser.Scene {
       // "!" when they have something for you.
       const ch = list[v.tier];
       const news = this.prep ? this.newsFrom(i) : null;
-      const flag = this.prep ? (i === 1 && legendFloors(run!, FLOORS).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
+      const flag = this.prep ? (i === 1 && legendFloors(run!, floorsOf(run!)).length ? '!' : '') : ch.complete && !ch.claimed ? '!' : ch.claimed ? '' : '?';
       if (flag) {
         const f = text(this, x, y - 66, flag, 18, flag === '!' ? '#ffd04a' : '#c8d8ff', { fontStyle: 'bold', stroke: '#14101e', strokeThickness: 4 }).setOrigin(0.5).setDepth(3);
         if (!calm()) this.tweens.add({ targets: f, y: f.y - 5, yoyo: true, repeat: -1, duration: 520, ease: 'Sine.easeInOut' });
@@ -725,8 +725,8 @@ export class CampScene extends Phaser.Scene {
     const run = state.run!;
     if (i === 0) return run.prep && run.prep !== 'skip' ? 'Good choice! Safe travels, and come see me in the shops.' : 'Take something for the road! On the house, just this once. Pick one below.';
     if (i === 1) {
-      const floors = legendFloors(run, FLOORS);
-      const lands = (run.biomes ?? []).slice(0, FLOORS).join(', then ');
+      const floors = legendFloors(run, floorsOf(run));
+      const lands = (run.biomes ?? []).slice(0, floorsOf(run)).join(', then ');
       if (floors.length)
         return `Exciting news! A legendary Hexling has been sighted up ahead: it should be roaming floor ${floors.map((f) => f + 1).join(' and ')}. Look for the glowing hex!${lands ? ` The lands ahead: ${lands}.` : ''}`;
       return lands ? `My notes say the lands ahead are ${lands}. Plan your team around them!` : 'Stay curious out there!';
@@ -997,7 +997,7 @@ export class CampScene extends Phaser.Scene {
     const [px, py, pw, ph] = LANDSCAPE ? [W - 272, 92, 262, H - 100] : [10, H - 280, W - 20, 272];
     this.add.rectangle(px, py, pw, ph, 0x1a1428, 0.94).setOrigin(0).setStrokeStyle(2, 0x6a4a2a).setDepth(4);
     text(this, px + pw / 2, py + 10, 'Before you set out', 16, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5, 0).setDepth(4);
-    const floors = legendFloors(run, FLOORS);
+    const floors = legendFloors(run, floorsOf(run));
     const tip = floors.length
       ? `Alder: “A legendary is roaming floor ${floors.map((f) => f + 1).join(' and ')}!”`
       : 'Take one thing for the road. Tap a visitor for news.';

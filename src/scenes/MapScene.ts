@@ -33,7 +33,7 @@ import { caravanAt, fillTeamFromBench, joinParty, placeRng, unequipHeld, reviveF
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
-import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, encounterKind, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
+import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, floorsOf, PASSIVES, earnCoins, encounterKind, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
 import { freeRerollReady, reviveShare, useFreeReroll } from '../logic/workshop';
@@ -410,7 +410,7 @@ export class MapScene extends Phaser.Scene {
     if (run.race) this.drawRaceStatus();
     if (LANDSCAPE) return this.drawSideInfo();
     this.add.rectangle(-OX, -OY, FW, TOP_BAR + OY, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 10, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 10, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${floorsOf(run)}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 38, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     // Heat and daily markers after the land name.
     let mx = 14 + biome.width + 12;
@@ -435,7 +435,9 @@ export class MapScene extends Phaser.Scene {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 67, 'skull', 14);
       const foe = run.race ? run.race.opponent : 'Boss';
-      text(this, 32, 60, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd');
+      const st = text(this, 32, 60, steps === 1 ? `${foe} is next` : `${foe} in ${steps} steps`, 12, '#c9a3dd');
+      // A quick run: tagged after the steps line (the rows above are full).
+      if (run.quick) text(this, 32 + st.width + 10, 60, 'QUICK RUN', 11, '#8fd6ff', { fontStyle: 'bold' });
     }
     button(this, W - 226, TOP_BAR / 2, 40, 44, '', () => openGameMenu(this), { glyph: 'menu' });
     button(this, W - 170, TOP_BAR / 2, 60, 44, 'Hexlidex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 12 });
@@ -459,7 +461,7 @@ export class MapScene extends Phaser.Scene {
   private drawSideInfo() {
     const run = state.run!;
     this.add.rectangle(-OX, -OY, SIDE_L + OX, FH, 0x0b0912, 0.92).setOrigin(0);
-    text(this, 14, 12, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${FLOORS}`, 20, '#ffc94d', { fontStyle: 'bold' });
+    text(this, 14, 12, run.race ? (run.race.royale ? 'Battle royale' : 'Stage battle') : run.hunt ? `Gilded Hunt ${run.hunt.depth}` : `Floor ${run.floor + 1} / ${floorsOf(run)}`, 20, '#ffc94d', { fontStyle: 'bold' });
     const biome = text(this, 14, 40, `${run.map.biome} lands`, 14, '#' + ELEMENT_COLORS[run.map.biome].toString(16).padStart(6, '0'));
     let mx = 14 + biome.width + 12;
     if (run.heat) {
@@ -467,6 +469,7 @@ export class MapScene extends Phaser.Scene {
       const t = text(this, mx + 10, 40, String(run.heat), 14, '#ff8a3a', { fontStyle: 'bold' });
       mx += 22 + t.width;
     }
+    if (run.quick) text(this, mx - 2, 41, 'QUICK', 12, '#8fd6ff', { fontStyle: 'bold' });
     if (run.daily) pixelIcon(this, mx, 48, 'calendar', 16);
     if (run.weekly && run.twist) {
       // The weekly twist: tap the crown to read it again.

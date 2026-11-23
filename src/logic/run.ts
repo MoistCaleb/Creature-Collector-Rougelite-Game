@@ -59,6 +59,10 @@ import { benchMax, benchShareBase, extraPouch, gildedBoost, reviveShare, startCo
 export const TEAM_MAX = 4;
 export const BENCH_MAX = 3;
 export const FLOORS = 3;
+/** Quick runs (2.0): two floors on smaller maps. */
+export const QUICK_FLOORS = 2;
+/** How many floors this run has. */
+export const floorsOf = (run: Pick<Run, 'quick'>): number => (run.quick ? QUICK_FLOORS : FLOORS);
 
 // ---------------------------------------------------------------- passives
 
@@ -114,7 +118,19 @@ export const PASSIVES: Record<PassiveId, { name: string; desc: string }> = {
 
 // ---------------------------------------------------------------- meta save
 
+/** Quick runs' own record (2.0): it never touches the main W/L, wins, unlocks or Heat. */
+export interface QuickRecord {
+  wins: number;
+  losses: number;
+  streak: number;
+  best: number;
+  /** Fastest quick win (active play time, ms). */
+  fastest?: number;
+}
+
 export interface Meta {
+  /** Quick runs (2.0): their own W/L and streak. */
+  quick?: QuickRecord;
   /** Boons (2.0): every boon you've been offered (Hexlidex), and how often you took each (Records). */
   boonsSeen?: string[];
   boonPicks?: Record<string, number>;
@@ -265,11 +281,18 @@ export function recordRun(run: Run, won: boolean) {
   const meta = run.meta;
   if (run.race) return;
   noteRunSurprises(meta, run);
+  if (run.quick) {
+    // Quick runs keep their own record; only which Hexlings you used carries over.
+    countQuickResult(meta, won);
+    noteUsage(meta, run);
+    saveMeta(meta);
+    return;
+  }
   const mvp = runMvp(run);
   const rec: RunRecord = {
     at: Date.now(),
     won,
-    floor: won ? 3 : run.floor + 1,
+    floor: won ? floorsOf(run) : run.floor + 1,
     mapId: run.mapId,
     heat: run.heat ?? 0,
     daily: run.daily,
@@ -286,10 +309,24 @@ export function recordRun(run: Run, won: boolean) {
   noteRunRecord(meta, rec);
   meta.history = [rec, ...(meta.history ?? [])].slice(0, HISTORY_MAX);
   countRunResult(meta, won);
+  noteUsage(meta, run);
+  saveMeta(meta);
+}
+
+/** Which Hexlings finished the run on your team, alive or fallen (for "most used"). */
+function noteUsage(meta: Meta, run: Run) {
   const usage = (meta.usage = meta.usage ?? {});
   const ids = new Set([...allCreatures(run).map((c) => c.speciesId), ...(run.log.fallen ?? []).map((f) => f.speciesId)]);
   for (const id of ids) usage[id] = (usage[id] ?? 0) + 1;
-  saveMeta(meta);
+}
+
+/** Count a quick run's result in its own W/L and streak. */
+export function countQuickResult(meta: Meta, won: boolean) {
+  const q = (meta.quick ??= { wins: 0, losses: 0, streak: 0, best: 0 });
+  if (won) q.wins += 1;
+  else q.losses += 1;
+  q.streak = won ? q.streak + 1 : 0;
+  q.best = Math.max(q.best, q.streak);
 }
 
 /** Does this species start runs shiny? (Caught shiny in any form, unless you've switched it off.) */
@@ -419,7 +456,10 @@ export function abandonSavedRun(meta: Meta) {
   try {
     const raw = storage.getItem(RUN_KEY);
     const data = raw ? JSON.parse(raw) : null;
-    if (data && !data.hunt && !data.race) {
+    if (data?.quick && !data.race) {
+      countQuickResult(meta, false);
+      saveMeta(meta);
+    } else if (data && !data.hunt && !data.race) {
       countRunResult(meta, false);
       saveMeta(meta);
     }
@@ -442,6 +482,8 @@ export function saveMeta(meta: Meta) {
 // ---------------------------------------------------------------- run
 
 export interface Run {
+  /** A quick run (2.0): two floors on smaller maps, with its own record. */
+  quick?: boolean;
   rng: Rng;
   seed: number;
   meta: Meta;
@@ -826,14 +868,17 @@ export function startRun(
   weekly?: string,
   /** Online races: the passive the seed gives this starter (the same for every player). */
   racePassive?: PassiveId | null,
+  /** A quick run: two floors on smaller maps (normal runs only). */
+  quickRun = false,
 ): Run {
+  const quick = quickRun && !daily && !weekly && racePassive === undefined;
   const rng = new Rng(seed);
   const def = MAP_BY_ID[mapId] ?? MAP_BY_ID.wildlands;
   const biomes = def.biomes ? [...def.biomes] : rng.shuffle([...ELEMENTS]).slice(0, FLOORS);
   if (!daily && !weekly) meta.lastMap = def.id;
-  const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31));
-  // Online races have their own W/L (see addOnlineWin / addOnlineLoss), so they don't count here.
-  if (racePassive === undefined) meta.runs += 1;
+  const map = generateFloor(0, biomes[0], rng.int(0, 2 ** 31), quick);
+  // Online races have their own W/L (see addOnlineWin / addOnlineLoss), and quick runs their own record.
+  if (racePassive === undefined && !quick) meta.runs += 1;
   if (daily) {
     const rec = dailyRecord(meta, daily);
     rec.attempts += 1;
@@ -855,6 +900,7 @@ export function startRun(
   const seeded = even || !!daily || !!weekly || racePassive !== undefined;
   const workshop = workshopSnapshot(meta, seeded);
   const run: Run = {
+    ...(quick ? { quick: true } : {}),
     workshop,
     heat: even ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
     ...(daily ? { daily } : {}),
@@ -899,7 +945,15 @@ export function startRun(
   // Rare surprises: the run's omen and the first floor's (seeded runs can't be forced).
   startSurprises(run, !!daily || !!weekly || racePassive !== undefined);
   applyWorkshopStart(run);
+  // A quick run gets to its build fast: a boon offer before the first step.
+  if (quick) queueOffer(run, 'quick');
   return run;
+}
+
+/** Open a boon offer, or queue it behind the one already on screen. */
+function queueOffer(run: Run, source: string) {
+  if (run.boons?.offer) run.boons.queue.push({ mode: 'normal', picks: 1 });
+  else openOffer(run, source);
 }
 
 /** The Workshop's head start on a new run: potions, coins, a Limit Breaker and the Blessing's boon. */
@@ -2051,6 +2105,11 @@ export function clearFloor(run: Run): boolean {
     if (run.hunt.depth % 2 === 0) openOffer(run, `hunt${run.hunt.depth}`);
     return false;
   }
+  if (run.quick && run.floor === QUICK_FLOORS - 1) {
+    // A quick run won: its own record only (no wins, unlocks, Heat or map tokens).
+    saveMeta(meta);
+    return true;
+  }
   if (run.floor === FLOORS - 1) {
     // Winning a run unlocks the next map and the next passive.
     const before = unlockedMaps(meta).length;
@@ -2082,7 +2141,7 @@ export function clearFloor(run: Run): boolean {
   // A new floor: everyone's moves are fully restored.
   for (const c of allCreatures(run)) restoreUses(c);
   applyFloorCap(run);
-  run.map = generateFloor(run.floor, run.biomes[run.floor], floorSeed(run));
+  run.map = generateFloor(run.floor, run.biomes[run.floor], floorSeed(run), run.quick);
   run.currentId = run.map.startId;
   run.visited = [run.map.startId];
   run.bossPending = false;

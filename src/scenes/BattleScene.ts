@@ -109,7 +109,7 @@ import {
   noteShiny,
   GLASS_MULT,
   placeRng,
-  saveMeta, teamTrait } from '../logic/run';
+  saveMeta, teamTrait, floorsOf } from '../logic/run';
 import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
@@ -420,7 +420,7 @@ export class BattleScene extends Phaser.Scene {
     const eclipse = floorSurprise(run).floor === 'eclipse';
     if (boss && elderHere(run)) playMusic('elder', run.map.biome);
     else if (this.kind === 'elite' && dojoOn(run)) playMusic('dojo');
-    else playMusic(boss ? (run.floor === 2 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', eclipse && !boss ? 'Shadow' : run.map.biome);
+    else playMusic(boss ? (run.floor === floorsOf(run) - 1 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', eclipse && !boss ? 'Shadow' : run.map.biome);
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     // Resuming: stat stages, who's out, the foe's potions and used-up rule effects come back too.

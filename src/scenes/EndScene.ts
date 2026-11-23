@@ -10,7 +10,7 @@ import { unlocksOf } from '../logic/cosmetics';
 import { finishRunClock, formatDuration } from '../logic/runClock';
 import { promoteBench, recordWeekly, TWISTS, weeklyRecord } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
-import { allCreatures, clearSavedRun, dailyRecord, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
+import { allCreatures, clearSavedRun, dailyRecord, floorsOf, describeDaily, HUNT_MAX_STARS, HUNT_SHINY_IN, huntShinyIn, noteHunt, recordDaily, recordRun, runMvp, saveMeta, startHunt } from '../logic/run';
 import { persist, state } from '../state';
 import { type Creature } from '../logic/creature';
 import { hasLoadout, saveLoadout } from '../logic/arena';
@@ -85,7 +85,7 @@ export class EndScene extends Phaser.Scene {
         this.newBest = finishRunClock(state.meta, run, data.won);
         recordRun(run, data.won);
         // A win: your friends may meet this team as your ghost.
-        if (data.won && !run.daily && !run.weekly) void shareGhost(lastWinTeam(state.meta)).catch(() => {});
+        if (data.won && !run.daily && !run.weekly && !run.quick) void shareGhost(lastWinTeam(state.meta)).catch(() => {});
       }
     }
     const sprite = (x: number, y: number, speciesId: string, stage: number, scale: number) =>
@@ -106,7 +106,9 @@ export class EndScene extends Phaser.Scene {
             : `You reached the boss. Your team now faces ${race.opponent}!`
         : `Your team fell in the ${run.map.biome} lands before reaching the boss.`
       : data.won
-        ? `${run.map.biome} lands conquered. All three floors cleared.`
+        ? run.quick
+          ? `${run.map.biome} lands conquered. Both floors of a quick run cleared.`
+          : `${run.map.biome} lands conquered. All three floors cleared.`
         : `Fell on floor ${run.floor + 1}, in the ${run.map.biome} lands.`;
     text(this, W / 2, LANDSCAPE ? 28 : 46, title, race ? 34 : 40, data.won ? '#ffc94d' : '#e0524a', { fontStyle: 'bold' }).setOrigin(0.5);
     text(
@@ -150,7 +152,7 @@ export class EndScene extends Phaser.Scene {
     const totalDamage = [...allCreatures(run), ...(run.log.fallen ?? [])].reduce((n, c) => n + (c.dealt ?? 0), 0);
     const stats: [string, string][] = [
       ['Battles won', String(run.log.battlesWon)],
-      hunt ? ['Hunt floor', String(hunt.depth)] : race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? 3 : run.floor)],
+      hunt ? ['Hunt floor', String(hunt.depth)] : race ? ['Stage', data.won ? 'Cleared' : 'Lost'] : ['Floors cleared', String(data.won ? floorsOf(run) : run.floor)],
       ...((hunt || race
         ? [
             ['Caught', String(run.log.caught)],
@@ -214,6 +216,11 @@ export class EndScene extends Phaser.Scene {
       const rec = weeklyRecord(state.meta, run.weekly);
       extra.push(`Weekly ${TWISTS[run.twist].name}: ${best ? 'new best!' : `best this week: ${describeDaily(rec.best!)}`} (attempt ${rec.attempts})`);
     }
+    // Quick runs: their own record (the main W/L, wins and unlocks are untouched).
+    if (run.quick && !hunt) {
+      const q = state.meta.quick ?? { wins: 0, losses: 0, streak: 0, best: 0 };
+      extra.push(`Quick runs: ${q.wins}–${q.losses}${q.streak > 1 ? ` · ${q.streak} wins in a row` : ''}`);
+    }
     if (run.unlockedThisRun.length) extra.push(`New starters: ${run.unlockedThisRun.join(', ')}`);
     const earned = state.meta.newAchievements.splice(0);
     if (earned.length) {
@@ -263,7 +270,7 @@ export class EndScene extends Phaser.Scene {
       const u = unlocksOf(titles);
       extra.push(`New title${titles.length > 1 ? 's' : ''}: ${titles.map((t) => t.name).join(', ')}${u ? ` · unlocks ${u}` : ''} (Edit trainer)`);
     }
-    const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race;
+    const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race && !run.quick;
     if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
       const block = text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
       // The ember tally (2.0): counts up with a crackle, then lands with a ping (instant with Reduce motion).
@@ -299,7 +306,7 @@ export class EndScene extends Phaser.Scene {
     // Keep a good creature: save its form and moves for the team builder.
     const alive = allCreatures(run).filter((c) => c.hp > 0);
     // Won a normal run: keep climbing as a Shiny Hunt.
-    const canHunt = data.won && !run.daily && !run.weekly && !hunt;
+    const canHunt = data.won && !run.daily && !run.weekly && !hunt && !run.quick;
     if (canHunt) {
       const hb = button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 296 : 630, 320, 52, 'Gilded Hunt', () => this.confirmHunt(run), {
         fontSize: 20,
@@ -311,7 +318,7 @@ export class EndScene extends Phaser.Scene {
       this.tweens.add({ targets: hb, scale: 1.04, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     }
     if (alive.length) {
-      const label = `${hunt ? `Hunt ${hunt.depth}` : data.won ? 'Win' : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
+      const label = `${hunt ? `Hunt ${hunt.depth}` : data.won ? (run.quick ? 'Quick win' : 'Win') : `Floor ${run.floor + 1}`} · ${MAP_BY_ID[run.mapId]?.name ?? run.map.biome}`;
       button(this, LANDSCAPE ? cx0 + colW / 2 : W / 2, LANDSCAPE ? 352 : 692, 320, 44, 'Save a loadout', () => this.saveLoadouts(alive, label), {
         fontSize: 16,
         color: 0x2f4a6b,
@@ -330,9 +337,10 @@ export class EndScene extends Phaser.Scene {
     }, { color: 0x3b6d4a, fontSize: again ? 16 : 20 });
     if (again) {
       const mapId = run.mapId;
+      const quick = !!run.quick;
       button(this, bx + 80, by, bw, 52, 'Run again', () => {
         state.run = null;
-        this.scene.start('Starter', { mapId });
+        this.scene.start('Starter', { mapId, quick });
       }, { color: 0x5b3c8a, fontSize: 16, glyph: 'play' });
     }
   }

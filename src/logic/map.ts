@@ -42,6 +42,12 @@ const FLOOR_SHAPES = [
 
 export const ROUTE_LENGTHS = FLOOR_SHAPES.map((s) => s.routeLength);
 
+/** Quick runs (2.0): two shorter, narrower floors (about 15 minutes in all). */
+const QUICK_SHAPES = [
+  { cols: 8, routeLength: 15, density: 0.88 },
+  { cols: 10, routeLength: 18, density: 0.88 },
+];
+
 const nid = (col: number, y: number) => `${col},${y}`;
 
 /** Forward moves: the two hexes touching this one from the row above. */
@@ -57,13 +63,14 @@ function forward(col: number, y: number): [number, number][] {
  * reachable from the start AND can reach the top. Every route climbs one row per move.
  * Retries until the floor has enough choice.
  */
-export function generateFloor(floor: number, biome: Element, seed: number): FloorMap {
+export function generateFloor(floor: number, biome: Element, seed: number, quick = false): FloorMap {
   const rng = new Rng(seed);
+  const shape = (quick ? QUICK_SHAPES[floor] : undefined) ?? FLOOR_SHAPES[Math.min(floor, FLOOR_SHAPES.length - 1)];
   for (let attempt = 0; attempt < 80; attempt++) {
-    const m = tryFloor(floor, biome, rng);
+    const m = tryFloor(floor, biome, rng, shape);
     if (m && branchiness(m) >= MIN_BRANCHINESS) return m;
   }
-  return tryFloor(floor, biome, rng, 1)!;
+  return tryFloor(floor, biome, rng, shape, 1)!;
 }
 
 /** Each node has at most two moves; this keeps most of them at two. */
@@ -80,8 +87,7 @@ export function stepsToBoss(m: FloorMap, id: string): number {
   return m.nodes[id].y - m.nodes[m.bossId].y;
 }
 
-function tryFloor(floor: number, biome: Element, rng: Rng, forceDensity?: number): FloorMap | null {
-  const shape = FLOOR_SHAPES[floor];
+function tryFloor(floor: number, biome: Element, rng: Rng, shape: (typeof FLOOR_SHAPES)[number], forceDensity?: number): FloorMap | null {
   const { cols } = shape;
   const density = forceDensity ?? shape.density;
   const topY = 2; // the row right below the boss

@@ -488,7 +488,7 @@ export function myBuddy(m: Meta): { id: string; stage: number; shiny: boolean } 
  * a loss and 35-50 for a win.
  */
 export function runEmbers(run: import('./run').Run, won: boolean): { total: number; lines: string[] } {
-  const floors = won ? 3 : run.floor;
+  const floors = won ? (run.quick ? 2 : 3) : run.floor;
   const lines: string[] = [];
   let n = 0;
   const add = (amount: number, label: string) => {
@@ -508,6 +508,12 @@ export function runEmbers(run: import('./run').Run, won: boolean): { total: numb
   if (heat) {
     const extra = Math.round(n * 0.1 * heat);
     add(extra, `Heat ${heat}`);
+  }
+  // Quick runs pay about half.
+  if (run.quick && n > 0) {
+    const half = Math.ceil(n / 2);
+    lines.push(`halved for a quick run`);
+    n = half;
   }
   return { total: n, lines };
 }

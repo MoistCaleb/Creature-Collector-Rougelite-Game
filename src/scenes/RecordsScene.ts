@@ -67,6 +67,10 @@ export class RecordsScene extends Phaser.Scene {
       ['Online W/L', `${meta.onlineWins ?? 0}–${meta.onlineLosses ?? 0}`],
       ['Online streak', String(meta.onlineStreak ?? 0)],
       ['Best online streak', String(meta.bestOnlineStreak ?? 0)],
+      // Quick runs (2.0): their own record.
+      ['Quick run W/L', `${meta.quick?.wins ?? 0}–${meta.quick?.losses ?? 0}`],
+      ['Quick streak', String(meta.quick?.streak ?? 0)],
+      ['Fastest quick win', meta.quick?.fastest ? formatDuration(meta.quick.fastest) : '—'],
     ];
     const tw = (colW - 8) / 3;
     tiles.forEach(([label, value], i) => {

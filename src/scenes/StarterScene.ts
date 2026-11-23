@@ -41,9 +41,12 @@ export class StarterScene extends Phaser.Scene {
   private race: RaceInfo | null = null;
   /** Gilded Hunt milestone (floor 7): the starter offered Gilded at this pick, if any. */
   private gold: string | null = null;
+  /** A quick run (2.0): two floors on smaller maps. */
+  private quick = false;
 
-  create(data: { mapId?: string; daily?: string; weekly?: string; race?: RaceInfo } = {}) {
+  create(data: { mapId?: string; daily?: string; weekly?: string; race?: RaceInfo; quick?: boolean } = {}) {
     this.daily = data.daily ?? null;
+    this.quick = !!data.quick && !data.daily && !data.weekly && !data.race;
     this.weekly = data.weekly ?? null;
     const week = this.weekly ? weeklyInfo(this.weekly) : null;
     this.race = data.race ?? null;
@@ -51,8 +54,8 @@ export class StarterScene extends Phaser.Scene {
     background(this);
     playMusic('title');
     const opp = duel.opponent?.name ?? 'your friend';
-    const titleText = this.race ? (royale.active ? `Battle royale · ${royale.players.length} players` : `Stage battle vs ${opp}`) : week ? `Weekly · ${TWISTS[week.twist].name}` : this.daily ? `Daily run · ${this.daily}` : 'Choose your starter';
-    const title = text(this, W / 2 + 20, 34, titleText, this.daily || this.race || week ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
+    const titleText = this.race ? (royale.active ? `Battle royale · ${royale.players.length} players` : `Stage battle vs ${opp}`) : week ? `Weekly · ${TWISTS[week.twist].name}` : this.daily ? `Daily run · ${this.daily}` : this.quick ? 'Quick run: choose your starter' : 'Choose your starter';
+    const title = text(this, W / 2 + 20, 34, titleText, this.daily || this.race || week || this.quick ? 22 : 26, '#ffc94d', { fontStyle: 'bold' }).setOrigin(0.5);
     if (this.daily || week) pixelIcon(this, title.x - title.width / 2 - 16, 34, week ? 'crown' : 'calendar', 22);
     text(
       this,
@@ -170,7 +173,7 @@ export class StarterScene extends Phaser.Scene {
       button(this, 40, 28, 64, 36, '', () => {
         rolled = null;
         traitKey = null;
-        this.scene.start(this.daily || this.weekly ? 'Daily' : 'MapSelect', {});
+        this.scene.start(this.daily || this.weekly ? 'Daily' : 'MapSelect', { quick: this.quick });
       }, { fontSize: 15, glyph: 'back' });
     }
   }
@@ -196,7 +199,7 @@ export class StarterScene extends Phaser.Scene {
         onPick: (i) => {
           setBondTrait(state.meta, id, found[i]);
           saveMeta(state.meta);
-          this.scene.restart({ mapId: this.mapId });
+          this.scene.restart({ mapId: this.mapId, quick: this.quick });
         },
       });
     });
@@ -218,7 +221,7 @@ export class StarterScene extends Phaser.Scene {
     const on = starterShiny(meta, id);
     button(this, x, y, w, 24, on ? '✦ Gilded' : '✦ Normal', () => {
       toggleStarterShiny(meta, id);
-      this.scene.restart({ mapId: this.mapId, daily: this.daily ?? undefined, weekly: this.weekly ?? undefined, race: this.race ?? undefined });
+      this.scene.restart({ mapId: this.mapId, quick: this.quick, daily: this.daily ?? undefined, weekly: this.weekly ?? undefined, race: this.race ?? undefined });
     }, { fontSize: 11, color: on ? 0x7a5a1c : 0x2a2440 });
   }
 
@@ -244,7 +247,7 @@ export class StarterScene extends Phaser.Scene {
         ? startWeekly(state.meta, this.weekly, id)
         : this.daily
         ? startRun(state.meta, id, dailySeed(this.daily), 'wildlands', this.daily)
-        : startRun(state.meta, id, Date.now(), this.mapId);
+        : startRun(state.meta, id, Date.now(), this.mapId, undefined, false, undefined, undefined, this.quick);
     }
     // The starter keeps the trait it showed on its card.
     if (trait && state.run.team[0]) state.run.team[0].trait = trait;
