@@ -3,6 +3,7 @@ import { ELEMENTS, type Element } from '../data/types';
 import type { WeatherId } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { saveMeta, type Meta, type Run } from './run';
+import { hiddenBoost, surpriseInPool } from './workshop';
 
 /**
  * Rare surprises (2.0): an omen for the whole run, and per floor a rare floor, an Elder guardian, a
@@ -40,7 +41,8 @@ const ODDS = { omen: 1 / 15, floor: 1 / 30, elder: 1 / 20, hex: 1 / 12, enc: 1 /
 /** Runs in a row without a surprise before one is guaranteed. */
 export const DROUGHT_MAX = 3;
 
-const of = (kind: string) => SURPRISE_LIST.filter((s) => s.kind === kind).map((s) => s.id);
+/** The surprises of a kind this run can meet (Lore gates some; seeded runs have them all). */
+const of = (kind: string, run?: Run) => SURPRISE_LIST.filter((s) => s.kind === kind && (!run || surpriseInPool(run, s.id))).map((s) => s.id);
 
 /** This floor's key (the Gilded Hunt's floors each get their own). */
 const floorKey = (run: Run) => (run.hunt ? `h${run.hunt.depth}` : String(run.floor));
@@ -56,7 +58,8 @@ export const omenOf = (run: Run | null | undefined): string | undefined => run?.
 export function startSurprises(run: Run, seeded: boolean) {
   const rs = runSurprises(run);
   const h = hashString(`${run.seed}:omen`);
-  if ((h % 10000) / 10000 < ODDS.omen) rs.omen = of('omen')[(h >>> 8) % of('omen').length];
+  const omens = of('omen', run);
+  if ((h % 10000) / 10000 < ODDS.omen && omens.length) rs.omen = omens[(h >>> 8) % omens.length];
   if (!seeded && (run.meta.surpriseDrought ?? 0) >= DROUGHT_MAX) rs.forced = true;
   rollFloorSurprises(run);
 }
@@ -68,12 +71,13 @@ export function rollFloorSurprises(run: Run) {
   if (rs.floors[key]) return;
   const rng = new Rng(hashString(`${run.seed}:surprise:${key}`));
   const fs: FloorSurprise = {};
-  if (rng.chance(ODDS.floor)) fs.floor = rng.pick(of('floor'));
+  if (rng.chance(ODDS.floor)) fs.floor = rng.pick(of('floor', run));
   if (rng.chance(ODDS.elder)) fs.elder = true;
-  let hex = rng.chance(ODDS.hex) ? rng.pick(of('hex')) : undefined;
-  const enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter')) : undefined;
+  // Keen eye (Workshop): hidden hexes half again as often.
+  let hex = rng.chance(ODDS.hex * hiddenBoost(run)) ? rng.pick(of('hex', run)) : undefined;
+  const enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter', run)) : undefined;
   // Drought protection: the first floor gets a hidden hex if nothing else turned up.
-  if (rs.forced && !rs.omen && !fs.floor && !fs.elder && !hex && !enc) hex = rng.pick(of('hex'));
+  if (rs.forced && !rs.omen && !fs.floor && !fs.elder && !hex && !enc) hex = rng.pick(of('hex', run));
   rs.forced = false;
   const battles = () =>
     Object.values(run.map.nodes)

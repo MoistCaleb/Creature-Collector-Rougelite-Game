@@ -1,3 +1,4 @@
+import { benchMax } from './workshop';
 import { teamMax } from './boons';
 import { rollTrait } from '../data/traits';
 import { elementPool, MAX_TIER, MOVES } from '../data/moves';
@@ -16,7 +17,7 @@ import {
   stats,
   type Creature,
 } from './creature';
-import { allCreatures, BENCH_MAX, earnCoins, eventRng, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, teamTrait, prestigeTracked, registerJoin, releaseNote, rosterFull, type Run } from './run';
+import { allCreatures, earnCoins, eventRng, rollHeld, stash, unequipHeld, highestLevel, luckyOdds, teamTrait, prestigeTracked, registerJoin, releaseNote, rosterFull, type Run } from './run';
 import { speciesWithElement } from '../data/species';
 
 export interface EventResult {
@@ -54,7 +55,7 @@ const scale = (run: Run, base: number) => Math.round(base * (1 + run.floor));
 
 function addCreature(run: Run, c: Creature) {
   if (run.team.length < teamMax(run)) run.team.push(c);
-  else if (run.bench.length < BENCH_MAX) run.bench.push(c);
+  else if (run.bench.length < benchMax(run)) run.bench.push(c);
   registerJoin(run, c);
 }
 

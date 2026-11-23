@@ -32,6 +32,8 @@ export interface CampState {
   bond: Record<string, number>;
   /** What you've done with each Hexling today ('pet', 'feed', 'play'). */
   cared: Record<string, string[]>;
+  /** Workshop upgrades bought (2.0, see logic/workshop). */
+  workshop?: import('../data/workshop').WorkshopId[];
 }
 
 export const CREW_MAX = 3;

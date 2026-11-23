@@ -2,6 +2,7 @@ import { BOON_LIST, BOONS, isBoon, type BoonDef, type BoonId } from '../data/boo
 import type { Element } from '../data/types';
 import { canPrestige, creatureTypes, prestige, stats, type Creature } from './creature';
 import { allCreatures, floorBoons, placeRng, saveMeta, type Run } from './run';
+import { boonInPool, rarityTier, wsHas } from './workshop';
 
 /**
  * Boons on a run (2.0): what you hold, the offer on screen, and the curse flags. Offers come from
@@ -66,7 +67,8 @@ export function rollOffer(run: Run, tag: string, mode: OfferMode = 'normal'): Bo
   const rb = runBoons(run);
   const rng = placeRng(run, `boon:${tag}`);
   const taken = new Set<BoonId>(rb.held);
-  const free = (b: BoonDef) => !taken.has(b.id);
+  // Lore (Workshop): some boons only join the pool once unlocked (seeded runs have them all).
+  const free = (b: BoonDef) => !taken.has(b.id) && boonInPool(run, b.id);
   const els = new Set<Element>(allCreatures(run).flatMap((c) => creatureTypes(c)));
   const pick = (pool: BoonDef[], weight: (b: BoonDef) => number): BoonId | null => {
     const list = pool.filter(free);
@@ -77,7 +79,9 @@ export function rollOffer(run: Run, tag: string, mode: OfferMode = 'normal'): Bo
     taken.add(id);
     return id;
   };
-  const elementW = (b: BoonDef) => (b.element ? ELEMENT_WEIGHT[b.element] : 1) * (b.rarity === 'rare' ? 0.35 : 1);
+  // Fortune (Workshop): rare element boons and mythics a little more often.
+  const fortune = rarityTier(run);
+  const elementW = (b: BoonDef) => (b.element ? ELEMENT_WEIGHT[b.element] : 1) * (b.rarity === 'rare' ? 0.35 + 0.15 * fortune : 1);
   const general = BOON_LIST.filter((b) => !b.element && b.rarity === 'common');
   const mythics = BOON_LIST.filter((b) => b.rarity === 'mythic');
   const rares = BOON_LIST.filter((b) => b.rarity === 'rare');
@@ -94,10 +98,12 @@ export function rollOffer(run: Run, tag: string, mode: OfferMode = 'normal'): Bo
     // 1: an element boon for your team. 2: a general boon (1 in 10 is mythic). 3: a curse 1 in 4, else general.
     const mine = BOON_LIST.filter((b) => b.element && els.has(b.element) && b.rarity !== 'curse');
     ids.push(pick(mine, elementW) ?? pick(general, () => 1));
-    ids.push(rng.chance(0.1) ? (pick(mythics, () => 1) ?? pick(general, () => 1)) : pick(general, () => 1));
+    ids.push(rng.chance(0.1 + 0.03 * fortune) ? (pick(mythics, () => 1) ?? pick(general, () => 1)) : pick(general, () => 1));
     ids.push(rng.chance(0.25) ? (pick(curses, () => 1) ?? pick(general, () => 1)) : (pick(general, () => 1) ?? pick(mine, elementW)));
     // Marked: guardians' offers (and every other) have a fourth choice.
-    if (hasBoon(run, 'marked') || run.surprises?.omen === 'bloodmoon') ids.push(pick(general, () => 1) ?? pick(mine, elementW));
+    // First pick (Workshop): so does the run's first offer.
+    const firstFour = wsHas(run, 'firstfour') && (rb.offers ?? 0) <= 1;
+    if (hasBoon(run, 'marked') || run.surprises?.omen === 'bloodmoon' || firstFour) ids.push(pick(general, () => 1) ?? pick(mine, elementW));
   }
   return ids.filter((x): x is BoonId => !!x);
 }

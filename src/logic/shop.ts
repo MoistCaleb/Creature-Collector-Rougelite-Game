@@ -1,3 +1,4 @@
+import { benchMax } from './workshop';
 import { omenPriceMult } from './surprises';
 import { hasBoon, teamMax } from './boons';
 import { rollTrait } from '../data/traits';
@@ -21,7 +22,7 @@ import {
   type Creature,
 } from './creature';
 import { checkAchievements } from './achievements';
-import { allCreatures, maxPotions, placeRng, BENCH_MAX, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, type Run } from './run';
+import { allCreatures, maxPotions, placeRng, highestLevel, prestigeTracked, releaseNote, rollHeld, stash, trackStat, rosterFull, saveMeta, type Run } from './run';
 
 export type ItemId = 'potion' | 'restore' | 'manual' | 'scroll' | 'stone' | 'sigil' | 'recruit' | 'held' | 'relearn' | 'limit';
 
@@ -211,7 +212,7 @@ export function applyItem(run: Run, slot: ShopSlot, target?: Creature, moveIndex
     case 'recruit': {
       const c = slot.recruit!;
       if (run.team.length < teamMax(run)) run.team.push(c);
-      else if (run.bench.length < BENCH_MAX) run.bench.push(c);
+      else if (run.bench.length < benchMax(run)) run.bench.push(c);
       return `Joined your ${run.team.includes(c) ? 'team' : 'bench'}.`;
     }
   }

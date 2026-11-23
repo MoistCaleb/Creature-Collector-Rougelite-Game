@@ -29,13 +29,14 @@ import {
 } from '../logic/creature';
 import { NODE_INFO, stepsToBoss, type MapNode } from '../logic/map';
 import { BOSSES } from '../data/trainers';
-import { fillTeamFromBench, placeRng, unequipHeld, REVIVE_LEVEL, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
+import { fillTeamFromBench, placeRng, unequipHeld, reviveFallen, revivedForm, rivalHere, rivalTrainerName, rosterFull } from '../logic/run';
 import { raceWaitPanel } from '../ui/raceWait';
 import { researcherHint, shopTalk } from '../logic/talk';
 import { hashString } from '../logic/rng';
 import { allCreatures, altarOptions, altarUsable, canMoveTo, currentNode, moveTo, FLOORS, PASSIVES, earnCoins, encounterKind, peekEncounter, prestigeTracked, registerJoin, releaseNote, scoutRange, trackStat } from '../logic/run';
 import { ACHIEVEMENTS } from '../logic/achievements';
 import { icon as pixelIcon, NODE_ICONS } from '../ui/icons';
+import { freeRerollReady, reviveShare, useFreeReroll } from '../logic/workshop';
 import { applyItem, canAfford, eligibleTargets, ITEMS, pay, priceFor, rerollPrice, rollShop, slotDesc, slotGlyph, slotName, unusableReason, type ShopSlot } from '../logic/shop';
 import { hasSeenForm } from '../logic/dex';
 import { dex, persist, state } from '../state';
@@ -1223,10 +1224,10 @@ export class MapScene extends Phaser.Scene {
     if (!grave.length)
       return showMessage(this, 'Revival', 'A warm glow, but no one to bring back: none of your Hexlings has fallen this run. Lucky you.', this.done);
     const full = rosterFull(run);
-    const forms = grave.map(revivedForm);
+    const forms = grave.map((c) => revivedForm(c, run));
     openPicker(this, {
       title: 'Revival',
-      subtitle: `Bring back one fallen Hexling at ${Math.round(REVIVE_LEVEL * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: release someone first to make room.' : ''}`,
+      subtitle: `Bring back one fallen Hexling at ${Math.round(reviveShare(run) * 100)}% of the level it fell at, fully healed. Once per floor.${full ? '\nYour party is full: release someone first to make room.' : ''}`,
       options: forms.map((c, i) => ({ creature: c, disabled: full, note: `Fell at Lv ${grave[i].level} → returns at Lv ${c.level}` })),
       onPick: (i) => {
         const c = reviveFallen(run, grave[i].uid);
@@ -1522,7 +1523,8 @@ export class MapScene extends Phaser.Scene {
       const name = hasSeenForm(state.meta.dex, c.speciesId, c.stage) ? creatureName(c) : 'Mystery Hexling';
       return `Recruit: ${name} Lv ${c.level}`;
     };
-    const reroll = rerollPrice(run, shop);
+    const rerollFree = freeRerollReady(run) && rerollPrice(run, shop) > 0;
+    const reroll = rerollFree ? 0 : rerollPrice(run, shop);
     openPicker(this, {
       title: `Shop   ◉ ${run.coins}`,
       subtitle: `${shopTalk(run)}\nItems take effect right away.`,
@@ -1538,11 +1540,13 @@ export class MapScene extends Phaser.Scene {
             glyph: slotGlyph(sl),
           };
         }),
-        { label: `Reroll stock   ◉ ${reroll}`, sub: 'New items, same shop', disabled: !canAfford(run, reroll) },
+        { label: `Reroll stock   ◉ ${reroll}`, sub: rerollFree ? 'Free once this floor (Restocker)' : 'New items, same shop', disabled: !canAfford(run, reroll) },
       ],
       onPick: (i) => {
         if (i === shop.slots.length) {
-          pay(run, reroll);
+          // Restocker (Workshop): the first reroll on each floor is free.
+          if (rerollFree) useFreeReroll(run);
+          else pay(run, reroll);
           run.shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
           return this.scene.restart({});
         }

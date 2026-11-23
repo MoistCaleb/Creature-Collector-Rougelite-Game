@@ -41,6 +41,7 @@ import {
   teamElement,
   type Creature,
   cureStatus,
+  limitBreak,
 } from './creature';
 import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
@@ -51,6 +52,7 @@ import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
 import { generateFloor, type FloorMap, type MapNode, type NodeKind } from './map';
 import { hashString, Rng } from './rng';
+import { benchMax, benchShareBase, extraPouch, gildedBoost, reviveShare, startCoins, startPotions, starterBonus, workshopSnapshot, wsHas } from './workshop';
 
 export const TEAM_MAX = 4;
 export const BENCH_MAX = 3;
@@ -516,6 +518,8 @@ export interface Run {
   shopVisits?: number;
   /** Boons (2.0): held, the offer on screen, curse flags (see logic/boons). */
   boons?: RunBoons;
+  /** The Workshop upgrades this run started with (2.0, see logic/workshop). */
+  workshop?: import('./workshop').RunWorkshop;
   /** Embers for this run have been paid (2.0). */
   embersPaid?: boolean;
   /** Rare surprises (2.0): the omen and each floor's (see logic/surprises). */
@@ -823,7 +827,10 @@ export function startRun(
         ? (racePassive ?? null)
         : meta.equippedPassive;
   saveMeta(meta);
+  // The Workshop (2.0): seeded runs (daily, weekly, races) start without it.
+  const workshop = workshopSnapshot(meta, even || !!daily || !!weekly || racePassive !== undefined);
   const run: Run = {
+    workshop,
     heat: even ? 0 : Math.min(meta.heat ?? 0, meta.heatUnlocked ?? 0),
     ...(daily ? { daily } : {}),
     ...(weekly ? { weekly, twist: weeklyInfo(weekly).twist } : {}),
@@ -836,7 +843,7 @@ export function startRun(
     map,
     currentId: map.startId,
     visited: [map.startId],
-    team: [withShiny(createCreature(starterId, passive === 'champion' ? 10 : BALANCE.starterLevel), starterShiny(meta, starterId))],
+    team: [withShiny(createCreature(starterId, (passive === 'champion' ? 10 : BALANCE.starterLevel) + starterBonus({ workshop })), starterShiny(meta, starterId))],
     bench: [],
     evoStones: passive === 'evolutionist' ? 1 : 0,
     stonesSeen: passive === 'evolutionist' ? 1 : 0,
@@ -866,7 +873,37 @@ export function startRun(
   applyFloorCap(run);
   // Rare surprises: the run's omen and the first floor's (seeded runs can't be forced).
   startSurprises(run, !!daily || !!weekly || racePassive !== undefined);
+  applyWorkshopStart(run);
   return run;
+}
+
+/** The Workshop's head start on a new run: potions, coins, a Limit Breaker and the Blessing's boon. */
+function applyWorkshopStart(run: Run) {
+  if (!run.workshop?.up.length) return;
+  run.potions = Math.min(maxPotions(run), (run.potions ?? 0) + startPotions(run));
+  run.coins += startCoins(run);
+  if (wsHas(run, 'provisioner')) {
+    run.potions = maxPotions(run);
+    limitBreak(run.team[0]);
+  }
+  if (wsHas(run, 'blessing')) openOffer(run, 'blessing');
+}
+
+/**
+ * Partner (a Workshop capstone): a second starter joins at the starter's level, with its own seeded
+ * nature and trait. Returns it, or null if this run can't have one.
+ */
+export function addPartner(run: Run, speciesId: string): Creature | null {
+  if (!wsHas(run, 'partner') || run.team.length !== 1 || !SPECIES_BY_ID[speciesId] || run.team[0].speciesId === speciesId) return null;
+  const lead = run.team[0];
+  const c = withShiny(createCreature(speciesId, lead.level), starterShiny(run.meta, speciesId));
+  c.nature = natureFor(`${run.seed}:partner`);
+  c.trait ??= rollTrait(c.speciesId, `${run.seed}:partner`);
+  c.hp = stats(c).hp;
+  run.team.push(c);
+  applyCampBond(run, c);
+  registerJoin(run, c);
+  return c;
 }
 
 /**
@@ -1144,16 +1181,16 @@ export function buryFallen(run: Run): string[] {
   return fallen.map(creatureName);
 }
 
-/** A revived Hexling comes back at this share of the level it fell at. */
+/** A revived Hexling comes back at this share of the level it fell at (70% with Second chance). */
 export const REVIVE_LEVEL = 0.6;
 
 /** The level a fallen Hexling comes back at. */
-export const reviveLevel = (c: Pick<Creature, 'level'>) => Math.max(1, Math.round(c.level * REVIVE_LEVEL));
+export const reviveLevel = (c: Pick<Creature, 'level'>, run?: Run | null) => Math.max(1, Math.round(c.level * (run ? reviveShare(run) : REVIVE_LEVEL)));
 
 /** What a fallen Hexling would be like revived (full health, fresh moves, 60% of its level). */
-export function revivedForm(c: Creature): Creature {
+export function revivedForm(c: Creature, run?: Run | null): Creature {
   const r = JSON.parse(JSON.stringify(c)) as Creature;
-  r.level = reviveLevel(c);
+  r.level = reviveLevel(c, run);
   r.xp = 0;
   r.banked = 0;
   r.status = undefined;
@@ -1168,7 +1205,7 @@ export function reviveFallen(run: Run, uid: number): Creature | null {
   const grave = run.log.graveyard ?? [];
   const i = grave.findIndex((c) => c.uid === uid);
   if (i < 0 || rosterFull(run)) return null;
-  const c = revivedForm(grave[i]);
+  const c = revivedForm(grave[i], run);
   grave.splice(i, 1);
   // It's no longer among the fallen in the run summary.
   const f = (run.log.fallen ?? []).findIndex((x) => x.uid === uid);
@@ -1381,7 +1418,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     const roll = hashString(`${run.seed}:shiny:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`);
     // (Hunt odds can be fractional with Heat: 1 in 10.5 and so on.)
     // Gilded Charm: Gilded Hexlings turn up more often (x1.5, final form x2).
-    const charm = (1 + teamTrait(run.team, 'gilded') * 0.5) * (fsur.floor === 'grove' ? 5 : 1);
+    // Lucky glint (Workshop): wild Hexlings off the Gilded Hunt only.
+    const glint = kind === 'battle' && !run.hunt ? gildedBoost(run) : 1;
+    const charm = (1 + teamTrait(run.team, 'gilded') * 0.5) * (fsur.floor === 'grove' ? 5 : 1) * glint;
     if (odds && (run.hunt ? roll % 100000 < (100000 * charm) / odds : roll % Math.max(1, Math.round(odds / charm)) === 0)) c.shiny = true;
     if (goldTrainer) c.shiny = true;
     c.hp = stats(c).hp;
@@ -1530,7 +1569,7 @@ export function battleXp(enemies: Creature[], kind: EncounterKind, floor = 0): n
 export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[] {
   const top = highestLevel(run);
   // Mentor's Aura: the bench learns more from watching.
-  const benchShare = (run.passive === 'mentor' || hasBoon(run, 'benchpress') ? 1 : BALANCE.benchXpShare) * (1 + teamTrait(run.team, 'mentor'));
+  const benchShare = (run.passive === 'mentor' || hasBoon(run, 'benchpress') ? 1 : benchShareBase(run, BALANCE.benchXpShare)) * (1 + teamTrait(run.team, 'mentor'));
   const out: XpResult[] = [];
   for (const c of run.team) {
     const share = !fought || fought.includes(c.uid) ? 1 : BALANCE.sideXpShare;
@@ -1545,7 +1584,7 @@ export function grantXp(run: Run, amount: number, fought?: number[]): XpResult[]
 }
 
 /** How many potions this run can carry, and how much each heals. */
-export const maxPotions = (run: Run) => (run.passive === 'apothecary' ? 8 : 5);
+export const maxPotions = (run: Run) => (run.passive === 'apothecary' ? 8 : 5) + extraPouch(run);
 
 /** Take the choice offered at camp before setting out. */
 export function applyPrep(run: Run, id: PrepId | 'skip') {
@@ -1618,7 +1657,7 @@ export function unequipHeld(run: Run, c: Creature) {
 }
 
 export function rosterFull(run: Run): boolean {
-  return run.team.length >= teamMax(run) && run.bench.length >= BENCH_MAX;
+  return run.team.length >= teamMax(run) && run.bench.length >= benchMax(run);
 }
 
 /**
@@ -1929,6 +1968,8 @@ export function clearFloor(run: Run): boolean {
   floorBoons(run);
   // A boon after each guardian, before the next floor (an Elder's: a mythic one).
   openOffer(run, `guardian${run.floor}`, wasElder ? 'mythic' : 'normal');
+  // Lore V (Workshop): one extra boon offer every run, right after the first guardian's.
+  if (run.floor === 1 && wsHas(run, 'lore5') && run.boons?.offer) run.boons.queue.push({ mode: 'normal', picks: 1 });
   return false;
 }
 
