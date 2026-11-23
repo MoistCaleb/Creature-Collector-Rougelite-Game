@@ -2,7 +2,7 @@ import { SURPRISE_LIST, SURPRISES } from '../data/surprises';
 import { ELEMENTS, type Element } from '../data/types';
 import type { WeatherId } from '../data/moves';
 import { hashString, Rng } from './rng';
-import { saveMeta, type Meta, type Run } from './run';
+import { placeRoamer, saveMeta, type Meta, type Run } from './run';
 import { hiddenBoost, surpriseInPool } from './workshop';
 
 /**
@@ -75,7 +75,10 @@ export function rollFloorSurprises(run: Run) {
   if (rng.chance(ODDS.elder)) fs.elder = true;
   // Keen eye (Workshop): hidden hexes half again as often.
   let hex = rng.chance(ODDS.hex * hiddenBoost(run)) ? rng.pick(of('hex', run)) : undefined;
-  const enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter', run)) : undefined;
+  let enc = rng.chance(ODDS.enc) ? rng.pick(of('encounter', run)) : undefined;
+  // Echo of yourself can't be the same for everyone, and needs a winning team to copy: seeded runs
+  // (and players without a win yet) meet a Gilded trainer instead.
+  if (enc === 'echo' && (run.workshop?.full || run.daily || run.weekly || !lastWinTeam(run.meta))) enc = 'gildedtrainer';
   // Drought protection: the first floor gets a hidden hex if nothing else turned up.
   if (rs.forced && !rs.omen && !fs.floor && !fs.elder && !hex && !enc) hex = rng.pick(of('hex', run));
   rs.forced = false;
@@ -103,12 +106,27 @@ export function rollFloorSurprises(run: Run) {
     const others = ELEMENTS.filter((e) => e !== run.map.biome);
     fs.second = others[rng.int(0, others.length - 1)];
   }
+  // Ancient Ruins: relic chests (two treasure hexes), a stone titan (an Elder), a legendary roams.
+  if (fs.floor === 'ruins') {
+    fs.elder = true;
+    for (let i = 0; i < 2; i++) {
+      const spots = battles().filter((id) => id !== fs.encNode);
+      if (spots.length) run.map.nodes[spots[rng.int(0, spots.length - 1)]].kind = 'treasure';
+    }
+    placeRoamer(run, true);
+  }
   // Starfall (an omen): every floor has a Boon hex.
   if (rs.omen === 'starfall' && !Object.values(run.map.nodes).some((n) => n.kind === 'boon')) {
     const spots = battles().filter((id) => id !== fs.encNode);
     if (spots.length) run.map.nodes[spots[rng.int(0, spots.length - 1)]].kind = 'boon';
   }
   rs.floors[key] = fs;
+}
+
+/** Your last winning team (from your run history), for Echo of yourself. */
+export function lastWinTeam(meta: Meta): { speciesId: string; stage: number; level: number }[] | null {
+  const rec = (meta.history ?? []).find((r) => r.won && r.team.length && !r.daily && !r.weekly);
+  return rec ? rec.team.slice(0, 4) : null;
 }
 
 /** Did this run meet any surprise? */

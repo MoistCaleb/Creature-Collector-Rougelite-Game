@@ -8,7 +8,7 @@ import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
-import { elderHere, floorSurprise, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
+import { elderHere, floorSurprise, lastWinTeam, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
 import { NIGHT_SHARE, nightOut } from './ambience';
@@ -1385,7 +1385,7 @@ export function encounterKind(run: Run, node: MapNode): EncounterKind {
   const k = node.kind as EncounterKind;
   if (k !== 'battle') return k;
   const fs = floorSurprise(run);
-  if (floorCurse(run, 'hauntedfloor') || (fs.enc === 'gildedtrainer' && fs.encNode === node.id)) return 'elite';
+  if (floorCurse(run, 'hauntedfloor') || ((fs.enc === 'gildedtrainer' || fs.enc === 'echo') && fs.encNode === node.id)) return 'elite';
   return k;
 }
 
@@ -1496,6 +1496,18 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
   run.log.fights += 1;
   // Your rival: their own team instead, led by their ace.
   if (kind === 'elite' && rivalHere(run, node.id)) return rivalTeam(run, enemies);
+  // Echo of yourself (a surprise): your last winning team, at this fight's level.
+  const echo = fsur.enc === 'echo' && fsur.encNode === node.id ? lastWinTeam(run.meta) : null;
+  if (echo && enemies.length) {
+    const level = Math.max(...enemies.map((e) => e.level));
+    return echo.map((t, i) => {
+      const c = createCreature(t.speciesId, level, Math.min(2, t.stage));
+      c.trait = rollTrait(c.speciesId, `${run.seed}:echo:${run.floor}:${i}`);
+      c.nature = natureFor(`${run.seed}:echo:${i}`);
+      c.hp = stats(c).hp;
+      return c;
+    });
+  }
   return enemies;
 }
 

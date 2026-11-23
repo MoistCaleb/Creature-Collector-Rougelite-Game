@@ -282,7 +282,10 @@ export class BattleScene extends Phaser.Scene {
         run.activeBattle.rival = true;
       } else if (this.kind === 'elite') {
         const r = placeRng(run, 'trainer');
-        run.activeBattle.trainer = trainerName((xs) => r.pick(xs));
+        const fsx = floorSurprise(run);
+        // Surprises: an Echo of yourself, or a Gilded trainer.
+        const enc = fsx.encNode === run.currentId ? fsx.enc : undefined;
+        run.activeBattle.trainer = enc === 'echo' ? 'Your Echo' : enc === 'gildedtrainer' ? `Gilded ${trainerName((xs) => r.pick(xs))}` : trainerName((xs) => r.pick(xs));
       }
       persist();
     }
