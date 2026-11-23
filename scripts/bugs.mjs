@@ -4,6 +4,8 @@
  *   node scripts/bugs.mjs            list every report, oldest first
  *   node scripts/bugs.mjs delete 3 7 delete reports 3 and 7 (once fixed and logged)
  *
+ * In a Claude Code cloud session, run it with NODE_USE_ENV_PROXY=1 (and --no-warnings) so fetch uses the proxy.
+ *
  * Reading and deleting need the private bug-report key in the x-bug-token header. In Claude Code
  * cloud sessions it's a saved network credential, added to every request to the Supabase host by
  * the proxy, so nothing is set here. Elsewhere, set BUG_TOKEN.
