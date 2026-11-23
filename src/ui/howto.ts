@@ -83,7 +83,7 @@ export const HOW_TO_PLAY: Page[] = [
       'Every run pays embers, win or lose: more for floors, guardians, wins, Gilded and Heat.',
       'Spend them at camp: decorations at the Ember stall, lasting upgrades in the Workshop.',
       'The Workshop has four branches (Supplies, Training, Fortune, Lore), each built in order and ending in a capstone.',
-      'Lore adds more boons and surprises to your runs: variety, not power.',
+      'Lore adds more boons and surprises to your runs: variety, not power. The Hexlidex Boons tab shows which Lore tier each locked one needs, with a hint.',
       'Daily and weekly runs and online races ignore the Workshop, so they stay fair for everyone.',
       'Played before 2.0? Your first camp visit pays welcome-back embers for the runs you\'ve already won and played.',
     ],

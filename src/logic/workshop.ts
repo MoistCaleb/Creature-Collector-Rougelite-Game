@@ -96,6 +96,15 @@ export function surpriseInPool(run: HasWorkshop | null | undefined, id: string):
   return !need || fullPool(run) || wsHas(run, need);
 }
 
+/**
+ * Hexlidex Lore hints: the Lore upgrade a boon or surprise needs, if this profile doesn't own it yet
+ * (so normal runs can't offer it). Null when it's in the pool from the start or already unlocked.
+ */
+export function loreLock(m: Meta, kind: 'boon' | 'surprise', id: string): WorkshopUpgrade | null {
+  const need = (kind === 'boon' ? LORE_BOONS : LORE_SURPRISES)[id];
+  return need && !ownedUpgrades(m).includes(need) ? WORKSHOP_BY_ID[need] : null;
+}
+
 // ---------------------------------------------------------------- effects
 
 /** Training: levels added to the starter (and to a Partner). */

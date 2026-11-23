@@ -108,6 +108,30 @@ export const LORE_BOONS: Record<string, WorkshopId> = {
   fusion: 'lore5', pact: 'lore5',
 };
 
+/** Vague Hexlidex hints for Lore-locked boons you haven't been offered yet (like surprise hints). */
+export const LORE_BOON_HINTS: Record<string, string> = {
+  packtactics: 'Strength in numbers, if they look alike.',
+  rainbowsquad: 'A team of every colour.',
+  lingering: 'Some troubles stay a while longer.',
+  dread: 'Fear lives in the dark.',
+  quake: 'The ground breaks every wall.',
+  opportunist: 'Strike the foe that is already hurting.',
+  rampage: 'One who never steps back grows fiercer.',
+  possession: 'Spirits that muddle minds.',
+  chainlightning: 'Lightning that strikes twice.',
+  dragonpride: 'Follow a dragon into battle.',
+  firststrike: 'Always the first to move.',
+  prospector: 'Every battle pays a little more.',
+  plaguebearer: 'Foes arrive already sick.',
+  halo: 'A light that shields its own.',
+  lonechampion: 'Stronger with fewer at its side.',
+  glassmenagerie: 'A small team that hits hard.',
+  ironclad: 'Metal that strikes back.',
+  overflow: 'Each knockout feeds the next.',
+  fusion: 'Every attack finds its best element.',
+  pact: 'A price paid in health for richer offers.',
+};
+
 export const LORE_SURPRISES: Record<string, WorkshopId> = {
   mirror: 'lore2', shattered: 'lore2',
   hiddenshop: 'lore3',

@@ -12,6 +12,8 @@ import { activeTeam, activeTeamIndex, ARENA_LEVEL, ARENA_TEAM, arenaForms, arena
 import { openPicker, showMessage } from '../ui/picker';
 import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
+import { loreLock } from '../logic/workshop';
+import { LORE_BOON_HINTS } from '../data/workshop';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
@@ -766,9 +768,14 @@ export class DexScene extends Phaser.Scene {
     this.contentH = y;
   }
 
-  /** Boons (2.0): every boon you've been offered; the rest are ???. Element boons by element. */
+  /**
+   * Boons (2.0): every boon you've been offered; the rest are ???. Element boons by element. Lore
+   * hints: a boon still locked behind a Lore upgrade says which one, with a vague hint.
+   */
   private drawBoons() {
     const seen = state.meta.boonsSeen ?? [];
+    const lock = (id: string) => loreLock(state.meta, 'boon', id);
+    const LOCK_COLOR = 0x6b5a2a;
     const picks = state.meta.boonPicks ?? {};
     const order = [...ELEMENTS.flatMap((el) => BOON_LIST.filter((b) => b.element === el)), ...BOON_LIST.filter((b) => !b.element)];
     const head = (b: (typeof BOON_LIST)[number]) => (b.element ? b.element : b.rarity === 'mythic' ? 'Mythic' : b.rarity === 'curse' ? 'Curses' : 'General');
@@ -780,20 +787,39 @@ export class DexScene extends Phaser.Scene {
         last = h;
         if (b.element) this.anchor(b.element, y);
         const hy = y;
-        this.addRow(hy, 28, (row) => row.add(text(this, 16, hy + 6, `${h}  ·  ${BOON_LIST.filter((x) => head(x) === h && seen.includes(x.id)).length}/${BOON_LIST.filter((x) => head(x) === h).length}`, 15, '#ffc94d', { fontStyle: 'bold' })));
+        const locked = BOON_LIST.filter((x) => head(x) === h && lock(x.id)).length;
+        this.addRow(hy, 28, (row) => {
+          const t = text(this, 16, hy + 6, `${h}  ·  ${BOON_LIST.filter((x) => head(x) === h && seen.includes(x.id)).length}/${BOON_LIST.filter((x) => head(x) === h).length}`, 15, '#ffc94d', { fontStyle: 'bold' });
+          row.add(t);
+          if (locked) row.add(text(this, 16 + t.width + 10, hy + 8, `${locked} locked by Lore`, 12, '#8a7a4a'));
+        });
         y += 30;
       }
       const ry = y;
       const known = seen.includes(b.id);
+      const need = lock(b.id);
+      const hint = LORE_BOON_HINTS[b.id];
       this.addRow(ry, 74, (row) => {
-        row.add(this.add.rectangle(12, ry, W - 24, 68, known ? COLORS.panel : 0x15111f).setOrigin(0).setStrokeStyle(2, known ? BOON_COLOR[b.rarity] : COLORS.stroke));
+        row.add(this.add.rectangle(12, ry, W - 24, 68, known ? COLORS.panel : 0x15111f).setOrigin(0).setStrokeStyle(2, known ? BOON_COLOR[b.rarity] : need ? LOCK_COLOR : COLORS.stroke));
+        if (!known && need) {
+          // Locked: which Lore upgrade adds it, and a vague hint of what it does.
+          row.add(text(this, 24, ry + 8, `??? · Locked: ${need.name} at the Workshop`, 14, '#a8925a', { fontStyle: 'bold' }));
+          const d = text(this, 24, ry + 30, hint, 12, '#6d6588', { wordWrap: { width: W - 60 } });
+          if (d.height > 32) d.setScale(Math.max(0.75, 32 / d.height));
+          row.add(d);
+          return;
+        }
         if (!known) {
-          row.add(text(this, 24, ry + 24, '??? Not yet offered', 14, '#4a4068'));
+          row.add(text(this, 24, hint ? ry + 10 : ry + 24, '??? Not yet offered', 14, '#4a4068'));
+          // Unlocked by Lore but not offered yet: keep the hint.
+          if (hint) row.add(text(this, 24, ry + 32, hint, 12, '#5a5278', { wordWrap: { width: W - 60 } }));
           return;
         }
         const { label, sub } = boonCardText(b.id);
         row.add(text(this, 24, ry + 8, label, 14, COLORS.text, { fontStyle: 'bold' }));
-        if (picks[b.id]) row.add(text(this, W - 24, ry + 8, `taken ${picks[b.id]}×`, 11, COLORS.textDim).setOrigin(1, 0));
+        // Seen on a daily, weekly or race run but not unlocked for normal runs yet.
+        const tag = [picks[b.id] ? `taken ${picks[b.id]}×` : '', need ? `normal runs: ${need.name}` : ''].filter(Boolean).join(' · ');
+        if (tag) row.add(text(this, W - 24, ry + 8, tag, 11, need ? '#a8925a' : COLORS.textDim).setOrigin(1, 0));
         const d = text(this, 24, ry + 28, sub.replace('\n', '  '), 12, COLORS.textDim, { wordWrap: { width: W - 60 } });
         if (d.height > 36) d.setScale(Math.max(0.75, 36 / d.height));
         row.add(d);
@@ -808,9 +834,11 @@ export class DexScene extends Phaser.Scene {
     for (const sp of SURPRISE_LIST) {
       const ry = y;
       const known = found.includes(sp.id);
+      const need = loreLock(state.meta, 'surprise', sp.id);
       this.addRow(ry, 64, (row) => {
-        row.add(this.add.rectangle(12, ry, W - 24, 58, known ? COLORS.panel : 0x15111f).setOrigin(0).setStrokeStyle(2, known ? 0x8a6ac8 : COLORS.stroke));
-        row.add(text(this, 24, ry + 7, known ? sp.name : '???', 14, known ? COLORS.text : '#6d6588', { fontStyle: 'bold' }));
+        row.add(this.add.rectangle(12, ry, W - 24, 58, known ? COLORS.panel : 0x15111f).setOrigin(0).setStrokeStyle(2, known ? 0x8a6ac8 : need ? 0x6b5a2a : COLORS.stroke));
+        row.add(text(this, 24, ry + 7, known ? sp.name : need ? `??? · Locked: ${need.name} at the Workshop` : '???', 14, known ? COLORS.text : need ? '#a8925a' : '#6d6588', { fontStyle: 'bold' }));
+        if (known && need) row.add(text(this, W - 24, ry + 8, `normal runs: ${need.name}`, 11, '#a8925a').setOrigin(1, 0));
         const d = text(this, 24, ry + 27, known ? sp.desc : sp.hint, 12, known ? COLORS.textDim : '#5a5278', { wordWrap: { width: W - 60 } });
         if (d.height > 28) d.setScale(Math.max(0.75, 28 / d.height));
         row.add(d);
