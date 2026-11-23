@@ -39,13 +39,14 @@ import {
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
 import { branchUpgrades, WORKSHOP_BRANCHES, type WorkshopBranch } from '../data/workshop';
+import { titleNews } from '../logic/cosmetics';
 import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
 import { payHuntMilestones } from '../logic/huntMilestones';
 import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
 import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, floorsOf, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
-import { myTitle } from '../logic/titles';
+import { myTitle, takeNewTitles } from '../logic/titles';
 import { friendsAvailable, listFriends, type Friend } from '../net/friends';
 import { state } from '../state';
 import { card } from '../ui/accountUi';
@@ -673,7 +674,9 @@ export class CampScene extends Phaser.Scene {
         if (gained) {
           sfx.bondHeart();
           const h = campHearts(meta, speciesId);
-          showMessage(this, `${name} trusts you more!`, `Camp bond ${'♥'.repeat(h)}: ${bondReward(h, name)}.`, () => this.scene.restart());
+          const news = titleNews(takeNewTitles(meta));
+          if (news) saveMeta(meta);
+          showMessage(this, `${name} trusts you more!`, `Camp bond ${'♥'.repeat(h)}: ${bondReward(h, name)}.${news}`, () => this.scene.restart());
         }
       },
     });
@@ -894,9 +897,12 @@ export class CampScene extends Phaser.Scene {
       cancelLabel: 'Back',
       onCancel: () => this.workshop(),
       onPick: (i) => {
-        if (buyUpgrade(meta, ups[i].id) === null) sfx.workshopBuild(!!ups[i].capstone);
+        const built = buyUpgrade(meta, ups[i].id) === null;
+        if (built) sfx.workshopBuild(!!ups[i].capstone);
+        const fresh = built ? takeNewTitles(meta) : [];
         saveMeta(meta);
-        this.scene.restart({ workshop: id });
+        if (fresh.length) showMessage(this, `${ups[i].name} built!`, titleNews(fresh).replace(/^\n+/, ''), () => this.scene.restart({ workshop: id }));
+        else this.scene.restart({ workshop: id });
       },
     });
   }

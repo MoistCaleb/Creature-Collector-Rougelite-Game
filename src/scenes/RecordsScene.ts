@@ -6,6 +6,10 @@ import { formatDuration } from '../logic/runClock';
 import { gildedCount } from '../logic/gilded';
 import { earnedTitles, TITLES } from '../logic/titles';
 import { MAP_BY_ID } from '../data/maps';
+import { BOON_COLOR } from '../data/boons';
+import { ELEMENTS } from '../data/types';
+import { WORKSHOP } from '../data/workshop';
+import { boonsTaken, COLLECTABLE, eldersBeaten, favouriteTrait, maxBondLines, MYTHICS, mythicsFound, surprisesFound, topBoons, workshopOwned } from '../logic/feats';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { mostUsed, type RunRecord } from '../logic/run';
 import { state } from '../state';
@@ -94,6 +98,32 @@ export class RecordsScene extends Phaser.Scene {
       y += 86;
     }
 
+    // Favourite trait and the boons you take most (2.0).
+    const ft = favouriteTrait(meta);
+    const boons = topBoons(meta, 5);
+    if (ft || boons.length) heading(x0, 'Boons and traits');
+    if (ft) {
+      list.add(this.add.rectangle(x0, y, colW, 64, COLORS.panel).setOrigin(0).setStrokeStyle(2, 0x5cc2ff, 0.7));
+      list.add(text(this, x0 + 12, y + 10, 'Favourite trait', 12, '#5cc2ff', { fontStyle: 'bold' }));
+      list.add(text(this, x0 + colW - 12, y + 10, `${ft.runs} run${ft.runs === 1 ? '' : 's'}`, 12, COLORS.textDim).setOrigin(1, 0));
+      list.add(fit(text(this, x0 + 12, y + 26, ft.trait.name, 16, COLORS.text, { fontStyle: 'bold' }), colW - 24));
+      list.add(fit(text(this, x0 + 12, y + 46, ft.trait.text, 11, COLORS.textDim), colW - 24, 0.75));
+      y += 72;
+    }
+    if (boons.length) {
+      list.add(text(this, x0 + 2, y, `Boons you take most · ${boonsTaken(meta)} taken in all`, 12, COLORS.textDim));
+      y += 20;
+      for (const { boon, picks } of boons) {
+        list.add(this.add.rectangle(x0, y, colW, 30, COLORS.panel).setOrigin(0));
+        list.add(this.add.rectangle(x0, y, 5, 30, BOON_COLOR[boon.rarity]).setOrigin(0));
+        const mark = boon.rarity === 'curse' ? '☠ ' : boon.rarity === 'mythic' ? '✦ ' : '';
+        list.add(fit(text(this, x0 + 14, y + 15, `${mark}${boon.name}`, 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(0, 0.5), colW - 80));
+        list.add(text(this, x0 + colW - 10, y + 15, `×${picks}`, 13, COLORS.text, { fontStyle: 'bold' }).setOrigin(1, 0.5));
+        y += 34;
+      }
+      y += 6;
+    }
+
     // Lifetime counts, two columns.
     heading(x0, 'Lifetime');
     const forms = DEX_FORMS;
@@ -123,6 +153,13 @@ export class RecordsScene extends Phaser.Scene {
       ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
       ['Closest camp bond', closest ? `${SPECIES_BY_ID[closest.speciesId].names[0]} ${'♥'.repeat(campHearts(meta, closest.speciesId))}` : '—'],
       ['Camp challenges', String(meta.camp?.done ?? 0)],
+      // 2.0's long-term feats (also leaderboards).
+      ['Workshop upgrades', `${workshopOwned(meta)}/${WORKSHOP.length}`],
+      ['Lines at 5 hearts', String(maxBondLines(meta))],
+      ['Rare surprises', `${surprisesFound(meta)}/${COLLECTABLE.length}`],
+      ['Elders beaten', `${eldersBeaten(meta)}/${ELEMENTS.length}`],
+      ['Mythic boons found', `${mythicsFound(meta)}/${MYTHICS.length}`],
+      ['Boons taken', String(boonsTaken(meta))],
       ['Fastest win', meta.fastestWin ? formatDuration(meta.fastestWin) : '—'],
       ['Hexlidex rewards', String(meta.dexClaimed?.length ?? 0)],
       ['Dailies played', String(Object.values(meta.dailies ?? {}).filter((r) => r.attempts > 0).length)],

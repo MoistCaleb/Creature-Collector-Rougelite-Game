@@ -188,6 +188,8 @@ export interface Meta {
   bestStreak?: number;
   /** How many runs each species (by base id) finished on your team, alive or fallen. */
   usage?: Record<string, number>;
+  /** How many runs each trait finished on your team (2.0, for the favourite trait in Records). */
+  traitUsage?: Record<string, number>;
   /** Deepest Shiny Hunting floor reached, and the most shinies caught in one hunt. */
   bestHunt?: number;
   /** The Heat of that deepest hunt (the higher Heat wins a tie in depth). */
@@ -318,6 +320,8 @@ function noteUsage(meta: Meta, run: Run) {
   const usage = (meta.usage = meta.usage ?? {});
   const ids = new Set([...allCreatures(run).map((c) => c.speciesId), ...(run.log.fallen ?? []).map((f) => f.speciesId)]);
   for (const id of ids) usage[id] = (usage[id] ?? 0) + 1;
+  const tu = (meta.traitUsage ??= {});
+  for (const t of new Set(allCreatures(run).map((c) => c.trait).filter((t): t is NonNullable<typeof t> => !!t))) tu[t] = (tu[t] ?? 0) + 1;
 }
 
 /** Count a quick run's result in its own W/L and streak. */

@@ -1,6 +1,7 @@
 import { formatDuration } from './runClock';
 import { earnedTitles } from './titles';
 import { legendsCaught, type Meta } from './run';
+import { eldersBeaten, maxBondLines, mythicsFound, surprisesFound, workshopOwned } from './feats';
 
 /**
  * All-time Top 10 leaderboards: what's ranked, and your own numbers for each. The server keeps
@@ -40,6 +41,12 @@ export const BOARDS: Board[] = [
   { id: 'hunt', name: 'Deepest Gilded Hunt', get: (m) => (m.bestHunt ? m.bestHunt * 100 + (m.bestHuntHeat ?? 0) : 0), show: showHunt },
   { id: 'tourney', name: 'Tournaments won', get: (m) => m.tourneyWins ?? 0 },
   { id: 'online', name: 'Online wins', get: (m) => m.onlineWins ?? 0 },
+  // 2.0: the Workshop, max-bond lines, rare surprises, Elders and mythic boons.
+  { id: 'workshop', name: 'Workshop upgrades', get: workshopOwned },
+  { id: 'bond5', name: 'Lines at 5 hearts', get: maxBondLines },
+  { id: 'surprises', name: 'Rare surprises found', get: surprisesFound },
+  { id: 'elders', name: 'Elders beaten', get: eldersBeaten },
+  { id: 'mythics', name: 'Mythic boons found', get: mythicsFound },
   { id: 'titles', name: 'Titles earned', get: (m) => earnedTitles(m).length },
   { id: 'coins', name: 'Coins earned', get: (m) => m.stats.coinsEarned },
   // Seconds of active play in your fastest won run (0: no win yet).
