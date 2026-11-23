@@ -157,7 +157,7 @@ export class MapScene extends Phaser.Scene {
     if (run.race?.done) playMusic('showdown');
     else if (run.shop) playMusic('shop');
     else if (run.pendingNode === 'event') playMusic('event');
-    else playMusic('map', map.biome);
+    else this.mapMusic();
 
     // ---- map layer
     this.layer = this.add.container(0, 0);
@@ -1103,6 +1103,14 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
+  /** The map's song: the land's own, or a rare floor's (2.0). */
+  private mapMusic() {
+    const run = state.run!;
+    const rare = floorSurprise(run).floor;
+    if (rare) playMusic('rare', rare);
+    else playMusic('map', run.map.biome);
+  }
+
   /** Banners for the run's omen (once a run) and this floor's rare floor and Elder (once a floor). */
   private announceSurprises(then: () => void) {
     const run = state.run!;
@@ -1130,7 +1138,13 @@ export class MapScene extends Phaser.Scene {
     if (!lines.length) return then();
     persist();
     sfx.shinyReveal();
-    showMessage(this, 'A rare surprise!', lines.join('\n\n'), then);
+    // An omen gets its own ominous song while it's announced; the map's comes back after.
+    const omen = lines[0].startsWith('Omen:');
+    if (omen) playMusic('omen');
+    showMessage(this, 'A rare surprise!', lines.join('\n\n'), () => {
+      if (omen) this.mapMusic();
+      then();
+    });
   }
 
   /** Hatchery (a surprise): the egg hatches once it's seen enough battles (it waits if the party is full). */
@@ -1171,6 +1185,7 @@ export class MapScene extends Phaser.Scene {
     const fs = floorSurprise(run);
     const id = fs.hex ?? 'well';
     if (findSurprise(state.meta, id)) persist();
+    sfx.discover();
     if (id === 'hatchery') {
       if (run.surprises?.egg)
         return showMessage(this, 'Hatchery', 'An empty nest. You already carry an egg, warm in your bag.', this.done);

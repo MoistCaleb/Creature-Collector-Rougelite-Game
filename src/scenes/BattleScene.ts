@@ -416,7 +416,11 @@ export class BattleScene extends Phaser.Scene {
     this.showActions();
     ensureFxTextures(this);
     // The floor's element colours the music; floor 3's guardian has its own song.
-    playMusic(boss ? (run.floor === 2 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', run.map.biome);
+    // 2.0: an Elder has its own song, the Dojo's trainers theirs, and Eclipse battles sound of the night.
+    const eclipse = floorSurprise(run).floor === 'eclipse';
+    if (boss && elderHere(run)) playMusic('elder', run.map.biome);
+    else if (this.kind === 'elite' && dojoOn(run)) playMusic('dojo');
+    else playMusic(boss ? (run.floor === 2 && !run.hunt ? 'final' : 'boss') : this.kind === 'elite' ? 'trainer' : 'battle', eclipse && !boss ? 'Shadow' : run.map.biome);
     // Entry effects of a boss rule (stat drops, poison...).
     const entry = this.battle.start(resuming);
     // Resuming: stat stages, who's out, the foe's potions and used-up rule effects come back too.
@@ -1924,6 +1928,7 @@ export class BattleScene extends Phaser.Scene {
       if (teamSynergy(run.team).length) trackStat(run, 'synergyWins');
       // Hexlings that fought and are still standing grow closer to you.
       const hearts = growBond(run, ab.fought ?? []);
+      if (hearts.length) this.time.delayedCall(1100, () => sfx.bondHeart());
       const fallen = this.fallenNote() + (hearts.length ? `\n\n${hearts.map((h) => `♥ ${h}`).join('\n')}` : '');
       postBattleRecover(run, { won: true, sun: this.battle.weather === 'sun' });
       ab.summary = fallen;

@@ -480,6 +480,39 @@ export const sfx = {
     tone(root, 0.14, { type: 'sine', vol: 0.07 });
     tone(root * 1.5, 0.12, { type: 'sine', vol: 0.04, delay: 0.04 });
   },
+  /** A hidden hex is found (2.0): a sparkling run of bells, like a music box opening. */
+  discover() {
+    [0, 4, 7, 11, 14, 19].forEach((st, i) => tone(note(st, 784), 0.5 - i * 0.04, { type: 'sine', vol: 0.08, delay: i * 0.06, attack: 0.005 }));
+    tone(note(-12, 784), 0.9, { type: 'triangle', vol: 0.05, delay: 0.02, attack: 0.08 });
+    noise(0.9, { freq: 9000, to: 4000, vol: 0.05, type: 'highpass', delay: 0.15 });
+  },
+  /** A Workshop upgrade is built: two hammer knocks, then a warm chord (bigger for a capstone). */
+  workshopBuild(capstone = false) {
+    for (const d of [0, 0.16]) {
+      tone(180, 0.08, { type: 'square', vol: 0.12, slide: 90, delay: d });
+      noise(0.06, { freq: 2600, vol: 0.18, type: 'bandpass', q: 2, delay: d });
+    }
+    const chord = capstone ? [0, 4, 7, 12, 16, 19] : [0, 4, 7, 12];
+    chord.forEach((st, i) => tone(note(st, 392), 0.6, { type: 'triangle', vol: 0.08, delay: 0.36 + i * 0.04, attack: 0.02 }));
+    if (capstone) noise(1, { freq: 8000, to: 3000, vol: 0.07, type: 'highpass', delay: 0.4 });
+  },
+  /** A bond heart is gained: a soft two-beat heartbeat, then a sweet rising pair. */
+  bondHeart() {
+    tone(90, 0.12, { type: 'sine', vol: 0.3, slide: 60 });
+    tone(80, 0.14, { type: 'sine', vol: 0.22, slide: 55, delay: 0.16 });
+    tone(note(4, 659), 0.25, { type: 'sine', vol: 0.08, delay: 0.38 });
+    tone(note(9, 659), 0.45, { type: 'sine', vol: 0.08, delay: 0.5, attack: 0.01 });
+  },
+  /** The ember tally ticks up: a tiny crackle that climbs with the count (i: 0 up). */
+  emberTick(i = 0) {
+    tone(note(Math.min(i, 24), 880), 0.05, { type: 'triangle', vol: 0.05 });
+    noise(0.03, { freq: 3500, vol: 0.04, type: 'bandpass', q: 3 });
+  },
+  /** The tally lands: a crackle of fire and a bright ping. */
+  emberDone() {
+    noise(0.5, { freq: 1800, to: 600, vol: 0.12, type: 'bandpass', q: 0.8 });
+    tone(note(12, 880), 0.3, { type: 'sine', vol: 0.07, delay: 0.04 });
+  },
   /** A shiny's hit lands: a bright ping on top of the normal hit. */
   shinyHit() {
     tone(2637, 0.22, { type: 'sine', vol: 0.08 });
@@ -522,7 +555,9 @@ export const sfx = {
  * cadences, over bass, drums, pads, arpeggios and bells. Map and battle songs take the colour of the
  * floor's element (its mode, tempo and instruments), so every element sounds different.
  */
-export type Theme = 'title' | 'map' | 'battle' | 'trainer' | 'boss' | 'final' | 'shop' | 'event' | 'arena' | 'win' | 'lose' | 'showdown';
+export type Theme = 'title' | 'map' | 'battle' | 'trainer' | 'boss' | 'final' | 'shop' | 'event' | 'arena' | 'win' | 'lose' | 'showdown'
+  /** 2.0: a rare floor's map song (the floor's id as the variant), an Elder guardian, an omen's run start and the Dojo. */
+  | 'rare' | 'elder' | 'omen' | 'dojo';
 
 type Drums = 'none' | 'soft' | 'drive' | 'march' | 'half' | 'taiko';
 
@@ -613,10 +648,49 @@ function progs(scale: number[], seed: number): { progA: number[]; progB: number[
   return { progA: a[seed % a.length], progB: b[(seed >> 2) % b.length] };
 }
 
-/** A song for a theme, coloured by an element where it has one. */
-function songFor(theme: Theme, el: Element | null): SongDef {
+/** Rare floors' map songs (2.0), each its own mood. */
+function rareFloorSong(id: string): SongDef {
+  switch (id) {
+    case 'grove':
+      // Gold everywhere: bright Lydian, music-box bells and a twinkling arpeggio.
+      return { bpm: 104, root: 294, scale: LYDIAN, progA: [0, 1, 4, 0], progB: [3, 1, 5, 4], lead: 'triangle', bass: 'triangle', drums: 'soft', pad: true, bells: true, arp: true, density: 0.55, seed: 1501 };
+    case 'eclipse':
+      // The sun never rises: slow, low and hollow, with distant bells.
+      return { bpm: 76, root: 165, scale: HARMONIC, progA: [0, 5, 0, 4], progB: [5, 3, 1, 4], lead: 'sine', bass: 'sine', drums: 'none', pad: true, echo: true, bells: true, density: 0.3, seed: 1502 };
+    case 'ruins':
+      // Older than the rest: a grave Dorian march under a choir and slow war drums.
+      return { bpm: 84, root: 147, scale: DORIAN, progA: [0, 6, 3, 0], progB: [3, 4, 5, 4], lead: 'triangle', bass: 'triangle', drums: 'taiko', pad: true, echo: true, density: 0.4, epic: true, seed: 1503 };
+    case 'stormfront':
+      // A sky that's never calm: restless minor, a quick arpeggio and a half-time beat.
+      return { bpm: 118, root: 233, scale: MINOR, progA: [0, 6, 5, 4], progB: [3, 4, 6, 4], lead: 'square', bass: 'square', drums: 'half', arp: true, echo: true, density: 0.55, seed: 1504 };
+    case 'mirror':
+      // A floor that looks back: dreamy, everything echoed.
+      return { bpm: 92, root: 262, scale: LYDIAN, progA: [0, 4, 5, 1], progB: [1, 4, 0, 0], lead: 'sine', bass: 'triangle', drums: 'soft', pad: true, echo: true, bells: true, density: 0.4, seed: 1505 };
+    default:
+      // Shattered: two lands at once, tense Phrygian with a broken half-time beat.
+      return { bpm: 108, root: 196, scale: PHRYGIAN, progA: [0, 1, 6, 0], progB: [5, 6, 1, 4], lead: 'sawtooth', bass: 'square', drums: 'half', arp: true, echo: true, density: 0.5, seed: 1506 };
+  }
+}
+
+/** A song for a theme, coloured by an element where it has one (a rare floor's id for 'rare'). */
+function songFor(theme: Theme, variant: string | null): SongDef {
+  const el = variant && variant in FLAVOR ? (variant as Element) : null;
   const f = el ? FLAVOR[el] : null;
   switch (theme) {
+    case 'rare':
+      return rareFloorSong(variant ?? '');
+    case 'omen':
+      // An omen at the run's start: a slow, ominous Phrygian swell, bells tolling.
+      return { bpm: 70, root: 156, scale: PHRYGIAN, progA: [0, 1, 0, 6], progB: [5, 6, 1, 0], lead: 'sine', bass: 'sine', drums: 'none', pad: true, echo: true, bells: true, density: 0.3, seed: 1601 };
+    case 'dojo':
+      // Three trainers in a row: a driving Dorian fight song on war drums.
+      return { bpm: 144, root: 220, scale: DORIAN, progA: [0, 6, 3, 4], progB: [3, 4, 6, 6], lead: 'square', bass: 'sawtooth', drums: 'taiko', arp: true, density: 0.75, seed: 1701 };
+    case 'elder': {
+      // An Elder guardian: the boss song's darker, heavier elder, with choir and brass.
+      const fl = f ?? FLAVOR.Dragon;
+      const scale = isMajor(fl.scale) || fl.scale === DORIAN ? HARMONIC : fl.scale;
+      return { bpm: Math.round(132 * Math.max(0.95, fl.tempo)), root: fl.root * 0.8, scale, progA: [0, 1, 5, 4], progB: [5, 6, 1, 4], lead: 'sawtooth', bass: 'sawtooth', drums: 'taiko', arp: true, bells: true, density: 0.7, epic: true, seed: fl.seed + 77 };
+    }
     case 'title':
       return { bpm: 88, root: 220, scale: MINOR, progA: [0, 5, 2, 6], progB: [3, 4, 0, 4], lead: 'triangle', bass: 'triangle', drums: 'soft', pad: true, bells: true, density: 0.5, seed: 11 };
     case 'arena':
@@ -724,8 +798,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Fades the outgoing song while the next one starts. */
 let songGain: GainNode | null = null;
 
-/** Play a theme (coloured by an element for map and battle songs). null: silence. */
-export function playMusic(theme: Theme | null, el: Element | null = null) {
+/** Play a theme (coloured by an element for map and battle songs, or a rare floor's id for 'rare'). null: silence. */
+export function playMusic(theme: Theme | null, el: Element | string | null = null) {
   const key = theme ? `${theme}${el ? ':' + el : ''}` : null;
   wantedTheme = key;
   if (key === playing) return;
@@ -749,7 +823,7 @@ function startTheme(key: string) {
   if (!ctx || !musicBus) return;
   stopTheme();
   playing = key;
-  const [theme, el] = key.split(':') as [Theme, Element | undefined];
+  const [theme, el] = key.split(':') as [Theme, string | undefined];
   const def = songFor(theme, el ?? null);
   const steps = compose(def);
   const bus = ctx.createGain();

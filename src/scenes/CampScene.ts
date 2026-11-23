@@ -671,6 +671,7 @@ export class CampScene extends Phaser.Scene {
         sfx.coin();
         this.bubble(c, first ? '♥ +1' : '♥', '#ff8ab0');
         if (gained) {
+          sfx.bondHeart();
           const h = campHearts(meta, speciesId);
           showMessage(this, `${name} trusts you more!`, `Camp bond ${'♥'.repeat(h)}: ${bondReward(h, name)}.`, () => this.scene.restart());
         }
@@ -893,7 +894,7 @@ export class CampScene extends Phaser.Scene {
       cancelLabel: 'Back',
       onCancel: () => this.workshop(),
       onPick: (i) => {
-        if (buyUpgrade(meta, ups[i].id) === null) sfx.coin();
+        if (buyUpgrade(meta, ups[i].id) === null) sfx.workshopBuild(!!ups[i].capstone);
         saveMeta(meta);
         this.scene.restart({ workshop: id });
       },

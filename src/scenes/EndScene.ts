@@ -20,6 +20,7 @@ import { shareGhost } from '../net/friends';
 import { lastWinTeam } from '../logic/surprises';
 import { openPicker } from '../ui/picker';
 import { playMusic, sfx } from '../ui/sound';
+import { calm } from '../ui/motion';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
 
@@ -198,6 +199,8 @@ export class EndScene extends Phaser.Scene {
     roster('Fallen', run.log.fallen ?? [], true);
 
     const extra: string[] = [];
+    let emberLine: ((n: number) => string) | null = null;
+    let emberTotal = 0;
     if (run.daily) {
       // Record once per run (the screen lays itself out again when the phone turns).
       const best = recordedRuns.has(run) ? false : recordDaily(run, data.won);
@@ -230,7 +233,12 @@ export class EndScene extends Phaser.Scene {
       // The next goal: the cheapest Workshop upgrade still to build.
       const next = workshopProgress(state.meta).next;
       const goal = next ? (have >= next.cost ? ` · ready to build ${next.name} in the Workshop` : ` · ${have}/${next.cost} to ${next.name}`) : '';
-      if (em.total) extra.unshift(`Embers +${em.total} (${em.lines.join(', ')}) · ${have} at camp${goal}`);
+      if (em.total) {
+        // The tally ticks up from 0 once the screen is in (see below).
+        emberLine = (n) => `Embers +${n} (${em.lines.join(', ')}) · ${have - em.total + n} at camp${n === em.total ? goal : ''}`;
+        emberTotal = em.total;
+        extra.unshift(emberLine(em.total));
+      }
     }
     // Camp bond (2.0): every run builds it with the Hexlings who came along (races and dailies too).
     const bond = payRunBond(state.meta, run, data.won);
@@ -239,6 +247,7 @@ export class EndScene extends Phaser.Scene {
       const shown = bond.slice(0, 3).map((b) => `${SPECIES_BY_ID[b.speciesId].names[0]} +${b.points}${b.after > b.before ? ` (new ${'♥'.repeat(b.after)})` : ''}`);
       const more = bond.length > 3 ? ` +${bond.length - 3} more` : '';
       extra.push(`Camp bond: ${shown.join(', ')}${more}`);
+      if (bond.some((b) => b.after > b.before)) this.time.delayedCall(2600, () => sfx.bondHeart());
     }
     // Gilded Hunt (2.0): the next milestone to dive for.
     if (hunt) {
@@ -256,7 +265,35 @@ export class EndScene extends Phaser.Scene {
     }
     const huntRoom = data.won && !run.daily && !run.weekly && !hunt && !run.race;
     if (extra.length && y < (LANDSCAPE ? (run.race ? 290 : huntRoom ? 262 : 310) : run.race ? 610 : huntRoom ? 594 : 640)) {
-      text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
+      const block = text(this, cx0 + colW / 2, y + 4, extra.join('\n'), 13, '#8fe08a', { align: 'center', wordWrap: { width: colW - 8 }, lineSpacing: 4 }).setOrigin(0.5, 0);
+      // The ember tally (2.0): counts up with a crackle, then lands with a ping (instant with Reduce motion).
+      const line = emberLine;
+      const at = line ? extra.indexOf(line(emberTotal)) : -1;
+      if (line && at >= 0 && !calm()) {
+        const show = (n: number) => block.setText(extra.map((l, i) => (i === at ? line(n) : l)).join('\n'));
+        show(0);
+        const counter = { n: 0 };
+        let last = 0;
+        this.tweens.add({
+          targets: counter,
+          n: emberTotal,
+          delay: 900,
+          duration: Math.min(1800, 600 + emberTotal * 30),
+          ease: 'Cubic.easeOut',
+          onUpdate: () => {
+            const n = Math.round(counter.n);
+            if (n === last) return;
+            // A tick every few embers, so big tallies don't buzz.
+            if (Math.floor(n / Math.max(1, Math.ceil(emberTotal / 16))) !== Math.floor(last / Math.max(1, Math.ceil(emberTotal / 16)))) sfx.emberTick(Math.floor((n / emberTotal) * 16));
+            last = n;
+            show(n);
+          },
+          onComplete: () => {
+            show(emberTotal);
+            sfx.emberDone();
+          },
+        });
+      }
     }
 
     // Keep a good creature: save its form and moves for the team builder.
