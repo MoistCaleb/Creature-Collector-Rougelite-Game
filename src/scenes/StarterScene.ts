@@ -6,7 +6,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
 import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
-import { dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
+import { addPartner, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -18,7 +18,8 @@ import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { playMusic } from '../ui/sound';
 import { icon as pixelIcon } from '../ui/icons';
 import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
-import { showMessage } from '../ui/picker';
+import { openPicker, showMessage } from '../ui/picker';
+import { wsHas } from '../logic/workshop';
 
 /** This visit's three random starters. */
 let rolled: string[] | null = null;
@@ -161,6 +162,9 @@ export class StarterScene extends Phaser.Scene {
   }
 
   private pick(id: string) {
+    // Partner (a Workshop capstone): the other two starters, with the traits their cards showed.
+    const key = traitKey;
+    const others = !this.race && !this.daily && !this.weekly ? (rolled ?? []).filter((x) => x !== id) : [];
     rolled = null;
     const trait = traitKey ? rollTrait(id, traitKey) : undefined;
     traitKey = null;
@@ -181,9 +185,28 @@ export class StarterScene extends Phaser.Scene {
     }
     // The starter keeps the trait it showed on its card.
     if (trait && state.run.team[0]) state.run.team[0].trait = trait;
+    const run = state.run;
     // Every run but dailies and weeklies stops at camp first: one thing for the road, and the news.
-    if (prepsAvailable(state.run)) this.scene.start('Camp', { prep: true });
-    else this.scene.start('Map', {});
+    const go = () => (prepsAvailable(run) ? this.scene.start('Camp', { prep: true }) : this.scene.start('Map', {}));
+    if (!wsHas(run, 'partner') || !others.length) return go();
+    const lead = run.team[0];
+    const previews = others.map((o) => {
+      const c = createCreature(o, lead.level);
+      if (key) c.trait = rollTrait(o, key) ?? c.trait;
+      return c;
+    });
+    openPicker(this, {
+      title: 'Choose a partner',
+      subtitle: `Partner (Workshop): one more starter joins ${SPECIES_BY_ID[lead.speciesId].names[lead.stage]} at Lv ${lead.level}.`,
+      options: previews.map((c) => ({ creature: c })),
+      onPick: (i) => {
+        const p = addPartner(run, others[i]);
+        if (p && previews[i].trait) p.trait = previews[i].trait;
+        go();
+      },
+      cancelLabel: 'No partner',
+      onCancel: go,
+    });
   }
 }
 

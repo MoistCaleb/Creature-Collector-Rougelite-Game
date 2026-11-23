@@ -76,6 +76,17 @@ export const HOW_TO_PLAY: Page[] = [
     ],
   },
   {
+    title: 'Embers and the Workshop',
+    glyph: 'flame',
+    lines: [
+      'Every run pays embers, win or lose: more for floors, guardians, wins, Gilded and Heat.',
+      'Spend them at camp: decorations at the Ember stall, lasting upgrades in the Workshop.',
+      'The Workshop has four branches (Supplies, Training, Fortune, Lore), each built in order and ending in a capstone.',
+      'Lore adds more boons and surprises to your runs: variety, not power.',
+      'Daily and weekly runs and online races ignore the Workshop, so they stay fair for everyone.',
+    ],
+  },
+  {
     title: 'Elements',
     glyph: 'sparkle',
     lines: [

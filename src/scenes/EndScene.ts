@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { workshopProgress } from '../logic/workshop';
 import { camp, payRunEmbers } from '../logic/camp';
 import { BOONS } from '../data/boons';
 import { takeNewMilestones } from '../logic/gilded';
@@ -212,7 +213,11 @@ export class EndScene extends Phaser.Scene {
     if (!race || !data.won) {
       const em = payRunEmbers(state.meta, run, data.won);
       saveMeta(state.meta);
-      if (em.total) extra.unshift(`Embers +${em.total} (${em.lines.join(', ')}) · ${camp(state.meta).embers} at camp`);
+      const have = camp(state.meta).embers;
+      // The next goal: the cheapest Workshop upgrade still to build.
+      const next = workshopProgress(state.meta).next;
+      const goal = next ? (have >= next.cost ? ` · ready to build ${next.name} in the Workshop` : ` · ${have}/${next.cost} to ${next.name}`) : '';
+      if (em.total) extra.unshift(`Embers +${em.total} (${em.lines.join(', ')}) · ${have} at camp${goal}`);
     }
     // The boons this run was built on.
     const held = run.boons?.held ?? [];

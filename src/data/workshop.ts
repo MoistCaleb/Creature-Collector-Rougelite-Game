@@ -81,11 +81,11 @@ export const WORKSHOP: WorkshopUpgrade[] = [
   U('rarity2', 'fortune', 'Fortune II', 270, 'Rare and mythic boons are offered more often again.'),
   U('blessing', 'fortune', 'Blessing', 350, 'Start every run with a boon (choose from 3).', true),
   // ------------------------------------------------------------ Lore (1,250)
-  U('lore1', 'lore', 'Lore I', 60, '5 more boons join the pool: Pack Tactics, Rainbow Squad, Lingering, Dread and Quake.'),
-  U('lore2', 'lore', 'Lore II', 120, '5 more boons (Opportunist, Rampage, Possession, Chain Lightning, Dragon Pride) and two rare floors: Mirror and Shattered.'),
+  U('lore1', 'lore', 'Lore I', 60, '5 more boons join the pool: Pack Tactics, Rainbow Squad, Lingering, Dread and Fault Line.'),
+  U('lore2', 'lore', 'Lore II', 120, "5 more boons (Opportunist, Rampage, Possession, Chain Lightning, Dragon's Pride) and two rare floors: Mirror and Shattered."),
   U('lore3', 'lore', 'Lore III', 200, '4 more boons (First Strike, Prospector, Plague Bearer, Halo) and the Hidden Shop.'),
   U('lore4', 'lore', 'Lore IV', 300, '4 more boons (Lone Champion, Glass Menagerie, Ironclad, the mythic Overflow) and Gilded trainers.'),
-  U('lore5', 'lore', 'Lore V', 570, 'The last mythics (Fusion, Pact), the rarest omens (Blood Moon, Golden Age), and one extra boon offer every run.', true),
+  U('lore5', 'lore', 'Lore V', 570, 'The last mythics (Elemental Fusion, Pact), the rarest omens (Blood Moon, Golden Age), and one extra boon offer every run.', true),
 ];
 
 export const WORKSHOP_BY_ID = Object.fromEntries(WORKSHOP.map((u) => [u.id, u])) as Record<WorkshopId, WorkshopUpgrade>;

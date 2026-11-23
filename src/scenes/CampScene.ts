@@ -31,6 +31,8 @@ import {
   type PrepId,
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
+import { branchUpgrades, WORKSHOP_BRANCHES, type WorkshopBranch } from '../data/workshop';
+import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, FLOORS, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
 import { myTitle } from '../logic/titles';
@@ -79,8 +81,12 @@ export class CampScene extends Phaser.Scene {
     super('Camp');
   }
 
-  init(data: { prep?: boolean }) {
+  /** Reopen the Workshop on this branch after a purchase (the scene restarts to redraw). */
+  private reopen: WorkshopBranch | 'list' | null = null;
+
+  init(data: { prep?: boolean; workshop?: WorkshopBranch | 'list' }) {
     this.prep = !!data.prep && !!state.run;
+    this.reopen = data.workshop ?? null;
   }
 
   create() {
@@ -206,6 +212,12 @@ export class CampScene extends Phaser.Scene {
     if (this.prep) this.prepPanel();
     else {
       this.campButtons();
+      if (this.reopen) {
+        const b = this.reopen;
+        this.reopen = null;
+        if (b === 'list') this.workshop();
+        else this.workshopBranch(b);
+      }
       this.signposts();
     }
 
@@ -725,13 +737,15 @@ export class CampScene extends Phaser.Scene {
     const items: [string, () => void, number][] = [
       [`Challenges${ready ? ` (${ready}!)` : ''}`, () => this.challengeList(), ready ? 0x8a5a1a : 0x4a3a2a],
       [`Ember stall · ${c.embers}`, () => this.stall(), 0x6a3a1a],
+      [workshopProgress(meta).next && c.embers >= workshopProgress(meta).next!.cost ? 'Workshop (!)' : 'Workshop', () => this.workshop(), 0x4a3a5a],
       ['Camp crew', () => this.crewPicker(), 0x3a4a2a],
     ];
     items.forEach(([label, fn, color], i) => {
       // Upright: a stack top right. Sideways: a row along the top right.
-      const bx = LANDSCAPE ? W - 300 + i * 100 : W - 72;
+      // (Sideways, four fit where three used to, clear of the title.)
+      const bx = LANDSCAPE ? W - 53 - (items.length - 1 - i) * 82 : W - 72;
       const by = LANDSCAPE ? 30 : 110 + i * 40;
-      button(this, bx, by, LANDSCAPE ? 94 : 128, 34, label, () => (sfx.click(), fn()), { fontSize: LANDSCAPE ? 11 : 12, color }).setDepth(3);
+      button(this, bx, by, LANDSCAPE ? 78 : 128, 34, label, () => (sfx.click(), fn()), { fontSize: LANDSCAPE ? 11 : 12, color }).setDepth(3);
     });
   }
 
@@ -766,6 +780,68 @@ export class CampScene extends Phaser.Scene {
         }
         saveMeta(meta);
         this.scene.restart();
+      },
+    });
+  }
+
+  /** The Workshop (2.0): lasting upgrades for embers, in four branches. */
+  private workshop() {
+    const meta = state.meta;
+    const c = camp(meta);
+    const prog = workshopProgress(meta);
+    const own = ownedUpgrades(meta);
+    openPicker(this, {
+      title: 'Workshop',
+      subtitle: prog.done
+        ? `Every upgrade built (${prog.total} embers). You have ${c.embers} embers.`
+        : `You have ${c.embers} embers · ${prog.spent}/${prog.total} built.\nUpgrades work on normal runs and the Gilded Hunt, not on daily or weekly runs or online.`,
+      options: WORKSHOP_BRANCHES.map((b) => {
+        const ups = branchUpgrades(b.id);
+        const have = ups.filter((u) => own.includes(u.id)).length;
+        const next = nextUpgrade(meta, b.id);
+        return {
+          label: `${b.name}   ${have}/${ups.length}`,
+          sub: next ? `Next: ${next.name} · ${next.cost} embers` : `Complete · ${b.blurb}`,
+          color: b.color,
+          badge: next && c.embers >= next.cost ? 'READY' : undefined,
+        };
+      }),
+      rowHeight: 56,
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => this.workshopBranch(WORKSHOP_BRANCHES[i].id),
+    });
+  }
+
+  /** One branch of the Workshop: what you've built, the next upgrade to buy, and what's after it. */
+  private workshopBranch(id: WorkshopBranch) {
+    const meta = state.meta;
+    const c = camp(meta);
+    const b = WORKSHOP_BRANCHES.find((x) => x.id === id)!;
+    const own = ownedUpgrades(meta);
+    const next = nextUpgrade(meta, id);
+    const ups = branchUpgrades(id);
+    openPicker(this, {
+      title: `Workshop · ${b.name}`,
+      subtitle: `${b.blurb}\nYou have ${c.embers} embers. Buy them in order.`,
+      options: ups.map((u) => {
+        const have = own.includes(u.id);
+        const isNext = next?.id === u.id;
+        return {
+          label: `${have ? '✓ ' : ''}${u.name}${u.capstone ? '  ★' : ''}`,
+          sub: have ? `Built · ${u.desc}` : `${u.cost} embers · ${u.desc}`,
+          disabled: have || !isNext || c.embers < u.cost,
+          color: have ? 0x2f3f2a : isNext ? b.color : 0x2a2a34,
+          badge: u.capstone ? 'CAPSTONE' : undefined,
+        };
+      }),
+      rowHeight: 60,
+      cancelLabel: 'Back',
+      onCancel: () => this.workshop(),
+      onPick: (i) => {
+        if (buyUpgrade(meta, ups[i].id) === null) sfx.coin();
+        saveMeta(meta);
+        this.scene.restart({ workshop: id });
       },
     });
   }
