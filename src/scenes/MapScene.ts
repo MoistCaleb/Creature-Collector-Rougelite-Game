@@ -1,6 +1,7 @@
 import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
 import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
+import { surpriseBadge, surpriseEdge, surpriseTint } from '../ui/surpriseUi';
 import { BOONS } from '../data/boons';
 import { boonCardText, boonRowColor, openBoonList, openBoonOffer } from '../ui/boonPick';
 import { boonBadge } from '../ui/boonUi';
@@ -332,6 +333,9 @@ export class MapScene extends Phaser.Scene {
       max: () => this.maxScroll,
     });
 
+    // A rare floor or omen colours the map (over the hexes, under the bars), and the screen's edge glows.
+    surpriseTint(this, run, { x: -OX, y: -OY, w: FW, h: FH });
+    surpriseEdge(this, run, { x: -OX, y: -OY, w: FW, h: FH });
     this.drawTopBar();
     this.drawBottomBar();
 
@@ -478,57 +482,11 @@ export class MapScene extends Phaser.Scene {
     this.boonChip(10, TOP_BAR + 20, W - 20 - (sw ? sw + 8 : 0));
   }
 
-  /** What's special about this run and floor right now, for the surprise badge. */
-  private activeSurprises(): { name: string; lines: string[] } | null {
-    const run = state.run!;
-    const rs = run.surprises;
-    if (!rs) return null;
-    const fs = floorSurprise(run);
-    const names: string[] = [];
-    const lines: string[] = [];
-    if (rs.omen && SURPRISES[rs.omen]) {
-      names.push(SURPRISES[rs.omen].name);
-      lines.push(`Omen (all run): ${SURPRISES[rs.omen].name}\n${SURPRISES[rs.omen].desc}`);
-    }
-    if (fs.floor && SURPRISES[fs.floor]) {
-      names.push(SURPRISES[fs.floor].name);
-      lines.push(`This floor: ${SURPRISES[fs.floor].name}\n${SURPRISES[fs.floor].desc}${fs.floor === 'shattered' && fs.second ? ` (${run.map.biome} and ${fs.second})` : ''}`);
-    }
-    if (fs.elder && fs.floor !== 'ruins') {
-      names.push('Elder');
-      lines.push(`An Elder guardian waits at the top of this floor.\n${SURPRISES.elder.desc}`);
-    }
-    if (fs.hexNode && !run.visited.includes(fs.hexNode)) lines.push('Something glitters on a hex ahead (???).');
-    if (rs.egg) lines.push(`Egg: ${Math.min(rs.egg.wins, EGG_WINS)} / ${EGG_WINS} battles to hatch.`);
-    if (!lines.length) return null;
-    return { name: names.length === 1 ? names[0] : names.length ? `${names.length} surprises` : 'Surprise', lines };
-  }
-
   /** A pink badge while a surprise is active (right-aligned at x); tap to read them again. Returns its width. */
   private surpriseChip(x: number, y: number, maxW: number): number {
-    const a = this.activeSurprises();
-    if (!a) return 0;
-    const h = 30;
-    const label = text(this, 0, 0, `✶ ${a.name}`, 13, '#ff9ae2', { fontStyle: 'bold' }).setOrigin(0, 0.5);
-    let s = a.name;
-    while (label.width + 20 > maxW && s.length > 4) {
-      s = s.slice(0, -1);
-      label.setText(`✶ ${s}…`);
-    }
-    const w = label.width + 20;
-    const c = this.add.container(x - w, y).setDepth(6);
-    label.setX(10);
-    const glow = this.add.rectangle(w / 2, 0, w + 8, h + 8, 0xff7ad9, 0.2);
-    const bg = this.add.rectangle(w / 2, 0, w, h, 0x2a1230, 0.95).setStrokeStyle(2, 0xff7ad9).setInteractive({ useHandCursor: true });
-    bg.on('pointerup', () => showMessage(this, 'Active surprises', a.lines.join('\n\n')));
-    c.add([glow, bg, label]);
-    if (!calm()) this.tweens.add({ targets: glow, alpha: { from: 0.08, to: 0.4 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    // A rare floor or omen also tints the screen's edge, so it's felt at a glance.
-    if (a.name !== 'Surprise') {
-      const edge = this.add.rectangle(-OX, -OY, FW, FH).setOrigin(0).setStrokeStyle(6, 0xff7ad9, 0.35).setDepth(5);
-      if (!calm()) this.tweens.add({ targets: edge, alpha: { from: 0.4, to: 1 }, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    }
-    return w;
+    const b = surpriseBadge(this, state.run!, x, y, { maxW });
+    b?.setDepth(6);
+    return b?.width ?? 0;
   }
 
   /** Boons held: a glowing badge with a gem for each; tap for the list. */

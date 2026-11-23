@@ -2,6 +2,7 @@ import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
 import { boonBadge } from '../ui/boonUi';
+import { surpriseBadge } from '../ui/surpriseUi';
 import { openBoonList } from '../ui/boonPick';
 import { traitLine } from '../ui/traitText';
 import { TRAITS, type TraitId } from '../data/traits';
@@ -404,6 +405,7 @@ export class BattleScene extends Phaser.Scene {
       openGameMenu(this, () => this.afterMenu(), this.shownEnemy ? creatureTypes(this.shownEnemy) : []);
     }, { glyph: 'menu' }).setDepth(5);
     this.drawBoonBadge();
+    this.drawSurpriseBadge();
 
     this.refreshEnemy();
     this.refreshPlayer();
@@ -1156,6 +1158,17 @@ export class BattleScene extends Phaser.Scene {
     if (!b) return;
     b.setX(L.menu.x - 24 - 8 - b.width).setDepth(5);
     this.boonBadge = b;
+  }
+
+  /** Run battles: the active surprises (omen, rare floor, Elder), a pink badge under the menu button. */
+  private drawSurpriseBadge() {
+    const run = state.run;
+    if (this.match || !run) return;
+    // Upright: under the menu button. Sideways: left of it (and of the boons), above the message box.
+    const right = LANDSCAPE ? (this.boonBadge ? this.boonBadge.x - 8 : L.menu.x - 24 - 8) : L.menu.x + 24;
+    const y = LANDSCAPE ? L.menu.y : L.menu.y + 18 + 6 + 14;
+    const b = surpriseBadge(this, run, right, y, { maxW: LANDSCAPE ? 180 : 170, h: LANDSCAPE ? 32 : 28, canTap: () => !this.busy });
+    b?.setDepth(5);
   }
 
   /** A boon kicked in: a ribbon with its name slides in by that side's panel, with a chime. */
