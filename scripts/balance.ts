@@ -7,6 +7,11 @@ import { attackEl } from '../src/data/moves';
  * Usage: npx vite-node scripts/balance.ts [scale]
  *   scale multiplies the number of runs (default 1, about 12,000 runs; 0.2 for a quick look).
  *   RULES_ONLY=1 runs about 8,000 Heat 4-8 runs and prints only the guardian rule loss rates.
+ *   PROFILES_ONLY=1 (2.0) compares player profiles and writes docs/PROFILES_REPORT.md: a veteran
+ *     (every Workshop upgrade, every line at five bond hearts) across Heat 0-8, to make sure maxed
+ *     players still lose sometimes, and a new player (no upgrades, Lore-locked pools, no bond) next
+ *     to the game without the Workshop and next to a 1.x-like game, to check early runs feel the same.
+ *   PROFILE=new|full|legacy|veteran plays the whole main report as that profile (default: new).
  *
  * The bot is a decent player, not a great one: it picks the strongest move by type and power,
  * switches out of bad matchups, drinks potions when low, rests when hurt, buys useful items and
@@ -28,7 +33,7 @@ import {
   type Creature,
 } from '../src/logic/creature';
 import {
-  allCreatures, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, equipHeld, fillTeamFromBench, grantXp, makeEncounter, moveTo,
+  addPartner, allCreatures, battleCoins, battleXp, buryFallen, catchCreature, clearFloor, currentNode, equipHeld, fillTeamFromBench, grantXp, makeEncounter, moveTo,
   encounterKind, postBattleRecover, potionHeal, promoteBench, rollHeld, startHunt, startRun, startWeekly, stash, TWIST_ORDER, TWISTS, usePotion, weeklyInfo, type Meta, type Run, type TwistId,
 } from '../src/logic/run';
 import { Rng } from '../src/logic/rng';
@@ -37,9 +42,34 @@ import { emptyDex } from '../src/logic/dex';
 import { BOONS } from '../src/data/boons';
 import { elderHere, floorSurprise, omenCoinMult, stormFrontWeather } from '../src/logic/surprises';
 import { hasBoon, openOffer, skipOffer, takeBoon } from '../src/logic/boons';
-import { isRareTrait, setTraitsEnabled, silenceTrait, traitOf, TRAITS, type TraitId } from '../src/data/traits';
+import { isRareTrait, LEGEND_TRAITS, setTraitsEnabled, silenceTrait, traitOf, traitsOf, TRAITS, type TraitId } from '../src/data/traits';
+import { camp, CAMP_HEARTS } from '../src/logic/camp';
+import { WORKSHOP } from '../src/data/workshop';
 
 (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+
+// ---------------------------------------------------------------- player profiles (2.0)
+
+/**
+ * Who the bot plays as:
+ * - new: a 2.0 player on day one (no Workshop, Lore-locked boons and surprises, no camp bond).
+ * - full: the same but with the full boon and surprise pool (2.0 without the Workshop's Lore gate).
+ * - legacy: 1.x-like (no boons and no traits; surprises and the rest of 2.0 stay on).
+ * - veteran: every Workshop upgrade, and every line at five camp bond hearts (the starter takes its
+ *   rare trait, +2 levels and a bond heart; Partner adds a second starter).
+ */
+type Profile = 'new' | 'full' | 'legacy' | 'veteran';
+const PROFILES: Profile[] = ['new', 'full', 'legacy', 'veteran'];
+const PROFILE_NAMES: Record<Profile, string> = {
+  new: 'New player',
+  full: 'No Workshop, full pool',
+  legacy: '1.x-like (no boons or traits)',
+  veteran: 'Veteran (all upgrades, max bond)',
+};
+const envProfile = (process.env.PROFILE ?? 'new') as Profile;
+if (!PROFILES.includes(envProfile)) throw new Error(`PROFILE must be one of ${PROFILES.join(', ')}`);
+/** Boons are skipped while this is set (the legacy profile, or BOONS=off). */
+let skipBoons = false;
 
 // ---------------------------------------------------------------- the bot
 
@@ -179,8 +209,8 @@ interface RunResult {
   huntDepth?: number;
 }
 
-function blankMeta(heat: number): Meta {
-  return {
+function blankMeta(heat: number, profile: Profile = envProfile): Meta {
+  const meta: Meta = {
     unlockedStarters: SPECIES.map((s) => s.id),
     unlockedPassives: [],
     equippedPassive: null,
@@ -197,12 +227,49 @@ function blankMeta(heat: number): Meta {
     heat,
     heatUnlocked: heat,
   };
+  if (profile === 'veteran') {
+    const c = camp(meta);
+    c.workshop = WORKSHOP.map((u) => u.id);
+    for (const sp of SPECIES) c.bond[sp.id] = CAMP_HEARTS[CAMP_HEARTS.length - 1];
+    // Every trait found, so heart 4's choice is open on every line.
+    meta.dex.traits = SPECIES.flatMap((sp) => traitsOf(sp.id).map((t) => `${sp.id}:${t}`));
+  }
+  return meta;
 }
 
-function play(opts: { seed: number; starter: string; heat?: number; hunt?: boolean; weekly?: string }): RunResult {
-  const meta = blankMeta(opts.heat ?? 0);
+/** The veteran's starter picks: its line's rare trait (heart 4's choice), and a Partner. */
+function veteranStart(run: Run, rng: Rng) {
+  const set = traitsOf(run.team[0].speciesId);
+  if (set.length) run.team[0].trait = set[set.length - 1];
+  const other = rng.pick(SPECIES.filter((sp) => sp.id !== run.team[0].speciesId && !LEGEND_TRAITS[sp.id]));
+  const p = addPartner(run, other.id);
+  if (p) {
+    const ps = traitsOf(p.speciesId);
+    if (ps.length) p.trait = ps[ps.length - 1];
+  }
+}
+
+function play(opts: { seed: number; starter: string; heat?: number; hunt?: boolean; weekly?: string; profile?: Profile }): RunResult {
+  const profile = opts.weekly ? 'new' : (opts.profile ?? envProfile);
+  if (profile === 'legacy') {
+    setTraitsEnabled(false);
+    skipBoons = true;
+    try {
+      return playRun(opts, profile);
+    } finally {
+      setTraitsEnabled(true);
+      skipBoons = false;
+    }
+  }
+  return playRun(opts, profile);
+}
+
+function playRun(opts: { seed: number; starter: string; heat?: number; hunt?: boolean; weekly?: string }, profile: Profile): RunResult {
+  const meta = blankMeta(opts.heat ?? 0, profile);
   const run = opts.weekly ? startWeekly(meta, opts.weekly, opts.starter) : startRun(meta, opts.starter, opts.seed, 'wildlands');
   if (!opts.weekly) run.heat = opts.heat ?? 0;
+  if (profile === 'full' && run.workshop) run.workshop.full = true;
+  if (profile === 'veteran') veteranStart(run, new Rng(opts.seed ^ 0x5eed));
   const bossFights: FightResult[] = [];
   const trait = traitOf(run.team[0]);
   const done = (r: Omit<RunResult, 'bossFights'>): RunResult => {
@@ -321,7 +388,7 @@ const boonTally: Record<string, { runs: number; wins: number }> = {};
 function botBoons(run: Run) {
   for (let guard = 0; guard < 8 && run.boons?.offer; guard++) {
     const offer = run.boons.offer;
-    if (process.env.BOONS === 'off') {
+    if (process.env.BOONS === 'off' || skipBoons) {
       skipOffer(run);
       continue;
     }
@@ -465,6 +532,106 @@ if (process.env.TRAITS_ONLY) {
   const common = on.filter((r, i) => r.trait && !isRareTrait(pickStarter(seeds[i]), r.trait as TraitId));
   o.push(`**Rare (◆) vs common:** rare-trait starters won ${pct(rare.filter((r) => r.won).length, rare.length)} (${rare.length} runs), common ${pct(common.filter((r) => r.won).length, common.length)} (${common.length} runs).`, '');
   writeFileSync('docs/TRAITS_REPORT.md', o.join('\n'));
+  console.log(o.join('\n'));
+  process.exit(0);
+}
+
+// Player profiles (2.0): the veteran across Heat, and the new player next to the game as it was.
+if (process.env.PROFILES_ONLY) {
+  const o: string[] = [];
+  const wr = (xs: RunResult[]) => xs.filter((r) => r.won).length / Math.max(1, xs.length);
+  const reached = (xs: RunResult[], f: number) => xs.filter((r) => r.floor >= f).length / Math.max(1, xs.length);
+  const p100 = (x: number) => `${Math.round(x * 100)}%`;
+  const noise = (p: number, n: number) => 2 * Math.sqrt((2 * p * (1 - p)) / Math.max(1, n));
+
+  // 1. Day one: the same Heat 0 seeds as a new player, without the Lore gate, and 1.x-like.
+  const n0 = N(2000);
+  const seeds = Array.from({ length: n0 }, () => nextSeed());
+  const early: Record<Profile, RunResult[]> = { new: [], full: [], legacy: [], veteran: [] };
+  for (const pr of ['new', 'full', 'legacy'] as Profile[]) {
+    for (const k of Object.keys(boonTally)) delete boonTally[k];
+    early[pr] = seeds.map((seed) => play({ seed, starter: pickStarter(seed), heat: 0, profile: pr }));
+    process.stderr.write(`${pr} done\n`);
+  }
+  // 2. Veterans and new players at every Heat (the same seeds for both).
+  const heats: { heat: number; runs: number; vet: RunResult[]; fresh: RunResult[] }[] = [];
+  for (let heat = 0; heat <= 8; heat++) {
+    const hs = Array.from({ length: N(300) }, () => nextSeed());
+    const vet = hs.map((seed) => play({ seed, starter: pickStarter(seed), heat, profile: 'veteran' }));
+    const fresh = hs.map((seed) => play({ seed, starter: pickStarter(seed), heat, profile: 'new' }));
+    heats.push({ heat, runs: hs.length, vet, fresh });
+    process.stderr.write(`heat ${heat} done\n`);
+  }
+  // 3. Gilded Hunt depth after a Heat 0 win.
+  const huntOf = (pr: Profile) => {
+    const d: number[] = [];
+    for (let tries = 0; d.length < N(100) && tries < N(100) * 8; tries++) {
+      const seed = nextSeed();
+      const r = play({ seed, starter: pickStarter(seed), heat: 0, hunt: true, profile: pr });
+      if (r.huntDepth) d.push(r.huntDepth);
+    }
+    return d.sort((a, b) => a - b);
+  };
+  const hunt = { new: huntOf('new'), veteran: huntOf('veteran') };
+  process.stderr.write('hunts done\n');
+
+  o.push('# Player profiles report', '');
+  o.push(`Generated by \`PROFILES_ONLY=1 npx vite-node scripts/balance.ts${scale !== 1 ? ` ${scale}` : ''}\` on ${new Date().toISOString().slice(0, 10)} (${Math.round((Date.now() - t0) / 1000)} s). The same bot as the balance report, playing as:`, '');
+  for (const pr of PROFILES) o.push(`- **${PROFILE_NAMES[pr]}**${pr === 'new' ? ': no Workshop upgrades, the Lore-locked boon and surprise pools, no camp bond.' : pr === 'full' ? ': as a new player, but with the full boon and surprise pool (2.0 without the Lore gate).' : pr === 'legacy' ? ': boons and traits off. Surprises, Elders and the rest of 2.0 stay on, so this is close to 1.x, not identical.' : ': every Workshop upgrade (Partner, Provisioner, Blessing, Lore V…) and every line at five camp bond hearts: the starter takes its rare trait, +2 levels and a bond heart, catches start with a bond heart.'}`);
+  o.push('', 'Random starter from all lines, Wildlands map. Read the numbers as relative: a thoughtful player wins more than the bot.', '');
+
+  // ---- new players
+  const nw = wr(early.new);
+  o.push('## New players: do early runs feel the same?', '', `${n0} Heat 0 runs, the same seeds for each profile. Differences under about ${Math.round(noise(nw, n0) * 100)} points are noise.`, '');
+  o.push('| Profile | Win rate | Reached floor 2 | Reached floor 3 | Boons held at the end |', '|---|---|---|---|---|');
+  for (const pr of ['new', 'full', 'legacy'] as Profile[]) {
+    const xs = early[pr];
+    o.push(`| ${PROFILE_NAMES[pr]} | **${p100(wr(xs))}** | ${p100(reached(xs, 1))} | ${p100(reached(xs, 2))} | ${(xs.reduce((t, r) => t + (r.boons?.length ?? 0), 0) / n0).toFixed(1)} |`);
+  }
+  o.push('');
+  const verdict = (a: number, b: number, what: string) => {
+    const d = a - b;
+    const band = noise((a + b) / 2, n0);
+    return `- New player vs ${what}: ${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d * 100))} points, ${Math.abs(d) <= band ? '**within noise**' : d > 0 ? '**new players win more**' : '**new players win less**'}.`;
+  };
+  o.push(verdict(nw, wr(early.full), 'the full pool (what the Lore gate changes)'));
+  o.push(verdict(nw, wr(early.legacy), '1.x-like (what boons and traits change on day one)'));
+  o.push('');
+
+  // ---- veterans
+  o.push('## Veterans: do maxed players still lose?', '', `${heats[0].runs} runs per Heat, the same seeds for both profiles.`, '');
+  o.push('| Heat | New player | Veteran | Veteran loses | Change |', '|---|---|---|---|---|');
+  for (const h of heats) {
+    const a = wr(h.fresh);
+    const b = wr(h.vet);
+    o.push(`| ${h.heat} | ${p100(a)} | **${p100(b)}** | ${p100(1 - b)} | ${b >= a ? '+' : '−'}${Math.abs(Math.round((b - a) * 100))} |`);
+  }
+  o.push('');
+  const top = heats[heats.length - 1];
+  const topLoss = 1 - wr(top.vet);
+  const zeroLoss = 1 - wr(heats[0].vet);
+  o.push(`- Targets (proposed): a veteran loses at least 1 in 4 runs at Heat ${top.heat} and at least 1 in 20 at Heat 0.`);
+  o.push(`- Heat ${top.heat}: the veteran loses **${p100(topLoss)}** (${topLoss >= 0.25 ? 'meets the target' : '**below the target: maxed players win too easily at the top**'}).`);
+  o.push(`- Heat 0: the veteran loses **${p100(zeroLoss)}** (${zeroLoss >= 0.05 ? 'meets the target' : 'below the target, which is fine at Heat 0 if Heat still bites'}).`);
+  {
+    const ends: Record<string, number> = {};
+    for (const r of top.vet) if (!r.won) ends[`F${r.floor + 1} ${r.endedBy!.startsWith('Guardian') ? 'Guardian' : r.endedBy}`] = (ends[`F${r.floor + 1} ${r.endedBy!.startsWith('Guardian') ? 'Guardian' : r.endedBy}`] ?? 0) + 1;
+    const list = Object.entries(ends).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${p100(v / top.runs)}`);
+    if (list.length) o.push(`- Where veteran runs end at Heat ${top.heat}: ${list.join(', ')}.`);
+  }
+  o.push('');
+
+  // ---- hunts
+  o.push('## Gilded Hunt depth', '', 'Hunts started right after a Heat 0 win (capped at floor 41).', '');
+  o.push('| Profile | Hunts | Median floor | Top quarter | Deepest |', '|---|---|---|---|---|');
+  for (const pr of ['new', 'veteran'] as const) {
+    const d = hunt[pr];
+    const q = (p: number) => (d.length ? d[Math.min(d.length - 1, Math.floor(d.length * p))] : 0);
+    o.push(`| ${PROFILE_NAMES[pr]} | ${d.length} | ${q(0.5)} | ${q(0.75)}+ | ${d[d.length - 1] ?? '—'} |`);
+  }
+  o.push('');
+  o.push('Bot limits: it never uses the Workshop free shop reroll or bond colours, and it ranks the team by level. Partner always adds a random other line (not legendaries).');
+  writeFileSync('docs/PROFILES_REPORT.md', o.join('\n'));
   console.log(o.join('\n'));
   process.exit(0);
 }
