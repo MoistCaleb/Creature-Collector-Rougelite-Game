@@ -43,6 +43,7 @@ import { titleNews } from '../logic/cosmetics';
 import { buyUpgrade, nextUpgrade, ownedUpgrades, workshopProgress } from '../logic/workshop';
 import { payHuntMilestones } from '../logic/huntMilestones';
 import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
+import { tip } from '../ui/tips';
 import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, floorsOf, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
@@ -237,7 +238,7 @@ export class CampScene extends Phaser.Scene {
       if (welcome) {
         sfx.coin();
         showMessage(this, 'Welcome to Hexbound 2.0!', welcomeText(welcome), () => this.scene.restart());
-      } else announceHunt(this, meta, () => {});
+      } else announceHunt(this, meta, () => tip(this, 'camp'));
       if (this.reopen) {
         const b = this.reopen;
         this.reopen = null;

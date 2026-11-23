@@ -1146,7 +1146,7 @@ export class MapScene extends Phaser.Scene {
     if (omen) playMusic('omen');
     showMessage(this, 'A rare surprise!', lines.join('\n\n'), () => {
       if (omen) this.mapMusic();
-      then();
+      tip(this, 'surprise', then);
     });
   }
 

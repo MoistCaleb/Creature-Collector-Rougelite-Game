@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { rollTrait, TRAITS, type TraitId } from '../data/traits';
 import { traitDescOf, traitName } from '../ui/traitText';
+import { tip } from '../ui/tips';
 import { bondColours, bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTrait } from '../logic/camp';
 import { traitsFound } from '../logic/dex';
 import { SPECIES_BY_ID } from '../data/species';
@@ -176,6 +177,8 @@ export class StarterScene extends Phaser.Scene {
         this.scene.start(this.daily || this.weekly ? 'Daily' : 'MapSelect', { quick: this.quick });
       }, { fontSize: 15, glyph: 'back' });
     }
+    // First time: what traits are.
+    if (choices.some((id) => this.cardTrait(id))) tip(this, 'traits');
   }
 
   /** The trait a card shows: your chosen one (camp bond heart 4, normal runs), else rolled. */

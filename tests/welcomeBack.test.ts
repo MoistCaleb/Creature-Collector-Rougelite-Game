@@ -9,7 +9,7 @@ const store: Record<string, string> = {};
 
 const { loadMeta, saveMeta } = await import('../src/logic/run');
 const { camp } = await import('../src/logic/camp');
-const { payWelcomeBack, WELCOME_CAP, WELCOME_PER_RUN, WELCOME_PER_WIN, welcomeGift, welcomeText } = await import('../src/logic/welcomeBack');
+const { needsTour, payWelcomeBack, WELCOME_CAP, WELCOME_PER_RUN, WELCOME_PER_WIN, welcomeGift, welcomeText } = await import('../src/logic/welcomeBack');
 
 const storage = await import('../src/storage');
 const KEY = 'ccr-meta-v1';
@@ -48,5 +48,17 @@ describe('welcome-back embers (2.0)', () => {
     fresh.wins = 5;
     saveMeta(fresh);
     expect(payWelcomeBack(loadMeta())).toBeNull();
+  });
+
+  it('shows the 2.0 tour once, only to saves that played before 2.0', () => {
+    const fresh = loadMeta();
+    expect(needsTour(fresh)).toBe(false);
+    fresh.welcome = { embers: 20, wins: 2, runs: 2, paid: true };
+    expect(needsTour(fresh)).toBe(true);
+    fresh.welcome.toured = true;
+    expect(needsTour(fresh)).toBe(false);
+    // An old save with no runs (opened but never played): nothing to tour, the tips teach it.
+    fresh.welcome = { embers: 0, wins: 0, runs: 0, paid: false };
+    expect(needsTour(fresh)).toBe(false);
   });
 });

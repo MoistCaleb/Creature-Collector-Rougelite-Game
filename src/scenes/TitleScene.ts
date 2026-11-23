@@ -1,7 +1,10 @@
 import { accountsAvailable, currentUser } from '../net/account';
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed } from '../logic/run';
+import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed, saveMeta } from '../logic/run';
+import { needsTour } from '../logic/welcomeBack';
+import { prefs } from '../ui/prefs';
+import { openTour } from '../ui/tour';
 import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
@@ -159,7 +162,13 @@ export class TitleScene extends Phaser.Scene {
     this.events.once('shutdown', off);
 
     // After an update: what changed (once). Otherwise, once you have a title: where to find titles.
-    if (!maybeShowWhatsNew(this, meta.runs > 0) && earnedTitles(meta).length) tip(this, 'titles');
+    // Played before 2.0: the 2.0 tour instead (once; it covers what's new).
+    if (needsTour(meta)) {
+      meta.welcome!.toured = true;
+      prefs.lastVersion = APP_VERSION;
+      saveMeta(meta);
+      openTour(this, meta.welcome!.paid ? 0 : meta.welcome!.embers);
+    } else if (!maybeShowWhatsNew(this, meta.runs > 0) && earnedTitles(meta).length) tip(this, 'titles');
 
     // How to play and Records (sideways: under the title, on the left).
     const hx = LANDSCAPE ? lx : cx;

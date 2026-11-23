@@ -19,6 +19,8 @@ export interface WelcomeBack {
   wins: number;
   runs: number;
   paid: boolean;
+  /** The 2.0 tour has been shown (once, for saves that played before 2.0). */
+  toured?: boolean;
 }
 
 /** The gift for this much past progress. */
@@ -56,3 +58,6 @@ export function welcomeText(w: WelcomeBack): string {
   const parts = [`${w.wins} win${w.wins === 1 ? '' : 's'}`, ...(runs > 0 ? [`${runs} other run${runs === 1 ? '' : 's'}`] : [])];
   return `For your ${parts.join(' and ')} so far, the camp gives you ${w.embers} embers${w.embers >= WELCOME_CAP ? ' (the most it gives)' : ''}.\n\nSpend them in the Workshop on lasting upgrades, or on decorations at the Ember stall. Every run pays more embers from now on, win or lose.`;
 }
+
+/** Played before 2.0 and hasn't had the 2.0 tour yet (new players learn from the first-time tips). */
+export const needsTour = (meta: Meta): boolean => !!meta.welcome && meta.welcome.runs > 0 && !meta.welcome.toured;

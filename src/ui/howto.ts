@@ -77,6 +77,17 @@ export const HOW_TO_PLAY: Page[] = [
     ],
   },
   {
+    title: 'Traits',
+    glyph: 'gem',
+    lines: [
+      'Every Hexling has a trait: a passive that works on its own, in battle or on the map.',
+      'Each line has three possible traits: two common and one rare (◆, about 1 in 7). Legendaries each have their own.',
+      'Evolving keeps the trait, and the final form makes it stronger.',
+      'Tap a trait on the starter pick, team screen or Hexlidex to read it. The Hexlidex shows which of a line\'s traits you\'ve found.',
+      'In the Arena you can give a Hexling any trait you\'ve found for its line.',
+    ],
+  },
+  {
     title: 'Rare surprises',
     glyph: 'star',
     lines: [
