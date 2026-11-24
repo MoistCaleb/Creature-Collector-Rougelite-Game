@@ -1,6 +1,7 @@
 import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
 import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
+import { surpriseBadge, surpriseEdge, surpriseTint } from '../ui/surpriseUi';
 import { BOONS } from '../data/boons';
 import { boonCardText, boonRowColor, openBoonList, openBoonOffer } from '../ui/boonPick';
 import { boonBadge } from '../ui/boonUi';
@@ -23,6 +24,7 @@ import {
   usesText,
   moveDef,
   recommendForget,
+  recommendReason,
   naturalMoves,
   resolvePending,
   stats,
@@ -332,6 +334,9 @@ export class MapScene extends Phaser.Scene {
       max: () => this.maxScroll,
     });
 
+    // A rare floor or omen colours the map (over the hexes, under the bars), and the screen's edge glows.
+    surpriseTint(this, run, { x: -OX, y: -OY, w: FW, h: FH });
+    surpriseEdge(this, run, { x: -OX, y: -OY, w: FW, h: FH });
     this.drawTopBar();
     this.drawBottomBar();
 
@@ -393,10 +398,11 @@ export class MapScene extends Phaser.Scene {
     const nm = MOVES[id];
     const rec = recommendForget(c, id);
     const tag = 'RECOMMENDED';
+    const why = recommendReason(c, id, rec);
     const fromLand = c.landMoves?.includes(id) ? `\nLearned from the ${nm.element} lands, in place of its usual move.` : '';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
-      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}${fromLand}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}${fromLand}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)${why ? `\nSuggested: ${rec === null ? `don't learn it` : `forget ${moveDef(c.moves[rec]).name}`}. ${why}` : ''}`,
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...c.moves.map((m, i) => {
@@ -473,8 +479,16 @@ export class MapScene extends Phaser.Scene {
     const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });
     if ((run.bag ?? []).length) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
     button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
-    // Boons: a badge just under the bar.
-    this.boonChip(10, TOP_BAR + 20, W - 20);
+    // Boons: a badge just under the bar, and active surprises (omen, rare floor, Elder) at its right.
+    const sw = this.surpriseChip(W - 10, TOP_BAR + 20, W * 0.45);
+    this.boonChip(10, TOP_BAR + 20, W - 20 - (sw ? sw + 8 : 0));
+  }
+
+  /** A pink badge while a surprise is active (right-aligned at x); tap to read them again. Returns its width. */
+  private surpriseChip(x: number, y: number, maxW: number): number {
+    const b = surpriseBadge(this, state.run!, x, y, { maxW });
+    b?.setDepth(6);
+    return b?.width ?? 0;
   }
 
   /** Boons held: a glowing badge with a gem for each; tap for the list. */
@@ -509,6 +523,7 @@ export class MapScene extends Phaser.Scene {
     pixelIcon(this, 100, 80, 'stone', 16);
     text(this, 112, 70, `${run.evoStones}`, 16, run.evoStones ? '#e0a8ff' : COLORS.textDim, { fontStyle: 'bold' });
     this.boonChip(10, 140, SIDE_L - 20);
+    this.surpriseChip(SIDE_L - 10, run.race ? 440 : 392, SIDE_L - 20);
     if (run.map.layout === 'rows' && !run.bossPending) {
       const steps = stepsToBoss(run.map, run.currentId);
       pixelIcon(this, 21, 109, 'skull', 14);

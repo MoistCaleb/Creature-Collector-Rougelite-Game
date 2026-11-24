@@ -2,6 +2,7 @@ import { DOJO_ROUNDS, dojoOn, dojoResult, elderHere, floorSurprise, omenCoinMult
 import { BOON_COLOR, BOONS } from '../data/boons';
 import { floorCurse, hasBoon } from '../logic/boons';
 import { boonBadge } from '../ui/boonUi';
+import { surpriseBadge } from '../ui/surpriseUi';
 import { openBoonList } from '../ui/boonPick';
 import { traitLine } from '../ui/traitText';
 import { TRAITS, type TraitId } from '../data/traits';
@@ -20,7 +21,7 @@ import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, cleanLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
-import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
+import { battleBackdrop, battlePad, battleSky, fieldWeather, onField, pickStage, stageMood, type Mood } from '../ui/backdrops';
 import { arenaBackdrop, arenaPad, type Crowd } from '../ui/arena';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
@@ -267,6 +268,10 @@ export class BattleScene extends Phaser.Scene {
     // "already wrapped up" flag, queued next step or fast-forward.
     this.watchEnded = false;
     this.duelNext = null;
+    this.weatherShown = null;
+    this.weatherFx = [];
+    this.skySynced = false;
+    this.field = null;
     this.fast = false;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
@@ -404,6 +409,7 @@ export class BattleScene extends Phaser.Scene {
       openGameMenu(this, () => this.afterMenu(), this.shownEnemy ? creatureTypes(this.shownEnemy) : []);
     }, { glyph: 'menu' }).setDepth(5);
     this.drawBoonBadge();
+    this.drawSurpriseBadge();
 
     this.refreshEnemy();
     this.refreshPlayer();
@@ -653,7 +659,11 @@ export class BattleScene extends Phaser.Scene {
   /** The weather's look over the field, matching the battle's weather (none when it clears). */
   private weatherFx: Phaser.GameObjects.GameObject[] = [];
   private weatherShown: string | null = null;
+  /** The sky's been matched to the battle once (the first time is instant, no crossfade). */
+  private skySynced = false;
   private showWeather() {
+    this.syncSky(!this.skySynced);
+    this.skySynced = true;
     const w = this.battle.weather;
     if (w === this.weatherShown) return;
     this.weatherShown = w;
@@ -673,9 +683,38 @@ export class BattleScene extends Phaser.Scene {
 
   /** The element's environment behind the field, and a pad under each side. */
   private drawField(el: Element, stage: number) {
-    battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
-    battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72);
-    battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72);
+    const sky = battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
+    const pads = [...battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72), ...battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72)];
+    this.field = { el, stage, sky, pads, mood: stageMood(el, stage) };
+  }
+
+  /** The painted field, so the time of day can change mid-battle. */
+  private field: { el: Element; stage: number; sky: Phaser.GameObjects.Image; pads: Phaser.GameObjects.Ellipse[]; mood: Mood } | null = null;
+
+  /** The sky follows the battle: sun makes it day, night falling makes it night (a crossfade). */
+  private syncSky(instant = false) {
+    const f = this.field;
+    if (!f || !this.battle) return;
+    const want: Mood = this.battle.weather === 'sun' || this.battle.dawn ? 'day' : this.battle.night ? 'night' : stageMood(f.el, f.stage);
+    if (want === f.mood) return;
+    f.mood = want;
+    const board = { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH };
+    const sky = battleSky(this, f.el, f.stage, board, L.field, want);
+    this.children.moveAbove(sky, f.sky);
+    const pads = [...battlePad(this, f.el, f.stage, ENEMY_POS.x, ENEMY_POS.y + 72, 200, want), ...battlePad(this, f.el, f.stage, PLAYER_POS.x, PLAYER_POS.y + 72, 200, want)];
+    // Each new pad piece sits just above the old one, under the Hexlings.
+    pads.forEach((p, i) => this.children.moveAbove(p, f.pads[i]));
+    const old = [f.sky, ...f.pads];
+    f.sky = sky;
+    f.pads = pads;
+    const fresh = [sky, ...pads];
+    if (instant || calm()) {
+      old.forEach((o) => o.destroy());
+      return;
+    }
+    const alphas = fresh.map((o) => o.alpha);
+    fresh.forEach((o) => o.setAlpha(0));
+    fresh.forEach((o, i) => this.tweens.add({ targets: o, alpha: alphas[i], duration: 1400, ease: 'Sine.easeInOut', onComplete: i === 0 ? () => old.forEach((x) => x.destroy()) : undefined }));
   }
 
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
@@ -1158,6 +1197,17 @@ export class BattleScene extends Phaser.Scene {
     this.boonBadge = b;
   }
 
+  /** Run battles: the active surprises (omen, rare floor, Elder), a pink badge under the menu button. */
+  private drawSurpriseBadge() {
+    const run = state.run;
+    if (this.match || !run) return;
+    // Upright: under the menu button. Sideways: left of it (and of the boons), above the message box.
+    const right = LANDSCAPE ? (this.boonBadge ? this.boonBadge.x - 8 : L.menu.x - 24 - 8) : L.menu.x + 24;
+    const y = LANDSCAPE ? L.menu.y : L.menu.y + 18 + 6 + 14;
+    const b = surpriseBadge(this, run, right, y, { maxW: LANDSCAPE ? 180 : 170, h: LANDSCAPE ? 32 : 28, canTap: () => !this.busy });
+    b?.setDepth(5);
+  }
+
   /** A boon kicked in: a ribbon with its name slides in by that side's panel, with a chime. */
   private async boonCallout(side: 'player' | 'enemy', id: string, more: boolean) {
     const b = BOONS[id];
@@ -1345,9 +1395,12 @@ export class BattleScene extends Phaser.Scene {
       );
       this.actions.add(text(this, L.fallback.x, L.fallback.noteY, 'Out of move uses! Rest, bench it, or use a Full Restore.', 13, '#ffc94d', { align: 'center', wordWrap: { width: L.fallback.w } }).setOrigin(0.5, 0));
     }
+    // Jeered: only attacks work for now.
+    const jeered = (this.battle.p.jeer ?? 0) > 0;
     p.moves.forEach((m, i) => {
       if (outOfMoves(p)) return;
       const d = moveDef(m);
+      const usable = hasUses(m) && !(jeered && d.kind !== 'attack');
       const mult = d.kind === 'attack' ? typeMultiplier(attackEl(d), creatureTypes(e)) : 1;
       const hint = d.kind !== 'attack' ? '' : mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
       const x = x0 + bw / 2 + (i % 2) * (bw + gap);
@@ -1358,14 +1411,14 @@ export class BattleScene extends Phaser.Scene {
           color,
           sub: `${moveSummary(d, m.tier)}  ·  ${'✦'.repeat(m.tier)}`,
           fontSize: 17,
-          enabled: hasUses(m),
+          enabled: usable,
           // Long names stay on one line (shrinking), clear of the accuracy and uses in the corners.
           oneLine: true,
           contentDy: LANDSCAPE ? 6 : 2,
         }),
       );
       // Hit chance in the top-left corner; limited moves show their uses left in the top-right.
-      this.actions.add(text(this, x - bw / 2 + 6, y - bh / 2 + 2, accText(d), 11, d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(hasUses(m) ? 1 : 0.5));
+      this.actions.add(text(this, x - bw / 2 + 6, y - bh / 2 + 2, jeered && d.kind !== 'attack' ? 'JEERED' : accText(d), 11, jeered && d.kind !== 'attack' ? '#ff8a7a' : d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(usable ? 1 : 0.6));
       const left = usesLeft(m);
       if (Number.isFinite(left)) {
         const max = maxUses(d)!;
@@ -1511,13 +1564,15 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
     }
+    // Snare: the one out can't leave until it slips free.
+    const snared = !forced && this.battle.snared('player');
     openPicker(this, {
       title: forced ? 'Choose your next Hexling' : 'Switch Hexling',
-      subtitle: forced ? undefined : 'Switching uses your turn.',
+      subtitle: forced ? undefined : snared ? `${creatureName(this.battle.p.c)} is caught in a Snare! It can't switch out for ${this.battle.p.snare} more turn${this.battle.p.snare === 1 ? '' : 's'}.` : 'Switching uses your turn.',
       options: list.map((x, i) => ({
         creature: x.c,
-        disabled: i === this.battle.pActive || !isAlive(x.c),
-        note: i === this.battle.pActive ? 'In battle' : !isAlive(x.c) ? 'Fallen' : undefined,
+        disabled: i === this.battle.pActive || !isAlive(x.c) || snared,
+        note: i === this.battle.pActive ? (snared ? 'Snared' : 'In battle') : !isAlive(x.c) ? 'Fallen' : undefined,
       })),
       onPick: pick,
       onCancel: forced ? undefined : () => this.maybeAuto(),
@@ -1576,6 +1631,8 @@ export class BattleScene extends Phaser.Scene {
           if (ev === shownEarly) break;
           this.say(ev.text, events, idx);
           if (ev.text === 'It missed!') sfx.miss();
+          // Night falling (a trait) shows in the sky.
+          if (ev.text.endsWith('night falls over the battle.') || ev.text.endsWith('Dawn breaks over the battle.')) this.syncSky();
           await this.wait(620);
           break;
         case 'stat': {
@@ -1753,6 +1810,15 @@ export class BattleScene extends Phaser.Scene {
         this.fxChips.add(t.setPosition(x + 5, y + 2));
         x += side === 'player' ? -4 : w + 4;
       }
+      // Neutral moves on this side's Hexling: Jeer, Echo, Snare, Toll, Hush, Mirror Veil.
+      for (const [label, color] of this.neutralTags(side)) {
+        const t = text(this, 0, 0, label, 11, '#1a1426', { fontStyle: 'bold' });
+        const w = t.width + 10;
+        if (side === 'player') x -= w;
+        this.fxChips.add(this.add.rectangle(x, y, w, 16, color).setOrigin(0));
+        this.fxChips.add(t.setPosition(x + 5, y + 2));
+        x += side === 'player' ? -4 : w + 4;
+      }
       // Time Warp and the weather are on the whole field: chips with the enemy's.
       if (side === 'enemy' && this.battle.warp > 0) {
         const t = text(this, 0, 0, `TIME WARP · ${this.battle.warp}`, 11, '#1a1426', { fontStyle: 'bold' });
@@ -1769,6 +1835,20 @@ export class BattleScene extends Phaser.Scene {
         this.fxChips.add(t.setPosition(x + 5, y + 2));
       }
     }
+  }
+
+  /** Chips for the Neutral moves working on a side's Hexling, with turns left. */
+  private neutralTags(side: 'player' | 'enemy'): [string, number][] {
+    const x = side === 'player' ? this.battle.p : this.battle.e;
+    if (!x || !isAlive(x.c)) return [];
+    const out: [string, number][] = [];
+    if (x.jeer) out.push([`JEERED · ${x.jeer}`, 0xff8a7a]);
+    if (x.echo) out.push([`ECHO · ${x.echo}`, 0xc8a0ff]);
+    if (x.snare) out.push([`SNARED · ${x.snare}`, 0xa0c070]);
+    if (x.toll) out.push([`TOLL · ${x.toll}`, 0xd0b060]);
+    if (x.hush) out.push([`HUSHED · ${x.hush}`, 0x9ab0d0]);
+    if (x.veiled) out.push(['MIRROR VEIL', 0xbfe8ff]);
+    return out;
   }
 
   private afterTurn() {

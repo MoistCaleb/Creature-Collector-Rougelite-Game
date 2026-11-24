@@ -1,6 +1,7 @@
 import { BOND_ENDURE, bondHearts } from '../data/natures';
 import { BALANCE } from '../data/balance';
 import { WEATHER, WEATHER_CHIP, WEATHER_IDS, weatherMult, weatherShort, weatherTurns, type WeatherId } from '../data/moves';
+import { echoTurns, hushTurns, jeerTurns, MOVES, NEUTRAL, neutralHaste, snareSpeed, snareTurns, TOLL_TURNS, tollDamage, veilCut, type NeutralFx } from '../data/moves';
 import { attackEl, attackValue, bulwarkRepeat, effectsAtTier, speedPower, warpTurns, healAtTier, MAX_STAGE, mendHeal, STAT_LABEL, TEAM_FX, teamFxTurns, TIER_POWER, type MoveDef, type StatKey, type TeamFxId } from '../data/moves';
 import type { BossRule } from '../data/trainers';
 import type { Element } from '../data/types';
@@ -44,6 +45,15 @@ export interface Combatant {
   phantom?: boolean;
   rampage?: number;
   forged?: number;
+  /** Neutral moves on it: Jeer, Echo and Snare turns left, the move Echo repeats, Mirror Veil up this turn (and its damage cut), Toll's countdown and bite, Hush turns left. */
+  jeer?: number;
+  echo?: number;
+  lastMove?: string;
+  veiled?: number;
+  toll?: number;
+  tollDmg?: number;
+  snare?: number;
+  hush?: number;
 }
 
 /** Element Touch: the status each element's hits can cause. */
@@ -73,11 +83,17 @@ export interface BattleState {
   night?: boolean;
   /** Time Warp turns left. */
   warp?: number;
+  /** Turn of Day made it day (on a floor where it would be night). */
+  dawn?: boolean;
+  /** Neutral move effects on each Hexling: [jeer, echo, toll, tollDmg, snare, hush], and Echo's move. */
+  neutral?: { player: NeutralSave[]; enemy: NeutralSave[] };
   /** uids that already hung on through their bond this battle. */
   bonded?: number[];
   weather?: WeatherId | null;
   weatherLeft?: number;
 }
+
+export type NeutralSave = [number, number, number, number, number, number, string | null];
 
 export type PlayerAction =
   | { kind: 'move'; index: number }
@@ -184,8 +200,14 @@ export class Battle {
   /** The weather (set by a weather move) and its turns left. */
   weather: WeatherId | null = null;
   weatherLeft = 0;
-  /** Night falls (Night Stalker, Eclipse): it lasts the battle. */
+  /** Night falls (Night Stalker, Eclipse): it lasts the battle (unless Turn of Day turns it). */
   night = false;
+  /** Turn of Day brought the day: the sky shows day even on a night floor. */
+  dawn = false;
+  /** Whose Hexling has already had its go this turn (moved, switched or used a potion). */
+  private acted: Record<Side, boolean> = { player: false, enemy: false };
+  /** This turn, Echo made this side repeat its last move instead of the one picked. */
+  private echoed: Record<Side, boolean> = { player: false, enemy: false };
   /** Who moved first this turn (Patient). */
   private firstSide: Side | null = null;
 
@@ -362,6 +384,8 @@ export class Battle {
       weather: this.weather,
       weatherLeft: this.weatherLeft,
       night: this.night,
+      dawn: this.dawn,
+      neutral: { player: this.player.map(neutralSave), enemy: this.enemy.map(neutralSave) },
       bonded: this.player.filter((x) => x.bonded).map((x) => x.c.uid),
     };
   }
@@ -388,6 +412,11 @@ export class Battle {
     this.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
     this.setWeather(s.weather, s.weatherLeft);
     this.night = !!s.night;
+    this.dawn = !!s.dawn && !this.night;
+    if (s.neutral) {
+      this.player.forEach((x, i) => neutralLoad(x, s.neutral!.player?.[i]));
+      this.enemy.forEach((x, i) => neutralLoad(x, s.neutral!.enemy?.[i]));
+    }
     if (Array.isArray(s.bonded)) for (const x of this.player) if (s.bonded.includes(x.c.uid)) x.bonded = 'spent';
   }
 
@@ -478,7 +507,14 @@ export class Battle {
   }
 
   canSwapTo(index: number): boolean {
+    if (this.snared('player')) return false;
     return index !== this.pActive && !!this.player[index] && isAlive(this.player[index].c);
+  }
+
+  /** Snare: this side's Hexling (still standing) can't be switched out. */
+  snared(side: Side): boolean {
+    const x = side === 'player' ? this.p : this.e;
+    return !!x && isAlive(x.c) && (x.snare ?? 0) > 0;
   }
 
   /** Free switch after your active creature faints. */
@@ -500,10 +536,14 @@ export class Battle {
     this.turnNo++;
     this.fatigueNotice(ev);
     this.firstSide = null;
+    this.acted = { player: false, enemy: false };
+    this.echoed = { player: false, enemy: false };
     // Trainers may switch or drink a potion instead of attacking; that happens first.
     const plan = this.enemyPlan();
     if (plan) this.doEnemyPlan(plan, ev);
-    const enemyMove = plan ? null : this.chooseEnemyMove();
+    if (plan) this.acted.enemy = true;
+    const enemyMove = plan ? null : this.echoSlot('enemy', this.chooseEnemyMove());
+    if (action.kind !== 'move') this.acted.player = true;
 
     if (action.kind === 'potion') {
       const x = this.player[action.index];
@@ -539,7 +579,7 @@ export class Battle {
       const enemyAtStart = this.e;
       // A move with no uses left (or index -1) falls back to the creature's basic attack.
       const chosen = this.p.c.moves[action.index];
-      const pSlot = chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c);
+      const pSlot = this.echoSlot('player', chosen && hasUses(chosen) ? chosen : fallbackMove(this.p.c));
       const pPri = !!moveDef(pSlot).priority || this.clawProc(this.p) || this.slipping(this.p) || this.firstStrike('player');
       const ePri = !!enemyMove && (!!moveDef(enemyMove).priority || this.clawProc(this.e) || this.slipping(this.e) || this.firstStrike('enemy'));
       // The Tailwind boss always goes first, except under Time Warp (then speed decides, slower first).
@@ -568,6 +608,7 @@ export class Battle {
   // ------------------------------------------------------------ duels
 
   canEnemySwapTo(index: number): boolean {
+    if (this.snared('enemy')) return false;
     return index !== this.eActive && !!this.enemy[index] && isAlive(this.enemy[index].c);
   }
 
@@ -607,6 +648,8 @@ export class Battle {
     this.turnNo++;
     this.fatigueNotice(ev);
     this.firstSide = null;
+    this.acted = { player: pAct.kind !== 'move', enemy: eAct.kind !== 'move' };
+    this.echoed = { player: false, enemy: false };
     const names = this.duel ?? { player: 'You', enemy: 'The enemy' };
     if (pAct.kind === 'swap' && this.canSwapTo(pAct.index)) {
       ev.push({ kind: 'text', text: `${names.player} calls back ${creatureName(this.p.c)}.` });
@@ -651,8 +694,10 @@ export class Battle {
       const m = c.moves[act.index];
       return m && hasUses(m) ? m : fallbackMove(c);
     };
-    const pSlot = slotFor(pAct, this.p.c);
-    const eSlot = slotFor(eAct, this.e.c);
+    const pRaw = slotFor(pAct, this.p.c);
+    const eRaw = slotFor(eAct, this.e.c);
+    const pSlot = pRaw && this.echoSlot('player', pRaw);
+    const eSlot = eRaw && this.echoSlot('enemy', eRaw);
     const pAt = this.p;
     const eAt = this.e;
     let order: Side[] = [];
@@ -678,7 +723,12 @@ export class Battle {
   // ------------------------------------------------------------ traits (2.0)
 
   private is(x: Combatant, id: TraitId): boolean {
-    return traitOf(x.c) === id;
+    return this.tr(x) === id;
+  }
+
+  /** Its trait, unless Hush has silenced it. */
+  private tr(x: Combatant): TraitId | null {
+    return x.hush ? null : (traitOf(x.c) ?? null);
   }
 
   private tv(x: Combatant, id: TraitId): number {
@@ -687,13 +737,13 @@ export class Battle {
 
   /** "Enemy Magmite's Magma Skin" */
   private traitName(x: Combatant, side: Side): string {
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     return `${this.nameOf(side, x.c)}'s ${t ? TRAITS[t].name : 'trait'}`;
   }
 
   /** The trait fired: queue its callout, and give its name for the line that follows. */
   private tcall(x: Combatant, side: Side, ev: BattleEvent[]): string {
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     if (t) ev.push({ kind: 'trait', side, id: t });
     return this.traitName(x, side);
   }
@@ -701,7 +751,7 @@ export class Battle {
   /** Run something a trait might cause; the callout goes in front only if it did. */
   private ifCalled(x: Combatant, side: Side, ev: BattleEvent[], fn: () => boolean): boolean {
     const n = ev.length;
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     if (!fn()) return false;
     if (t) ev.splice(n, 0, { kind: 'trait', side, id: t });
     return true;
@@ -713,7 +763,7 @@ export class Battle {
     x.turnsIn = 0;
     x.eagerUsed = false;
     if (resuming) return;
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     if (!t) return;
     const who = this.traitName(x, side);
     // Every trait here announces itself (Night Stalker only if it isn't night already).
@@ -772,7 +822,7 @@ export class Battle {
 
   /** Speed from traits: Quick Start's first turns, Night Stalker at night, Rain Rider in rain. */
   private traitSpeed(x: Combatant): number {
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     if (t === 'quickstart' && (x.turnsIn ?? 0) < 2) return stageMult(this.tv(x, t));
     if (t === 'nightstalker' && this.night) return stageMult(1);
     if (t === 'rainrider' && this.weather === 'rain') return stageMult(this.tv(x, t));
@@ -810,13 +860,13 @@ export class Battle {
 
   /** Would a hit of this element be soaked up by the target's trait (the AI reads traits)? */
   private soaks(x: Combatant, el: Element): boolean {
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     return !!t && TRAITS[t].absorb === el && isAlive(x.c);
   }
 
   /** Absorbers: a hit of their element heals them instead. */
   private absorbs(x: Combatant, side: Side, el: Element, ev: BattleEvent[]): boolean {
-    const t = traitOf(x.c);
+    const t = this.tr(x);
     if (!t || TRAITS[t].absorb !== el || !isAlive(x.c)) return false;
     const max = stats(x.c).hp;
     x.c.hp = Math.min(max, x.c.hp + this.mend(Math.ceil(max * this.tv(x, t))));
@@ -836,7 +886,7 @@ export class Battle {
   /** Damage from the attacker's and the defender's traits (and benched Cheerleaders). */
   private traitMult(user: Combatant, target: Combatant, def: MoveDef, el: Element, powerMult: number, side: Side, rmult: number, why?: Why): number {
     let m = 1;
-    const t = traitOf(user.c);
+    const t = this.tr(user);
     const v = t ? this.tv(user, t) : 0;
     switch (t) {
       case 'heavy':
@@ -886,7 +936,7 @@ export class Battle {
       note(why, TRAITS.cheer.name, k);
       m *= k;
     }
-    const d = traitOf(target.c);
+    const d = this.tr(target);
     const before = m;
     const dv = d ? this.tv(target, d) : 0;
     switch (d) {
@@ -909,7 +959,7 @@ export class Battle {
 
   /** After a move lands: the user's traits, then the target's traits striking back. */
   private traitsAfterHit(user: Combatant, side: Side, target: Combatant, targetSide: Side, el: Element, total: number, superHit: boolean, ev: BattleEvent[]) {
-    const ut = traitOf(user.c);
+    const ut = this.tr(user);
     const umax = stats(user.c).hp;
     const uname = this.traitName(user, side);
     if (ut && isAlive(user.c)) {
@@ -934,7 +984,7 @@ export class Battle {
       if (ut === 'touch' && isAlive(target.c) && !target.status && this.rng.chance(v))
         this.ifCalled(user, side, ev, () => this.inflict(target, targetSide, TOUCH_STATUS[creatureTypes(user.c)[0]], ev, `${uname}: `, { x: user, side }));
     }
-    const tt = traitOf(target.c);
+    const tt = this.tr(target);
     if (tt && total > 0 && isAlive(user.c)) {
       const tv = this.tv(target, tt);
       const tn = this.traitName(target, targetSide);
@@ -994,7 +1044,7 @@ export class Battle {
       const x = side === 'player' ? this.p : this.e;
       if (!x || !isAlive(x.c)) continue;
       x.turnsIn = (x.turnsIn ?? 0) + 1;
-      const t = traitOf(x.c);
+      const t = this.tr(x);
       if (!t) continue;
       const v = this.tv(x, t);
       const max = stats(x.c).hp;
@@ -1330,7 +1380,7 @@ export class Battle {
     const foeFrac = this.e.c.hp / stats(this.e.c).hp;
     const mine = this.autoMatchup(p);
     // Switch out of a bad matchup when a healthy teammate does at least twice as well (not twice in a row).
-    if (this.turnNo - this.lastAutoSwitch > 2 && foeFrac > 0.2) {
+    if (!this.snared('player') && this.turnNo - this.lastAutoSwitch > 2 && foeFrac > 0.2) {
       const i = this.bestPlayerAnswer(this.pActive);
       const alt = i >= 0 ? this.player[i] : null;
       if (alt && alt.c.hp / stats(alt.c).hp > 0.4 && this.autoMatchup(alt) > mine * 2) {
@@ -1349,18 +1399,19 @@ export class Battle {
     const t = this.tactics;
     if (!t || this.spared || !isAlive(this.e.c) || !isAlive(this.p.c)) return null;
     const e = this.e;
+    const trapped = this.snared('enemy');
     const frac = e.c.hp / stats(e.c).hp;
     const badStatus = e.status === 'sleep' || e.status === 'freeze' || ((e.status === 'burn' || e.status === 'poison') && frac < 0.6);
     if (t.potions > 0 && (frac < 0.3 || (badStatus && frac < 0.8)) && this.rng.chance(0.7)) return { kind: 'potion' };
     // Switch when the player's creature hits this one super-effectively and a teammate takes it far better.
-    if (this.turnNo - this.lastEnemySwitch > 2 && this.threatTo(e) > 1.2 && frac > 0.2) {
+    if (!trapped && this.turnNo - this.lastEnemySwitch > 2 && this.threatTo(e) > 1.2 && frac > 0.2) {
       const i = this.bestEnemyAnswer(this.eActive);
       if (i >= 0 && this.threatTo(this.enemy[i]) <= 1 && this.enemy[i].c.hp / stats(this.enemy[i].c).hp > 0.4 && this.rng.chance(0.6)) {
         return { kind: 'swap', index: i };
       }
     }
     // Every attack it has would be soaked up by the player's trait: send in someone who can hurt it.
-    if (this.turnNo - this.lastEnemySwitch > 2 && this.punchOf(e) < 0.5) {
+    if (!trapped && this.turnNo - this.lastEnemySwitch > 2 && this.punchOf(e) < 0.5) {
       const i = this.bestEnemyAnswer(this.eActive);
       if (i >= 0 && this.punchOf(this.enemy[i]) >= 0.5) return { kind: 'swap', index: i };
     }
@@ -1434,6 +1485,8 @@ export class Battle {
     user.c.moves.forEach((m, i) => {
       if (!hasUses(m)) return;
       const d = moveDef(m);
+      // Jeered: only attacks will work.
+      if (user.jeer && d.kind !== 'attack') return;
       let score = d.kind !== 'attack' ? this.statusScore(m, user, foe) : this.attackScore(user, foe, m);
       if (side === 'player' && Number.isFinite(usesLeft(m)) && d.kind === 'attack') {
         const el = attackElement(d, user, foe);
@@ -1515,6 +1568,215 @@ export class Battle {
     }
   }
 
+  // ------------------------------------------------------------ the other Neutral moves
+
+  /** Echo: a Hexling caught in it uses its last move again, whatever was picked. */
+  private echoSlot(side: Side, slot: MoveSlot): MoveSlot {
+    const x = side === 'player' ? this.p : this.e;
+    if (!x?.echo || !x.lastMove || slot.id === x.lastMove) return slot;
+    const m = x.c.moves.find((s) => s.id === x.lastMove);
+    this.echoed[side] = true;
+    return m && hasUses(m) ? m : fallbackMove(x.c);
+  }
+
+  /** Turns for an effect put on a Hexling: one more if it has already had its go this turn. */
+  private span(side: Side, n: number): number {
+    return n + (this.acted[side] ? 1 : 0);
+  }
+
+  /** side: whoever the move works for (after Mirror Veil, the one who bounced it). */
+  private useNeutral(side: Side, n: NeutralFx, tier: number, ev: BattleEvent[]) {
+    const user = side === 'player' ? this.p : this.e;
+    const foeSide: Side = side === 'player' ? 'enemy' : 'player';
+    const foe = side === 'player' ? this.e : this.p;
+    const who = this.nameOf(side, user.c);
+    const them = this.nameOf(foeSide, foe.c);
+    const failed = (why: string) => ev.push({ kind: 'text', text: `But it failed! ${why}` });
+    const haste = () => {
+      if (neutralHaste(tier) && isAlive(user.c)) this.bump(user, side, 'spd', neutralHaste(tier), ev);
+    };
+    switch (n) {
+      case 'jeer': {
+        if (foe.jeer) return failed(`${them} is already riled up.`);
+        foe.jeer = this.span(foeSide, jeerTurns(tier));
+        ev.push({ kind: 'stat', side: foeSide, up: false });
+        ev.push({ kind: 'text', text: `${them} is riled up! It can only attack for ${jeerTurns(tier)} turns.` });
+        return;
+      }
+      case 'echo': {
+        if (foe.echo) return failed(`${them} is already caught in an Echo.`);
+        if (!foe.lastMove || !MOVES[foe.lastMove]) return failed(`${them} hasn't used a move yet.`);
+        foe.echo = this.span(foeSide, echoTurns(tier));
+        ev.push({ kind: 'stat', side: foeSide, up: false });
+        ev.push({ kind: 'text', text: `${them} is caught in an Echo! It must repeat ${MOVES[foe.lastMove].name} for ${echoTurns(tier)} turns.` });
+        return;
+      }
+      case 'veil': {
+        user.veiled = tier;
+        ev.push({ kind: 'stat', side, up: true });
+        ev.push({ kind: 'text', text: `${who} raised a Mirror Veil!${veilCut(tier) ? ` (−${Math.round(veilCut(tier) * 100)}% damage this turn)` : ''}` });
+        return;
+      }
+      case 'swap': {
+        const a: [number, number, number] = [user.atkStage, user.defStage, user.spdStage];
+        [user.atkStage, user.defStage, user.spdStage] = [foe.atkStage, foe.defStage, foe.spdStage];
+        [foe.atkStage, foe.defStage, foe.spdStage] = a;
+        const mine = user.atkStage + user.defStage + user.spdStage;
+        ev.push({ kind: 'stat', side, up: mine >= 0 });
+        ev.push({ kind: 'text', text: `${who} swapped stat changes with ${them}!` });
+        return haste();
+      }
+      case 'smoke': {
+        for (const x of [user, foe]) x.atkStage = x.defStage = x.spdStage = 0;
+        ev.push({ kind: 'text', text: 'A thick smoke rolls in! Every stat change was cleared.' });
+        if (this.weather) {
+          const d = WEATHER[this.weather];
+          this.weather = null;
+          this.weatherLeft = 0;
+          ev.push({ kind: 'weather', id: null });
+          ev.push({ kind: 'text', text: d.end });
+        }
+        if (this.warp > 0) {
+          this.warp = 0;
+          ev.push({ kind: 'text', text: 'Time snapped back to normal!' });
+        }
+        return haste();
+      }
+      case 'toll': {
+        if (foe.toll) return failed(`The toll already sounds for ${them}.`);
+        foe.toll = TOLL_TURNS;
+        foe.tollDmg = tollDamage(tier);
+        ev.push({ kind: 'stat', side: foeSide, up: false });
+        ev.push({ kind: 'text', text: `A toll sounds for ${them}… In ${TOLL_TURNS} turns it rings, unless it switches out!` });
+        return;
+      }
+      case 'snare': {
+        if (foe.snare) return failed(`${them} is already snared.`);
+        foe.snare = this.span(foeSide, snareTurns(tier));
+        ev.push({ kind: 'text', text: `${them} is caught in a Snare! It can't switch out for ${snareTurns(tier)} turns.` });
+        this.bump(foe, foeSide, 'spd', -snareSpeed(tier), ev, true);
+        return;
+      }
+      case 'hush': {
+        const t = traitOf(foe.c);
+        if (!t) return failed(`${them} has no trait to silence.`);
+        if (foe.hush) return failed(`${them}'s trait is already silenced.`);
+        foe.hush = this.span(foeSide, hushTurns(tier));
+        ev.push({ kind: 'stat', side: foeSide, up: false });
+        ev.push({ kind: 'text', text: `${them}'s ${TRAITS[t].name} was silenced for ${hushTurns(tier)} turns!` });
+        return;
+      }
+      case 'daynight': {
+        if (this.night) {
+          this.night = false;
+          this.dawn = true;
+          ev.push({ kind: 'text', text: `${who} turned the day! Dawn breaks over the battle.` });
+        } else {
+          if (this.weather === 'sun') {
+            this.weather = null;
+            this.weatherLeft = 0;
+            ev.push({ kind: 'weather', id: null });
+            ev.push({ kind: 'text', text: WEATHER.sun.end });
+          }
+          this.night = true;
+          this.dawn = false;
+          ev.push({ kind: 'text', text: `${who} turned the day… night falls over the battle.` });
+        }
+        return haste();
+      }
+    }
+  }
+
+  /** End of turn: Jeer, Echo, Snare and Hush count down, and a Toll may ring. */
+  private neutralEndOfTurn(ev: BattleEvent[]) {
+    for (const side of ['player', 'enemy'] as const) {
+      const x = side === 'player' ? this.p : this.e;
+      if (!isAlive(x.c)) continue;
+      const name = this.label(x);
+      if (x.jeer && --x.jeer === 0) ev.push({ kind: 'text', text: `${name} calmed down.` });
+      if (x.echo && --x.echo === 0) ev.push({ kind: 'text', text: `${name} broke free of the Echo.` });
+      if (x.snare && --x.snare === 0) ev.push({ kind: 'text', text: `${name} slipped out of the Snare.` });
+      if (x.toll && --x.toll === 0) {
+        const max = stats(x.c).hp;
+        const dmg = this.hurt(x, Math.max(1, Math.floor(max * (x.tollDmg || tollDamage(1)))));
+        ev.push({ kind: 'damage', side, hp: x.c.hp, maxHp: max, amount: dmg });
+        ev.push({ kind: 'text', text: `The toll rings for ${name}!` });
+        this.sashNote(x, ev);
+        if (!isAlive(x.c)) {
+          this.handleFaint(side, ev);
+          continue;
+        }
+      }
+    }
+    // Hush runs its course even on the bench.
+    for (const x of [...this.player, ...this.enemy]) {
+      if (!x.hush || --x.hush > 0) continue;
+      const t = traitOf(x.c);
+      if ((x === this.p || x === this.e) && isAlive(x.c) && t) ev.push({ kind: 'text', text: `${this.label(x)}'s ${TRAITS[t].name} returns.` });
+    }
+  }
+
+  /** How much the AI wants a Neutral move right now (comparable to attack power). */
+  private neutralScore(n: NeutralFx, user: Combatant, foe: Combatant, hpFrac: number): number {
+    const foeFrac = foe.c.hp / stats(foe.c).hp;
+    const stagesOf = (x: Combatant) => x.atkStage + x.defStage + x.spdStage;
+    const plus = (x: Combatant) => Math.max(0, x.atkStage) + Math.max(0, x.defStage) + Math.max(0, x.spdStage);
+    const minus = (x: Combatant) => -Math.min(0, x.atkStage) - Math.min(0, x.defStage) - Math.min(0, x.spdStage);
+    const live = (x: Combatant) => x.c.moves.filter((m) => hasUses(m));
+    const ut = traitOf(user.c) ?? null;
+    const ft = this.tr(foe);
+    switch (n) {
+      case 'jeer': {
+        if (foe.jeer || foeFrac < 0.3 || hpFrac < 0.3) return 0;
+        const other = live(foe).filter((m) => moveDef(m).kind !== 'attack').length;
+        return other ? Math.min(70, 25 + 15 * other) : 0;
+      }
+      case 'echo': {
+        if (foe.echo || !foe.lastMove || !MOVES[foe.lastMove] || foeFrac < 0.3) return 0;
+        const last = MOVES[foe.lastMove];
+        if (last.kind !== 'attack') return 70;
+        return typeMultiplier(attackEl(last), creatureTypes(user.c)) < 1 ? 60 : 5;
+      }
+      case 'veil': {
+        if (user.lastMove === NEUTRAL.veil.id) return 0;
+        const hinders = live(foe).filter((m) => moveDef(m).kind === 'debuff').length;
+        if (!hinders) return 0;
+        return foe.lastMove && MOVES[foe.lastMove]?.kind === 'debuff' ? 55 : 20 + 8 * hinders;
+      }
+      case 'swap': {
+        const gain = stagesOf(foe) - stagesOf(user);
+        return gain >= 2 ? 35 + 20 * gain : 0;
+      }
+      case 'smoke': {
+        let gain = plus(foe) - plus(user) + minus(user) - minus(foe);
+        if (this.weather && creatureTypes(foe.c).includes(WEATHER[this.weather].up) && !creatureTypes(user.c).includes(WEATHER[this.weather].up)) gain += 2;
+        if (this.warp > 0 && this.speedOf(user) > this.speedOf(foe)) gain += 2;
+        return gain >= 2 ? 35 + 12 * gain : 0;
+      }
+      case 'toll':
+        if (foe.toll || foeFrac < 0.4 || hpFrac < 0.3) return 0;
+        return foe.snare ? 80 : 45;
+      case 'snare':
+        if (foe.snare || foeFrac < 0.3 || hpFrac < 0.3) return 0;
+        return foe.toll ? 75 : 30;
+      case 'hush':
+        if (!ft || foe.hush || foeFrac < 0.3 || hpFrac < 0.3) return 0;
+        return TRAITS[ft].kind === 'Legendary' ? 60 : 40;
+      case 'daynight': {
+        // Who gains from night, who from the sun: flip it if that's the foe.
+        let v = 0;
+        const nightFan = (t: TraitId | null) => t === 'nightstalker' || t === 'eclipse';
+        const sunFan = (x: Combatant, t: TraitId | null) => t === 'sunseeker' || t === 'daybreak' || creatureTypes(x.c).includes('Fire');
+        if (this.night) v += (nightFan(ft) ? 1 : 0) - (nightFan(ut) ? 1 : 0);
+        else {
+          v += (nightFan(ut) ? 1 : 0) - (nightFan(ft) ? 1 : 0);
+          if (this.weather === 'sun') v += (sunFan(foe, ft) ? 1 : 0) - (sunFan(user, ut) ? 1 : 0);
+        }
+        return v > 0 ? 45 + 15 * v : 0;
+      }
+    }
+  }
+
   private useWarp(tier: number, ev: BattleEvent[]) {
     if (this.warp > 0) {
       this.warp = 0;
@@ -1559,6 +1821,7 @@ export class Battle {
       const slower = this.speedOf(user) < this.speedOf(foe);
       return this.warp > 0 ? (slower ? 0 : 55) : slower ? 60 : 0;
     }
+    if (d.neutral) return this.neutralScore(d.neutral, user, foe, hpFrac);
     if (d.kind === 'heal') return hpFrac < 0.5 ? 90 * (1 - hpFrac) : 0;
     if (d.team) {
       const side = this.sideOf(user);
@@ -1702,19 +1965,36 @@ export class Battle {
 
   private useMove(side: Side, slot: MoveSlot, ev: BattleEvent[]) {
     const user = side === 'player' ? this.p : this.e;
+    this.acted[side] = true;
     if (!this.canAct(user, side, ev)) return;
-    spendUse(slot);
     const target = side === 'player' ? this.e : this.p;
     const targetSide: Side = side === 'player' ? 'enemy' : 'player';
     const def = moveDef(slot);
     const who = this.nameOf(side, user.c);
+    if (this.echoed[side]) ev.push({ kind: 'text', text: `${who} is caught in the Echo!` });
+    // Jeer: too riled up for anything but an attack.
+    if (user.jeer && def.kind !== 'attack') {
+      ev.push({ kind: 'text', text: `${who} is too riled up to use ${def.name}!` });
+      return;
+    }
+    spendUse(slot);
+    user.lastMove = def.id;
     ev.push({ kind: 'attack', side, move: def.name, moveId: def.id, slot: side === 'player' ? this.pActive : this.eActive });
     ev.push({ kind: 'text', text: `${who} used ${def.name}!` });
     if (def.protect) return this.useBulwark(side, user, slot.tier, ev);
     user.guardStreak = 0;
+    if (def.neutral === 'veil') return this.useNeutral(side, 'veil', slot.tier, ev);
     // The foe's Bulwark stops attacks and stat-lowering moves cold.
     if (target.guarded && (def.kind === 'attack' || def.kind === 'debuff') && !(def.element === 'Earth' && this.hb(side, 'quake'))) {
       ev.push({ kind: 'text', text: `${this.nameOf(targetSide, target.c)} blocked it behind its Bulwark!` });
+      return;
+    }
+    // Mirror Veil: a Hinder move bounces back onto the one who used it.
+    if (target.veiled && def.kind === 'debuff') {
+      ev.push({ kind: 'text', text: `${this.nameOf(targetSide, target.c)}'s Mirror Veil bounced it back!` });
+      if (def.neutral) return this.useNeutral(targetSide, def.neutral, slot.tier, ev);
+      this.applyStatus(targetSide, slot, ev);
+      if (def.status && this.rng.chance(def.status.chance)) this.inflict(user, side, def.status.id, ev, '', { x: target, side: targetSide });
       return;
     }
     if (def.warp) return this.useWarp(slot.tier, ev);
@@ -1740,6 +2020,10 @@ export class Battle {
       return;
     }
     if (def.team) return this.useTeamMove(side, def, slot.tier, ev);
+    if (def.neutral) {
+      this.firstMoved[side] = true;
+      return this.useNeutral(side, def.neutral, slot.tier, ev);
+    }
     if (def.kind !== 'attack') {
       this.firstMoved[side] = true;
       this.applyStatus(side, slot, ev);
@@ -1794,6 +2078,7 @@ export class Battle {
         this.boonMult(user, target, el, side, r.mult, firstMove, why) *
         (this.hasFx(side, 'rally') ? 1.25 : 1) *
         (this.hasFx(targetSide, 'guard') ? 0.75 : 1) *
+        (1 - (target.veiled ? veilCut(target.veiled) : 0)) *
         weatherMult(this.weather, el) *
         // Ironhide: each super-effective element only counts x1.25 against their Hexlings.
         (side === 'player' && this.has('ironhide') ? Math.pow(1.25 / 1.5, r.mult >= 2 ? 2 : r.mult > 1.01 ? 1 : 0) : 1);
@@ -2002,7 +2287,7 @@ export class Battle {
     // Steadfast and Second Skin: once a battle, a knockout blow leaves 1 HP.
     if (foeHit && !x.endured && dmg >= before && before > 1) {
       const max = stats(x.c).hp;
-      const t = traitOf(x.c);
+      const t = this.tr(x);
       if ((t === 'steadfast' && before >= max * this.tv(x, 'steadfast')) || t === 'secondskin') {
         x.endured = 'fired';
         x.c.hp = 1 + (t === 'secondskin' ? Math.floor(max * this.tv(x, 'secondskin')) : 0);
@@ -2035,7 +2320,10 @@ export class Battle {
 
   private endOfTurn(ev: BattleEvent[]) {
     // Bulwarks only last the turn.
-    for (const x of [...this.player, ...this.enemy]) x.guarded = false;
+    for (const x of [...this.player, ...this.enemy]) {
+      x.guarded = false;
+      x.veiled = 0;
+    }
     if (this.warp > 0 && --this.warp === 0) ev.push({ kind: 'text', text: 'Time returned to normal.' });
     if (this.spared) {
       ev.push({ kind: 'text', text: `The wild ${creatureName(this.e.c)} is too weak to fight on!` });
@@ -2065,6 +2353,7 @@ export class Battle {
       // Burn, poison and paralysis wear off with time (the others count down when it tries to act).
       if ((x.status === 'burn' || x.status === 'poison' || x.status === 'para') && --x.statusTurns <= 0) this.cure(x, side, ev);
     }
+    this.neutralEndOfTurn(ev);
     this.traitsEndOfTurn(ev);
     this.boonsEndOfTurn(ev);
     this.sidelines(ev);
@@ -2102,7 +2391,7 @@ export class Battle {
     if (x.endured === 'fired') {
       x.endured = 'spent';
       this.tcall(x, this.sideOfC(x), ev);
-      ev.push({ kind: 'text', text: `${this.label(x)} hung on with its ${TRAITS[traitOf(x.c)!].name}!` });
+      ev.push({ kind: 'text', text: `${this.label(x)} hung on with its ${TRAITS[this.tr(x)!].name}!` });
     }
     if (x.bonded === 'fired') {
       x.bonded = 'spent';
@@ -2197,6 +2486,25 @@ function resetStages(x: Combatant) {
   x.spdStage = 0;
   x.guardStreak = 0;
   x.guarded = false;
+  // Coming in fresh: Jeer, Echo, Snare and Toll are left behind (Hush isn't: it runs its course).
+  x.jeer = x.echo = x.snare = x.toll = x.veiled = 0;
+  x.lastMove = undefined;
+}
+
+export function neutralSave(x: Combatant): NeutralSave {
+  return [x.jeer ?? 0, x.echo ?? 0, x.toll ?? 0, x.tollDmg ?? 0, x.snare ?? 0, x.hush ?? 0, x.lastMove ?? null];
+}
+
+export function neutralLoad(x: Combatant, v: unknown) {
+  if (!Array.isArray(v)) return;
+  const n = (i: number, max: number) => Math.max(0, Math.min(max, Number(v[i]) || 0));
+  x.jeer = n(0, 9);
+  x.echo = n(1, 9);
+  x.toll = n(2, 9);
+  x.tollDmg = n(3, 1);
+  x.snare = n(4, 9);
+  x.hush = n(5, 9);
+  x.lastMove = typeof v[6] === 'string' && MOVES[v[6]] ? v[6] : undefined;
 }
 
 /** The element an attack actually hits with (bestType moves pick the user's most effective type). */

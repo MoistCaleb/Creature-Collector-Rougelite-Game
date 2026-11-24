@@ -14,7 +14,7 @@ import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
-import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
+import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
@@ -31,7 +31,7 @@ import { shinySparkle } from '../ui/shiny';
 import { searchBox } from '../ui/searchBox';
 
 type Tab = 'creatures' | 'moves' | 'elements' | 'boons';
-/** Content starts below the header, tabs and the jump-to-element bar. */
+/** Content starts below the header, tabs and the element filter bar. */
 /** Where the list starts, under the header (a shorter header on the wide board). */
 let TOP = 196;
 /** Creature rows: collapsed, and expanded into a big card. */
@@ -48,8 +48,17 @@ const INFO_BTN = 48;
 
 /** Hexlings tab: search text and which lines to show (kept while you browse). */
 let dexQuery = '';
-type DexFilter = 'all' | 'caught' | 'gilded';
+type DexFilter = 'all' | 'caught' | 'uncaught' | 'unseen' | 'gilded';
 let dexFilter: DexFilter = 'all';
+/** The first chip steps through these (tap again for the next; the last goes back to all). */
+const CATCH_STEPS: { f: DexFilter; label: string; color: number }[] = [
+  { f: 'all', label: 'Caught', color: COLORS.panelLight },
+  { f: 'caught', label: 'Caught', color: 0x3b6d4a },
+  { f: 'uncaught', label: 'Uncaught', color: 0x8a5a2a },
+  { f: 'unseen', label: 'Unseen', color: 0x4a3a7a },
+];
+/** Every tab: show only this element (tap its button again to show all). */
+let elFilter: Element | null = null;
 /** Moves tab: search text and which kind of move to show. */
 let moveQuery = '';
 type MoveFilter = 'all' | 'attack' | 'status';
@@ -69,8 +78,6 @@ export class DexScene extends Phaser.Scene {
   private content!: Phaser.GameObjects.Container;
   private contentH = 0;
   private scroller!: Scroller;
-  /** Where each element's rows start in the current tab, for the jump bar. */
-  private anchors: Partial<Record<Element, number[]>> = {};
   /** Every row of the current tab: where it sits and how to draw it. Only rows near the screen exist. */
   private rows: { y: number; h: number; build: (c: Phaser.GameObjects.Container) => void }[] = [];
   private live = new Map<number, Phaser.GameObjects.Container>();
@@ -111,7 +118,6 @@ export class DexScene extends Phaser.Scene {
     this.content = this.add.container(0, TOP);
     this.rows = [];
     this.live = new Map();
-    this.anchors = {};
     const maskShape = this.make.graphics({}).fillRect(0, TOP, W, H - TOP);
     this.content.setMask(maskShape.createGeometryMask());
 
@@ -175,7 +181,7 @@ export class DexScene extends Phaser.Scene {
     });
   }
 
-  /** Two rows of element buttons: tap to glide to that element; tap again for the next one. */
+  /** Two rows of element buttons: tap one to show only that element; tap it again to show all. */
   private drawJumpBar() {
     const dex = state.meta.dex;
     this.jumpBar?.destroy();
@@ -187,12 +193,16 @@ export class DexScene extends Phaser.Scene {
       const seen = dex.elements.includes(el);
       const x = 16 + bw / 2 + (i % cols) * (bw + 4);
       const y = y0 + Math.floor(i / cols) * 30;
-      bar.add(button(this, x, y, bw, LANDSCAPE ? 24 : 26, seen ? el : '???', () => this.jumpTo(el), {
-        color: seen ? ELEMENT_COLORS[el] : COLORS.panelLight,
-        textColor: seen ? elementTextColor(el) : '#6d6588',
+      const on = elFilter === el;
+      const dim = !!elFilter && !on;
+      const b = button(this, x, y, bw, LANDSCAPE ? 24 : 26, seen ? (on ? `✓ ${el}` : el) : '???', () => this.filterElement(el), {
+        color: seen && !dim ? ELEMENT_COLORS[el] : COLORS.panelLight,
+        textColor: seen && !dim ? elementTextColor(el) : '#6d6588',
         fontSize: 11,
-        enabled: (this.anchors[el]?.length ?? 0) > 0,
-      }));
+        enabled: seen,
+      });
+      if (on) bar.add(this.add.rectangle(x, y, bw + 4, (LANDSCAPE ? 24 : 26) + 4).setStrokeStyle(2, 0xffffff));
+      bar.add(b);
     });
   }
 
@@ -225,7 +235,10 @@ export class DexScene extends Phaser.Scene {
       chip(0, moveFilter === 'attack', 'Attacks', 0x8a3a2a, () => (moveFilter = moveFilter === 'attack' ? 'all' : 'attack'));
       chip(1, moveFilter === 'status', 'Status', 0x2f4a6b, () => (moveFilter = moveFilter === 'status' ? 'all' : 'status'));
     } else {
-      chip(0, dexFilter === 'caught', 'Caught', 0x3b6d4a, () => (dexFilter = dexFilter === 'caught' ? 'all' : 'caught'));
+      // Caught -> Uncaught -> Unseen -> all.
+      const k = Math.max(0, CATCH_STEPS.findIndex((s) => s.f === dexFilter));
+      const step = CATCH_STEPS[k];
+      chip(0, k > 0, step.label, step.color, () => (dexFilter = CATCH_STEPS[(k + 1) % CATCH_STEPS.length].f));
       chip(1, dexFilter === 'gilded', '✦ Gilded', 0x7a5a1c, () => (dexFilter = dexFilter === 'gilded' ? 'all' : 'gilded'));
     }
   }
@@ -242,17 +255,11 @@ export class DexScene extends Phaser.Scene {
     this.drawJumpBar();
   }
 
-  /** Glide to the next row for this element below the current view (wrapping to the first). */
-  private jumpTo(el: Element) {
-    const ys = this.anchors[el] ?? [];
-    if (!ys.length) return;
-    const viewTop = TOP - this.content.y; // content-space y at the top of the view
-    const next = ys.find((y) => y > viewTop + 4) ?? ys[0];
-    this.scroller.glideTo(TOP - next + 4, () => this.refreshRows());
-  }
-
-  private anchor(el: Element, y: number) {
-    (this.anchors[el] ??= []).push(y);
+  /** Show only this element's rows (tap it again to show every element). */
+  private filterElement(el: Element) {
+    elFilter = elFilter === el ? null : el;
+    if (this.tab === 'creatures' || this.tab === 'moves') this.relist();
+    else this.scene.restart({ from: this.from, tab: this.tab });
   }
 
   /** Builds rows that are on (or near) the screen and removes ones that scrolled far away. */
@@ -280,14 +287,13 @@ export class DexScene extends Phaser.Scene {
 
   private drawCreatures() {
     this.rows = [];
-    this.anchors = {};
     this.rowOf = new Map();
     const dex = state.meta.dex;
     const owned = state.meta.shinyOwned ?? [];
     const q = dexQuery.trim().toLowerCase().replace(/^#/, '');
     let y = 8;
     // Completion rewards, at the top of the list.
-    if (!q && dexFilter === 'all') {
+    if (!q && dexFilter === 'all' && !elFilter) {
       const ry = y;
       this.addRow(ry, 58, (row) => this.rewardsRow(row, ry));
       y += 58;
@@ -295,17 +301,26 @@ export class DexScene extends Phaser.Scene {
     DEX_SPECIES.forEach((sp, i) => {
       if (dexFilter === 'caught' && !dex.caught.includes(sp.id)) return;
       if (dexFilter === 'gilded' && !owned.includes(sp.id)) return;
+      if (dexFilter === 'uncaught' && dex.caught.includes(sp.id)) return;
+      if (dexFilter === 'unseen' && sp.names.some((_, st) => hasSeenForm(dex, sp.id, st))) return;
+      if (elFilter && !sp.types.includes(elFilter)) return;
       // Search: names of forms you've seen (unseen names stay secret), or the number.
       if (q && !(/^\d+$/.test(q) ? Number(q) === i + 1 : sp.names.some((n, st) => hasSeenForm(dex, sp.id, st) && n.toLowerCase().includes(q)))) return;
       this.rowOf.set(i, this.rows.length);
       const h = this.expanded === i ? this.cardH(sp) : ROW_H;
       const yy = y;
       this.addRow(yy, h, (row) => (this.expanded === i ? this.drawCreatureCard(row, sp, i, yy, h) : this.drawCreatureRow(row, sp, i, yy, h)));
-      for (const el of new Set(sp.types)) this.anchor(el, yy);
       y += h;
     });
     if (!this.rows.length) {
-      const msg = dexFilter === 'gilded' && !owned.length ? 'No Gilded Hexlings yet. Catch one to unlock its whole line!' : 'Nothing matches. Try another name or filter.';
+      const msg =
+        dexFilter === 'gilded' && !owned.length
+          ? 'No Gilded Hexlings yet. Catch one to unlock its whole line!'
+          : !q && !elFilter && dexFilter === 'uncaught'
+            ? "You've caught every Hexling!"
+            : !q && !elFilter && dexFilter === 'unseen'
+              ? "You've seen every Hexling!"
+              : 'Nothing matches. Try another name or filter.';
       this.addRow(8, 80, (row) => row.add(text(this, W / 2, 40, msg, 14, COLORS.textDim, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5)));
       y = 88;
     }
@@ -707,7 +722,6 @@ export class DexScene extends Phaser.Scene {
   private drawMoves() {
     const dex = state.meta.dex;
     this.rows = [];
-    this.anchors = {};
     const q = moveQuery.trim().toLowerCase();
     const KIND: Record<string, string> = { attack: 'Attack', buff: 'Boost', debuff: 'Hinder', heal: 'Heal' };
     const kindOf = (id: string) => KIND[MOVES[id].kind] ?? 'Move';
@@ -725,15 +739,15 @@ export class DexScene extends Phaser.Scene {
     // Each element's moves (with its Blitz and Crush), then the Neutral ones.
     const groups: [Element | 'Neutral', string[]][] = [
       ...ELEMENTS.map((el): [Element, string[]] => [el, [...elementPool(el), fastId(el), slowId(el)]]),
-      ['Neutral', [BULWARK_ID, WARP_ID]],
+      ['Neutral', [BULWARK_ID, WARP_ID, ...NEUTRAL_IDS]],
     ];
     for (const [el, pool] of groups) {
+      if (elFilter && el !== elFilter) continue;
       const neutral = el === 'Neutral';
       const elSeen = neutral || dex.elements.includes(el);
       const ids = pool.filter((id) => shows(id, el));
       if (!ids.length) continue;
       const hy = y;
-      if (!neutral) this.anchor(el, hy);
       this.addRow(hy, 30, (row) => {
         if (neutral) {
           const t = text(this, 22, hy + 4, 'NEUTRAL', 12, '#1a1426', { fontStyle: 'bold' });
@@ -784,10 +798,10 @@ export class DexScene extends Phaser.Scene {
     let y = 8;
     let last = '';
     for (const b of order) {
+      if (elFilter && b.element !== elFilter) continue;
       const h = head(b);
       if (h !== last) {
         last = h;
-        if (b.element) this.anchor(b.element, y);
         const hy = y;
         const locked = BOON_LIST.filter((x) => head(x) === h && lock(x.id)).length;
         this.addRow(hy, 28, (row) => {
@@ -828,12 +842,18 @@ export class DexScene extends Phaser.Scene {
       });
       y += 74;
     }
-    // Rare surprises (2.0): found ones, and a vague hint for the rest.
+    if (elFilter && y === 8) {
+      this.addRow(8, 80, (row) => row.add(text(this, W / 2, 40, `No ${elFilter} boons.`, 14, COLORS.textDim).setOrigin(0.5)));
+      y = 96;
+    }
+    // Rare surprises (2.0): found ones, and a vague hint for the rest. Not by element.
     const found = state.meta.surprisesFound ?? [];
     const sy = y + 10;
-    this.addRow(sy, 30, (row) => row.add(text(this, 16, sy + 6, `Rare surprises  ·  ${found.length}/${SURPRISE_LIST.length}`, 15, '#ffc94d', { fontStyle: 'bold' })));
-    y += 42;
-    for (const sp of SURPRISE_LIST) {
+    if (!elFilter) {
+      this.addRow(sy, 30, (row) => row.add(text(this, 16, sy + 6, `Rare surprises  ·  ${found.length}/${SURPRISE_LIST.length}`, 15, '#ffc94d', { fontStyle: 'bold' })));
+      y += 42;
+    }
+    for (const sp of elFilter ? [] : SURPRISE_LIST) {
       const ry = y;
       const known = found.includes(sp.id);
       const need = loreLock(state.meta, 'surprise', sp.id);
@@ -853,9 +873,9 @@ export class DexScene extends Phaser.Scene {
   private drawElements() {
     const dex = state.meta.dex;
     const name = (e: Element) => (dex.elements.includes(e) ? e : '???');
-    ELEMENTS.forEach((el, i) => {
+    const list = elFilter ? [elFilter] : ELEMENTS;
+    list.forEach((el, i) => {
       const y = 8 + i * 96;
-      this.anchor(el, y);
       this.addRow(y, 96, (row) => {
         row.add(this.add.rectangle(12, y, W - 24, 86, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
         if (!dex.elements.includes(el)) {
@@ -868,6 +888,6 @@ export class DexScene extends Phaser.Scene {
         row.add(text(this, 24, y + 60, `Weak to: ${weakTo.map(name).join(', ')}`, 14, '#f08a80'));
       });
     });
-    this.contentH = ELEMENTS.length * 96 + 16;
+    this.contentH = list.length * 96 + 16;
   }
 }

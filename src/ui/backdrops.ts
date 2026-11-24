@@ -350,7 +350,7 @@ function prop(g: Phaser.GameObjects.Graphics, rng: Rng, kind: Prop, x: number, b
 
 // ---------------------------------------------------------------- stage variants
 
-type Mood = 'day' | 'dusk' | 'night' | 'fog';
+export type Mood = 'day' | 'dusk' | 'night' | 'fog';
 
 /** Times of day each element can have ('day' is the theme as drawn above). */
 const MOODS: Record<Element, Mood[]> = {
@@ -407,10 +407,15 @@ export function pickStage(el: Element): number {
   return stage;
 }
 
-/** An element's theme as it looks on one stage. */
-function themeFor(el: Element, stage: number): Theme {
+/** A stage's own time of day. */
+export const stageMood = (el: Element, stage: number): Mood => stageParts(el, stage).mood;
+
+/** An element's theme as it looks on one stage (at its own time of day, or the one given). */
+function themeFor(el: Element, stage: number, moodAs?: Mood): Theme {
   const base = THEMES[el];
-  const { mood, alt, ridgeAlt, flip } = stageParts(el, stage);
+  const parts = stageParts(el, stage);
+  const { alt, ridgeAlt, flip } = parts;
+  const mood = moodAs ?? parts.mood;
   const t: Theme = { ...base, far: { ...base.far }, mid: alt ? ALT[el].mid : base.mid, orb: base.orb && { ...base.orb } };
   if (ridgeAlt) {
     t.far.ridge = ALT[el].ridge;
@@ -451,13 +456,13 @@ function themeFor(el: Element, stage: number): Theme {
 }
 
 /** Paint the still part of a stage (sky, range, props, ground) into a texture. */
-function paint(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, horizon: number, fieldH: number): string {
-  const key = `bd:${el}:${stage}:${bw}x${bh}:${horizon}:${fieldH}`;
+function paint(scene: Phaser.Scene, el: Element, stage: number, bw: number, bh: number, horizon: number, fieldH: number, mood?: Mood): string {
+  const key = `bd:${el}:${stage}:${mood ?? ''}:${bw}x${bh}:${horizon}:${fieldH}`;
   if (scene.textures.exists(key)) return key;
   // Keep only the newest few stage paintings.
   const old = scene.textures.getTextureKeys().filter((k) => k.startsWith('bd:'));
   for (const k of old.slice(0, Math.max(0, old.length - 3))) scene.textures.remove(k);
-  const t = themeFor(el, stage);
+  const t = themeFor(el, stage, mood);
   const rng = new Rng(hashString(`backdrop:${el}:${stage}`));
   const w = Math.ceil(bw / PX);
   const h = Math.ceil(bh / PX);
@@ -633,6 +638,8 @@ export function fieldWeather(scene: Phaser.Scene, id: import('../data/moves').We
   const wash = scene.add.rectangle(area.x, area.y, area.width, area.height, color, alpha).setOrigin(0).setAlpha(0);
   scene.tweens.add({ targets: wash, alpha: 1, duration: 500 });
   const out: Phaser.GameObjects.GameObject[] = [wash];
+  // Rain and hail: the sky darkens from the top and clouds roll in.
+  if (id === 'rain' || id === 'hail') out.push(...stormClouds(scene, area, id === 'rain' ? 0x3a4458 : 0x8a98b0));
   for (let i = 0; i < heavy; i++) {
     const extra: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig =
       id === 'hail'
@@ -641,6 +648,42 @@ export function fieldWeather(scene: Phaser.Scene, id: import('../data/moves').We
           ? { speedX: { min: 120, max: 220 }, frequency: 25 }
           : {};
     out.push(weatherFx(scene, kind, area, extra));
+  }
+  return out;
+}
+
+/** Clouds rolling in over the top of the field (pixel puffs that drift across), and a darker sky. */
+function stormClouds(scene: Phaser.Scene, area: Phaser.Geom.Rectangle, color: number): Phaser.GameObjects.GameObject[] {
+  const out: Phaser.GameObjects.GameObject[] = [];
+  const dim = scene.add.graphics().setAlpha(0);
+  dim.fillGradientStyle(0x0a0c18, 0x0a0c18, 0x0a0c18, 0x0a0c18, 0.45, 0.45, 0, 0);
+  dim.fillRect(area.x, area.y, area.width, area.height * 0.45);
+  scene.tweens.add({ targets: dim, alpha: 1, duration: 1400 });
+  out.push(dim);
+  const key = `cloud:${color.toString(16)}`;
+  if (!scene.textures.exists(key)) {
+    // A lumpy cloud: overlapping puffs, a lighter top and darker belly, drawn at pixel scale.
+    const g = scene.make.graphics({}, false);
+    const puffs: [number, number, number][] = [[10, 14, 8], [20, 10, 10], [32, 12, 9], [42, 15, 7], [26, 16, 9]];
+    for (const [x, y, r] of puffs) g.fillStyle(mix(color, 0x000000, 0.25)).fillCircle(x, y + 2, r);
+    for (const [x, y, r] of puffs) g.fillStyle(color).fillCircle(x, y, r);
+    for (const [x, y, r] of puffs) g.fillStyle(mix(color, 0xffffff, 0.18)).fillCircle(x - 1, y - 2, r * 0.6);
+    g.generateTexture(key, 52, 26);
+    g.destroy();
+  }
+  const n = Math.max(4, Math.round(area.width / 80));
+  const mask = scene.make.graphics({}, false).fillRect(area.x, area.y, area.width, area.height);
+  scene.events.once('shutdown', () => mask.destroy());
+  for (let i = 0; i < n; i++) {
+    const s = PX * (0.6 + Math.random() * 0.5);
+    const y = area.y + area.height * (0.03 + Math.random() * 0.14);
+    const endX = area.x + (area.width * (i + 0.5)) / n + (Math.random() - 0.5) * 60;
+    const c = scene.add.image(area.x - 80 - Math.random() * 120, y, key).setScale(s).setAlpha(0).setMask(mask.createGeometryMask());
+    // Roll in from the left, then drift slowly back and forth.
+    scene.tweens.add({ targets: c, x: endX, alpha: 0.85, duration: 1600 + i * 180, ease: 'Sine.easeOut', onComplete: () => {
+      if (c.active) scene.tweens.add({ targets: c, x: endX + 24, duration: 5000 + Math.random() * 3000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    } });
+    out.push(c);
   }
   return out;
 }
@@ -689,14 +732,13 @@ export interface Board {
  * layout where the creatures stand (top-left); it stretches into the margins, and the rest (the
  * controls) is shaded so the buttons read well.
  */
-export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, b: Board, field: { w: number; h: number }) {
+export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, b: Board, field: { w: number; h: number }): Phaser.GameObjects.Image {
   // Field edges in layout coordinates; a field that reaches the layout's edge runs on to the screen's.
   const left = -b.ox;
   const top = -b.oy;
   const right = field.w >= b.w ? b.fw - b.ox : field.w;
   const bottom = field.h >= b.h ? b.fh - b.oy : field.h;
-  const key = paint(scene, el, stage, b.fw, b.fh, b.oy + field.h * 0.4, bottom + b.oy);
-  scene.add.image(left, top, key).setOrigin(0).setScale(PX);
+  const img = battleSky(scene, el, stage, b, field);
   const area = new Phaser.Geom.Rectangle(left, top, right - left, bottom - top);
   weather(scene, el, area);
   const t = themeFor(el, stage);
@@ -719,15 +761,25 @@ export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, 
     for (let i = 0; i < 4; i++) scene.add.rectangle(field.w - 12 + i * 3, top, 3, b.fh, shade, 0.2 + i * 0.15).setOrigin(0);
     scene.add.rectangle(field.w, top, b.fw - b.ox - field.w, b.fh, shade, 0.82).setOrigin(0);
   }
+  return img;
+}
+
+/** The battle's painted scene alone, at a given time of day (night falling, a sun move...). */
+export function battleSky(scene: Phaser.Scene, el: Element, stage: number, b: Board, field: { w: number; h: number }, mood?: Mood): Phaser.GameObjects.Image {
+  const bottom = field.h >= b.h ? b.fh - b.oy : field.h;
+  const key = paint(scene, el, stage, b.fw, b.fh, b.oy + field.h * 0.4, bottom + b.oy, mood);
+  return scene.add.image(-b.ox, -b.oy, key).setOrigin(0).setScale(PX);
 }
 
 /** The ground pad a creature stands on, in the element's colors, with a shadow on it. */
-export function battlePad(scene: Phaser.Scene, el: Element, stage: number, x: number, y: number, w = 200) {
-  const [top, rim] = themeFor(el, stage).pad;
-  scene.add.ellipse(x, y + 6, w + 16, 52, rim);
-  scene.add.ellipse(x, y, w + 16, 48, top);
-  scene.add.ellipse(x, y + 2, w - 30, 30, mix(top, 0xffffff, 0.12), 0.6);
-  scene.add.ellipse(x, y, w - 20, 34, 0x000000, 0.3);
+export function battlePad(scene: Phaser.Scene, el: Element, stage: number, x: number, y: number, w = 200, mood?: Mood): Phaser.GameObjects.Ellipse[] {
+  const [top, rim] = themeFor(el, stage, mood).pad;
+  return [
+    scene.add.ellipse(x, y + 6, w + 16, 52, rim),
+    scene.add.ellipse(x, y, w + 16, 48, top),
+    scene.add.ellipse(x, y + 2, w - 30, 30, mix(top, 0xffffff, 0.12), 0.6),
+    scene.add.ellipse(x, y, w - 20, 34, 0x000000, 0.3),
+  ];
 }
 
 /** Text that sits straight on the field gets a dark outline so it reads on bright skies too. */

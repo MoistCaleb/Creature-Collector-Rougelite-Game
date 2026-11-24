@@ -57,6 +57,8 @@ export interface MoveDef {
   speedPower?: 'fast' | 'slow';
   /** Weather moves: change the battle's weather for a few turns (see WEATHER). */
   weather?: WeatherId;
+  /** The other Neutral moves that bend the battle for a turn or a few (see NEUTRAL). */
+  neutral?: NeutralFx;
 }
 
 // ---------------------------------------------------------------- team moves
@@ -315,6 +317,68 @@ export const slowId = (el: Element) => `${el}:slow`;
 MOVES[BULWARK_ID] = { id: BULWARK_ID, name: 'Bulwark', element: 'Neutral', kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: [], priority: true, protect: true };
 MOVES[WARP_ID] = { id: WARP_ID, name: 'Time Warp', element: 'Neutral', kind: 'buff', rank: -1, power: 0, accuracy: 100, effects: [], warp: true };
 
+/**
+ * More Neutral moves that disrupt the battle for a turn or a few. The ones aimed at the foe are
+ * Hinder moves: Bulwark blocks them and Mirror Veil bounces them back.
+ */
+export type NeutralFx = 'jeer' | 'echo' | 'veil' | 'swap' | 'smoke' | 'toll' | 'snare' | 'hush' | 'daynight';
+export const NEUTRAL: Record<NeutralFx, { id: string; name: string; foe: boolean; uses: number }> = {
+  jeer: { id: 'Neutral:jeer', name: 'Jeer', foe: true, uses: 6 },
+  echo: { id: 'Neutral:echo', name: 'Echo', foe: true, uses: 5 },
+  veil: { id: 'Neutral:veil', name: 'Mirror Veil', foe: false, uses: 5 },
+  swap: { id: 'Neutral:swap', name: 'Switcheroo', foe: true, uses: 5 },
+  smoke: { id: 'Neutral:smoke', name: 'Smokescreen', foe: false, uses: 5 },
+  toll: { id: 'Neutral:toll', name: 'Toll', foe: true, uses: 4 },
+  snare: { id: 'Neutral:snare', name: 'Snare', foe: true, uses: 5 },
+  hush: { id: 'Neutral:hush', name: 'Hush', foe: true, uses: 5 },
+  daynight: { id: 'Neutral:daynight', name: 'Turn of Day', foe: false, uses: 4 },
+};
+export const NEUTRAL_IDS = Object.values(NEUTRAL).map((n) => n.id);
+for (const [k, n] of Object.entries(NEUTRAL) as [NeutralFx, (typeof NEUTRAL)[NeutralFx]][])
+  MOVES[n.id] = { id: n.id, name: n.name, element: 'Neutral', kind: n.foe ? 'debuff' : 'buff', rank: -1, power: 0, accuracy: 100, effects: [], neutral: k, ...(k === 'veil' ? { priority: true } : {}) };
+
+/** Jeer: turns the foe can only attack. */
+export const jeerTurns = (tier: number) => 2 + tier;
+/** Echo: turns the foe must repeat its last move. */
+export const echoTurns = (tier: number) => 1 + tier;
+/** Mirror Veil: damage it also takes off this turn's hits, by tier. */
+export const veilCut = (tier: number) => [0, 0, 0.15, 0.3][tier] ?? 0;
+/** Toll: turns until it rings, and the share of max HP it takes. */
+export const TOLL_TURNS = 3;
+export const tollDamage = (tier: number) => 0.3 + 0.05 * tier;
+/** Snare: turns the foe can't switch out, and the Speed it loses. */
+export const snareTurns = (tier: number) => 2 + tier;
+export const snareSpeed = (tier: number) => (tier >= 3 ? 2 : 1);
+/** Hush: turns the foe's trait is silenced. */
+export const hushTurns = (tier: number) => 2 + tier;
+/** Switcheroo, Smokescreen, Turn of Day: Speed the user gains afterward at higher tiers. */
+export const neutralHaste = (tier: number) => tier - 1;
+
+/** The short line for a Neutral move. */
+function neutralSummary(n: NeutralFx, tier: number): string {
+  const haste = neutralHaste(tier) ? `, +${neutralHaste(tier)} Spd` : '';
+  switch (n) {
+    case 'jeer':
+      return `Foe ${jeerTurns(tier)}t: attacks only`;
+    case 'echo':
+      return `Foe ${echoTurns(tier)}t: repeats its last move`;
+    case 'veil':
+      return `First · bounces Hinders back${veilCut(tier) ? ` · −${Math.round(veilCut(tier) * 100)}% dmg` : ''}`;
+    case 'swap':
+      return `Swap stat changes with foe${haste}`;
+    case 'smoke':
+      return `Clear stats, weather, warp${haste}`;
+    case 'toll':
+      return `Foe −${Math.round(tollDamage(tier) * 100)}% HP in ${TOLL_TURNS}t if it stays`;
+    case 'snare':
+      return `Foe ${snareTurns(tier)}t: can't switch · −${snareSpeed(tier)} Spd`;
+    case 'hush':
+      return `Foe ${hushTurns(tier)}t: trait silenced`;
+    case 'daynight':
+      return `Day ⇄ night (night ends sun)${haste}`;
+  }
+}
+
 /** Bulwark used again right after it worked: the chance it holds (better at higher skill tiers). */
 export const bulwarkRepeat = (tier: number) => [0, 0.25, 1 / 3, 0.5][tier] ?? 0.25;
 /** Turns Time Warp lasts (counting the turn it's used): 5, then +1 per skill tier. */
@@ -530,6 +594,7 @@ export const accText = (m: MoveDef) => `${m.accuracy}% acc`;
 export function moveSummary(m: MoveDef, tier: number): string {
   if (m.protect) return `First · blocks hits · reuse ${Math.round(bulwarkRepeat(tier) * 100)}%`;
   if (m.warp) return `${warpTurns(tier)} turns: slower goes first`;
+  if (m.neutral) return neutralSummary(m.neutral, tier);
   if (m.weather) return `${weatherTurns(tier)}t ${WEATHER[m.weather].tag}: ${weatherShort(m.weather)}`;
   if (m.team === 'mend') return `Team: heal ${Math.round(mendHeal(tier) * 100)}% + cure`;
   if (m.team) return `Team ${teamFxTurns(tier)}t: ${TEAM_FX[m.team].short}`;
@@ -561,7 +626,7 @@ export function moveSummary(m: MoveDef, tier: number): string {
 
 /** What a skill-tier upgrade does to this move. */
 export function tierUpgradeText(m: MoveDef, toTier: number): string {
-  if (m.protect || m.warp || m.weather) return `Stronger: ${moveSummary(m, toTier)}`;
+  if (m.protect || m.warp || m.weather || m.neutral) return `Stronger: ${moveSummary(m, toTier)}`;
   if (m.kind === 'attack') return toTier === 3 ? `+50% power total, ${TIER3_EFFECT[attackEl(m)]}` : '+25% power';
   if (m.kind === 'heal' || m.team) return `Stronger: ${moveSummary(m, toTier)}`;
   return `Stronger: ${describeEffects(m, toTier)}`;
@@ -583,6 +648,7 @@ export function attackValue(m: MoveDef, tier = 1): number {
 export function maxUses(d: MoveDef): number | null {
   if (d.protect) return 4;
   if (d.warp || d.weather) return 5;
+  if (d.neutral) return NEUTRAL[d.neutral].uses;
   if (d.team) return 8;
   if (d.kind === 'heal') return 10;
   if (d.kind === 'buff' || d.kind === 'debuff') return 20;
