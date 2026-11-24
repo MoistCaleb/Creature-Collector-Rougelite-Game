@@ -60,6 +60,12 @@ function swatch(key: keyof TrainerLook, v: number): number | null {
  * picker that shows your trainer wearing every option. Your trainer stands beside your team in
  * every battle, and online your opponent sees it (and you see theirs).
  */
+/**
+ * What was new when you opened the editor. Opening it counts as seeing everything (so the title
+ * screen's NEW tag goes), but the tags inside stay up for this visit, until you open that part.
+ */
+let visit: { items: { key: keyof TrainerLook; value: number }[]; titles: string[] } = { items: [], titles: [] };
+
 export class TrainerScene extends Phaser.Scene {
   private from = 'Title';
 
@@ -67,14 +73,21 @@ export class TrainerScene extends Phaser.Scene {
     super('Trainer');
   }
 
-  init(data: { from?: string }) {
+  init(data: { from?: string; again?: boolean }) {
     this.from = data.from ?? 'Title';
+    if (!data.again) {
+      const meta = state.meta;
+      visit = { items: newItems(meta), titles: newTitles(meta) };
+      const a = markSeen(meta, 'seenItems', visit.items.map((i) => itemId(i.key, i.value)));
+      const b = markSeen(meta, 'seenTitles', visit.titles);
+      if (a || b) saveMeta(meta);
+    }
   }
 
   private set(next: TrainerLook) {
     state.meta.trainerLook = cleanLook(next);
     saveMeta(state.meta);
-    this.scene.restart({ from: this.from });
+    this.scene.restart({ from: this.from, again: true });
   }
 
   create() {
@@ -101,7 +114,7 @@ export class TrainerScene extends Phaser.Scene {
     text(this, 96, 266 + py, pose === 'backCommand' ? 'In battle (from behind) · tap' : 'Tap to see it in battle', 10, COLORS.textDim).setOrigin(0.5, 1);
     panel.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       previewPose = previewPose === 'stand' ? 'back' : 'stand';
-      this.scene.restart({ from: this.from });
+      this.scene.restart({ from: this.from, again: true });
     });
 
     // Name, shuffle and a note on where the trainer shows up.
@@ -112,7 +125,7 @@ export class TrainerScene extends Phaser.Scene {
       fontSize: 20,
       sub: title ? titleSub(title) : LANDSCAPE ? 'Name and title' : 'Your name and title · tap to change',
       color: 0x2f4a6b,
-      badge: newTitles(meta).length ? 'NEW' : undefined,
+      badge: visit.titles.length ? 'NEW' : undefined,
     });
     if (title) titleInButton(this, nb, title, 13);
     // Shuffle: everyday clothes only, or mixing in the gear you've unlocked.
@@ -152,7 +165,7 @@ export class TrainerScene extends Phaser.Scene {
     // One tile per part, two columns; tap to choose from a grid of previews.
     const t = tiles();
     const TILE_W = t.w;
-    const fresh = newItems(meta);
+    const fresh = visit.items;
     LOOK_PARTS.forEach((part, i) => {
       const x = t.x0 + (i % t.cols) * (TILE_W + 6);
       const y = t.top + Math.floor(i / t.cols) * (TILE_H + TILE_GAP);
@@ -184,9 +197,9 @@ export class TrainerScene extends Phaser.Scene {
     // Colors of a hat you aren't wearing would show nothing: preview them on a cap.
     const base: TrainerLook = part.key === 'hatColor' && look.hat === 0 ? { ...look, hat: 1 } : look;
     const close = () => layer.destroy();
-    // Unlocked gear you haven't seen yet gets a NEW tag, once: opening the grid counts as seeing it.
-    const unseen = new Set(newItems(state.meta).filter((i) => i.key === part.key).map((i) => i.value));
-    if (unseen.size && markSeen(state.meta, 'seenItems', [...unseen].map((v) => itemId(part.key, v)))) saveMeta(state.meta);
+    // Unlocked gear new this visit gets a NEW tag in the grid; its part tile's tag goes once you've opened it.
+    const unseen = new Set(visit.items.filter((i) => i.key === part.key).map((i) => i.value));
+    visit.items = visit.items.filter((i) => i.key !== part.key);
     part.names.forEach((name, v) => {
       const x = 18 + (v % cols) * cellW;
       const y = top + Math.floor(v / cols) * cellH;
@@ -244,17 +257,20 @@ export class TrainerScene extends Phaser.Scene {
         {
           label: 'Titles',
           glyph: 'crown',
-          sub: `${titles.length}/${TITLES.length} earned${newTitles(meta).length ? ` · ${newTitles(meta).length} new!` : ' · shown to your opponent online'}`,
-          badge: newTitles(meta).length ? 'NEW' : undefined,
+          sub: `${titles.length}/${TITLES.length} earned${visit.titles.length ? ` · ${visit.titles.length} new!` : ' · shown to your opponent online'}`,
+          badge: visit.titles.length ? 'NEW' : undefined,
         },
         { label: 'Gilded milestones', glyph: 'sparkle', sub: next ? `Next: ${next.count} Gilded species (you have ${gildedCount(meta)})` : 'All reached!' },
       ],
-      onPick: (i) => (i === 0 ? this.rename() : i === 1 ? openTitles(this, meta, () => this.scene.restart({ from: this.from })) : openGildedMilestones(this, meta)),
+      onPick: (i) => (i === 0 ? this.rename() : i === 1 ? openTitles(this, meta, () => {
+        visit.titles = [];
+        this.scene.restart({ from: this.from, again: true });
+      }, visit.titles) : openGildedMilestones(this, meta)),
       onCancel: () => {},
     });
   }
 
   private rename() {
-    editTrainerName({ onDone: () => this.scene.restart({ from: this.from }) });
+    editTrainerName({ onDone: () => this.scene.restart({ from: this.from, again: true }) });
   }
 }

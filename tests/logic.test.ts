@@ -13,7 +13,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, starterShiny, toggleStarterShiny, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
+import { allCreatures, bagHasNew, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, starterShiny, toggleStarterShiny, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1120,6 +1120,18 @@ describe('held items', () => {
     c.hp = 0;
     buryFallen(run);
     expect(run.bag!.sort()).toEqual(['band', 'egg']);
+  });
+  it("the Bag's dot shows new items until the Bag is opened, not items handed back", () => {
+    const run = startRun(mkMeta(), 'emberkit', 9);
+    expect(bagHasNew(run)).toBe(false);
+    stash(run, 'band');
+    expect(bagHasNew(run)).toBe(true);
+    run.bagUnseen = 0; // opened the Bag
+    expect(bagHasNew(run)).toBe(false);
+    stash(run, 'egg', false); // returned, not earned
+    expect(bagHasNew(run)).toBe(false);
+    stash(run, 'egg');
+    expect(bagHasNew(run)).toBe(true);
   });
   it('Lucky Egg earns more XP', () => {
     const run = startRun(mkMeta(), 'emberkit', 10);

@@ -33,6 +33,11 @@ export class BagScene extends Phaser.Scene {
 
   create() {
     const run = state.run!;
+    // Opening the Bag counts as seeing what's new in it (the gold dot on its buttons goes).
+    if (run.bagUnseen) {
+      run.bagUnseen = 0;
+      persist();
+    }
     background(this);
 
     // Upright: potions and stones in a header, items listed below. Sideways: potions and stones in
