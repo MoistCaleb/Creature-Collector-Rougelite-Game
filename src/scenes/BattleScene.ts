@@ -21,7 +21,7 @@ import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
 import { bossLook, cleanLook, lookForName, myLook, myName, type TrainerLook } from '../data/trainerLook';
-import { battleBackdrop, battlePad, fieldWeather, onField, pickStage } from '../ui/backdrops';
+import { battleBackdrop, battlePad, battleSky, fieldWeather, onField, pickStage, stageMood, type Mood } from '../ui/backdrops';
 import { arenaBackdrop, arenaPad, type Crowd } from '../ui/arena';
 import { ensureTrainerTexture, TRAINER_W, trainerSpan } from '../ui/trainerSprite';
 import { trainerFlare, trainerFx } from '../ui/trainerFx';
@@ -268,6 +268,10 @@ export class BattleScene extends Phaser.Scene {
     // "already wrapped up" flag, queued next step or fast-forward.
     this.watchEnded = false;
     this.duelNext = null;
+    this.weatherShown = null;
+    this.weatherFx = [];
+    this.skySynced = false;
+    this.field = null;
     this.fast = false;
     this.match = data.match ?? null;
     if (this.match) return this.createMatch(this.match);
@@ -655,7 +659,11 @@ export class BattleScene extends Phaser.Scene {
   /** The weather's look over the field, matching the battle's weather (none when it clears). */
   private weatherFx: Phaser.GameObjects.GameObject[] = [];
   private weatherShown: string | null = null;
+  /** The sky's been matched to the battle once (the first time is instant, no crossfade). */
+  private skySynced = false;
   private showWeather() {
+    this.syncSky(!this.skySynced);
+    this.skySynced = true;
     const w = this.battle.weather;
     if (w === this.weatherShown) return;
     this.weatherShown = w;
@@ -675,9 +683,38 @@ export class BattleScene extends Phaser.Scene {
 
   /** The element's environment behind the field, and a pad under each side. */
   private drawField(el: Element, stage: number) {
-    battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
-    battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72);
-    battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72);
+    const sky = battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
+    const pads = [...battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72), ...battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72)];
+    this.field = { el, stage, sky, pads, mood: stageMood(el, stage) };
+  }
+
+  /** The painted field, so the time of day can change mid-battle. */
+  private field: { el: Element; stage: number; sky: Phaser.GameObjects.Image; pads: Phaser.GameObjects.Ellipse[]; mood: Mood } | null = null;
+
+  /** The sky follows the battle: sun makes it day, night falling makes it night (a crossfade). */
+  private syncSky(instant = false) {
+    const f = this.field;
+    if (!f || !this.battle) return;
+    const want: Mood = this.battle.weather === 'sun' ? 'day' : this.battle.night ? 'night' : stageMood(f.el, f.stage);
+    if (want === f.mood) return;
+    f.mood = want;
+    const board = { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH };
+    const sky = battleSky(this, f.el, f.stage, board, L.field, want);
+    this.children.moveAbove(sky, f.sky);
+    const pads = [...battlePad(this, f.el, f.stage, ENEMY_POS.x, ENEMY_POS.y + 72, 200, want), ...battlePad(this, f.el, f.stage, PLAYER_POS.x, PLAYER_POS.y + 72, 200, want)];
+    // Each new pad piece sits just above the old one, under the Hexlings.
+    pads.forEach((p, i) => this.children.moveAbove(p, f.pads[i]));
+    const old = [f.sky, ...f.pads];
+    f.sky = sky;
+    f.pads = pads;
+    const fresh = [sky, ...pads];
+    if (instant || calm()) {
+      old.forEach((o) => o.destroy());
+      return;
+    }
+    const alphas = fresh.map((o) => o.alpha);
+    fresh.forEach((o) => o.setAlpha(0));
+    fresh.forEach((o, i) => this.tweens.add({ targets: o, alpha: alphas[i], duration: 1400, ease: 'Sine.easeInOut', onComplete: i === 0 ? () => old.forEach((x) => x.destroy()) : undefined }));
   }
 
   /** Trainers standing beside the field: arms down, and their textures for giving an order. */
@@ -1589,6 +1626,8 @@ export class BattleScene extends Phaser.Scene {
           if (ev === shownEarly) break;
           this.say(ev.text, events, idx);
           if (ev.text === 'It missed!') sfx.miss();
+          // Night falling (a trait) shows in the sky.
+          if (ev.text.endsWith('night falls over the battle.')) this.syncSky();
           await this.wait(620);
           break;
         case 'stat': {
