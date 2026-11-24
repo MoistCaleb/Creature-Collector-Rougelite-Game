@@ -14,7 +14,7 @@ import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
-import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, slowId, WARP_ID } from '../data/moves';
+import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
@@ -739,7 +739,7 @@ export class DexScene extends Phaser.Scene {
     // Each element's moves (with its Blitz and Crush), then the Neutral ones.
     const groups: [Element | 'Neutral', string[]][] = [
       ...ELEMENTS.map((el): [Element, string[]] => [el, [...elementPool(el), fastId(el), slowId(el)]]),
-      ['Neutral', [BULWARK_ID, WARP_ID]],
+      ['Neutral', [BULWARK_ID, WARP_ID, ...NEUTRAL_IDS]],
     ];
     for (const [el, pool] of groups) {
       if (elFilter && el !== elFilter) continue;

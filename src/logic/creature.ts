@@ -1,6 +1,7 @@
 import { natureMult } from '../data/natures';
 import { BALANCE } from '../data/balance';
 import { weatherId, type WeatherId } from '../data/moves';
+import { NEUTRAL, type NeutralFx } from '../data/moves';
 import { attackEl, attackId, attackValue, BULWARK_ID, fastId, slowId, WARP_ID, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, teamMoveId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES, SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
@@ -254,10 +255,47 @@ export function extraMoves(sp: Species): LearnEntry[] {
   else if (sp.base.def >= bulky) out.push({ id: BULWARK_ID, level: 30 });
   const w = WEATHER_LINES[sp.id];
   if (w) out.push({ id: weatherId(w), level: 28 });
+  for (const [n, lv] of NEUTRAL_LINES[sp.id] ?? []) out.push({ id: NEUTRAL[n].id, level: lv });
   EXTRA_CACHE.set(sp.id, out);
   return out;
 }
 const EXTRA_CACHE = new Map<string, LearnEntry[]>();
+
+/** Lines that learn one of the other Neutral moves (by what suits them), and at what level. */
+export const NEUTRAL_LINES: Record<string, [NeutralFx, number][]> = {
+  // Jeer: fast, fragile hecklers.
+  crowlet: [['jeer', 22]],
+  staticat: [['jeer', 24]],
+  gloomkit: [['jeer', 24]],
+  // Echo: wailing spirits and sirens.
+  wailet: [['echo', 26]],
+  siplet: [['echo', 26]],
+  bubblit: [['echo', 28]],
+  // Mirror Veil: mirror lines.
+  twilit: [['veil', 24], ['daynight', 32]],
+  glintmite: [['veil', 26]],
+  // Switcheroo: tricksters.
+  prismkit: [['swap', 26]],
+  maskit: [['swap', 24]],
+  // Smokescreen: smoke, cloud and mist.
+  smoglet: [['smoke', 24]],
+  cloudlet: [['smoke', 24]],
+  mistlet: [['smoke', 32]],
+  // Toll: reapers and death caps.
+  grimlet: [['toll', 30]],
+  belladot: [['toll', 30]],
+  bonelet: [['toll', 32]],
+  // Snare: webs and traps.
+  creepet: [['snare', 22]],
+  icemite: [['snare', 24]],
+  pitchling: [['snare', 24]],
+  // Hush: halos and silent owls.
+  halofly: [['hush', 28]],
+  snowlet: [['hush', 26]],
+  // Turn of Day: dusk and dawn.
+  mothlet: [['daynight', 30]],
+  dawnling: [['daynight', 30]],
+};
 
 /** The only lines that call up the weather: two for each kind. */
 export const WEATHER_LINES: Record<string, WeatherId> = {

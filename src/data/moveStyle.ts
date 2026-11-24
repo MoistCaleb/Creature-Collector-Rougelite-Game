@@ -1,4 +1,4 @@
-import type { MoveDef } from './moves';
+import type { MoveDef, NeutralFx } from './moves';
 
 /**
  * Which animation a move plays, chosen from the words in its name ("Venom Fang" bites,
@@ -65,8 +65,22 @@ const STATUS_RULES: [RegExp, Style][] = [
   [/\b(charge|focus|overclock|kindle|stoking|hoard|polarity|magnetize|rod|core|sunsoak|commune|halo|bless|roar|rumble)\b/, 'gather'],
 ];
 
+const NEUTRAL_STYLE: Record<NeutralFx, Style> = {
+  jeer: 'roar',
+  echo: 'roar',
+  veil: 'shield',
+  swap: 'vortex',
+  smoke: 'fade',
+  toll: 'curse',
+  snare: 'bind',
+  hush: 'gaze',
+  daynight: 'swirl',
+};
+
 export function moveStyle(def: MoveDef): Style {
   const name = def.name.toLowerCase();
+  // The Neutral moves that bend the battle.
+  if (def.neutral) return NEUTRAL_STYLE[def.neutral];
   // Speed attacks: a Blitz darts in, a Crush comes down heavy.
   if (def.speedPower) return def.speedPower === 'fast' ? 'dash' : 'smash';
   if (def.kind === 'heal') {

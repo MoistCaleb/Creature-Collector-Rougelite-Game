@@ -2,7 +2,7 @@ import { isBoon } from '../data/boons';
 import type { ArenaPick } from '../logic/arena';
 import type { TrainerLook } from '../data/trainerLook';
 import { makeArenaCreature } from '../logic/arena';
-import { Battle, type BattleEvent, type PlayerAction } from '../logic/battle';
+import { Battle, neutralLoad, neutralSave, type BattleEvent, type NeutralSave, type PlayerAction } from '../logic/battle';
 import { isAlive, stats, type Creature } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { synergyMults } from '../logic/synergy';
@@ -206,6 +206,8 @@ interface SideSnap {
   def: number;
   spd: number;
   sash: 'fired' | 'spent' | null;
+  /** Neutral move effects on it (Jeer, Echo, Toll, Snare, Hush). */
+  nx?: NeutralSave;
 }
 
 export interface Snap {
@@ -221,6 +223,9 @@ export interface Snap {
   wx?: [string, number] | null;
   /** Potions left on each side. */
   pots?: { player: number; enemy: number };
+  /** Night (Night Stalker, Eclipse, Turn of Day), or day brought by Turn of Day. */
+  night?: boolean;
+  dawn?: boolean;
 }
 
 export function snapshot(b: Battle): Snap {
@@ -233,8 +238,9 @@ export function snapshot(b: Battle): Snap {
       def: x.defStage,
       spd: x.spdStage,
       sash: x.sash ?? null,
+      nx: neutralSave(x),
     }));
-  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } }, warp: b.warp, wx: b.weather ? [b.weather, b.weatherLeft] : null };
+  return { player: side(b.player), enemy: side(b.enemy), pActive: b.pActive, eActive: b.eActive, fx: { player: { ...b.teamFx.player }, enemy: { ...b.teamFx.enemy } }, warp: b.warp, wx: b.weather ? [b.weather, b.weatherLeft] : null, night: b.night, dawn: b.dawn };
 }
 
 /** A snapshot with each side's potions left (from the runner's side). */
@@ -242,7 +248,7 @@ const withPots = (snap: Snap, pots: { host: number; guest: number }): Snap => ({
 
 /** The same state seen from the other side of the field. */
 export function flipSnap(s: Snap): Snap {
-  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp, wx: s.wx, pots: s.pots ? { player: s.pots.enemy, enemy: s.pots.player } : undefined };
+  return { player: s.enemy, enemy: s.player, pActive: s.eActive, eActive: s.pActive, fx: s.fx ? { player: s.fx.enemy, enemy: s.fx.player } : undefined, warp: s.warp, wx: s.wx, pots: s.pots ? { player: s.pots.enemy, enemy: s.pots.player } : undefined, night: s.night, dawn: s.dawn };
 }
 
 export function applySnap(b: Battle, s: Snap) {
@@ -257,6 +263,7 @@ export function applySnap(b: Battle, s: Snap) {
       x.defStage = v.def;
       x.spdStage = v.spd;
       x.sash = v.sash ?? undefined;
+      neutralLoad(x, v.nx ?? [0, 0, 0, 0, 0, 0, null]);
     });
   side(b.player, s.player);
   side(b.enemy, s.enemy);
@@ -265,6 +272,8 @@ export function applySnap(b: Battle, s: Snap) {
   b.teamFx = { player: { ...(s.fx?.player ?? {}) }, enemy: { ...(s.fx?.enemy ?? {}) } };
   b.warp = Math.max(0, Math.min(9, Number(s.warp) || 0));
   b.setWeather(Array.isArray(s.wx) ? s.wx[0] : null, Array.isArray(s.wx) ? s.wx[1] : 0);
+  b.night = !!s.night;
+  b.dawn = !!s.dawn && !b.night;
 }
 
 /** Battle events seen from the other side of the field. */

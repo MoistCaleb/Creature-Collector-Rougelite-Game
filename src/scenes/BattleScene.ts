@@ -695,7 +695,7 @@ export class BattleScene extends Phaser.Scene {
   private syncSky(instant = false) {
     const f = this.field;
     if (!f || !this.battle) return;
-    const want: Mood = this.battle.weather === 'sun' ? 'day' : this.battle.night ? 'night' : stageMood(f.el, f.stage);
+    const want: Mood = this.battle.weather === 'sun' || this.battle.dawn ? 'day' : this.battle.night ? 'night' : stageMood(f.el, f.stage);
     if (want === f.mood) return;
     f.mood = want;
     const board = { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH };
@@ -1395,9 +1395,12 @@ export class BattleScene extends Phaser.Scene {
       );
       this.actions.add(text(this, L.fallback.x, L.fallback.noteY, 'Out of move uses! Rest, bench it, or use a Full Restore.', 13, '#ffc94d', { align: 'center', wordWrap: { width: L.fallback.w } }).setOrigin(0.5, 0));
     }
+    // Jeered: only attacks work for now.
+    const jeered = (this.battle.p.jeer ?? 0) > 0;
     p.moves.forEach((m, i) => {
       if (outOfMoves(p)) return;
       const d = moveDef(m);
+      const usable = hasUses(m) && !(jeered && d.kind !== 'attack');
       const mult = d.kind === 'attack' ? typeMultiplier(attackEl(d), creatureTypes(e)) : 1;
       const hint = d.kind !== 'attack' ? '' : mult > 1.01 ? ' ▲' : mult < 0.99 ? ' ▼' : '';
       const x = x0 + bw / 2 + (i % 2) * (bw + gap);
@@ -1408,14 +1411,14 @@ export class BattleScene extends Phaser.Scene {
           color,
           sub: `${moveSummary(d, m.tier)}  ·  ${'✦'.repeat(m.tier)}`,
           fontSize: 17,
-          enabled: hasUses(m),
+          enabled: usable,
           // Long names stay on one line (shrinking), clear of the accuracy and uses in the corners.
           oneLine: true,
           contentDy: LANDSCAPE ? 6 : 2,
         }),
       );
       // Hit chance in the top-left corner; limited moves show their uses left in the top-right.
-      this.actions.add(text(this, x - bw / 2 + 6, y - bh / 2 + 2, accText(d), 11, d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(hasUses(m) ? 1 : 0.5));
+      this.actions.add(text(this, x - bw / 2 + 6, y - bh / 2 + 2, jeered && d.kind !== 'attack' ? 'JEERED' : accText(d), 11, jeered && d.kind !== 'attack' ? '#ff8a7a' : d.accuracy < 100 ? '#ffc94d' : '#d8d2ec', { fontStyle: 'bold' }).setAlpha(usable ? 1 : 0.6));
       const left = usesLeft(m);
       if (Number.isFinite(left)) {
         const max = maxUses(d)!;
@@ -1561,13 +1564,15 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
     }
+    // Snare: the one out can't leave until it slips free.
+    const snared = !forced && this.battle.snared('player');
     openPicker(this, {
       title: forced ? 'Choose your next Hexling' : 'Switch Hexling',
-      subtitle: forced ? undefined : 'Switching uses your turn.',
+      subtitle: forced ? undefined : snared ? `${creatureName(this.battle.p.c)} is caught in a Snare! It can't switch out for ${this.battle.p.snare} more turn${this.battle.p.snare === 1 ? '' : 's'}.` : 'Switching uses your turn.',
       options: list.map((x, i) => ({
         creature: x.c,
-        disabled: i === this.battle.pActive || !isAlive(x.c),
-        note: i === this.battle.pActive ? 'In battle' : !isAlive(x.c) ? 'Fallen' : undefined,
+        disabled: i === this.battle.pActive || !isAlive(x.c) || snared,
+        note: i === this.battle.pActive ? (snared ? 'Snared' : 'In battle') : !isAlive(x.c) ? 'Fallen' : undefined,
       })),
       onPick: pick,
       onCancel: forced ? undefined : () => this.maybeAuto(),
@@ -1627,7 +1632,7 @@ export class BattleScene extends Phaser.Scene {
           this.say(ev.text, events, idx);
           if (ev.text === 'It missed!') sfx.miss();
           // Night falling (a trait) shows in the sky.
-          if (ev.text.endsWith('night falls over the battle.')) this.syncSky();
+          if (ev.text.endsWith('night falls over the battle.') || ev.text.endsWith('Dawn breaks over the battle.')) this.syncSky();
           await this.wait(620);
           break;
         case 'stat': {
@@ -1805,6 +1810,15 @@ export class BattleScene extends Phaser.Scene {
         this.fxChips.add(t.setPosition(x + 5, y + 2));
         x += side === 'player' ? -4 : w + 4;
       }
+      // Neutral moves on this side's Hexling: Jeer, Echo, Snare, Toll, Hush, Mirror Veil.
+      for (const [label, color] of this.neutralTags(side)) {
+        const t = text(this, 0, 0, label, 11, '#1a1426', { fontStyle: 'bold' });
+        const w = t.width + 10;
+        if (side === 'player') x -= w;
+        this.fxChips.add(this.add.rectangle(x, y, w, 16, color).setOrigin(0));
+        this.fxChips.add(t.setPosition(x + 5, y + 2));
+        x += side === 'player' ? -4 : w + 4;
+      }
       // Time Warp and the weather are on the whole field: chips with the enemy's.
       if (side === 'enemy' && this.battle.warp > 0) {
         const t = text(this, 0, 0, `TIME WARP · ${this.battle.warp}`, 11, '#1a1426', { fontStyle: 'bold' });
@@ -1821,6 +1835,20 @@ export class BattleScene extends Phaser.Scene {
         this.fxChips.add(t.setPosition(x + 5, y + 2));
       }
     }
+  }
+
+  /** Chips for the Neutral moves working on a side's Hexling, with turns left. */
+  private neutralTags(side: 'player' | 'enemy'): [string, number][] {
+    const x = side === 'player' ? this.battle.p : this.battle.e;
+    if (!x || !isAlive(x.c)) return [];
+    const out: [string, number][] = [];
+    if (x.jeer) out.push([`JEERED · ${x.jeer}`, 0xff8a7a]);
+    if (x.echo) out.push([`ECHO · ${x.echo}`, 0xc8a0ff]);
+    if (x.snare) out.push([`SNARED · ${x.snare}`, 0xa0c070]);
+    if (x.toll) out.push([`TOLL · ${x.toll}`, 0xd0b060]);
+    if (x.hush) out.push([`HUSHED · ${x.hush}`, 0x9ab0d0]);
+    if (x.veiled) out.push(['MIRROR VEIL', 0xbfe8ff]);
+    return out;
   }
 
   private afterTurn() {
