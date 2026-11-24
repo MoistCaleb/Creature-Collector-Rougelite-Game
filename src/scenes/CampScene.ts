@@ -632,7 +632,7 @@ export class CampScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(400, 2500), act);
   }
 
-  /** Pet, feed or play with a camp Hexling (each once a day; the first each day builds your bond). */
+  /** Pet, feed or play with a camp Hexling (each once between runs, losses too; the first each time builds your bond). */
   private careFor(speciesId: string, stage: number, c: Phaser.GameObjects.Container) {
     const meta = state.meta;
     const name = SPECIES_BY_ID[speciesId].names[stage] ?? SPECIES_BY_ID[speciesId].names[0];
@@ -646,7 +646,7 @@ export class CampScene extends Phaser.Scene {
     };
     const now = hearts ? `${hearts >= BOND_HEART.max ? 'Best friends! ' : ''}${bondReward(Math.min(hearts, BOND_HEART.max), name).replace(/^./, (ch) => ch.toUpperCase())}.` : '';
     const toNext = next
-      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and your first time together here each day (+${BOND_POINTS.care}).`
+      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and your first time together here after each run (+${BOND_POINTS.care}).`
       : '';
     const alt = hearts >= BOND_HEART.max;
     const altOn = bondColours(meta, speciesId);
@@ -654,7 +654,7 @@ export class CampScene extends Phaser.Scene {
       title: `${name} ${'♥'.repeat(hearts)}${'♡'.repeat(CAMP_HEARTS.length - hearts)}`,
       subtitle: [now, toNext].filter(Boolean).join(' '),
       options: [
-        ...CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done today' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
+        ...CARE.map((k) => ({ label: labels[k][0], sub: done.includes(k) ? 'Done · again after your next run' : labels[k][1], disabled: done.includes(k), color: 0x6a3a5a })),
         ...(alt ? [{ label: `Bond colours: ${altOn ? 'on' : 'off'}`, sub: 'Tap to switch', color: 0x3a4a6a }] : []),
       ],
       cancelLabel: 'Back',
@@ -895,7 +895,7 @@ export class CampScene extends Phaser.Scene {
     const current = campCrew(meta).map((c) => c.speciesId);
     openPicker(this, {
       title: 'Camp crew',
-      subtitle: `Who stays at camp (up to ${CREW_MAX}). Spend time with them each day to build your bond.`,
+      subtitle: `Who stays at camp (up to ${CREW_MAX}). Spend time with them after each run to build your bond.`,
       options: [
         ...Array.from({ length: CREW_MAX }, (_, i) => {
           const id = current[i];

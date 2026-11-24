@@ -3,6 +3,7 @@ import { DEFAULT_STARTERS } from '../src/data/species';
 import { traitsOf } from '../src/data/traits';
 import { emptyStats } from '../src/logic/achievements';
 import {
+  heartFill,
   BOND_POINTS,
   BOND_START_LEVELS,
   BOND_VERSION,
@@ -76,7 +77,7 @@ describe('Camp bond, deepened (2.0)', () => {
     expect(camp(fresh).bondV).toBe(BOND_VERSION);
   });
 
-  it('caring builds bond once a day (the other two cares are just for fun)', () => {
+  it('caring builds bond once between runs (the other two cares are just for fun)', () => {
     const m = mkMeta();
     expect(care(m, 'emberkit', 'pet')).toBe(0);
     expect(care(m, 'emberkit', 'feed')).toBe(0);
@@ -84,6 +85,27 @@ describe('Camp bond, deepened (2.0)', () => {
     expect(camp(m).bond.emberkit).toBe(BOND_POINTS.care);
     at(m, 'frostling', CAMP_HEARTS[0] - 1);
     expect(care(m, 'frostling', 'play')).toBe(1);
+  });
+
+  it('care comes back after every run, losses too, but not after online races', () => {
+    const m = mkMeta();
+    care(m, 'emberkit', 'pet');
+    expect(care(m, 'emberkit', 'pet')).toBeNull();
+    payRunBond(m, startRun(m, 'emberkit', 3), false);
+    expect(care(m, 'emberkit', 'pet')).toBe(0);
+    expect(camp(m).bond.emberkit).toBe(BOND_POINTS.care * 2 + BOND_POINTS.finished);
+    const race = startRun(m, 'emberkit', 4);
+    race.race = {} as never;
+    payRunBond(m, race, true);
+    expect(care(m, 'emberkit', 'pet')).toBeNull();
+  });
+
+  it('the bond meter fills one heart after another', () => {
+    expect(heartFill(0)).toEqual([0, 0, 0, 0, 0]);
+    expect(heartFill(CAMP_HEARTS[0] / 2)).toEqual([0.5, 0, 0, 0, 0]);
+    const mid = (CAMP_HEARTS[0] + CAMP_HEARTS[1]) / 2;
+    expect(heartFill(mid)).toEqual([1, 0.5, 0, 0, 0]);
+    expect(heartFill(CAMP_HEARTS[4] + 99)).toEqual([1, 1, 1, 1, 1]);
   });
 
   it('runs pay bond: finishing, winning, MVP and each guardian it helped beat, once', () => {

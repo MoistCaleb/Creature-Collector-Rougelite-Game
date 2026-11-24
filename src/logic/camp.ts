@@ -37,7 +37,7 @@ export interface CampState {
   bondTrait?: Record<string, import('../data/traits').TraitId>;
   /** Heart 5: lines you've switched back from their bond colours. */
   altOff?: string[];
-  /** What you've done with each Hexling today ('pet', 'feed', 'play'). */
+  /** What you've done with each Hexling since your last run, or today ('pet', 'feed', 'play'). */
   cared: Record<string, string[]>;
   /** Workshop upgrades bought (2.0, see logic/workshop). */
   workshop?: import('../data/workshop').WorkshopId[];
@@ -70,7 +70,7 @@ export function counters(m: Meta): Record<string, number> {
   };
 }
 
-/** Your camp, set up for today (a new day brings new challenges and fresh care). */
+/** Your camp, set up for today (a new day brings new challenges and fresh care; so does each run, see payRunBond). */
 export function camp(m: Meta, now = new Date()): CampState {
   const day = localDay(now);
   const c = (m.camp ??= { day: '', base: {}, claimed: [], done: 0, embers: 0, owned: [], bond: {}, cared: {}, bondV: BOND_VERSION });
@@ -252,7 +252,7 @@ export const BOND_HEART = { startBond: 3, trait: 4, max: 5 } as const;
 export const CAMP_START_BOND = 3;
 /** Heart 5: extra starting levels as your starter. */
 export const BOND_START_LEVELS = 2;
-/** Bond points from a run (see payRunBond) and from camp (the first care each day). */
+/** Bond points from a run (see payRunBond) and from camp (the first care after each run). */
 export const BOND_POINTS = { care: 1, finished: 2, won: 4, mvp: 3, guardian: 1 } as const;
 
 /** The bond scale saved points are on. */
@@ -284,6 +284,14 @@ export function bondToNext(m: Meta, speciesId: string): { points: number; next: 
   return next === undefined ? null : { points, next, need: next - points };
 }
 
+/** How full each of the five hearts is (0-1), for the bond meter: they fill one after another. */
+export function heartFill(points: number): number[] {
+  return CAMP_HEARTS.map((hi, i) => {
+    const lo = CAMP_HEARTS[i - 1] ?? 0;
+    return Math.max(0, Math.min(1, (points - lo) / (hi - lo)));
+  });
+}
+
 /** What a heart gives (1-5). */
 export function bondReward(heart: number, name = 'it'): string {
   return (
@@ -306,8 +314,8 @@ export function addBond(m: Meta, speciesId: string, points: number): { before: n
 }
 
 /**
- * Spend time with a Hexling (each kind once a day; the first each day builds your bond).
- * Returns the hearts gained (0 or 1), or null if that was already done today.
+ * Spend time with a Hexling (each kind once between runs; the first each time builds your bond).
+ * Returns the hearts gained (0 or 1), or null if that was already done since your last run.
  */
 export function care(m: Meta, speciesId: string, what: Care): number | null {
   const c = camp(m);
@@ -426,6 +434,8 @@ export function payRunBond(meta: Meta, run: Run, won: boolean): { speciesId: str
     .sort((a, b) => b.points - a.points);
   if (run.bondPaid) return out;
   run.bondPaid = true;
+  // Every finished run (losses too, not online races) makes camp care fresh again.
+  if (!run.race) camp(meta).cared = {};
   for (const o of out) Object.assign(o, addBond(meta, o.speciesId, o.points));
   return out;
 }
