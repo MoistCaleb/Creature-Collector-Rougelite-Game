@@ -54,18 +54,26 @@ export function openWhatsNew(scene: Phaser.Scene, entries: ChangelogEntry[], onC
   const list = scene.add.container(0, 0);
   p.root.add(list);
   let y = top;
-  for (const e of entries) {
-    list.add(text(scene, x0, y, `${e.title}  \u00b7  v${e.version}`, 16, '#ffc94d', { fontStyle: 'bold' }));
-    y += 24;
-    for (const item of e.items) {
-      const t = text(scene, x0 + 16, y, item, 13, COLORS.text, { wordWrap: { width: ww - 16 }, lineSpacing: 2 });
-      list.add([text(scene, x0, y, '\u2726', 13, '#ffc94d'), t]);
-      y += t.height + 6;
+  // Built a few entries at a time, as you scroll toward them: the full history is hundreds of
+  // lines, and making them all up front stalled the popup on phones.
+  let built = 0;
+  const buildTo = (limit: number) => {
+    while (built < entries.length && y < limit) {
+      const e = entries[built++];
+      list.add(text(scene, x0, y, `${e.title}  \u00b7  v${e.version}`, 16, '#ffc94d', { fontStyle: 'bold' }));
+      y += 24;
+      for (const item of e.items) {
+        const t = text(scene, x0 + 16, y, item, 13, COLORS.text, { wordWrap: { width: ww - 16 }, lineSpacing: 2 });
+        list.add([text(scene, x0, y, '\u2726', 13, '#ffc94d'), t]);
+        y += t.height + 6;
+      }
+      y += 10;
     }
-    y += 10;
-  }
-  const overflow = y - bottom;
-  if (overflow > 0) {
+  };
+  const AHEAD = 500;
+  buildTo(bottom + AHEAD);
+  const overflow = () => y - bottom;
+  if (overflow() > 0) {
     // Only the list area shows; the rest scrolls under the panel's edges.
     const shape = scene.make.graphics({}, false).fillRect(p.x, top - 4, p.w, bottom - top + 4);
     list.setMask(shape.createGeometryMask());
@@ -76,9 +84,10 @@ export function openWhatsNew(scene: Phaser.Scene, entries: ChangelogEntry[], onC
       get: () => list.y,
       set: (v) => {
         list.setY(v);
-        hint.setVisible(v > -overflow + 4);
+        buildTo(bottom - v + AHEAD);
+        hint.setVisible(v > -overflow() + 4);
       },
-      min: () => -overflow - 4,
+      min: () => -overflow() - 4,
       max: () => 0,
       popup: true,
     });

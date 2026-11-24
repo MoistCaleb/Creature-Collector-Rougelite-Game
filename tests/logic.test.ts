@@ -2087,7 +2087,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.03', '2.02', '2.01', '2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.04', '2.03', '2.02', '2.01', '2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });
@@ -2751,7 +2751,7 @@ describe('Natures and bond', () => {
   });
 });
 
-import { dayPhase, holidayOn } from '../src/logic/ambience';
+import { clockSky, dayPhase, holidayOn, setWorldClock as setClock } from '../src/logic/ambience';
 describe('Time of day and holidays', () => {
   it('reads the phase of the day and only short holiday windows', () => {
     expect(dayPhase(new Date(2026, 10, 20, 13))).toBe('day');
@@ -2763,6 +2763,20 @@ describe('Time of day and holidays', () => {
     expect(holidayOn(new Date(2026, 11, 10))).toBeNull();
     expect(holidayOn(new Date(2026, 11, 31))?.id).toBe('newyear');
     expect(holidayOn(new Date(2026, 1, 14))?.id).toBe('valentine');
+  });
+
+  it('battle skies follow the clock, and keep their own time with the clock off', () => {
+    setClock(true);
+    const at = (h: number) => new Date(2026, 10, 20, h);
+    expect(clockSky('night', at(13))).toBe('day');
+    expect(clockSky('fog', at(13))).toBe('fog');
+    expect(clockSky('day', at(23))).toBe('night');
+    expect(clockSky('fog', at(2))).toBe('night');
+    expect(clockSky('day', at(6))).toBe('dusk');
+    expect(clockSky('day', at(19))).toBe('dusk');
+    setClock(false);
+    expect(clockSky('night', at(13))).toBe('night');
+    setClock(true);
   });
 });
 

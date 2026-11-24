@@ -47,5 +47,17 @@ let clockOn = true;
 export function setWorldClock(on: boolean) {
   clockOn = on;
 }
+/**
+ * A battle's sky by the clock: day in the daytime (a foggy stage stays foggy), the warm dusk sky
+ * at dawn and dusk, night at night. With the clock off, the stage keeps its own time of day.
+ */
+export function clockSky<M extends 'day' | 'dusk' | 'night' | 'fog'>(own: M, now: Date | null = new Date()): 'day' | 'dusk' | 'night' | 'fog' {
+  if (!clockOn || !now) return own;
+  const phase = dayPhase(now);
+  if (phase === 'day') return own === 'fog' ? 'fog' : 'day';
+  if (phase === 'night') return 'night';
+  return 'dusk';
+}
+
 /** Is it night out right now (and is the clock on)? */
 export const nightOut = (now: Date = new Date()): boolean => clockOn && dayPhase(now) === 'night';

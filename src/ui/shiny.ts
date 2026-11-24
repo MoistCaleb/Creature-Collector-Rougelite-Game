@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { icon } from './icons';
 import { sfx } from './sound';
-import { FONT, fullRect, ZOOM } from './widgets';
+import { FONT, fullRect, placeAbove, ZOOM } from './widgets';
 
 /** Odds that a wild Hexling is shiny. */
 export const SHINY_ODDS = 1 / 200;
@@ -182,7 +182,7 @@ export function shinyAura(scene: Phaser.Scene, sprite: Phaser.GameObjects.Image)
     .setDepth(sprite.depth);
   // Just above its Hexling in the draw order, not above everything at a higher depth: a trainer
   // standing in front of it, and the panels and messages, stay on top.
-  if (!sprite.parentContainer) scene.children.moveAbove(glitter as unknown as Phaser.GameObjects.GameObject, sprite);
+  if (!sprite.parentContainer) placeAbove(scene.children, glitter, sprite);
   // A gold glow around the sprite where the renderer supports it (WebGL).
   sprite.preFX?.setPadding(6);
   const fx = sprite.preFX?.addGlow(SHINY_GOLD, 2, 0, false, 0.1, 6) ?? null;

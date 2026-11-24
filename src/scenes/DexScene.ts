@@ -6,7 +6,8 @@ import { traitsFound } from '../logic/dex';
 import { traitDescOf, traitName } from '../ui/traitText';
 import { DEX_FORMS, DEX_SPECIES, dexStages, isLegend } from '../data/legends';
 import Phaser from 'phaser';
-import { camp, campCrew, campHearts, CREW_MAX } from '../logic/camp';
+import { BOND_HEART, BOND_POINTS, bondReward, bondToNext, camp, campCrew, campHearts, CREW_MAX } from '../logic/camp';
+import { bondMeter, bondMeterWidth } from '../ui/bondMeter';
 import { claimDexReward, dexRewards, habitat, lineRecord, matchups } from '../logic/dexInfo';
 import { activeTeam, activeTeamIndex, ARENA_LEVEL, ARENA_TEAM, arenaForms, arenaRoster, defaultArenaMoves, savedTeams, validArenaTeam } from '../logic/arena';
 import { openPicker, showMessage } from '../ui/picker';
@@ -44,6 +45,7 @@ const TRAIT_H = 34;
 const INFO_HAB = 70;
 const CHIP_ROW = 22;
 const INFO_REC = 52;
+const INFO_BOND = 78;
 const INFO_BTN = 48;
 
 /** Hexlings tab: search text and which lines to show (kept while you browse). */
@@ -466,7 +468,7 @@ export class DexScene extends Phaser.Scene {
   private infoH(sp: (typeof SPECIES)[number]): number {
     const m = matchups(sp.types);
     const rows = this.chipRows(m.weak).rows + this.chipRows(m.resist).rows + this.chipRows(m.immune.map((el) => ({ el, x: 0 }))).rows;
-    return INFO_HAB + 24 + rows * CHIP_ROW + 8 + INFO_REC + INFO_BTN;
+    return INFO_HAB + 24 + rows * CHIP_ROW + 8 + INFO_BOND + INFO_REC + INFO_BTN;
   }
 
   private cardH(sp: (typeof SPECIES)[number]): number {
@@ -511,9 +513,25 @@ export class DexScene extends Phaser.Scene {
     group('Immune to', m.immune.map((el) => ({ el, x: 0 })), '#8fd0ff');
     y += 8;
 
+    // Camp bond: five hearts, each filling as the bond grows toward it.
+    const caught = meta.dex.caught.includes(sp.id);
+    head(y, 'Camp bond');
+    const pts = meta.camp?.bond[sp.id] ?? 0;
+    const hearts = campHearts(meta, sp.id);
+    const next = bondToNext(meta, sp.id);
+    row.add(bondMeter(this, 22, y + 34, pts));
+    row.add(text(this, 30 + bondMeterWidth(), y + 34, next ? `${pts}/${next.next} to heart ${hearts + 1}` : 'Best friends!', 12, hearts ? '#ff8ab0' : COLORS.textDim, { fontStyle: 'bold' }).setOrigin(0, 0.5));
+    const name = sp.names[0];
+    const about = next
+      ? caught || pts
+        ? `Next: ${bondReward(hearts + 1, name)}.`
+        : `Catch one, then play runs together and visit it at camp (+${BOND_POINTS.care} after each run).`
+      : `${bondReward(BOND_HEART.max, name).replace(/^./, (ch) => ch.toUpperCase())}.`;
+    row.add(text(this, 22, y + 50, about, 12, COLORS.text, { wordWrap: { width: W - 50 }, maxLines: 2 }));
+    y += INFO_BOND;
+
     // Your record.
     head(y, 'Your record');
-    const caught = meta.dex.caught.includes(sp.id);
     const rec = lineRecord(meta, sp.id);
     const line = caught || rec.runs
       ? `Caught ${rec.caught} · On your team ${rec.runs} run${rec.runs === 1 ? '' : 's'} · Wins ${rec.wins} · MVP ${rec.mvp}${rec.best ? ` · Best Lv ${rec.best}` : ''}`

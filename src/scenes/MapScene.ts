@@ -57,7 +57,7 @@ import { titleBadge } from '../ui/titleBadge';
 import { lookForName, myLook, type TrainerLook } from '../data/trainerLook';
 import { calm } from '../ui/motion';
 import { Scroller } from '../ui/scroll';
-import { background, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
+import { background, placeAbove, placeBelow, button, clipList, COLORS, FH, FW, H, HpBar, LANDSCAPE, OX, OY, text, W } from '../ui/widgets';
 import { mapBackdrop } from '../ui/backdrops';
 import { dot, mapLife, type MapLife } from '../ui/mapLife';
 import { cry } from '../ui/cries';
@@ -345,7 +345,17 @@ export class MapScene extends Phaser.Scene {
     const resumeNode = () =>
       run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
     // A boon on offer (after a guardian, or from a curse) comes first; then a redraw shows its effects.
-    const resume = () => (run.boons?.offer ? openBoonOffer(this, run, () => this.scene.restart({})) : resumeNode());
+    const resume = () => {
+      if (!run.boons?.offer) return resumeNode();
+      // After the pick, redraw only what changed (a full rebuild here was a visible hitch on phones).
+      const before = this.mapSig();
+      openBoonOffer(this, run, () => {
+        if (this.mapSig() !== before || !this.redrawBoonChip) return this.scene.restart({});
+        this.redrawBoonChip();
+        persist();
+        resumeNode();
+      });
+    };
     // First-time tips come before anything that's waiting.
     const after = () => tip(this, 'map', () => (run.bench.length ? tip(this, 'bench', resume) : resume()));
     // Announce any achievements earned since the last time the map was shown.
@@ -494,8 +504,27 @@ export class MapScene extends Phaser.Scene {
   /** Boons held: a glowing badge with a gem for each; tap for the list. */
   private boonChip(x: number, y: number, maxW: number) {
     const run = state.run!;
-    const b = boonBadge(this, x, y, run.boons?.held ?? [], () => openBoonList(this, run), { maxW });
-    b?.setDepth(6);
+    const draw = () => {
+      const b = boonBadge(this, x, y, run.boons?.held ?? [], () => openBoonList(this, run), { maxW });
+      b?.setDepth(6);
+      return b;
+    };
+    let b = draw();
+    this.redrawBoonChip = () => {
+      b?.destroy();
+      b = draw();
+    };
+  }
+  private redrawBoonChip: (() => void) | null = null;
+
+  /** Everything else on the map a boon could change: when it's the same after a pick, only the boon badge is redrawn. */
+  private mapSig(): string {
+    const run = state.run!;
+    return JSON.stringify([
+      run.coins, run.evoStones, run.potions, (run.bag ?? []).length, run.currentId, run.floor,
+      allCreatures(run).map((c) => `${c.uid}:${c.level}:${c.hp}:${c.held ?? ''}`),
+      scoutRange(run), hasBoon(run, 'fogofwar'), run.pendingNode, run.shop ? 1 : 0,
+    ]);
   }
 
   /** Sideways: floor, land, coins, stones, steps to the boss and the buttons, in a left column. */
@@ -995,8 +1024,8 @@ export class MapScene extends Phaser.Scene {
       // Behind your own token (their Hexling still in front of them).
       const r = this.rival;
       if (this.me) {
-        this.layer.moveBelow(r.c, this.me.c);
-        if (r.f) this.layer.moveAbove(r.f, r.c);
+        placeBelow(this.layer, r.c, this.me.c);
+        if (r.f) placeAbove(this.layer, r.f, r.c);
       }
     } else {
       const r = this.rival;
@@ -1026,8 +1055,8 @@ export class MapScene extends Phaser.Scene {
         w = this.makeWalker(st.at!, player?.look ?? lookForName(st.name), lead, royaleSides.get(st.pid) ?? -1, st.name, slot);
         // Behind your own token (their Hexling still in front of them).
         if (this.me) {
-          this.layer.moveBelow(w.c, this.me.c);
-          if (w.f) this.layer.moveAbove(w.f, w.c);
+          placeBelow(this.layer, w.c, this.me.c);
+          if (w.f) placeAbove(this.layer, w.f, w.c);
         }
         this.rivals.set(st.pid, w);
       } else {
@@ -1726,6 +1755,8 @@ export class MapScene extends Phaser.Scene {
           fodder,
           () => false,
           (sac) => {
+            // Its held item goes back to the bag.
+            unequipHeld(run, sac);
             run.bench = run.bench.filter((b) => b !== sac);
             const lv = target.level;
             prestigeTracked(run, target);

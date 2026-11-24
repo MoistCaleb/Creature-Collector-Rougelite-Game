@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Element } from '../data/types';
 import { sfx } from './sound';
+import { placeBelow } from './widgets';
 
 /**
  * How creatures enter battle.
@@ -24,7 +25,7 @@ const groundOf = (s: Phaser.GameObjects.Image, home: Home) => home.y + s.height 
 
 /** Draw `obj` just underneath the sprite (above the backdrop and shadow). */
 function behind(scene: Phaser.Scene, obj: Phaser.GameObjects.GameObject, s: Phaser.GameObjects.Image) {
-  scene.children.moveBelow(obj as never, s as never);
+  placeBelow(scene.children, obj, s);
 }
 
 /** A flat hexagon on the ground, drawn around (0, 0). */

@@ -402,3 +402,25 @@ export function background(scene: Phaser.Scene, color = COLORS.bg, decor: 'menu'
   fullRect(scene, color);
   if (decor !== 'none') menuBackdrop(scene, OX, OY, FW, FH, color, decor === 'title');
 }
+
+/** Anything with an ordered child list: a scene's display list or a container. */
+type Ordered = { getIndex(child: never): number; moveTo(child: never, index: number): unknown };
+
+/**
+ * Put `item` directly above `base` in the draw order. (Phaser's own moveAbove does nothing when
+ * the item is already higher, even far higher: a new object stays on top of everything.)
+ */
+export function placeAbove(list: Ordered, item: unknown, base: unknown) {
+  const bi = list.getIndex(base as never);
+  const ii = list.getIndex(item as never);
+  if (bi < 0 || ii < 0 || item === base) return;
+  list.moveTo(item as never, ii < bi ? bi : bi + 1);
+}
+
+/** Put `item` directly below `base` in the draw order (see placeAbove). */
+export function placeBelow(list: Ordered, item: unknown, base: unknown) {
+  const bi = list.getIndex(base as never);
+  const ii = list.getIndex(item as never);
+  if (bi < 0 || ii < 0 || item === base) return;
+  list.moveTo(item as never, ii < bi ? bi - 1 : bi);
+}

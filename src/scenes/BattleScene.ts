@@ -41,8 +41,9 @@ import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvoluti
 import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
+import { clockSky } from '../logic/ambience';
 import { Battle, stageMult, type BattleEvent, type PlayerAction } from '../logic/battle';
-import { openPanel } from '../ui/panel';
+import { openFittedPanel } from '../ui/panel';
 import { Rng } from '../logic/rng';
 import { snapshot, type DuelController, type Next } from '../net/duel';
 import { session } from '../net/session';
@@ -117,7 +118,7 @@ import { dex, persist, state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
 import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { background, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
+import { background, placeAbove, placeBelow, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
 
 interface SidePanel {
   root: Phaser.GameObjects.Container;
@@ -573,7 +574,7 @@ export class BattleScene extends Phaser.Scene {
    */
   private trainerInFront() {
     const holder = this.trainers.player?.img.parentContainer;
-    if (holder && this.playerSprite) this.children.moveAbove(holder as unknown as Phaser.GameObjects.GameObject, this.playerSprite);
+    if (holder && this.playerSprite) placeAbove(this.children, holder, this.playerSprite);
   }
 
   /**
@@ -586,7 +587,7 @@ export class BattleScene extends Phaser.Scene {
     const list = this.children;
     const below = [this.playerPanel?.root, this.enemyPanel?.root].filter((x): x is Phaser.GameObjects.Container => !!x?.active);
     const first = below.sort((a, b) => list.getIndex(a) - list.getIndex(b))[0] ?? panel;
-    if (first) list.moveBelow(sprite as unknown as Phaser.GameObjects.GameObject, first);
+    if (first) placeBelow(list, sprite, first);
     if (side === 'player') this.trainerInFront();
   }
 
@@ -683,27 +684,29 @@ export class BattleScene extends Phaser.Scene {
 
   /** The element's environment behind the field, and a pad under each side. */
   private drawField(el: Element, stage: number) {
-    const sky = battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
-    const pads = [...battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72), ...battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72)];
-    this.field = { el, stage, sky, pads, mood: stageMood(el, stage) };
+    // Its time of day follows the device's clock (Settings: Day, night & holidays).
+    const mood = clockSky(stageMood(el, stage));
+    const sky = battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field, mood);
+    const pads = [...battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72, 200, mood), ...battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72, 200, mood)];
+    this.field = { el, stage, sky, pads, mood, base: mood };
   }
 
   /** The painted field, so the time of day can change mid-battle. */
-  private field: { el: Element; stage: number; sky: Phaser.GameObjects.Image; pads: Phaser.GameObjects.Ellipse[]; mood: Mood } | null = null;
+  private field: { el: Element; stage: number; sky: Phaser.GameObjects.Image; pads: Phaser.GameObjects.Ellipse[]; mood: Mood; base: Mood } | null = null;
 
   /** The sky follows the battle: sun makes it day, night falling makes it night (a crossfade). */
   private syncSky(instant = false) {
     const f = this.field;
     if (!f || !this.battle) return;
-    const want: Mood = this.battle.weather === 'sun' || this.battle.dawn ? 'day' : this.battle.night ? 'night' : stageMood(f.el, f.stage);
+    const want: Mood = this.battle.weather === 'sun' || this.battle.dawn ? 'day' : this.battle.night ? 'night' : f.base;
     if (want === f.mood) return;
     f.mood = want;
     const board = { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH };
     const sky = battleSky(this, f.el, f.stage, board, L.field, want);
-    this.children.moveAbove(sky, f.sky);
+    placeAbove(this.children, sky, f.sky);
     const pads = [...battlePad(this, f.el, f.stage, ENEMY_POS.x, ENEMY_POS.y + 72, 200, want), ...battlePad(this, f.el, f.stage, PLAYER_POS.x, PLAYER_POS.y + 72, 200, want)];
     // Each new pad piece sits just above the old one, under the Hexlings.
-    pads.forEach((p, i) => this.children.moveAbove(p, f.pads[i]));
+    pads.forEach((p, i) => placeAbove(this.children, p, f.pads[i]));
     const old = [f.sky, ...f.pads];
     f.sky = sky;
     f.pads = pads;
@@ -1081,16 +1084,19 @@ export class BattleScene extends Phaser.Scene {
     const c = x.c;
     if (!c) return;
     this.statsOpen = true;
-    const p = openPanel(this, `${creatureName(c)}  Lv ${c.level}${c.stars ? '  ' + '★'.repeat(c.stars) : ''}`, {
-      w: LANDSCAPE ? 640 : W - 20,
-      h: LANDSCAPE ? H - 16 : 640,
-      depth: 1500,
-      onClose: () => (this.statsOpen = false),
-    });
-    const r = p.root;
-    const x0 = p.x + 18;
-    const w = p.w - 36;
-    let y = p.top - 4;
+    openFittedPanel(
+      this,
+      `${creatureName(c)}  Lv ${c.level}${c.stars ? '  ' + '★'.repeat(c.stars) : ''}`,
+      { w: LANDSCAPE ? 640 : W - 20, minH: LANDSCAPE ? 0 : 420, depth: 1500, onClose: () => (this.statsOpen = false) },
+      (r, x0, w) => this.combatantBody(r, x0, w, side),
+    );
+  }
+
+  /** The stats panel's content, laid out from y = 0. Returns its height. */
+  private combatantBody(r: Phaser.GameObjects.Container, x0: number, w: number, side: 'player' | 'enemy'): number {
+    const x = side === 'player' ? this.battle!.p : this.battle!.e;
+    const c = x.c;
+    let y = 0;
     // Who, elements and condition.
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => r.add(typeChip(this, x0 + i * 64, y + 10, el, false)));
@@ -1178,6 +1184,7 @@ export class BattleScene extends Phaser.Scene {
       if (sub.width > mw) sub.setScale(mw / sub.width);
       r.add([top, sub]);
     });
+    return y + Math.ceil(c.moves.length / cols) * 40;
   }
 
   /** Callouts still on screen, per side, so a busy turn stacks them instead of piling them up. */

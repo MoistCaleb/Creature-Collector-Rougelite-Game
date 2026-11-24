@@ -99,7 +99,7 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
     toggle('Reduce motion', 'Less screen shake, flashes and zooms', prefs.reduceMotion, () => {
       prefs.reduceMotion = !prefs.reduceMotion;
     });
-    toggle('Day, night & holidays', 'The map follows your clock and calendar', prefs.worldClock, () => {
+    toggle('Day, night & holidays', 'The map and battle skies follow your clock and calendar', prefs.worldClock, () => {
       prefs.worldClock = !prefs.worldClock;
     });
 

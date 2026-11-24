@@ -78,9 +78,11 @@ export class BagScene extends Phaser.Scene {
     for (const c of holders) {
       const def = HELD[c.held!];
       list.add(this.add.rectangle(10, y, LW - 20, 48, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
-      list.add(pixelIcon(this, 34, y + 24, def.icon, 24));
-      list.add(text(this, 58, y + 6, creatureName(c), 14, COLORS.text, { fontStyle: 'bold' }));
-      list.add(text(this, 58, y + 26, def.name, 12, COLORS.textDim));
+      // The Hexling holding it, with the item beside its name.
+      list.add(this.add.image(34, y + 24, ensureCreatureTexture(this, c.speciesId, c.stage, colours(c))).setScale(1.3 * SPRITE_FIT));
+      list.add(text(this, 62, y + 6, creatureName(c), 14, COLORS.text, { fontStyle: 'bold' }));
+      list.add(pixelIcon(this, 70, y + 33, def.icon, 16));
+      list.add(text(this, 82, y + 26, def.name, 12, COLORS.textDim));
       list.add(
         button(this, LW - 60, y + 24, 88, 32, 'Take off', () => {
           unequipHeld(run, c);
