@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.05';
+export const APP_VERSION = '2.06';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.06',
+    title: 'Gone with the wind',
+    items: [
+      'A legendary that flees is gone for the rest of that run, instead of hopping to the next hex. It keeps the damage you did, so look for it again on another run.',
+      'Smoother map: finishing a hex’s choice (a boon, a rest, the shop, a level up...) no longer rebuilds the whole map, which caused a hitch right as you picked a boon.',
+      'The move suggestion is better balanced: it no longer fills every Hexling with two utility moves. Hard hitters keep more attacks, sturdy ones make room for a guard or a heal.',
+      'It also fits your current build: your Hexling’s nature and held item, your boons and the moves your team already has.',
+    ],
+  },
   {
     version: '2.05',
     title: 'Fresh eyes',
