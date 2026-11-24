@@ -24,6 +24,7 @@ import {
   usesText,
   moveDef,
   recommendForget,
+  recommendReason,
   naturalMoves,
   resolvePending,
   stats,
@@ -397,10 +398,11 @@ export class MapScene extends Phaser.Scene {
     const nm = MOVES[id];
     const rec = recommendForget(c, id);
     const tag = 'RECOMMENDED';
+    const why = recommendReason(c, id, rec);
     const fromLand = c.landMoves?.includes(id) ? `\nLearned from the ${nm.element} lands, in place of its usual move.` : '';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
-      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}${fromLand}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)`,
+      subtitle: `${nm.element} · ${moveSummary(nm, 1)} · ${accText(nm)} · ${maxUsesText(nm)}${fromLand}\nForget a move to make room? (Skill tiers on the forgotten move are lost.)${why ? `\nSuggested: ${rec === null ? `don't learn it` : `forget ${moveDef(c.moves[rec]).name}`}. ${why}` : ''}`,
       rows: [{ creature: c, text: `${creatureName(c)} · Lv ${c.level}`, big: true }],
       options: [
         ...c.moves.map((m, i) => {

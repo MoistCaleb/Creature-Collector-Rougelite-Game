@@ -5,7 +5,8 @@ import { emptyStats } from '../src/logic/achievements';
 import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src/data/types';
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
-import { fallbackMove, hasUses, outOfMoves, restoreUses, usesLeft, readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, resolvePending, stats } from '../src/logic/creature';
+import { fallbackMove, hasUses, outOfMoves, restoreUses, usesLeft, readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, recommendReason, resolvePending, stats } from '../src/logic/creature';
+import { WARP_ID as WARP_ID_ } from '../src/data/moves';
 import { BOSSES, RULES, extraRuleCount, guardianRules } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
@@ -1039,6 +1040,24 @@ describe('learn-move recommendation', () => {
     const buffs = Object.values(MOVES).filter((m) => m.kind === 'buff').map((m) => m.id);
     c.moves = [{ id: attackId('Fire', 0), tier: 1 }, { id: buffs[0], tier: 1 }, { id: buffs[1], tier: 1 }, { id: buffs[2], tier: 1 }];
     expect(recommendForget(c, buffs[3])).not.toBe(0);
+  });
+  const rec = (sp: string, moves: string[], learn: string) => {
+    const c = createCreature(sp, 34);
+    c.moves = moves.map((id) => ({ id, tier: 1 }));
+    const r = recommendForget(c, learn);
+    return r === null ? null : moves[r];
+  };
+  it('weighs utility by fit: a slow line drops a spare attack for Time Warp, a fast one keeps its moves', () => {
+    expect(rec('cogling', ['Metal:0', 'Metal:1', 'Metal:2', 'Metal:buff'], WARP_ID_)).toBe('Metal:0');
+    expect(rec('zapling', ['Storm:0', 'Storm:1', 'Storm:2', 'Storm:buff'], WARP_ID_)).toBeNull();
+  });
+  it('values coverage: a new element replaces a redundant attack, not the boost', () => {
+    expect(rec('emberkit', ['Fire:0', 'Fire:1', 'Fire:2', 'Fire:buff'], attackId('Water', 1))).toBe('Fire:0');
+  });
+  it('gives a reason', () => {
+    const c = createCreature('cogling', 34);
+    c.moves = ['Metal:0', 'Metal:1', 'Metal:2', 'Metal:buff'].map((id) => ({ id, tier: 1 }));
+    expect(recommendReason(c, WARP_ID_, recommendForget(c, WARP_ID_))).toMatch(/covers/);
   });
 });
 

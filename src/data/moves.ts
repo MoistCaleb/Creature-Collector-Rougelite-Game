@@ -369,7 +369,7 @@ function neutralSummary(n: NeutralFx, tier: number): string {
     case 'smoke':
       return `Clear stats, weather, warp${haste}`;
     case 'toll':
-      return `In ${TOLL_TURNS}t foe loses ${Math.round(tollDamage(tier) * 100)}% unless it leaves`;
+      return `Foe −${Math.round(tollDamage(tier) * 100)}% HP in ${TOLL_TURNS}t if it stays`;
     case 'snare':
       return `Foe ${snareTurns(tier)}t: can't switch · −${snareSpeed(tier)} Spd`;
     case 'hush':

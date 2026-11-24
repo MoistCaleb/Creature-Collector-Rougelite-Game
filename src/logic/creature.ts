@@ -1,11 +1,12 @@
 import { natureMult } from '../data/natures';
 import { BALANCE } from '../data/balance';
 import { weatherId, type WeatherId } from '../data/moves';
-import { NEUTRAL, type NeutralFx } from '../data/moves';
+import { effectsAtTier, NEUTRAL, WEATHER, type NeutralFx } from '../data/moves';
+import { traitOf } from '../data/traits';
 import { attackEl, attackId, attackValue, BULWARK_ID, fastId, slowId, WARP_ID, buffId, debuffId, extraId, MAX_TIER, maxUses, MOVES, specialId, teamMoveId, type MoveDef } from '../data/moves';
 import { hashString, Rng } from './rng';
 import { SPECIES, SPECIES_BY_ID, type BaseStats, type Species } from '../data/species';
-import { stabMultiplier, type Element, type TypePair } from '../data/types';
+import { stabMultiplier, typeMultiplier, type Element, type TypePair } from '../data/types';
 
 export interface MoveSlot {
   id: string;
@@ -376,36 +377,113 @@ export function learnMoves(c: Creature, auto = false): string[] {
   return learned;
 }
 
+/** Every pairing of elements a Hexling has: the foes a move list is measured against. */
+let FOE_TYPES: TypePair[] | null = null;
+function foeTypes(): TypePair[] {
+  if (FOE_TYPES) return FOE_TYPES;
+  const seen = new Map<string, TypePair>();
+  for (const sp of SPECIES) seen.set([...new Set(sp.types)].sort().join('/'), sp.types);
+  return (FOE_TYPES = [...seen.values()]);
+}
+
+/** How this line is built, from its base stats: each about 1 for an even spread. */
+function build(c: Creature) {
+  const b = species(c).base;
+  const avg = (b.hp + b.atk + b.def + b.spd) / 4;
+  return { atk: b.atk / avg, bulk: (b.hp + b.def) / 2 / avg, spd: b.spd / avg };
+}
+
+/** A utility move's worth to this Hexling, as a share of its damage (and what it's for, so two of a kind count less). */
+function utility(c: Creature, m: MoveSlot, list: MoveSlot[]): [number, string] {
+  const d = MOVES[m.id];
+  const k = build(c);
+  const types = creatureTypes(c);
+  const t = traitOf(c);
+  const slow = k.spd < 0.85;
+  const tier = 1 + 0.12 * (m.tier - 1);
+  if (d.protect) return [0.16 * k.bulk * tier, 'guard'];
+  if (d.warp) return [(slow ? 0.38 : k.spd > 1.05 ? 0 : 0.1) * tier, 'warp'];
+  if (d.weather) {
+    const w = WEATHER[d.weather];
+    const mine = types.includes(w.up) || (d.weather === 'sun' && (t === 'sunseeker' || t === 'daybreak')) || (d.weather === 'rain' && t === 'rainrider');
+    return [(mine ? 0.32 : 0.04) * tier, 'weather'];
+  }
+  if (d.team) return [(d.team === 'mend' ? 0.28 : d.team === 'rally' ? 0.22 * k.atk : d.team === 'guard' ? 0.2 * k.bulk : 0.2) * tier, `team:${d.team}`];
+  if (d.neutral) {
+    const hasToll = list.some((x) => MOVES[x.id].neutral === 'toll');
+    const hasSnare = list.some((x) => MOVES[x.id].neutral === 'snare');
+    const v: Record<NeutralFx, number> = {
+      jeer: 0.22 * Math.max(k.atk, k.spd),
+      echo: 0.2,
+      veil: 0.14 * k.bulk,
+      swap: 0.18,
+      smoke: 0.15,
+      toll: 0.22 * k.bulk + (hasSnare ? 0.08 : 0),
+      snare: 0.14 + (hasToll ? 0.1 : 0),
+      hush: 0.18,
+      daynight: 0.1 + (t === 'nightstalker' || t === 'eclipse' ? 0.2 : 0),
+    };
+    return [v[d.neutral] * tier, d.neutral];
+  }
+  if (d.kind === 'heal') return [(0.2 + 0.14 * k.bulk) * tier, 'heal'];
+  // Stat moves: worth more the more they play to how it's built.
+  const fx = effectsAtTier(d, m.tier);
+  if (d.kind === 'buff') {
+    let v = 0;
+    for (const e of fx) v += e.stages * (e.stat === 'atk' ? 0.09 * k.atk : e.stat === 'def' ? 0.07 * k.bulk : 0.07 * (slow ? 0.6 : 1));
+    const main = fx.reduce((a, e) => (e.stages > a.stages ? e : a), fx[0] ?? { stat: 'atk', stages: 0 });
+    return [Math.max(0, v), `up:${main.stat}`];
+  }
+  // Hinder moves.
+  let v = 0;
+  for (const e of fx) v += -e.stages * 0.06;
+  if (d.status) v += 0.12 * d.status.chance;
+  return [Math.max(0, v) * (d.accuracy / 100), 'hinder'];
+}
+
 /**
  * How useful a whole move list is to this creature, for recommending what to forget.
- * Attacks count by expected damage with STAB; a second attack of an element you already hit
- * harder with is mostly redundant; status moves are worth a fair hit each, but stacking more
- * than one adds little; a list with no attack at all is useless.
+ * Damage is measured against every pairing of elements in the game: the best hit on each (with
+ * same-type bonus and type matchups), plus a little for a backup, so covering more foes counts and a
+ * second attack that hits the same foes no harder counts for little. Each utility move adds a share
+ * of that damage by how well it fits the line (a slow Hexling wants Time Warp, a bulky one Toll or a
+ * heal); more than one of a kind adds less, and each extra utility move a bit less again. A list with
+ * no attack at all is useless.
  */
 function moveSetValue(c: Creature, moves: MoveSlot[]): number {
   const types = creatureTypes(c);
   const attacks: { el: Element; v: number }[] = [];
-  const status: number[] = [];
+  const util: [number, string][] = [];
   for (const m of moves) {
     const d = MOVES[m.id];
     if (d.kind === 'attack') {
-      let v = attackValue(d, m.tier) * (d.bestType ? stabMultiplier(types[0], types) : stabMultiplier(attackEl(d), types));
+      let v = attackValue(d, m.tier);
       if (d.priority || d.drain || d.execute || d.selfAfter || d.targetAfter) v *= 1.1;
-      if (d.signature) v *= 1.15;
-      attacks.push({ el: d.bestType ? types[0] : attackEl(d), v });
-    } else {
-      status.push((d.kind === 'heal' ? 60 : 50) * (1 + 0.15 * (m.tier - 1)));
-    }
+      if (d.signature) v *= 1.1;
+      // Unlimited moves never run dry.
+      if (maxUses(d) === null) v *= 1.05;
+      if (d.bestType) for (const el of new Set(types)) attacks.push({ el, v });
+      else attacks.push({ el: attackEl(d), v });
+    } else util.push(utility(c, m, moves));
   }
   if (attacks.length === 0) return 0;
-  let total = 0;
-  const seen = new Set<Element>();
-  for (const a of attacks.sort((x, y) => y.v - x.v)) {
-    total += seen.has(a.el) ? a.v * 0.5 : a.v;
-    seen.add(a.el);
+  let offense = 0;
+  const foes = foeTypes();
+  for (const ft of foes) {
+    const hits = attacks.map((a) => a.v * stabMultiplier(a.el, types) * typeMultiplier(a.el, ft)).sort((x, y) => y - x);
+    offense += hits[0] + 0.25 * (hits[1] ?? 0) + 0.05 * (hits[2] ?? 0);
   }
-  status.sort((x, y) => y - x).forEach((v, i) => (total += i === 0 ? v : v * 0.4));
-  return total;
+  offense /= foes.length;
+  const kinds = new Map<string, number>();
+  let share = 0;
+  util
+    .sort((x, y) => y[0] - x[0])
+    .forEach(([v, kind], i) => {
+      const n = kinds.get(kind) ?? 0;
+      kinds.set(kind, n + 1);
+      share += v * (n ? 0.35 : 1) * Math.pow(0.8, i);
+    });
+  return offense * (1 + share);
 }
 
 /**
@@ -417,12 +495,32 @@ export function recommendForget(c: Creature, id: string): number | null {
   let bestVal = moveSetValue(c, c.moves);
   c.moves.forEach((_, i) => {
     const v = moveSetValue(c, c.moves.map((m, j) => (j === i ? { id, tier: 1 } : m)));
-    if (v > bestVal + 0.01) {
+    if (v > bestVal * 1.005) {
       bestVal = v;
       best = i;
     }
   });
   return best;
+}
+
+/** Why the game suggests what it does (a short line under the choice), or null. */
+export function recommendReason(c: Creature, id: string, slot: number | null): string | null {
+  const nd = MOVES[id];
+  const has = (i: number | null) => c.moves.filter((_, j) => j !== i).map((m) => MOVES[m.id]);
+  if (slot === null) {
+    if (nd.kind === 'attack') return `Your moves already hit those foes as hard.`;
+    return `${nd.name} fits ${species(c).names[c.stage]} less than what it knows.`;
+  }
+  const old = MOVES[c.moves[slot].id];
+  const rest = has(slot);
+  if (old.kind === 'attack') {
+    const same = rest.find((d) => d.kind === 'attack' && d.element === old.element && attackValue(d) >= attackValue(old));
+    if (same) return `${same.name} already covers what ${old.name} hits.`;
+    if (nd.kind === 'attack') return `${nd.name} hits more foes hard than ${old.name}.`;
+    return `${nd.name} adds more than ${old.name}'s damage.`;
+  }
+  if (nd.kind === 'attack') return `${nd.name}'s damage adds more than ${old.name}.`;
+  return `${nd.name} suits ${species(c).names[c.stage]} better than ${old.name}.`;
 }
 
 /**
