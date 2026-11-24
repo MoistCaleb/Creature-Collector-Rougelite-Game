@@ -408,9 +408,11 @@ export class MapScene extends Phaser.Scene {
     if (!c) return;
     const id = c.pendingMoves[0];
     const nm = MOVES[id];
-    const rec = recommendForget(c, id);
+    // The suggestion fits your current build: its held item and nature, your boons and your team.
+    const ctx = { boons: run.boons?.held ?? [], team: allCreatures(run) };
+    const rec = recommendForget(c, id, ctx);
     const tag = 'RECOMMENDED';
-    const why = recommendReason(c, id, rec);
+    const why = recommendReason(c, id, rec, ctx);
     const fromLand = c.landMoves?.includes(id) ? `\nLearned from the ${nm.element} lands, in place of its usual move.` : '';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,

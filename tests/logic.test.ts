@@ -6,7 +6,8 @@ import { ELEMENTS, typeMultiplier, stabMultiplier, STRONG_AGAINST } from '../src
 import { branchiness, generateFloor, MIN_BRANCHINESS, reachable, ROUTE_LENGTHS, stepsToBoss } from '../src/logic/map';
 import { Battle } from '../src/logic/battle';
 import { fallbackMove, hasUses, outOfMoves, restoreUses, usesLeft, readyToEvolve, setFloorCeiling, stageCap, learnset, addLevels, addXp, bankLimit, BANK_LEVELS, gainXp, xpToNext, catchUpMultiplier, createCreature, evolve, levelCap, moveDef, prestige, recommendForget, recommendReason, resolvePending, stats } from '../src/logic/creature';
-import { WARP_ID as WARP_ID_ } from '../src/data/moves';
+import { WARP_ID as WARP_ID_, BULWARK_ID as BULWARK_ID_, teamMoveId } from '../src/data/moves';
+import { learnMoves, creatureTypes, type Creature, type MoveContext } from '../src/logic/creature';
 import { BOSSES, RULES, extraRuleCount, guardianRules } from '../src/data/trainers';
 import { moveStyle } from '../src/data/moveStyle';
 import type { Element } from '../src/data/types';
@@ -1058,6 +1059,79 @@ describe('learn-move recommendation', () => {
     const c = createCreature('cogling', 34);
     c.moves = ['Metal:0', 'Metal:1', 'Metal:2', 'Metal:buff'].map((id) => ({ id, tier: 1 }));
     expect(recommendReason(c, WARP_ID_, recommendForget(c, WARP_ID_))).toMatch(/covers/);
+  });
+  // Every line levelled to 60 following the suggestion, start to finish.
+  const grown = (sp: string) => {
+    const c = createCreature(sp, 5, 0);
+    for (let lv = 6; lv <= 60; lv++) {
+      c.level = lv;
+      c.stage = lv >= 36 ? 2 : lv >= 16 ? 1 : 0;
+      learnMoves(c);
+      while (c.pendingMoves.length) {
+        const id = c.pendingMoves.shift()!;
+        const i = recommendForget(c, id);
+        if (i !== null) c.moves[i] = { id, tier: 1 };
+      }
+    }
+    return c.moves.filter((m) => MOVES[m.id].kind !== 'attack').length;
+  };
+  it('balances attacks and utility, by build: hitters keep more attacks, sturdy lines more utility', () => {
+    const rows = SPECIES.map((sp) => ({ role: (sp.base.hp + sp.base.def) / (sp.base.atk + sp.base.spd), u: grown(sp.id) })).sort((x, y) => x.role - y.role);
+    const avg = (xs: { u: number }[]) => xs.reduce((t, r) => t + r.u, 0) / xs.length;
+    const third = Math.floor(rows.length / 3);
+    // Not every line ends on the same split, and utility never crowds out attacks.
+    expect(new Set(rows.map((r) => r.u)).size).toBeGreaterThan(1);
+    expect(avg(rows)).toBeGreaterThan(1);
+    expect(avg(rows)).toBeLessThan(1.8);
+    expect(Math.max(...rows.map((r) => r.u))).toBeLessThanOrEqual(2);
+    expect(avg(rows.slice(0, third))).toBeLessThan(avg(rows.slice(-third)));
+  });
+  /** A Lv 40 one of each line with these moves, and the slot suggested for `learn` with and without the context. */
+  const differs = (moves: (x: Element) => string[], learn: (x: Element) => string, a: (c: Creature) => MoveContext, b: (c: Creature) => MoveContext, want: (ra: number | null, rb: number | null) => boolean) =>
+    SPECIES.some((sp) => {
+      const [x] = sp.types;
+      const c = createCreature(sp.id, 40);
+      c.moves = moves(x).map((id) => ({ id, tier: 1 }));
+      return want(recommendForget(c, learn(x), a(c)), recommendForget(c, learn(x), b(c)));
+    });
+  it('fits your current build: held items, element boons and the team change the suggestion', () => {
+    // A sturdy item makes a guard worth more than a hitting one does.
+    expect(
+      SPECIES.some((sp) => {
+        const [x] = sp.types;
+        const mk = (held: 'band' | 'shell') => {
+          const c = createCreature(sp.id, 40);
+          c.held = held;
+          c.moves = [attackId(x, 2), attackId(x, 1), attackId(x, 0), `${x}:buff`].map((id) => ({ id, tier: 1 }));
+          return recommendForget(c, BULWARK_ID_);
+        };
+        return mk('band') !== mk('shell');
+      }),
+    ).toBe(true);
+    // An element boon makes that element's attacks count for more.
+    const other = (x: Element): Element => (x === 'Fire' ? 'Water' : 'Fire');
+    const boonOf: Partial<Record<Element, string>> = { Fire: 'kindling', Water: 'riptide', Frost: 'brittle', Earth: 'quake', Storm: 'chainlightning' };
+    expect(
+      differs(
+        (x) => [attackId(x, 2), attackId(x, 1), attackId(other(x), 1), `${x}:buff`],
+        (x) => attackId(x, 3),
+        () => ({}),
+        (c) => ({ boons: [boonOf[creatureTypes(c)[0]] ?? 'none'] }),
+        (ra, rb) => ra !== rb,
+      ),
+    ).toBe(true);
+    // A team move a teammate already brings is worth less.
+    expect(
+      SPECIES.some((sp) => {
+        const c = createCreature(sp.id, 40);
+        const [x] = sp.types;
+        const tm = teamMoveId(x);
+        c.moves = [attackId(x, 2), attackId(x, 1), attackId(x, 0), `${x}:buff`].map((id) => ({ id, tier: 1 }));
+        const mate = createCreature(sp.id, 40);
+        mate.moves = [{ id: tm, tier: 1 }];
+        return recommendForget(c, tm, { team: [c] }) !== null && recommendForget(c, tm, { team: [c, mate] }) === null;
+      }),
+    ).toBe(true);
   });
 });
 
