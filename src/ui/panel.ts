@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { holdScroll } from './scroll';
+import { holdScroll, Scroller } from './scroll';
 import { button, COLORS, fullRect, H, text, W } from './widgets';
 
 export interface Panel {
@@ -38,4 +38,55 @@ export function openPanel(
   };
   root.add(button(scene, W / 2, y + h - 30, 180, 40, opts.closeLabel ?? 'Close', close, { fontSize: 16 }));
   return { root, x, y, w, h, top: y + 50, close };
+}
+
+/**
+ * A panel sized to what's in it: `build` lays its content out from y = 0 at the given left edge and
+ * width, into `body`, and returns how tall it came out. The panel grows to fit, up to the board's
+ * height; past that, the content scrolls (drag or wheel) between the title and the Close button.
+ */
+export function openFittedPanel(
+  scene: Phaser.Scene,
+  title: string,
+  opts: { w?: number; minH?: number; onClose?: () => void; closeLabel?: string; depth?: number },
+  build: (body: Phaser.GameObjects.Container, x0: number, w: number) => number,
+): Panel {
+  const pw = Math.min(opts.w ?? W - 24, W - 12);
+  const body = scene.add.container(0, 0);
+  const contentH = build(body, (W - pw) / 2 + 18, pw - 36);
+  // 50 above for the title, 64 below for the Close button.
+  const chrome = 50 + 64;
+  let scroller: Scroller | null = null;
+  const p = openPanel(scene, title, {
+    ...opts,
+    w: pw,
+    h: Math.max(opts.minH ?? 0, contentH + chrome),
+    onClose: () => {
+      scroller?.dispose();
+      opts.onClose?.();
+    },
+  });
+  const top = p.top - 4;
+  const bottom = p.y + p.h - 60;
+  body.setY(top);
+  p.root.add(body);
+  const overflow = top + contentH - bottom;
+  if (overflow > 0) {
+    const shape = scene.make.graphics({}, false).fillRect(p.x, top - 4, p.w, bottom - top + 4);
+    body.setMask(shape.createGeometryMask());
+    body.once('destroy', () => shape.destroy());
+    const hint = text(scene, p.x + p.w - 10, p.y + p.h - 54, 'Drag to see more', 11, COLORS.textDim).setOrigin(1, 1);
+    p.root.add(hint);
+    scroller = new Scroller(scene, {
+      get: () => body.y,
+      set: (v) => {
+        body.setY(v);
+        hint.setVisible(v > top - overflow + 4);
+      },
+      min: () => top - overflow - 4,
+      max: () => top,
+      popup: true,
+    });
+  }
+  return p;
 }

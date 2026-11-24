@@ -7,7 +7,7 @@ import { cry } from './cries';
 import { calm } from './motion';
 import { prefs } from './prefs';
 import { ensureCreatureTexture, SPRITE_FIT } from './sprites';
-import { text } from './widgets';
+import { placeBelow, text } from './widgets';
 
 /**
  * The map's life: wild Hexlings of the land roaming the hexes, hopping from hex to hex along the
@@ -96,7 +96,7 @@ export function mapLife(scene: Phaser.Scene, o: MapLifeOpts): MapLife {
 
   // Screen-space layers: under the map (tint, cloud shadows) and over it (birds, fireflies, holiday).
   const under = scene.add.container(0, 0);
-  scene.children.moveBelow(under as never, o.layer as never);
+  placeBelow(scene.children, under, o.layer);
   const over = scene.add.container(0, 0);
   const mask = scene.make.graphics({}, false).fillRect(scr.x, scr.y, scr.width, scr.height);
   over.setMask(mask.createGeometryMask());
