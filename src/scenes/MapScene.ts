@@ -136,7 +136,7 @@ export class MapScene extends Phaser.Scene {
     super('Map');
   }
 
-  create(data: { banner?: string } = {}) {
+  create(data: { banner?: string; rest?: boolean } = {}) {
     const run = state.run!;
     // The scene object is reused between visits: start with no tokens from last time.
     this.me = null;
@@ -337,13 +337,15 @@ export class MapScene extends Phaser.Scene {
     // A rare floor or omen colours the map (over the hexes, under the bars), and the screen's edge glows.
     surpriseTint(this, run, { x: -OX, y: -OY, w: FW, h: FH });
     surpriseEdge(this, run, { x: -OX, y: -OY, w: FW, h: FH });
-    this.drawTopBar();
-    this.drawBottomBar();
+    this.drawBars();
 
     for (const c of allCreatures(run)) dex.creature(c, true);
     persist();
+    // What this drawing shows: when a hex's choice is done and nothing here changed, no redraw.
+    this.drawnSig = this.mapSig(false);
+    this.drawnBoard = this.boardSig();
     const resumeNode = () =>
-      run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
+      data.rest ? this.doHeal() : run.shop ? this.openShop() : run.pendingNode ? this.resumeNode(run.pendingNode) : this.promptPendingMoves();
     // A boon on offer (after a guardian, or from a curse) comes first; then a redraw shows its effects.
     const resume = () => {
       if (!run.boons?.offer) return resumeNode();
@@ -406,9 +408,11 @@ export class MapScene extends Phaser.Scene {
     if (!c) return;
     const id = c.pendingMoves[0];
     const nm = MOVES[id];
-    const rec = recommendForget(c, id);
+    // The suggestion fits your current build: its held item and nature, your boons and your team.
+    const ctx = { boons: run.boons?.held ?? [], team: allCreatures(run) };
+    const rec = recommendForget(c, id, ctx);
     const tag = 'RECOMMENDED';
-    const why = recommendReason(c, id, rec);
+    const why = recommendReason(c, id, rec, ctx);
     const fromLand = c.landMoves?.includes(id) ? `\nLearned from the ${nm.element} lands, in place of its usual move.` : '';
     openPicker(this, {
       title: `${creatureName(c)} wants to learn ${nm.name}`,
@@ -518,13 +522,45 @@ export class MapScene extends Phaser.Scene {
   private redrawBoonChip: (() => void) | null = null;
 
   /** Everything else on the map a boon could change: when it's the same after a pick, only the boon badge is redrawn. */
-  private mapSig(): string {
+  private mapSig(withNode = true): string {
     const run = state.run!;
     return JSON.stringify([
-      run.coins, run.evoStones, run.potions, (run.bag ?? []).length, run.currentId, run.floor,
-      allCreatures(run).map((c) => `${c.uid}:${c.level}:${c.hp}:${c.held ?? ''}`),
-      scoutRange(run), hasBoon(run, 'fogofwar'), run.pendingNode, run.shop ? 1 : 0,
+      this.barSig(), withNode ? run.pendingNode : null, this.boardSig(),
     ]);
+  }
+  /** What the hexes themselves show (everything but the bars, the boon badge and the open choice). */
+  private boardSig(): string {
+    const run = state.run!;
+    const lead = run.team[0];
+    return JSON.stringify([
+      run.currentId, run.floor, scoutRange(run), hasBoon(run, 'fogofwar'),
+      lead ? `${lead.uid}:${lead.speciesId}:${lead.stage}:${lead.shiny ? 1 : 0}` : null,
+      run.roamer?.node ?? null, JSON.stringify(run.surprises ?? null), run.rival?.node ?? null,
+      Object.values(run.map.nodes).map((n) => n.kind[0] + n.kind.length).join(''), run.visited.length,
+    ]);
+  }
+  /** What the top and bottom bars show (coins, stones, the Bag and your Hexlings). */
+  private barSig(): string {
+    const run = state.run!;
+    return JSON.stringify([
+      run.coins, run.evoStones, run.potions, (run.bag ?? []).length, run.bagUnseen ?? 0, run.bench.length,
+      allCreatures(run).map((c) => `${c.uid}:${c.level}:${c.hp}:${c.held ?? ''}:${c.stage}:${c.speciesId}:${c.stars}:${c.status ?? ''}:${c.shiny ? 1 : 0}`),
+    ]);
+  }
+  private drawnSig = '';
+  private drawnBoard = '';
+  private barObjs: Phaser.GameObjects.GameObject[] = [];
+
+  /** The top and bottom bars (sideways: the side columns), kept so they can be redrawn on their own. */
+  private drawBars() {
+    const before = new Set(this.children.list);
+    this.drawTopBar();
+    this.drawBottomBar();
+    this.barObjs = this.children.list.filter((o) => !before.has(o));
+  }
+  private redrawBars() {
+    for (const o of this.barObjs) o.destroy();
+    this.drawBars();
   }
 
   /** Sideways: floor, land, coins, stones, steps to the boss and the buttons, in a left column. */
@@ -1115,7 +1151,9 @@ export class MapScene extends Phaser.Scene {
       // Remember the unresolved choice so a reload offers it again.
       run.pendingNode = n.kind;
       persist();
-      return this.resumeNode(n.kind);
+      // Redraw the map for the new hex now, before its menu opens (the menu comes up over the
+      // fresh map), so finishing the choice needn't rebuild it: that was a hitch right as you picked.
+      return void this.scene.restart({});
     }
     switch (n.kind) {
       case 'boss':
@@ -1132,13 +1170,14 @@ export class MapScene extends Phaser.Scene {
         if (caravanAt(run, n)) {
           run.shop = caravanShop(run);
           persist();
-          return this.openShop();
+          return void this.scene.restart({});
         }
         // Haunted Floor (a curse): every battle on this floor is a trainer.
         this.scene.start('Battle', { kind: encounterKind(run, n) });
         return;
       case 'heal':
-        return this.doHeal();
+        // Redrawn for this hex first, then the rest (see above).
+        return void this.scene.restart({ rest: true });
       case 'levelup':
         return this.doLevelUp();
       case 'skill':
@@ -1150,7 +1189,8 @@ export class MapScene extends Phaser.Scene {
         run.shop = rollShop(run, 0, run.floor === 0 && n.next.includes(run.map.bossId) ? ['potion', 'restore'] : []);
         run.shopVisits = (run.shopVisits ?? 0) + 1;
         persist();
-        return this.openShop();
+        // Redrawn for this hex first; the shop opens over the fresh map.
+        return void this.scene.restart({});
       default:
         this.scene.restart({});
     }
@@ -1597,6 +1637,18 @@ export class MapScene extends Phaser.Scene {
     run.eventId = null;
     run.treasure = null;
     persist();
+    // The map was drawn for this hex already (before its menu opened). If the choice left the hexes
+    // as they are, redraw only the bars when coins, levels or HP changed, else just the boon badge.
+    // (The shop works the same way: a purchase, a reroll or leaving doesn't rebuild the map.)
+    const quiet = !state.meta.newAchievements.length && !(run.newItems ?? []).length && !run.race?.done;
+    if (quiet && this.redrawBoonChip && this.drawnBoard === this.boardSig()) {
+      if (this.drawnSig !== this.mapSig(false)) this.redrawBars();
+      else this.redrawBoonChip();
+      this.drawnSig = this.mapSig(false);
+      if (run.shop) return this.openShop();
+      this.mapMusic();
+      return this.promptPendingMoves();
+    }
     this.scene.restart({});
   };
 
@@ -1812,14 +1864,15 @@ export class MapScene extends Phaser.Scene {
           if (rerollFree) useFreeReroll(run);
           else pay(run, reroll);
           run.shop = rollShop(run, shop.rerolls + 1, shop.guaranteed);
-          return this.scene.restart({});
+          persist();
+          return this.done();
         }
         this.buy(shop.slots[i]);
       },
       cancelLabel: 'Leave shop',
       onCancel: () => {
         run.shop = null;
-        this.scene.restart({});
+        this.done();
       },
     });
   }
