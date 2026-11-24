@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.02';
+export const APP_VERSION = '2.03';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,19 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.03',
+    title: 'Tricks and tells',
+    items: [
+      'Nine new Neutral moves that bend a battle for a turn or a few. Jeer: the foe can only attack. Echo: it must repeat its last move. Mirror Veil: goes first and bounces a Hinder move back. Switcheroo: swap stat changes with the foe. Smokescreen: clears every stat change, the weather and Time Warp. Toll: in 3 turns the foe loses 35% of its HP, unless it switches out. Snare: it can\u2019t switch out and loses Speed. Hush: silences its trait. Turn of Day: flips day and night.',
+      'Each is learned by a few lines that suit it (Grimlet tolls, Creepet snares, Crowlet jeers, Mothlet turns the day...). Bulwark blocks the ones aimed at the foe. Active effects show as tags in battle.',
+      'The learn-move suggestion is smarter: it looks at which foes your attacks hit hard, so a second attack that hits the same foes counts for little, and it values moves that suit the Hexling (Time Warp for slow ones, Bulwark and Toll for bulky ones). It also says why it suggests what it does.',
+      'Hexlidex: the element buttons now filter the list instead of jumping to the element. The Caught button now also shows Uncaught and Unseen Hexlings.',
+      'When a surprise is active (an omen, a rare floor or an Elder), a pink badge shows on the map and in battle. Tap it to read what\u2019s going on. Rare floors and omens also tint the map.',
+      'The battle sky follows the battle: it fades to night when night falls and to day when the sun comes out. Rain and hail roll in clouds.',
+      'Fixed: the weather didn\u2019t show at the start of a battle if the previous battle had ended in the same weather. Eclipse floor battles now start at night.',
+    ],
+  },
   {
     version: '2.02',
     title: 'Gilded looks and fixes',
