@@ -2901,6 +2901,14 @@ describe('Roaming legendaries and night Hexlings', () => {
     foe[0].hp = Math.round(stats(foe[0]).hp * 0.5);
     legendFled(run, foe[0]);
     expect(run.meta.legends![id].hp).toBeCloseTo(0.5, 1);
+    // Gone for the rest of this run: it doesn't move on, and no later floor brings it back.
+    expect(run.roamer).toBeNull();
+    for (let s = 0; s < 10; s++) {
+      placeRoamer(run, true);
+      expect(run.roamer?.id).not.toBe(id);
+    }
+    // Another run: it can turn up again, still worn down.
+    run.legendsGone = [];
     placeRoamer(run, true);
     const again = makeEncounter(run, run.map.nodes[run.roamer!.node]);
     if (again[0].speciesId === id) expect(again[0].hp / stats(again[0]).hp).toBeCloseTo(0.5, 1);

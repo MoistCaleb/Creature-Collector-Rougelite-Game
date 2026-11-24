@@ -2382,7 +2382,7 @@ export class BattleScene extends Phaser.Scene {
     );
   }
 
-  /** The legendary leaves: it keeps the damage you did and roams on. */
+  /** The legendary leaves: it keeps the damage you did, and won't be back until another run. */
   private legendFlees() {
     const run = state.run!;
     this.cancelAuto();
@@ -2401,7 +2401,7 @@ export class BattleScene extends Phaser.Scene {
       showMessage(
         this,
         `${creatureName(foe)} fled!`,
-        `It vanished as quickly as it came, with ${left}% of its health left. Wear it down and it stays worn down: it's still out there.${fallen}`,
+        `It vanished as quickly as it came, with ${left}% of its health left. It's gone for this run, but the damage stays: look for it again on another run.${fallen}`,
         () => this.toMap(),
       ),
     );

@@ -3,7 +3,7 @@ import { SPECIES, SPECIES_BY_ID, type Species } from './species';
 
 /**
  * Roaming legendaries: six one-of-a-kind Hexlings that wander the later floors of a run. They
- * flee after a few turns, keeping the damage you did for the next time you meet. Catch one and it
+ * flee after a few turns and are gone for that run, keeping the damage you did for next time. Catch one and it
  * joins that run, gets its Hexlidex entry and can be brought to the Arena; caught, it roams no
  * more. They are never starters, and they only have one form (their final one).
  */

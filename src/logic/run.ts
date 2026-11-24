@@ -569,6 +569,8 @@ export interface Run {
   treasure: import('./events').TreasureOffer | null;
   /** A legendary roaming this floor, on a battle hex ahead (see data/legends). */
   roamer?: { id: string; node: string; announced?: boolean; cornered?: boolean } | null;
+  /** Legendaries that fled you this run: gone until another run. */
+  legendsGone?: string[];
   /**
    * Your rival this run: a trainer with a team that grows each floor. They wait on one trainer
    * hex a floor (`node`), and `beaten` lists the floors you beat them on.
@@ -1110,7 +1112,7 @@ export function placeRoamer(run: Run, force = false) {
   run.roamer = null;
   if (!roamable(run) || run.floor < 1) return;
   if (!force && hashString(`${run.seed}:roam:${run.floor}`) % 1000 >= LEGEND_CHANCE * 1000) return;
-  const left = LEGENDS.filter((l) => !run.meta.legends?.[l.id]?.caught);
+  const left = LEGENDS.filter((l) => !run.meta.legends?.[l.id]?.caught && !run.legendsGone?.includes(l.id));
   const spots = roamSpots(run);
   if (!left.length || !spots.length) return;
   const h = hashString(`${run.seed}:roamer:${run.floor}`);
@@ -1192,13 +1194,14 @@ export function legendFoe(run: Run, id: string): Creature {
   return c;
 }
 
-/** It fled (or you lost): it keeps the damage you did, and roams on. */
+/** It fled (or you lost): it keeps the damage you did, and is gone for the rest of this run. */
 export function legendFled(run: Run, foe: Creature) {
   const rec = (run.meta.legends ??= {})[foe.speciesId] ?? { hp: 1 };
   rec.hp = Math.max(0.1, foe.hp / stats(foe).hp);
   run.meta.legends[foe.speciesId] = rec;
   saveMeta(run.meta);
-  if (run.roamer?.id === foe.speciesId) moveRoamer(run, true);
+  if (!(run.legendsGone ??= []).includes(foe.speciesId)) run.legendsGone.push(foe.speciesId);
+  if (run.roamer?.id === foe.speciesId) run.roamer = null;
 }
 
 /** Beaten: it leaves this run, and comes back another day only partly recovered (unless caught). */
