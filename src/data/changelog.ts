@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.03';
+export const APP_VERSION = '2.04';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,20 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.04',
+    title: 'Bonds and clocks',
+    items: [
+      'Hexlidex: each Hexling\u2019s card has a Camp bond meter. Five hearts fill up as your bond grows, with how far it is to the next heart and what that heart gives you.',
+      'Camp care (pet, feed and play) comes back after every run you finish, wins and losses alike. Online races and the Battle Arena don\u2019t count.',
+      'Battle skies follow your device\u2019s clock (with Settings \u203a Day, night & holidays on): daytime battles in the day, dusk at dawn and dusk, night at night.',
+      'The Bag shows a sprite of the Hexling holding each equipped item.',
+      'Sacrificing a Hexling at a Prestige Altar now returns its held item to the Bag.',
+      'What\u2019s new opens much faster, and picking a boon on the map no longer lags.',
+      'Fixed: the battle screen could vanish (only the background left) when the sky changed mid-battle.',
+      'Fixed: in the battle stats panel, the moves overlapped the Close button.',
+    ],
+  },
   {
     version: '2.03',
     title: 'Tricks and tells',
