@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.04';
+export const APP_VERSION = '2.05';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.05',
+    title: 'Fresh eyes',
+    items: [
+      'Hidden hexes have their own icon, a crystal ball, so they no longer look like Event hexes.',
+      'The gold dot on the Bag now means new items went in since you last opened it, and opening the Bag clears it.',
+      'The NEW tag on your trainer goes once you open the trainer editor. It comes back when you unlock new gear or a title.',
+    ],
+  },
   {
     version: '2.04',
     title: 'Bonds and clocks',

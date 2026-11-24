@@ -46,7 +46,7 @@ import { SPECIES_BY_ID } from '../data/species';
 import { traitName } from '../ui/traitText';
 import { dex, persist, state } from '../state';
 import { announceGilded } from '../ui/gildedUi';
-import { TWISTS } from '../logic/run';
+import { bagHasNew, TWISTS } from '../logic/run';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
 import { colours, ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
@@ -485,9 +485,9 @@ export class MapScene extends Phaser.Scene {
     }
     button(this, W - 226, TOP_BAR / 2, 40, 44, '', () => openGameMenu(this), { glyph: 'menu' });
     button(this, W - 170, TOP_BAR / 2, 60, 44, 'Hexlidex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 12 });
-    // The Bag shows a dot when it holds items nobody is using yet.
+    // The Bag shows a dot when something new went in since you last opened it.
     const bag = button(this, W - 106, TOP_BAR / 2, 60, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 15 });
-    if ((run.bag ?? []).length) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
+    if (bagHasNew(run)) bag.add(this.add.circle(24, -16, 5, 0xffc94d));
     button(this, W - 40, TOP_BAR / 2, 64, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 15 });
     // Boons: a badge just under the bar, and active surprises (omen, rare floor, Elder) at its right.
     const sw = this.surpriseChip(W - 10, TOP_BAR + 20, W * 0.45);
@@ -562,7 +562,7 @@ export class MapScene extends Phaser.Scene {
     const bw = SIDE_L - 24;
     button(this, SIDE_L / 2, 186, bw, 44, 'Team', () => this.scene.start('Team', {}), { fontSize: 16 });
     const bag = button(this, SIDE_L / 2, 238, bw, 44, 'Bag', () => this.scene.start('Bag', {}), { fontSize: 16 });
-    if ((run.bag ?? []).length) bag.add(this.add.circle(bw / 2 - 12, -12, 5, 0xffc94d));
+    if (bagHasNew(run)) bag.add(this.add.circle(bw / 2 - 12, -12, 5, 0xffc94d));
     button(this, SIDE_L / 2, 290, bw, 44, 'Hexlidex', () => this.scene.start('Dex', { from: 'Map' }), { fontSize: 16 });
     button(this, SIDE_L / 2, 342, bw, 44, 'Menu', () => openGameMenu(this), { fontSize: 16, glyph: 'menu' });
   }

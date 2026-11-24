@@ -559,6 +559,8 @@ export interface Run {
   potions?: number;
   /** Held items not on any creature. */
   bag?: HeldId[];
+  /** Items put in the bag since it was last opened (the Bag button's gold dot). */
+  bagUnseen?: number;
   /** Held items gained since the map was last shown (each gets an announcement). */
   newItems?: HeldId[];
   /** Events already offered this run (so they don't repeat). */
@@ -925,6 +927,7 @@ export function startRun(
     coins: passive === 'coinpurse' ? 50 : 0,
     potions: passive === 'apothecary' ? 2 : 0,
     bag: passive === 'quartermaster' ? [rollHeld(rng), rollHeld(rng)] : [],
+    bagUnseen: passive === 'quartermaster' ? 2 : 0,
     shop: null,
     claimedTypes: [],
     bossPending: false,
@@ -1805,8 +1808,14 @@ export function rollHeld(rng: Rng): HeldId {
 /** Put an item in the bag. `fresh` items (newly earned, not returned) get announced on the map. */
 export function stash(run: Run, id: HeldId, fresh = true) {
   run.bag = [...(run.bag ?? []), id];
-  if (fresh) run.newItems = [...(run.newItems ?? []), id];
+  if (fresh) {
+    run.newItems = [...(run.newItems ?? []), id];
+    run.bagUnseen = (run.bagUnseen ?? 0) + 1;
+  }
 }
+
+/** The Bag has something you haven't looked at since it went in (cleared by opening the Bag). */
+export const bagHasNew = (run: Run): boolean => (run.bagUnseen ?? 0) > 0 && (run.bag ?? []).length > 0;
 
 /** Give a bag item to a creature; whatever it held goes back in the bag. */
 export function equipHeld(run: Run, c: Creature, id: HeldId) {

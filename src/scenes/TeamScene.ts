@@ -11,7 +11,7 @@ import { usesLeft, evolveLevel, readyToEvolve, BANK_LEVELS, bankedLevels, floorC
 import { playEvolution } from '../ui/fx';
 import { cry } from '../ui/cries';
 import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
-import { allCreatures, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, releaseNote, unclaimedTypes, unequipHeld } from '../logic/run';
+import { allCreatures, bagHasNew, dexComplete, equipHeld, needsPotion, usePotion, evolveTracked, releaseNote, unclaimedTypes, unequipHeld } from '../logic/run';
 import { HELD, heldName, type HeldId } from '../data/held';
 import { formName } from '../logic/dex';
 import { dex, persist, state } from '../state';
@@ -49,7 +49,7 @@ export class TeamScene extends Phaser.Scene {
     });
     button(this, W - 60, 30, 100, 42, 'Map', () => this.scene.start('Map', {}), { color: 0x3b6d4a, fontSize: 17, glyph: 'play' });
     const bagBtn = button(this, W - 150, 30, 68, 42, 'Bag', () => this.scene.start('Bag', { from: 'Team' }), { fontSize: 16, glyph: 'bag' });
-    if ((run.bag ?? []).length) bagBtn.add(this.add.circle(28, -15, 5, 0xffc94d));
+    if (bagHasNew(run)) bagBtn.add(this.add.circle(28, -15, 5, 0xffc94d));
     // Team synergy: shared elements on the main team boost everyone.
     const syn = teamSynergy(run.team, run.passive === 'harmonist' ? 2 : 1);
     if (syn.length) {

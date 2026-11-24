@@ -345,6 +345,20 @@ const ICONS = {
     '.....WW.....',
     '.....WW.....',
   ],
+  // Hidden hex: a crystal ball on a gold stand, a violet glint inside.
+  orb: [
+    '....BBBB....',
+    '..BBCCCCBB..',
+    '.BCWWCCCCCB.',
+    '.BCWCCCCPCB.',
+    'BCCCCCPPPCCB',
+    '.BCCCCCPCCB.',
+    '.BCCCCCCCCB.',
+    '..BBCCCCBB..',
+    '...yYYYYy...',
+    '..yYYYYYYy..',
+    '..yyyyyyyy..',
+  ],
   gem: [
     '.....CC.....',
     '....CWCC....',
@@ -571,7 +585,7 @@ export const NODE_ICONS: Record<string, IconId> = {
   event: 'question',
   revive: 'heart',
   boon: 'sparkle',
-  hidden: 'question',
+  hidden: 'orb',
   boss: 'skull',
 };
 

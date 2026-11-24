@@ -13,7 +13,7 @@ import type { Element } from '../src/data/types';
 import { attackId, elementPool, maxUses, MOVES } from '../src/data/moves';
 import { DEFAULT_STARTERS } from '../src/data/species';
 import { EVENTS, rollEvent } from '../src/logic/events';
-import { allCreatures, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, starterShiny, toggleStarterShiny, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
+import { allCreatures, bagHasNew, rollStarterChoices, toggleFavorite, dailySeed, dailyStarters, recordDaily, buryFallen, equipHeld, stash, battleCoins, battleXp, clearFloor, grantXp, catchCreature, clearSavedRun, hasSavedRun, loadRun, saveRun, unlockedMaps, claimGuardian, makeEncounter, moveTo, neutralMatchup, noAdvantageOver, startRun, starterShiny, toggleStarterShiny, startHunt, HUNT_MAX_STARS, dailyPassives, ELEMENT_PASSIVES, recordRun, HISTORY_MAX, mostUsed, type Meta } from '../src/logic/run';
 import { SPECIES_BY_ID } from '../src/data/species';
 import { applyItem, pay, priceFor, rollShop, unusableReason } from '../src/logic/shop';
 import { emptyDex, formName, seeCreature } from '../src/logic/dex';
@@ -1121,6 +1121,18 @@ describe('held items', () => {
     buryFallen(run);
     expect(run.bag!.sort()).toEqual(['band', 'egg']);
   });
+  it("the Bag's dot shows new items until the Bag is opened, not items handed back", () => {
+    const run = startRun(mkMeta(), 'emberkit', 9);
+    expect(bagHasNew(run)).toBe(false);
+    stash(run, 'band');
+    expect(bagHasNew(run)).toBe(true);
+    run.bagUnseen = 0; // opened the Bag
+    expect(bagHasNew(run)).toBe(false);
+    stash(run, 'egg', false); // returned, not earned
+    expect(bagHasNew(run)).toBe(false);
+    stash(run, 'egg');
+    expect(bagHasNew(run)).toBe(true);
+  });
   it('Lucky Egg earns more XP', () => {
     const run = startRun(mkMeta(), 'emberkit', 10);
     const a = run.team[0];
@@ -2087,7 +2099,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.04', '2.03', '2.02', '2.01', '2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.05', '2.04', '2.03', '2.02', '2.01', '2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

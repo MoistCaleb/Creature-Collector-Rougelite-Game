@@ -18,7 +18,7 @@ const hexNum = (c: string) => parseInt(c.slice(1), 16);
  * Every title by tier: the ones you've earned in their colors (tap to wear), the rest dimmed with
  * how to earn them and how close you are.
  */
-export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void) {
+export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void, newOnes?: string[]) {
   const pw = LANDSCAPE ? 760 : 436;
   const ph = LANDSCAPE ? 440 : 760;
   // The tier's list scrolls when it doesn't fit (one scroller at a time, rebuilt with each tab).
@@ -45,8 +45,9 @@ export function openTitles(scene: Phaser.Scene, meta: Meta, onClose: () => void)
 
   const body = scene.add.container(0, 0);
   p.root.add(body);
-  // New titles when the screen opened (tags stay for this visit).
-  const fresh = newTitles(meta);
+  // New titles when the screen opened (tags stay for this visit). The trainer editor passes what was
+  // new when it opened, since opening it already marked them seen.
+  const fresh = [...(newOnes ?? newTitles(meta))];
   // Open on a tier with something new in it.
   const firstNew = TITLES.find((t) => fresh.includes(t.name));
   if (firstNew) shownTier = firstNew.tier;
