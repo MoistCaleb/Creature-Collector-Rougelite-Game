@@ -732,16 +732,16 @@ export interface Board {
  * layout where the creatures stand (top-left); it stretches into the margins, and the rest (the
  * controls) is shaded so the buttons read well.
  */
-export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, b: Board, field: { w: number; h: number }): Phaser.GameObjects.Image {
+export function battleBackdrop(scene: Phaser.Scene, el: Element, stage: number, b: Board, field: { w: number; h: number }, mood?: Mood): Phaser.GameObjects.Image {
   // Field edges in layout coordinates; a field that reaches the layout's edge runs on to the screen's.
   const left = -b.ox;
   const top = -b.oy;
   const right = field.w >= b.w ? b.fw - b.ox : field.w;
   const bottom = field.h >= b.h ? b.fh - b.oy : field.h;
-  const img = battleSky(scene, el, stage, b, field);
+  const img = battleSky(scene, el, stage, b, field, mood);
   const area = new Phaser.Geom.Rectangle(left, top, right - left, bottom - top);
   weather(scene, el, area);
-  const t = themeFor(el, stage);
+  const t = themeFor(el, stage, mood);
   if (t.flash) {
     // Lightning now and then: a white flash over the field.
     const flash = scene.add.rectangle(area.x, area.y, area.width, area.height, 0xffffff, 0).setOrigin(0);

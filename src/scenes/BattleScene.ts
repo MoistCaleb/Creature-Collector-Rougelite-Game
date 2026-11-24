@@ -41,6 +41,7 @@ import { damageNumber, ensureFxTextures, faintFx, healFx, playCatch, playEvoluti
 import { moveImpact, playMove, type Style } from '../ui/movefx';
 import { playMusic, sfx } from '../ui/sound';
 import { BATTLE_SPEEDS, prefs } from '../ui/prefs';
+import { clockSky } from '../logic/ambience';
 import { Battle, stageMult, type BattleEvent, type PlayerAction } from '../logic/battle';
 import { openFittedPanel } from '../ui/panel';
 import { Rng } from '../logic/rng';
@@ -683,19 +684,21 @@ export class BattleScene extends Phaser.Scene {
 
   /** The element's environment behind the field, and a pad under each side. */
   private drawField(el: Element, stage: number) {
-    const sky = battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field);
-    const pads = [...battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72), ...battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72)];
-    this.field = { el, stage, sky, pads, mood: stageMood(el, stage) };
+    // Its time of day follows the device's clock (Settings: Day, night & holidays).
+    const mood = clockSky(stageMood(el, stage));
+    const sky = battleBackdrop(this, el, stage, { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH }, L.field, mood);
+    const pads = [...battlePad(this, el, stage, ENEMY_POS.x, ENEMY_POS.y + 72, 200, mood), ...battlePad(this, el, stage, PLAYER_POS.x, PLAYER_POS.y + 72, 200, mood)];
+    this.field = { el, stage, sky, pads, mood, base: mood };
   }
 
   /** The painted field, so the time of day can change mid-battle. */
-  private field: { el: Element; stage: number; sky: Phaser.GameObjects.Image; pads: Phaser.GameObjects.Ellipse[]; mood: Mood } | null = null;
+  private field: { el: Element; stage: number; sky: Phaser.GameObjects.Image; pads: Phaser.GameObjects.Ellipse[]; mood: Mood; base: Mood } | null = null;
 
   /** The sky follows the battle: sun makes it day, night falling makes it night (a crossfade). */
   private syncSky(instant = false) {
     const f = this.field;
     if (!f || !this.battle) return;
-    const want: Mood = this.battle.weather === 'sun' || this.battle.dawn ? 'day' : this.battle.night ? 'night' : stageMood(f.el, f.stage);
+    const want: Mood = this.battle.weather === 'sun' || this.battle.dawn ? 'day' : this.battle.night ? 'night' : f.base;
     if (want === f.mood) return;
     f.mood = want;
     const board = { w: W, h: H, ox: OX, oy: OY, fw: FW, fh: FH };

@@ -2751,7 +2751,7 @@ describe('Natures and bond', () => {
   });
 });
 
-import { dayPhase, holidayOn } from '../src/logic/ambience';
+import { clockSky, dayPhase, holidayOn, setWorldClock as setClock } from '../src/logic/ambience';
 describe('Time of day and holidays', () => {
   it('reads the phase of the day and only short holiday windows', () => {
     expect(dayPhase(new Date(2026, 10, 20, 13))).toBe('day');
@@ -2763,6 +2763,20 @@ describe('Time of day and holidays', () => {
     expect(holidayOn(new Date(2026, 11, 10))).toBeNull();
     expect(holidayOn(new Date(2026, 11, 31))?.id).toBe('newyear');
     expect(holidayOn(new Date(2026, 1, 14))?.id).toBe('valentine');
+  });
+
+  it('battle skies follow the clock, and keep their own time with the clock off', () => {
+    setClock(true);
+    const at = (h: number) => new Date(2026, 10, 20, h);
+    expect(clockSky('night', at(13))).toBe('day');
+    expect(clockSky('fog', at(13))).toBe('fog');
+    expect(clockSky('day', at(23))).toBe('night');
+    expect(clockSky('fog', at(2))).toBe('night');
+    expect(clockSky('day', at(6))).toBe('dusk');
+    expect(clockSky('day', at(19))).toBe('dusk');
+    setClock(false);
+    expect(clockSky('night', at(13))).toBe('night');
+    setClock(true);
   });
 });
 
