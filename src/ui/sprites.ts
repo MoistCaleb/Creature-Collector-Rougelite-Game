@@ -383,8 +383,8 @@ export function prehistoricPlan(speciesId: string, P: StagePlan, fam: Family) {
   else if (legs < 0.67 && fam.loco === 'insect') fam.loco = 'quad';
 }
 
-/** `pre`: its Prehistoric form (2.07): the same line from an earlier era, some parts lost or swapped (see prehistoricPlan). */
-export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false, pre = false): Px[][] {
+/** A line's body plan at a stage (its family, and this stage's parts), before any Prehistoric or hatchling changes. */
+function linePlan(speciesId: string, stage: number, v2: boolean): { fam: Family; P: StagePlan } {
   const types = SPECIES_BY_ID[speciesId].types;
   const legend = v2 ? LEGEND_PLANS[speciesId] : undefined;
   const lp = v2 ? LINE_PLANS[speciesId] : undefined;
@@ -393,9 +393,6 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   const P = { ...stagePlan(speciesId, stage, fam, types), ...(legend?.plan ?? {}), ...lineStage };
   /** 2.0 art: extra parts rolled from their own seed, so the original rolls stay as they are. */
   const r2 = new Rng(hashString(`${speciesId}:v2:${stage}`));
-  const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
-  /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
-  const sigVariant = v2 ? (lp?.sig ?? hashString(`${speciesId}:sigv`) % 3) : 0;
   if (v2 && !legend && !lp) {
     const has = (e: Element) => types.includes(e);
     if (stage > 0 && r2.chance(0.45))
@@ -412,7 +409,40 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
         cape: fam.loco === 'biped' || fam.loco === 'floater' ? (has('Shadow') || has('Spirit') || has('Light') ? 3 : 0.4) : 0,
       });
   }
+  return { fam, P };
+}
+
+/** A hatchling (2.07): bred from two lines. `other` is the parent whose line it isn't. */
+export interface Hatch {
+  other: string;
+  /** Its accent colour from the other parent. */
+  colours?: boolean;
+  /** One part (a top, back or tail) from the other parent. */
+  part?: boolean;
+}
+
+/** A hatchling borrows one part from its other parent's line: its head top, its back, or its tail (seeded per pair). */
+export function hatchlingPlan(speciesId: string, other: string, stage: number, P: StagePlan, fam: Family, v2: boolean) {
+  if (!SPECIES_BY_ID[other] || other === speciesId) return;
+  const o = linePlan(other, Math.min(stage, 1), v2);
+  const options: (() => void)[] = [];
+  if (o.P.top !== 'none' && o.P.top !== P.top) options.push(() => (P.top = o.P.top));
+  if (o.P.back !== 'none' && o.P.back !== P.back) options.push(() => (P.back = o.P.back));
+  if (o.fam.tail !== 'none' && o.fam.tail !== fam.tail && fam.loco !== 'serpent' && fam.loco !== 'slime') options.push(() => (fam.tail = o.fam.tail));
+  if (!options.length) return;
+  new Rng(hashString(`${speciesId}+${other}:hatch`)).pick(options)();
+}
+
+/** `pre`: its Prehistoric form (2.07): the same line from an earlier era, some parts lost or swapped (see prehistoricPlan). */
+export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false, pre = false, mix?: Hatch): Px[][] {
+  const types = SPECIES_BY_ID[speciesId].types;
+  const lp = v2 ? LINE_PLANS[speciesId] : undefined;
+  const { fam, P } = linePlan(speciesId, stage, v2);
+  const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
+  /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
+  const sigVariant = v2 ? (lp?.sig ?? hashString(`${speciesId}:sigv`) % 3) : 0;
   if (pre) prehistoricPlan(speciesId, P, fam);
+  if (mix?.part) hatchlingPlan(speciesId, mix.other, stage, P, fam, v2);
   const S = 40;
   const N = Math.round(S * k);
   const g: Px[][] = Array.from({ length: N }, () => Array<Px>(N).fill(0));

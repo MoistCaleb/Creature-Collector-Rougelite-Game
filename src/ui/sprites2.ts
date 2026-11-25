@@ -3,7 +3,7 @@ import type { Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { DEX_SPECIES } from '../data/legends';
 import { LINE_PLANS } from './linePlans';
-import { altHue, buildGrid, hueShift, paletteFor, primal, type Colours, type FaceInfo } from './sprites';
+import { altHue, buildGrid, hueShift, paletteFor, primal, type Colours, type FaceInfo, type Hatch } from './sprites';
 
 /**
  * Hexbound 2.0 art: the line part plans, drawn on a finer grid (64 px) and painted with light and
@@ -69,10 +69,10 @@ function measureFit(speciesId: string, stage: number): number {
 }
 
 /** `back`: the view from behind (the player's side in battle). */
-export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny: Colours = false, back = false) {
+export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny: Colours = false, back = false, hatch?: Hatch) {
   const k = fitScale(speciesId, stage);
   const face: Partial<FaceInfo> = {};
-  const g = buildGrid(speciesId, stage, k, face, true, back, shiny === 'ancient') as number[][];
+  const g = buildGrid(speciesId, stage, k, face, true, back, shiny === 'ancient', hatch) as number[][];
   const f = face as FaceInfo;
   const N = g.length;
   // Centre the creature and stand it on the bottom of the frame.
@@ -84,7 +84,7 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   const bx = ox - ox0;
   const by = oy - oy0;
   const { pal } = paletteFor(speciesId, stage, shiny);
-  recolour(pal, speciesId, stage, shiny);
+  recolour(pal, speciesId, stage, shiny, hatch?.colours ? hatch.other : undefined);
   // A near-black belly (from a dark accent) swallows the shading: lift it toward the body colour.
   const lum = (c: number) => 0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255);
   if (lum(pal[3]) < 70) pal[3] = light(pal[1], 0.35);
@@ -457,12 +457,20 @@ function toneOf(speciesId: string): number {
   return toneIndex.get(speciesId) ?? hashString(speciesId) % 8;
 }
 
-function recolour(pal: Record<number, number>, speciesId: string, stage: number, shiny: Colours) {
+/** A line's own body colour before shading (its tone, a line plan's colour or a legend's). */
+function lineBase(speciesId: string): number {
+  const t1 = SPECIES_BY_ID[speciesId].types[0];
+  return LEGEND_TONES[speciesId]?.[0] ?? LINE_PLANS[speciesId]?.color ?? TONES[t1][toneOf(speciesId) % 8];
+}
+
+function recolour(pal: Record<number, number>, speciesId: string, stage: number, shiny: Colours, mixWith?: string) {
   const [t1, t2] = SPECIES_BY_ID[speciesId].types;
   const i = toneOf(speciesId);
   const legend = LEGEND_TONES[speciesId];
   let base = legend ? legend[0] : (LINE_PLANS[speciesId]?.color ?? TONES[t1][i % 8]);
   let sec = legend ? legend[1] : t1 === t2 ? dark(TONES[t1][(i + 4) % 8], 0.28) : TONES[t2][(i * 3 + 1) % 8];
+  // A hatchling (2.07) wears its other parent's body colour as its accent.
+  if (mixWith && SPECIES_BY_ID[mixWith]) sec = lineBase(mixWith);
   // Babies a touch lighter, finals a touch deeper.
   base = stage === 0 ? light(base, 0.1) : stage === 2 ? dark(base, 0.14) : base;
   if (stage === 2) sec = dark(sec, 0.06);
