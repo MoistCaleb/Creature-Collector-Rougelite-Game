@@ -16,13 +16,13 @@ import {
   validArenaTeam,
   applyLoadout,
   loadoutsFor,
-  type ArenaPick, arenaTrait, ownsShiny } from '../logic/arena';
+  type ArenaPick, arenaTrait, lookOf, LOOK_LABEL, pickLooks, withLook } from '../logic/arena';
 import { createCreature, creatureTypes, getFloorCeiling, MAX_MOVES, setFloorCeiling, stats } from '../logic/creature';
 import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, clipList, COLORS, H, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
 import { elementIcon } from '../ui/elementIcons';
 
@@ -105,13 +105,16 @@ export class ArenaEditScene extends Phaser.Scene {
     this.lw = W - this.lx;
     if (wide) this.add.rectangle(12, 56, 288, 386, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
     else this.add.rectangle(12, 66, W - 24, 176, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
-    this.add.image(wide ? 66 : 76, wide ? 116 : 132, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale((wide ? 3 : 3.4) * SPRITE_FIT);
-    // Caught it shiny? Bring it shiny (or not).
-    if (ownsShiny(state.meta, p.speciesId)) {
-      button(this, wide ? 156 : W - 74, wide ? 255 : 168, wide ? 264 : 104, 30, p.shiny ? '✦ Gilded: on' : '✦ Gilded: off', () => {
-        picks[this.slot] = { ...p, shiny: !p.shiny || undefined };
+    this.add.image(wide ? 66 : 76, wide ? 116 : 132, ensureCreatureTexture(this, p.speciesId, p.stage, colours(p))).setScale((wide ? 3 : 3.4) * SPRITE_FIT);
+    // Unlocked another look (Gilded, Prehistoric, bond colours)? Tap to switch between them.
+    const looks = pickLooks(state.meta, p.speciesId);
+    if (looks.length > 1) {
+      const look = looks.includes(lookOf(p)) ? lookOf(p) : 'normal';
+      const color = look === 'gilded' ? 0x7a5a1c : look === 'prehistoric' ? 0x6a4a28 : look === 'bond' ? 0x6a2a4a : 0x2a2440;
+      button(this, wide ? 156 : W - 74, wide ? 255 : 168, wide ? 264 : 104, 30, LOOK_LABEL[look], () => {
+        picks[this.slot] = withLook(p, looks[(looks.indexOf(look) + 1) % looks.length]);
         this.save(picks);
-      }, { fontSize: 12, color: p.shiny ? 0x7a5a1c : 0x2a2440 });
+      }, { fontSize: 12, color, sub: undefined });
     }
     const ix = wide ? 128 : 150;
     text(this, ix, wide ? 68 : 78, `${sp.names[p.stage]}  Lv ${ARENA_LEVEL}`, wide ? 15 : 18, COLORS.text, { fontStyle: 'bold', wordWrap: { width: wide ? 166 : W } });

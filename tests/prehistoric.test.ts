@@ -57,3 +57,36 @@ describe('Prehistoric forms', () => {
     expect(colours({ ancient: true, alt: true })).toBe('ancient');
   });
 });
+
+describe('Looks in the team builder and on the starter screen', () => {
+  it('only unlocked looks can be picked, one at a time, and they carry into battle', async () => {
+    const { pickLooks, withLook, validArenaTeam, makeArenaCreature, lookOf } = await import('../src/logic/arena');
+    const meta = mkMeta();
+    meta.dex.caught.push('emberkit');
+    expect(pickLooks(meta, 'emberkit')).toEqual(['normal']);
+    meta.ancientFound = ['emberkit'];
+    meta.shinyOwned = ['emberkit'];
+    expect(pickLooks(meta, 'emberkit')).toEqual(['normal', 'gilded', 'prehistoric']);
+    const p = withLook(withLook({ speciesId: 'emberkit', stage: 0, moves: [] as string[] }, 'gilded'), 'prehistoric');
+    expect(lookOf(p)).toBe('prehistoric');
+    expect(p.shiny).toBeUndefined();
+    expect(makeArenaCreature(p).ancient).toBe(true);
+    expect(lookOf(validArenaTeam(meta, [p])[0])).toBe('prehistoric');
+    meta.ancientFound = [];
+    expect(lookOf(validArenaTeam(meta, [p])[0])).toBe('normal');
+  });
+
+  it('a starter starts in the look picked for it, if unlocked', async () => {
+    const { setStarterLook, starterLook } = await import('../src/logic/run');
+    const meta = mkMeta();
+    meta.shinyOwned = ['emberkit'];
+    expect(starterLook(meta, 'emberkit')).toBe('gilded');
+    expect(startRun(meta, 'emberkit', 3).team[0].shiny).toBe(true);
+    setStarterLook(meta, 'emberkit', 'prehistoric');
+    expect(starterLook(meta, 'emberkit')).toBe('gilded'); // not found yet
+    meta.ancientFound = ['emberkit'];
+    const c = startRun(meta, 'emberkit', 3).team[0];
+    expect(c.ancient).toBe(true);
+    expect(c.shiny).toBeUndefined();
+  });
+});

@@ -10,6 +10,7 @@ import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
 import { SURPRISES } from '../data/surprises';
 import { noteAncient } from './surprises';
+import { pickLooks, type PickLook } from './arena';
 import { dojoOn, dojoResult, elderHere, floorSurprise, lastWinTeam, tickEgg, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
@@ -49,7 +50,7 @@ import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { freshWelcome, noteWelcomeBack } from './welcomeBack';
-import { applyCampBond, bondStarterLevels, camp, CAMP_START_BOND, noteGuardianBond, type PrepId } from './camp';
+import { applyCampBond, bondColours, bondStarterLevels, camp, CAMP_START_BOND, noteGuardianBond, type PrepId } from './camp';
 import { lines, noteCatch, noteRunRecord } from './dexInfo';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
@@ -207,6 +208,8 @@ export interface Meta {
   shinyOwned?: string[];
   /** Shiny-unlocked species you've chosen to start runs with in their normal colours. */
   shinyOff?: string[];
+  /** The look each starter line starts runs in, once chosen on the starter screen (2.07). */
+  starterLook?: Record<string, PickLook>;
   /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
   shinySeen?: string[];
   shinyCaught?: number;
@@ -338,6 +341,32 @@ export function countQuickResult(meta: Meta, won: boolean) {
 /** Does this species start runs shiny? (Caught shiny in any form, unless you've switched it off.) */
 export function starterShiny(meta: Meta, speciesId: string): boolean {
   return (meta.shinyOwned ?? []).includes(speciesId) && !(meta.shinyOff ?? []).includes(speciesId);
+}
+
+/**
+ * The look a starter starts in: the one picked on the starter screen if it's still unlocked,
+ * else Gilded (if owned and not switched off), else its bond colours (if on at camp), else usual.
+ */
+export function starterLook(meta: Meta, speciesId: string): PickLook {
+  const chosen = meta.starterLook?.[speciesId];
+  if (chosen && pickLooks(meta, speciesId).includes(chosen)) return chosen;
+  return starterShiny(meta, speciesId) ? 'gilded' : bondColours(meta, speciesId) ? 'bond' : 'normal';
+}
+
+/** Choose the look a starter starts runs in. */
+export function setStarterLook(meta: Meta, speciesId: string, look: PickLook) {
+  (meta.starterLook ??= {})[speciesId] = look;
+  saveMeta(meta);
+}
+
+/** A creature in one look (one at a time). */
+export function applyLook(c: Creature, look: PickLook) {
+  delete c.shiny;
+  delete c.ancient;
+  delete c.alt;
+  if (look === 'gilded') c.shiny = true;
+  else if (look === 'prehistoric') c.ancient = true;
+  else if (look === 'bond') c.alt = true;
 }
 
 /** Switch a shiny-unlocked starter between its shiny and normal colours. */
@@ -994,6 +1023,8 @@ export function startRun(
   if (!daily && !weekly) meta.lastStarter = starterId;
   camp(meta);
   applyCampBond(run, starter);
+  // The look chosen on the starter screen (Gilded, Prehistoric, bond colours or usual).
+  applyLook(starter, starterLook(meta, starterId));
   makeRival(run);
   applyFloorCap(run);
   // Rare surprises: the run's omen and the first floor's (seeded runs can't be forced).

@@ -1,7 +1,7 @@
 import { accountsAvailable, currentUser } from '../net/account';
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed, saveMeta } from '../logic/run';
+import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterLook, todayUtc, dailyPlayed, saveMeta } from '../logic/run';
 import { needsTour } from '../logic/welcomeBack';
 import { prefs } from '../ui/prefs';
 import { openTour } from '../ui/tour';
@@ -76,7 +76,8 @@ export class TitleScene extends Phaser.Scene {
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);
     ids.forEach((id, i) => {
-      const key = ensureCreatureTexture(this, id, 0, starterShiny(meta, id));
+      const look = starterLook(meta, id);
+      const key = ensureCreatureTexture(this, id, 0, look === 'gilded' ? true : look === 'prehistoric' ? 'ancient' : look === 'bond' ? 'alt' : false);
       const x = lx - 170 + i * 68;
       const img = this.add.image(x, ly(190), key).setScale(2.2 * SPRITE_FIT);
       this.tweens.add({ targets: img, y: ly(180), yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });

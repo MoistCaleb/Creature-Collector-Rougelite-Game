@@ -88,6 +88,8 @@ interface Lead {
   speciesId: string;
   stage: number;
   shiny?: boolean;
+  ancient?: boolean;
+  alt?: boolean;
 }
 
 /** A trainer token on the map and the Hexling following it. */
@@ -534,7 +536,7 @@ export class MapScene extends Phaser.Scene {
     const lead = run.team[0];
     return JSON.stringify([
       run.currentId, run.floor, scoutRange(run), hasBoon(run, 'fogofwar'),
-      lead ? `${lead.uid}:${lead.speciesId}:${lead.stage}:${lead.shiny ? 1 : 0}` : null,
+      lead ? `${lead.uid}:${lead.speciesId}:${lead.stage}:${colours(lead)}` : null,
       run.roamer?.node ?? null, JSON.stringify(run.surprises ?? null), run.rival?.node ?? null,
       Object.values(run.map.nodes).map((n) => n.kind[0] + n.kind.length).join(''), run.visited.length,
     ]);
@@ -614,7 +616,7 @@ export class MapScene extends Phaser.Scene {
       won: false,
       steps: run.map.layout === 'rows' ? stepsToBoss(run.map, run.currentId) : undefined,
       at: run.currentId,
-      lead: lead ? { speciesId: lead.speciesId, stage: lead.stage, ...(lead.shiny ? { shiny: true } : {}) } : undefined,
+      lead: lead ? { speciesId: lead.speciesId, stage: lead.stage, ...(lead.shiny ? { shiny: true } : lead.ancient ? { ancient: true } : lead.alt ? { alt: true } : {}) } : undefined,
     });
   }
 
@@ -709,7 +711,7 @@ export class MapScene extends Phaser.Scene {
   private makeToken() {
     const run = state.run!;
     const lead = run.team[0];
-    this.me = this.makeWalker(run.currentId, myLook(run.meta), lead ? { speciesId: lead.speciesId, stage: lead.stage, shiny: lead.shiny } : null, run.followSide ?? -1, null);
+    this.me = this.makeWalker(run.currentId, myLook(run.meta), lead ? { speciesId: lead.speciesId, stage: lead.stage, shiny: lead.shiny, ancient: lead.ancient, alt: lead.alt } : null, run.followSide ?? -1, null);
     this.leadMood();
   }
 

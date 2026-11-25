@@ -539,3 +539,8 @@ rule loss rates (the report's rule table is small and noisy).
   around the head, horns, tusks, flank stripes, shoulder spikes.
 - **Where:** about 1 wild Hexling in 250; 1 in 6 on an Ancient Ruins floor; the Fossil Site. Caught
   ones stay Prehistoric. The Hexlidex shows the form in the corner of each stage once found.
+- **Looks:** once a line's Gilded, Prehistoric or bond colours (5 camp hearts) are unlocked, the
+  team builder (Arena picks, `ArenaPick.shiny/ancient/alt`) and the starter screen
+  (`meta.starterLook`) have a button that cycles through them, one look at a time. Starters carry
+  the look into normal runs, dailies, weeklies and stage battles; online, the other phones see it
+  (teams, finale creatures and map leads all carry it).

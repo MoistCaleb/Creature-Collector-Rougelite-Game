@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { rollTrait, TRAITS, type TraitId } from '../data/traits';
 import { traitDescOf, traitName } from '../ui/traitText';
 import { tip } from '../ui/tips';
-import { bondColours, bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTrait } from '../logic/camp';
+import { bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTrait } from '../logic/camp';
 import { traitsFound } from '../logic/dex';
 import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
@@ -10,7 +10,8 @@ import { createCreature, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { omenFor } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
-import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
+import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, setStarterLook, starterLook, startRun } from '../logic/run';
+import { LOOK_LABEL, pickLooks, type PickLook } from '../logic/arena';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -27,8 +28,11 @@ import { wsHas } from '../logic/workshop';
 import { gildedStarterOffer } from '../logic/huntMilestones';
 
 /** This visit's three random starters. */
+/** How each starter look is drawn. */
+const LOOK_COLOURS: Record<PickLook, Colours> = { normal: false, gilded: true, prehistoric: 'ancient', bond: 'alt' };
 let rolled: string[] | null = null;
-/** The starters' traits come from this (shared seeds: the same for everyone; otherwise rolled per visit). */
+/** The starters' traits come from this (shared seeds: the same for everyone; otherwise rolled per visit, and
+ *  never left over from a race or daily screen that closed without a pick). */
 let traitKey: string | null = null;
 
 export class StarterScene extends Phaser.Scene {
@@ -90,7 +94,7 @@ export class StarterScene extends Phaser.Scene {
     // Daily runs and weekly challenges: each starter comes with a passive that suits it.
     const passives = this.race ? racePassives(this.race.seed, this.race.starters) : week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
     this.gold = !this.race && !week && !this.daily ? gildedStarterOffer(state.meta, choices) : null;
-    traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : (traitKey ?? `free:${Math.random()}`);
+    traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : traitKey?.startsWith('free:') ? traitKey : `free:${Math.random()}`;
     const free = !this.race && !week && !this.daily;
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
@@ -100,7 +104,7 @@ export class StarterScene extends Phaser.Scene {
       const tName = trait ? `Trait: ${traitName(id, trait)}${choose ? ' ♥' : ''}` : '';
       dex.form(id, 0);
       const preview = createCreature(id, BALANCE.starterLevel + (free ? bondStarterLevels(state.meta, id) : 0));
-      const look: Colours = starterShiny(state.meta, id) || id === this.gold ? true : bondColours(state.meta, id) ? 'alt' : false;
+      const look: Colours = id === this.gold ? true : LOOK_COLOURS[starterLook(state.meta, id)];
       const s = stats(preview);
       if (LANDSCAPE) {
         // Sideways: three tall cards side by side.
@@ -218,15 +222,17 @@ export class StarterScene extends Phaser.Scene {
     });
   }
 
-  /** Shiny unlocked for this line: start it shiny (tap to switch to its normal colours and back). */
+  /** Another look unlocked for this line (Gilded, Prehistoric, bond colours): tap to switch the one it starts in. */
   private shinyToggle(id: string, x: number, y: number, w: number) {
     const meta = state.meta;
-    if (!(meta.shinyOwned ?? []).includes(id)) return;
-    const on = starterShiny(meta, id);
-    button(this, x, y, w, 24, on ? '✦ Gilded' : '✦ Normal', () => {
-      toggleStarterShiny(meta, id);
+    const looks = pickLooks(meta, id);
+    if (looks.length < 2) return;
+    const look = starterLook(meta, id);
+    const color = look === 'gilded' ? 0x7a5a1c : look === 'prehistoric' ? 0x6a4a28 : look === 'bond' ? 0x6a2a4a : 0x2a2440;
+    button(this, x, y, w, 24, LOOK_LABEL[look], () => {
+      setStarterLook(meta, id, looks[(looks.indexOf(look) + 1) % looks.length]);
       this.scene.restart({ mapId: this.mapId, quick: this.quick, daily: this.daily ?? undefined, weekly: this.weekly ?? undefined, race: this.race ?? undefined });
-    }, { fontSize: 11, color: on ? 0x7a5a1c : 0x2a2440 });
+    }, { fontSize: 11, color, oneLine: true });
   }
 
   private pick(id: string) {
