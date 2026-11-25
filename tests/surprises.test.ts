@@ -11,7 +11,7 @@ import {
   dojoOn,
   dojoResult,
   DROUGHT_MAX,
-  EGG_WINS,
+  eggNeed,
   eggReady,
   enterDojo,
   floorSurprise,
@@ -116,21 +116,25 @@ describe('rare surprises', () => {
 });
 
 describe('hatchery, dojo and caravan (2.0)', () => {
-  it('the egg is a line you have not caught, hatches after 5 wins with its rare trait', () => {
+  it('the egg is a line you have not caught, hatches after its won battles (3-7) with a trait of its line', () => {
     const meta = mkMeta();
     meta.dex.caught = ['emberkit'];
     const run = startRun(meta, 'emberkit', 21);
     const egg = layEgg(run);
     expect(egg.speciesId).not.toBe('emberkit');
     expect(layEgg(run)).toBe(egg);
-    for (let i = 0; i < EGG_WINS - 1; i++) postBattleRecover(run, { won: true });
+    const need = eggNeed(egg);
+    expect(need).toBeGreaterThanOrEqual(3);
+    expect(need).toBeLessThanOrEqual(7);
+    for (let i = 0; i < need - 1; i++) postBattleRecover(run, { won: true });
     postBattleRecover(run, {});
     expect(eggReady(run)).toBe(false);
     postBattleRecover(run, { won: true });
     expect(eggReady(run)).toBe(true);
     const c = hatchEgg(run)!;
     expect(c.speciesId).toBe(egg.speciesId);
-    expect(c.trait).toBe(traitsOf(c.speciesId)[2]);
+    expect(traitsOf(c.speciesId)).toContain(c.trait);
+    expect(c.heir?.other).toBe(egg.other);
     expect(joinParty(run, c)).toBe(true);
     expect(allCreatures(run)).toContain(c);
     expect(runSurprises(run).egg).toBeUndefined();
