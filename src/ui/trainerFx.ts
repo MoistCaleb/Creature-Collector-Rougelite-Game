@@ -103,6 +103,11 @@ const AURA_FX: Record<number, [number, Spawn][]> = {
     [150, (fx) => drift(fx, fx.px(rand(1, 30), rand(12, 33), pick([0xffb84a, 0xe08a2e, 0xffd890]), 1, 1).setAlpha(0.9), rand(-1, 1), -rand(6, 10), rand(1200, 1600), { ease: 'Linear' })],
     [700, (fx) => sparkle(fx, rand(2, 29), rand(2, 28), 0xffb84a)],
   ],
+  // Nestling: pastel shell motes drifting up, the odd pink twinkle
+  12: [
+    [160, (fx) => drift(fx, fx.px(rand(1, 30), rand(14, 33), pick([0xfff4d0, 0xffc0d8, 0xc8f0ff, 0xffe890])), rand(-2, 2), -rand(8, 14), rand(900, 1300))],
+    [600, (fx) => sparkle(fx, rand(2, 29), rand(0, 26), 0xff9ac8)],
+  ],
   // Void: light pulled into the trainer
   9: [
     [

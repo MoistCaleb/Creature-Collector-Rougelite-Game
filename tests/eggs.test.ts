@@ -178,3 +178,27 @@ describe('the Hatchery egg on a run', () => {
     expect(c.stars).toBe(EGG_STARS[egg.tier! - 1]);
   });
 });
+
+import { HATCH_MILESTONES, hatchedCount, hasTitle, TITLE_BY_NAME } from '../src/logic/titles';
+import { lockOf, TITLE_REWARDS } from '../src/logic/cosmetics';
+import { noteHatched } from '../src/logic/nest';
+
+describe('hatching milestones', () => {
+  it('count different pairs, and each earns a title and its gear', () => {
+    const meta = withCrew(['emberkit']);
+    noteHatched(meta, 'emberkit', 'puddlet', 2);
+    noteHatched(meta, 'emberkit', 'puddlet', 3);
+    expect(hatchedCount(meta)).toBe(1); // the same pair twice is one
+    for (const [count, title] of HATCH_MILESTONES) {
+      const t = TITLE_BY_NAME[title];
+      const gear = TITLE_REWARDS[title];
+      expect(gear.length).toBeGreaterThan(0);
+      while (hatchedCount(meta) < count - 1) noteHatched(meta, SPECIES[hatchedCount(meta)].id, 'puddlet', 1);
+      expect(hasTitle(meta, t)).toBe(false);
+      for (const c of gear) expect(lockOf(meta, c.key, c.value)).not.toBeNull();
+      noteHatched(meta, SPECIES[hatchedCount(meta)].id, 'zapling', 1);
+      expect(hasTitle(meta, t)).toBe(true);
+      for (const c of gear) expect(lockOf(meta, c.key, c.value)).toBeNull();
+    }
+  });
+});

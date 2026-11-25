@@ -11,6 +11,3 @@ Draw it on an offscreen canvas from the existing sprite textures; keep it under 
 ## Hatchling looks: Gilded and Prehistoric
 A hatchling whose line has its Gilded or Prehistoric look unlocked could hatch (or be switched) into it,
 keeping its borrowed part. Needs the hatchling look to combine with those palettes in ui/sprites2.
-
-## Hatching milestones
-Titles and trainer gear for pairings hatched (like the Prehistoric ones), once eggs have been played a while.

@@ -29,9 +29,15 @@ const FLAME = [0xffe060, 0xff9a2a, 0xff5a1a];
 const BONE = 0xeee2c0;
 const BONE_DARK = 0xb8a47a;
 const HIDE = 0x9a7448;
+/** Hatching gear: eggshell, woven straw, chick yellow. */
+const SHELL = 0xfaf4e4;
+const SHELL_DARK = 0xd8ccb0;
+const STRAW = 0xc8963c;
+const STRAW_DARK = 0x8a5e22;
+const CHICK = 0xffd84a;
 
 /** The outline color for each aura (0: the usual ink). */
-export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820, 0xc87a20];
+export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820, 0xc87a20, 0xe890b8];
 
 const shade = (c: number, k: number) => {
   const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k)));
@@ -152,6 +158,18 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     for (const x of [8, 11, 15, 18]) put(x, 29, 0xf4f8ff);
     rect(8, 33, 12, 33, 0xc8d8ec);
     rect(15, 33, 19, 33, 0xc8d8ec);
+  } else if (look.shoes === 6) {
+    // Chick slippers: round yellow chicks, beaks pointing forward.
+    round(8, 30, 12, 32, CHICK, 1);
+    round(15, 30, 19, 32, CHICK, 1);
+    put(10, 29, CHICK);
+    put(17, 29, CHICK);
+    if (!back) {
+      put(9, 30, INK); // eyes
+      put(16, 30, INK);
+      put(8, 31, 0xff8a2a); // beaks
+      put(15, 31, 0xff8a2a);
+    }
   } else if (look.shoes === 2) {
     rect(9, 31, 12, 32, skin); // sandals: a strap and a sole
     rect(15, 31, 18, 32, skin);
@@ -393,6 +411,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(17, 19, 17, 25, STEEL_DARK);
     rect(11, 22, 16, 22, STEEL_DARK);
     rect(13, 22, 14, 22, GOLD);
+  }
+  if (!back && look.back === 12) {
+    // Egg basket straps over the shoulders.
+    rect(10, 19, 10, 25, STRAW_DARK);
+    rect(17, 19, 17, 25, STRAW_DARK);
   }
   if (!back && look.back === 4) {
     // The greatsword's strap across the chest, from the hilt's shoulder down to the other hip.
@@ -732,6 +755,26 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         put(tx + 1, ty - 5, BONE);
         break;
       }
+      case 12: // egg basket: a woven basket on your back, eggs peeking out the top
+        if (back) {
+          round(8, 18, 19, 28, STRAW, 1);
+          for (let y = 19; y <= 27; y++) for (let x = 9; x <= 18; x++) if ((x + y * 2) % 4 === 0) put(x, y, STRAW_DARK);
+          rect(8, 18, 19, 18, STRAW_DARK); // the rim
+          for (const [ex, c] of [[10, SHELL], [13, 0xbfe8ff], [16, 0xffd0e0]] as const) {
+            round(ex, 14, ex + 2, 17, c, 1);
+            put(ex, 15, 0xffffff);
+          }
+        } else {
+          // From the front: the basket's woven sides behind your shoulders, eggs piled over them.
+          for (const [x0, egg] of [[2, SHELL], [21, 0xbfe8ff]] as const) {
+            round(x0, 15, x0 + 5, 22, STRAW, 1);
+            for (let y = 16; y <= 21; y++) for (let x = x0; x <= x0 + 5; x++) if ((x + y) % 2 === 0) put(x, y, STRAW_DARK);
+            rect(x0, 15, x0 + 5, 15, STRAW_DARK); // the rim
+            round(x0 + 1, 10, x0 + 4, 14, egg, 1);
+            put(x0 + 2, 11, 0xffffff);
+          }
+        }
+        break;
       case 11: // bone wings: long finger bones with dried hide stretched between
         wings((i, w, y) => (i === w - 1 || i % 3 === 0 ? (y % 4 === 0 ? BONE_DARK : BONE) : (i + y) % 5 === 0 ? shade(HIDE, 0.85) : HIDE), 5, 26, 9);
         break;
@@ -992,6 +1035,12 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
         }
         break;
       }
+      case 29: // eggshell cap: the top half of a cracked egg, worn as a hat
+        round(X0, Y0 - 4, X1, Y0 + 1, SHELL, 2);
+        for (let x = X0; x <= X1; x++) put(x, Y0 + 1 + ((x - X0) % 3 === 1 ? 1 : 0), (x - X0) % 3 === 1 ? SHELL_DARK : SHELL); // jagged edge
+        if (!back) for (const [x, y] of [[X0 + 3, Y0 - 2], [X1 - 4, Y0 - 3], [13, Y0 - 1]]) put(x, y, 0xffc0d8); // speckles
+        put(X0 + 2, Y0 - 3, 0xffffff);
+        break;
       case 17: // propeller cap
         round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);
         rect(X0 + 1, Y0 - 3, 13, Y0 - 1, acc);

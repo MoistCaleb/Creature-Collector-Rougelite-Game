@@ -20,6 +20,8 @@ import {
   type Hatchling,
 } from '../logic/nest';
 import { saveMeta } from '../logic/run';
+import { titleNews } from '../logic/cosmetics';
+import { takeNewTitles } from '../logic/titles';
 import { state } from '../state';
 import { playHatch } from './hatch';
 import { openPicker, showMessage, type PickOption } from './picker';
@@ -146,9 +148,11 @@ export function hatchNow(scene: Phaser.Scene, then: () => void) {
   const look = { a: egg.a, b: egg.b, tier: egg.tier, legendary: isLegendId(egg.b) };
   const h = hatchNest(meta);
   if (!h) return then();
+  // A hatching milestone (a title and its gear) is announced with the baby.
+  const news = titleNews(takeNewTitles(meta));
   saveMeta(meta);
   playHatch(scene, look, hatchlingPreview(h), () =>
-    showMessage(scene, `${creatureName(hatchlingPreview(h))} hatched!`, `${hatchlingText(h)}\n\nIt's in the Nursery: pick it on the starter screen for a normal run.`, then),
+    showMessage(scene, `${creatureName(hatchlingPreview(h))} hatched!`, `${hatchlingText(h)}\n\nIt's in the Nursery: pick it on the starter screen for a normal run.${news}`, then),
   );
 }
 

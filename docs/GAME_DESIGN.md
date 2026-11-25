@@ -586,3 +586,6 @@ rule loss rates (the report's rule table is small and noisy).
   (`heir` is kept when creatures sync). Older saved eggs hatch the old way (5 wins, the rare trait).
 - **Hexlidex Hatched tab**: a card per pair hatched (Nest or Hatchery), newest first, no blank cards; legendary
   pairs have a gold border.
+- **Hatching milestones** (titles with gear): different pairs hatched, 3 Egg Sitter (rare, Eggshell cap), 10 Nest
+  Keeper (epic, Egg basket), 25 Brood Master (legendary, Chick slippers), 60 Lineweaver (mythic, Nestling aura).
+  Shown at the top of the Hatched tab (tap for all of them).

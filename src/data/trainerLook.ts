@@ -41,13 +41,15 @@ export const HATS = [
   'Monarch crown',
   // Prehistoric title rewards.
   'Skull helm',
+  // Hatching title rewards.
+  'Eggshell cap',
 ] as const;
 export const TOPS = ['Tee', 'Jacket', 'Hoodie', 'Long coat', 'Armor', 'Tank top', 'Sweater', 'Overalls', 'Robe', 'Vest', 'Scarf', 'Cape', 'Sailor', 'Gilded coat', 'Dragon armor', 'Void cloak', 'Mech suit', 'Royal mantle'] as const;
 export const BOTTOMS = ['Pants', 'Shorts', 'Skirt', 'Long skirt', 'Cargo pants', 'Puffy pants'] as const;
 export const FACES = ['None', 'Glasses', 'Shades', 'Eyepatch', 'Freckles', 'Bandage'] as const;
-export const SHOES = ['Sneakers', 'Boots', 'Sandals', 'Gilded boots', 'Rocket boots', 'Cloud steps'] as const;
-export const AURAS = ['None', 'Golden glow', 'Inferno', 'Frost', 'Storm', 'Shadow', 'Toxic', 'Starfall', 'Rainbow', 'Void', 'Regal', 'Amber'] as const;
-export const BACKS = ['None', 'Angel wings', 'Demon wings', 'Jetpack', 'Greatsword', 'Dragon tail', 'Fairy wings', 'Mech arms', 'Phoenix wings', 'Victory banner', 'Bone tail', 'Bone wings'] as const;
+export const SHOES = ['Sneakers', 'Boots', 'Sandals', 'Gilded boots', 'Rocket boots', 'Cloud steps', 'Chick slippers'] as const;
+export const AURAS = ['None', 'Golden glow', 'Inferno', 'Frost', 'Storm', 'Shadow', 'Toxic', 'Starfall', 'Rainbow', 'Void', 'Regal', 'Amber', 'Nestling'] as const;
+export const BACKS = ['None', 'Angel wings', 'Demon wings', 'Jetpack', 'Greatsword', 'Dragon tail', 'Fairy wings', 'Mech arms', 'Phoenix wings', 'Victory banner', 'Bone tail', 'Bone wings', 'Egg basket'] as const;
 /** Clothing colors (hat, top, accent, bottoms). */
 export const CLOTH_COLORS = [
   0xd8443a, 0xf08a2a, 0xf0c838, 0x5ab84a, 0x2aa8a0, 0x6ac8f0, 0x3a6ad8, 0x2a3458,

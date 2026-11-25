@@ -13,7 +13,8 @@ import { activeTeam, activeTeamIndex, ARENA_LEVEL, ARENA_TEAM, arenaForms, arena
 import { openPicker, showMessage } from '../ui/picker';
 import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
-import { PREHISTORIC_MILESTONES, prehistoricCount } from '../logic/titles';
+import { HATCH_MILESTONES, hatchedCount, PREHISTORIC_MILESTONES, prehistoricCount } from '../logic/titles';
+import { eggImage } from '../ui/hatch';
 import { rewardText } from '../logic/cosmetics';
 import { hatchedPairs, TIER_NAMES, type PairRecord } from '../logic/nest';
 import { openPanel } from '../ui/panel';
@@ -712,6 +713,26 @@ export class DexScene extends Phaser.Scene {
     );
   }
 
+  private openHatchMilestones() {
+    const n = hatchedCount(state.meta);
+    this.overlay((done) =>
+      openPicker(this, {
+        title: 'Hatching milestones',
+        subtitle: `${n} different pair${n === 1 ? '' : 's'} hatched (a pair is a baby's line and its other parent). Each milestone is a title and trainer gear.`,
+        options: HATCH_MILESTONES.map(([c, t]) => ({
+          label: `${n >= c ? '✓ ' : ''}${c} pairs · ${t}`,
+          sub: `${n >= c ? 'Earned' : `${n}/${c}`} · ${rewardText(t)}`,
+          disabled: true,
+          color: n >= c ? 0x6a3a5a : undefined,
+        })),
+        rowHeight: 56,
+        cancelLabel: 'Back',
+        onCancel: done,
+        onPick: () => {},
+      }),
+    );
+  }
+
   private openRewards() {
     const meta = state.meta;
     const list = dexRewards(meta).sort((a, b) => Number(b.done && !b.claimed) - Number(a.done && !a.claimed) || Number(a.claimed) - Number(b.claimed) || b.have / b.goal - a.have / a.goal);
@@ -882,6 +903,25 @@ export class DexScene extends Phaser.Scene {
       row.add(text(this, 16, hy + 26, 'Breed at camp’s Nest, or carry a Hatchery egg on a run.', 12, COLORS.textDim));
     });
     y += 52;
+    // The next hatching milestone (a title and trainer gear); tap for all of them.
+    const my0 = y;
+    this.addRow(my0, 58, (row) => {
+      const n = hatchedCount(meta);
+      const next = HATCH_MILESTONES.find(([c]) => c > n);
+      row.add(
+        this.add
+          .rectangle(12, my0, W - 24, 50, COLORS.panel)
+          .setOrigin(0)
+          .setStrokeStyle(1, n ? 0xffc0d8 : COLORS.stroke)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerup', () => !this.scroller.moved && this.openHatchMilestones()),
+      );
+      row.add(eggImage(this, 34, my0 + 25, { a: 'sproutle', b: 'emberkit', tier: 3 }, 30));
+      row.add(text(this, 54, my0 + 8, `Hatching milestones  ${n}/${HATCH_MILESTONES[HATCH_MILESTONES.length - 1][0]}`, 15, '#ffc0d8', { fontStyle: 'bold' }));
+      row.add(text(this, 54, my0 + 28, next ? `Next: ${next[1]} at ${next[0]} pairs · ${rewardText(next[1]).replace(/^Unlocks /, '')}` : 'Every hatching milestone reached!', 12, COLORS.textDim, { fixedWidth: W - 100 }));
+      row.add(icon(this, W - 30, my0 + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+    });
+    y += 58;
     if (!list.length) {
       const my = y;
       this.addRow(my, 80, (row) =>
