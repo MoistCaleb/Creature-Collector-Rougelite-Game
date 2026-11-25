@@ -16,7 +16,8 @@ export const SPRITE_FIT = 32 / ART_SIZE;
  * 0 empty, 1 body, 2 secondary (markings, wings, fins), 3 belly / plates, 4 eye white, 5 pupil,
  * 6 horn / bone, 7 glow, 8 claw / fang, 9 dark (brow, mouth), 10 signature (element feature), 11 signature highlight
  */
-type Px = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+/** 12: a hatchling's borrowed part, painted in its other parent's colour. */
+type Px = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 type Loco = 'biped' | 'quad' | 'insect' | 'floater' | 'slime' | 'serpent' | 'avian';
 type BodyShape = 'round' | 'pear' | 'drop' | 'oval' | 'vtorso' | 'boxy' | 'wide' | 'segmented' | 'tall' | 'hulk';
@@ -417,20 +418,73 @@ export interface Hatch {
   other: string;
   /** Its accent colour from the other parent. */
   colours?: boolean;
-  /** One part (a top, back or tail) from the other parent. */
+  /** One part (a top, back or tail) from the other parent, painted in that parent's colour. */
   part?: boolean;
+  /** Which part, and borrowed or its own one repainted (internal: hatchSlot decides once per pair). */
+  slot?: HatchSlot;
+  strip?: boolean;
+}
+/** How a hatchling shows its other parent: that parent's part ('borrow'), or its own part in that parent's colour ('tint'). */
+export interface HatchPart {
+  slot: HatchSlot;
+  mode: 'borrow' | 'tint';
+}
+export type HatchSlot = 'top' | 'back' | 'tail' | 'arms';
+
+/** Put the other parent's part in this slot (when it has one there and it's different). */
+function applyHatchSlot(slot: HatchSlot, other: string, stage: number, P: StagePlan, fam: Family, v2: boolean, strip = false) {
+  if (strip) {
+    // Take its own part off (to find which pixels are that part).
+    if (slot === 'top') P.top = 'none';
+    if (slot === 'back') P.back = 'none';
+    if (slot === 'tail') fam.tail = 'none';
+    if (slot === 'arms') P.arms = 'none';
+    return;
+  }
+  if (!SPECIES_BY_ID[other]) return;
+  // Always the part the other parent has in its middle form, so it's the same part at every stage.
+  void stage;
+  const o = linePlan(other, 1, v2);
+  if (slot === 'top' && o.P.top !== 'none') P.top = o.P.top;
+  if (slot === 'arms' && !['serpent', 'slime', 'floater'].includes(fam.loco)) P.arms = o.P.arms;
+  if (slot === 'back' && o.P.back !== 'none') P.back = o.P.back;
+  if (slot === 'tail' && o.fam.tail !== 'none' && fam.loco !== 'serpent' && fam.loco !== 'slime') fam.tail = o.fam.tail;
 }
 
-/** A hatchling borrows one part from its other parent's line: its head top, its back, or its tail (seeded per pair). */
-export function hatchlingPlan(speciesId: string, other: string, stage: number, P: StagePlan, fam: Family, v2: boolean) {
-  if (!SPECIES_BY_ID[other] || other === speciesId) return;
-  const o = linePlan(other, Math.min(stage, 1), v2);
-  const options: (() => void)[] = [];
-  if (o.P.top !== 'none' && o.P.top !== P.top) options.push(() => (P.top = o.P.top));
-  if (o.P.back !== 'none' && o.P.back !== P.back) options.push(() => (P.back = o.P.back));
-  if (o.fam.tail !== 'none' && o.fam.tail !== fam.tail && fam.loco !== 'serpent' && fam.loco !== 'slime') options.push(() => (fam.tail = o.fam.tail));
-  if (!options.length) return;
-  new Rng(hashString(`${speciesId}+${other}:hatch`)).pick(options)();
+const HATCH_SLOT_CACHE = new Map<string, HatchPart | null>();
+/** Pixels that differ between two grids (and are filled in `a`). */
+function changed(a: Px[][], b: Px[][]): number {
+  let n = 0;
+  for (let y = 0; y < a.length; y++) for (let x = 0; x < a.length; x++) if (a[y][x] && a[y][x] !== b[y][x]) n++;
+  return n;
+}
+/**
+ * How a hatchling shows its other parent, decided once per pair (on the first stage) and kept at
+ * every stage: borrow whichever of that parent's head top, back, tail or arms changes it the most;
+ * if none would show clearly, its own biggest part is painted in that parent's colour instead.
+ */
+export function hatchSlot(speciesId: string, other: string): HatchPart | null {
+  const key = `${speciesId}+${other}`;
+  if (HATCH_SLOT_CACHE.has(key)) return HATCH_SLOT_CACHE.get(key)!;
+  let best: HatchPart | null = null;
+  if (SPECIES_BY_ID[other] && other !== speciesId) {
+    const SLOTS: HatchSlot[] = ['back', 'top', 'tail', 'arms'];
+    const plain = buildGrid(speciesId, 0, 1, {}, true);
+    let most = 9; // fewer changed pixels than this doesn't read as a new part
+    for (const slot of SLOTS) {
+      const n = changed(buildGrid(speciesId, 0, 1, {}, true, false, false, { other, slot }), plain);
+      if (n > most) [most, best] = [n, { slot, mode: 'borrow' }];
+    }
+    if (!best) {
+      most = 2;
+      for (const slot of SLOTS) {
+        const n = changed(plain, buildGrid(speciesId, 0, 1, {}, true, false, false, { other, slot, strip: true }));
+        if (n > most) [most, best] = [n, { slot, mode: 'tint' }];
+      }
+    }
+  }
+  HATCH_SLOT_CACHE.set(key, best);
+  return best;
 }
 
 /** `pre`: its Prehistoric form (2.07): the same line from an earlier era, some parts lost or swapped (see prehistoricPlan). */
@@ -442,7 +496,19 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
   const sigVariant = v2 ? (lp?.sig ?? hashString(`${speciesId}:sigv`) % 3) : 0;
   if (pre) prehistoricPlan(speciesId, P, fam);
-  if (mix?.part) hatchlingPlan(speciesId, mix.other, stage, P, fam, v2);
+  // A hatchling's borrowed part (hatchSlot picks which).
+  const hp = mix?.slot ? null : mix?.part ? hatchSlot(speciesId, mix.other) : null;
+  if (mix?.slot) applyHatchSlot(mix.slot, mix.other, stage, P, fam, v2, mix.strip);
+  else if (mix && hp?.mode === 'borrow') applyHatchSlot(hp.slot, mix.other, stage, P, fam, v2);
+  /** The grid, with a hatchling's part marked (12: painted in its other parent's colour). */
+  const finish = (): Px[][] => {
+    if (mix && hp) {
+      // Borrowed: every pixel that differs from how it looks without; its own part: from it taken off.
+      const ref = hp.mode === 'borrow' ? buildGrid(speciesId, stage, k, {}, v2, back, pre) : buildGrid(speciesId, stage, k, {}, v2, back, pre, { other: mix.other, slot: hp.slot, strip: true });
+      for (let y = 0; y < g.length; y++) for (let x = 0; x < g.length; x++) if (g[y][x] && g[y][x] !== ref[y][x] && ![4, 5, 7, 8].includes(g[y][x])) g[y][x] = 12;
+    }
+    return g;
+  };
   const S = 40;
   const N = Math.round(S * k);
   const g: Px[][] = Array.from({ length: N }, () => Array<Px>(N).fill(0));
@@ -889,7 +955,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       cx, eyeY, spread, faceR, my: Math.round(faceY + faceR * 0.55), eyes: fam.eyes, visor, hollow, mouth: P.mouth, stage,
       headTop, hy, by, rx, ry, shoulderX, shoulderY, hrx: merged ? rx : H.rx, loco: L, back: P.back, ground,
     } satisfies FaceInfo);
-    if (k > 1) return g;
+    if (k > 1) return finish();
   }
   const eyeAt = (x: number, y: number) => {
     if (hollow) {
@@ -975,7 +1041,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     case 'none':
       break;
   }
-  return g;
+  return finish();
 }
 
 /** 2.0 tails: tapered and curved, with a tip that shows the element. */

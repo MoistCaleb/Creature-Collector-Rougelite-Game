@@ -1,5 +1,5 @@
 import { SPECIES_BY_ID } from '../data/species';
-import type { Element } from '../data/types';
+import { ELEMENT_COLORS, type Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { DEX_SPECIES } from '../data/legends';
 import { LINE_PLANS } from './linePlans';
@@ -85,6 +85,8 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
   const by = oy - oy0;
   const { pal } = paletteFor(speciesId, stage, shiny);
   recolour(pal, speciesId, stage, shiny, hatch?.colours ? hatch.other : undefined);
+  // A hatchling's borrowed part: its other parent's own body colour.
+  if (hatch) pal[12] = hatchPartColour(hatch.other, stage, pal[1]);
   // A near-black belly (from a dark accent) swallows the shading: lift it toward the body colour.
   const lum = (c: number) => 0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255);
   if (lum(pal[3]) < 70) pal[3] = light(pal[1], 0.35);
@@ -461,6 +463,29 @@ function toneOf(speciesId: string): number {
 function lineBase(speciesId: string): number {
   const t1 = SPECIES_BY_ID[speciesId].types[0];
   return LEGEND_TONES[speciesId]?.[0] ?? LINE_PLANS[speciesId]?.color ?? TONES[t1][toneOf(speciesId) % 8];
+}
+
+/** The body colour a line is painted at this stage (for a hatchling's borrowed part). */
+function recolourBase(speciesId: string, stage: number): number {
+  if (!SPECIES_BY_ID[speciesId]) return 0x888888;
+  const b = lineBase(speciesId);
+  return stage === 0 ? light(b, 0.1) : stage === 2 ? dark(b, 0.14) : b;
+}
+
+/**
+ * The colour of a hatchling's borrowed part: whichever of its other parent's colours (body, accent,
+ * element glow) stands out most against its own body, so the part is easy to spot.
+ */
+function hatchPartColour(other: string, stage: number, body: number): number {
+  if (!SPECIES_BY_ID[other]) return 0x888888;
+  const [t1, t2] = SPECIES_BY_ID[other].types;
+  const i = toneOf(other);
+  const sec = t1 === t2 ? dark(TONES[t1][(i + 4) % 8], 0.28) : TONES[t2][(i * 3 + 1) % 8];
+  const dist = (a: number, b: number) => Math.hypot(((a >> 16) & 255) - ((b >> 16) & 255), ((a >> 8) & 255) - ((b >> 8) & 255), (a & 255) - (b & 255));
+  const options = [recolourBase(other, stage), sec, ELEMENT_COLORS[t1 as Element]];
+  // Its body colour unless that's close to yours; then the most different of the others.
+  if (dist(options[0], body) > 90) return options[0];
+  return options.reduce((best, c) => (dist(c, body) > dist(best, body) ? c : best));
 }
 
 function recolour(pal: Record<number, number>, speciesId: string, stage: number, shiny: Colours, mixWith?: string) {
