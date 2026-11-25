@@ -369,8 +369,8 @@ export class DexScene extends Phaser.Scene {
     this.tapArea(row, y, h, i, true, owned);
     row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
     if (owned) row.add(text(this, W - 138, y + 26, '✦ Gilded unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
-    // Fossil Site (a surprise): its ancient form, once brought back.
-    else if ((state.meta.ancientFound ?? []).includes(sp.id)) row.add(text(this, W - 138, y + 26, '◈ Ancient form found', 11, '#e0a85a', { fontStyle: 'bold' }).setOrigin(1, 0));
+    // Its Prehistoric form (Fossil Site, or caught in the wild), once found.
+    else if ((state.meta.ancientFound ?? []).includes(sp.id)) row.add(text(this, W - 138, y + 26, '◈ Prehistoric form found', 11, '#e0a85a', { fontStyle: 'bold' }).setOrigin(1, 0));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
     const caught = dex.caught.includes(sp.id);
@@ -389,6 +389,7 @@ export class DexScene extends Phaser.Scene {
       }, { fontSize: 12, glyph: 'star', color: fav ? 0x7a5a1c : 0x3a3450, enabled: canFav || fav }),
     );
     const shinySeen = (meta.shinySeen ?? []).includes(sp.id);
+    const prehistoric = (meta.ancientFound ?? []).includes(sp.id);
     const stages = dexStages(sp.id);
     stages.forEach((s, k) => {
       const sy = y + 38 + k * 136;
@@ -405,6 +406,11 @@ export class DexScene extends Phaser.Scene {
           row.add(this.add.rectangle(112, sy + 100, 44, 44, 0x2a2244).setStrokeStyle(1, owned ? COLORS.stroke : 0xffc94d, 0.7));
           row.add(this.add.image(112, sy + 100, ensureCreatureTexture(this, sp.id, s, !owned)).setScale(1 * SPRITE_FIT));
           if (!owned) row.add(icon(this, 128, sy + 84, 'sparkle', 10));
+        }
+        // Its Prehistoric form, once found: in the other corner.
+        if (prehistoric) {
+          row.add(this.add.rectangle(48, sy + 100, 44, 44, 0x2a2018).setStrokeStyle(1, 0xe0a85a, 0.7));
+          row.add(this.add.image(48, sy + 100, ensureCreatureTexture(this, sp.id, s, 'ancient')).setScale(1 * SPRITE_FIT));
         }
         row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
         row.add(text(this, 150, sy + 34, isLegend(sp.id) ? 'Legendary' : STAGE_LABEL[s], 12, isLegend(sp.id) ? '#e0c8ff' : '#8e86ad'));

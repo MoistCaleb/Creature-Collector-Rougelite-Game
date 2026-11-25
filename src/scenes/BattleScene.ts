@@ -427,7 +427,7 @@ export class BattleScene extends Phaser.Scene {
       : legend
         ? `The legendary ${creatureName(this.enemies[0])} appeared! It won't stay long...`
         : this.kind === 'battle'
-        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦GILDED✦' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
+        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦GILDED✦' : e.ancient ? '◈PREHISTORIC◈' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
         : this.kind === 'elite'
           ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
@@ -1335,7 +1335,7 @@ export class BattleScene extends Phaser.Scene {
     // Also fits the name line (see fitName).
     this.setStatus(p, c.status?.id ?? null);
     // A shiny's panel is gold, with a SHINY tab.
-    p.name.setColor(c.shiny ? '#ffd86b' : COLORS.text);
+    p.name.setColor(c.shiny ? '#ffd86b' : c.ancient ? '#e8a95a' : COLORS.text);
     p.frame.setStrokeStyle(c.shiny ? 3 : 2, c.shiny ? 0xffd86b : COLORS.stroke);
     p.shiny.setVisible(!!c.shiny);
     p.chips.removeAll(true);
@@ -1353,7 +1353,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.shownEnemy !== e) this.clearAura('enemy');
     this.shownEnemy = e;
     dex.creature(e);
-    this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage, e.shiny)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
+    this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage, colours(e))).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
     this.fillPanel(this.enemyPanel, e, hp);
     const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
@@ -2219,7 +2219,7 @@ export class BattleScene extends Phaser.Scene {
     this.msg.setText(`You throw a bond crystal at ${creatureName(wild)}!`);
     playCatch(
       this,
-      ensureCreatureTexture(this, wild.speciesId, wild.stage, wild.shiny),
+      ensureCreatureTexture(this, wild.speciesId, wild.stage, colours(wild)),
       5 * SPRITE_FIT,
       { x: PLAYER_POS.x + 30, y: PLAYER_POS.y - 30 },
       ENEMY_POS,

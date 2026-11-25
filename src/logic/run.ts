@@ -9,6 +9,7 @@ import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
 import { SURPRISES } from '../data/surprises';
+import { noteAncient } from './surprises';
 import { dojoOn, dojoResult, elderHere, floorSurprise, lastWinTeam, tickEgg, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
@@ -1632,6 +1633,11 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     const charm = (1 + teamTrait(run.team, 'gilded') * 0.5) * (fsur.floor === 'grove' ? 5 : 1) * glint;
     if (odds && (run.hunt ? roll % 100000 < (100000 * charm) / odds : roll % Math.max(1, Math.round(odds / charm)) === 0)) c.shiny = true;
     if (goldTrainer) c.shiny = true;
+    // About 1 wild Hexling in 250 is a Prehistoric form; on Ancient Ruins floors, 1 in 6. A hash too.
+    if (kind === 'battle' && !c.shiny) {
+      const preIn = fsur.floor === 'ruins' ? PREHISTORIC_RUINS_IN : PREHISTORIC_IN;
+      if (hashString(`${run.seed}:prehistoric:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`) % preIn === 0) c.ancient = true;
+    }
     c.hp = stats(c).hp;
     enemies.push(c);
   }
@@ -1655,6 +1661,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
 
 /** One wild Hexling in this many is shiny. */
 export const SHINY_IN = 200;
+/** One wild Hexling in this many is a Prehistoric form (cosmetic), and on an Ancient Ruins floor. */
+export const PREHISTORIC_IN = 250;
+export const PREHISTORIC_RUINS_IN = 6;
 /** Gilded Week (a weekly twist): one wild Hexling in this many is shiny. */
 export const GILDED_WEEK_IN = 15;
 /** Shiny Hunting: one in this many wild Hexlings, and trainers' / guardians' Hexlings, is shiny. */
@@ -1972,6 +1981,11 @@ export function catchCreature(
   c.nature = enemy.nature;
   c.trait = enemy.trait;
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
+  // A Prehistoric form stays one (and goes in the Hexlidex).
+  if (enemy.ancient) {
+    c.ancient = true;
+    noteAncient(run.meta, c.speciesId);
+  }
   if (enemy.shiny) {
     c.shiny = true;
     noteShinyOwned(run.meta, c.speciesId);

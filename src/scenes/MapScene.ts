@@ -1405,15 +1405,15 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
-  /** Fossil Site (a surprise): bring back one of three ancient forms (swap someone out if the party is full). */
+  /** Fossil Site (a surprise): bring back one of three Prehistoric forms (swap someone out if the party is full). */
   private doFossil() {
     const run = state.run!;
     const forms = fossilChoices(run);
     const full = rosterFull(run);
     openPicker(this, {
       title: 'Fossil Site',
-      subtitle: `Three fossils in the rock. Bring one back as an ancient form: its line in amber stone, for good in your Hexlidex.${full ? '\nYour party is full: you\u2019ll pick someone to swap out.' : ''}`,
-      options: forms.map((c) => ({ creature: c, note: `Ancient form · Lv ${c.level}` })),
+      subtitle: `Three fossils in the rock. Bring one back as a Prehistoric form: its line from an earlier era, for good in your Hexlidex.${full ? '\nYour party is full: you\u2019ll pick someone to swap out.' : ''}`,
+      options: forms.map((c) => ({ creature: c, note: `Prehistoric · Lv ${c.level}` })),
       onPick: (i) => {
         const c = forms[i];
         const take = (release?: Creature) => {
@@ -1425,8 +1425,8 @@ export class MapScene extends Phaser.Scene {
           persist();
           showMessage(
             this,
-            'An ancient form!',
-            `${release ? `${gone} was released.\n\n` : ''}${creatureName(c)} shakes off the dust of ages and joins your ${run.team.includes(c) ? 'team' : 'bench'}.${fresh ? '\n\nNew in your Hexlidex: its ancient form.' : ''}`,
+            'A Prehistoric form!',
+            `${release ? `${gone} was released.\n\n` : ''}${creatureName(c)} shakes off the dust of ages and joins your ${run.team.includes(c) ? 'team' : 'bench'}.${fresh ? '\n\nNew in your Hexlidex: its Prehistoric form.' : ''}`,
             this.done,
           );
         };

@@ -523,3 +523,19 @@ Hunt depth and the weekly twists. The bot is simple, so its numbers are for comp
 rule loss rates (the report's rule table is small and noisy).
 
 ## Open questions
+
+## Prehistoric forms (2.07)
+
+- A Hexling's line from an earlier era: still recognisably the same Hexling, but with earthier, muted
+  colours (amber where its element glow was, old ivory for bone) and different parts. Cosmetic only;
+  Gilded wins if a Hexling is both. Saved as `ancient` on the creature and `meta.ancientFound` (the
+  2.0 Fossil Site's "ancient form", renamed and redrawn).
+- **Parts** (seeded per line, the same at every stage, `prehistoricPlan` in ui/sprites.ts): wings,
+  capes, manes, fins and crystals not grown yet (bony plates or spines instead), antennae, ears,
+  crowns and antlers swapped for horns, a spiked ridge or a crest, thin and flame tails clubbed or
+  spiked, long arms shortened, a toothier mouth. Legs are only ever lost: a third of legged lines
+  have none (they slither), and some six-legged lines walk on four.
+- **Features** (two per line, `prehistoricFeatures` in ui/sprites2.ts): saw-toothed crest, bony frill
+  around the head, horns, tusks, flank stripes, shoulder spikes.
+- **Where:** about 1 wild Hexling in 250; 1 in 6 on an Ancient Ruins floor; the Fossil Site. Caught
+  ones stay Prehistoric. The Hexlidex shows the form in the corner of each stage once found.

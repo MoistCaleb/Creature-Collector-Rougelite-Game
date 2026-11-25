@@ -355,7 +355,36 @@ export interface FaceInfo {
 
 /** The design grid is 40 pixels; `k` > 1 draws it finer (k = 1.4: 56 pixels). `face`: filled in, and with k > 1 the face is left out for the caller to draw. */
 /** `back`: the 2.0 back view (for the player's side in battle): no face, and wings, shells, capes and tails in front of the body. */
-export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false): Px[][] {
+/**
+ * A Prehistoric form's body plan: the line before it evolved some of its parts. Decided once per
+ * line (seeded), so every stage changes the same way: wings not grown yet (bony plates or spines
+ * instead), antennae and ears swapped for horns or a spiked ridge, tails clubbed or spiked, long
+ * arms shortened, a toothier mouth, and legs only ever lost: some lines have none yet, some
+ * six-legged ones walk on four.
+ */
+export function prehistoricPlan(speciesId: string, P: StagePlan, fam: Family) {
+  const r = new Rng(hashString(`${speciesId}:prehistoric-plan`));
+  // Rolled in a fixed order, so the choices don't depend on this stage's parts.
+  const backTo: Back = r.chance(0.5) ? 'plates' : r.chance(0.6) ? 'spines' : 'none';
+  const topTo: Top = r.pick<Top>(['spikerow', 'horns-twin', 'unihorn', 'crest', 'none']);
+  const tailTo: Tail = r.chance(0.5) ? 'club' : 'spiked';
+  const shortArms = r.chance(0.6);
+  const toothy: Mouth = r.chance(0.5) ? 'fangs' : 'jaw';
+  // Legs are only ever lost, never added: a third of lines have none yet (they slither), and some
+  // six-legged lines walk on four.
+  const legs = r.next();
+  if (['batwings', 'featherwings', 'bugwings', 'cape', 'mane', 'fins', 'crystals'].includes(P.back)) P.back = backTo;
+  if (['antennae', 'ears', 'longears', 'crown', 'tuft', 'antlers'].includes(P.top)) P.top = topTo;
+  if (fam.tail === 'thin' || fam.tail === 'flame') fam.tail = tailTo;
+  if (shortArms && ['long', 'claws', 'fists', 'tentacles', 'blades'].includes(P.arms)) P.arms = 'stub';
+  if (['smile', 'none', 'beak'].includes(P.mouth) && fam.loco !== 'avian') P.mouth = toothy;
+  const legged = ['biped', 'quad', 'insect', 'avian'].includes(fam.loco);
+  if (legs < 0.34 && legged) fam.loco = 'serpent';
+  else if (legs < 0.67 && fam.loco === 'insect') fam.loco = 'quad';
+}
+
+/** `pre`: its Prehistoric form (2.07): the same line from an earlier era, some parts lost or swapped (see prehistoricPlan). */
+export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false, pre = false): Px[][] {
   const types = SPECIES_BY_ID[speciesId].types;
   const legend = v2 ? LEGEND_PLANS[speciesId] : undefined;
   const lp = v2 ? LINE_PLANS[speciesId] : undefined;
@@ -383,6 +412,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
         cape: fam.loco === 'biped' || fam.loco === 'floater' ? (has('Shadow') || has('Spirit') || has('Light') ? 3 : 0.4) : 0,
       });
   }
+  if (pre) prehistoricPlan(speciesId, P, fam);
   const S = 40;
   const N = Math.round(S * k);
   const g: Px[][] = Array.from({ length: N }, () => Array<Px>(N).fill(0));
@@ -1298,28 +1328,34 @@ export function altHue(speciesId: string): number {
   return (shinyHue(speciesId) + 120) % 360;
 }
 
-/** A Hexling's colours: Gilded first, then an ancient form's, then its bond colours. */
+/** A Hexling's colours: Gilded first, then a Prehistoric form's, then its bond colours. */
 export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean }): Colours => (c.shiny ? true : c.ancient ? 'ancient' : c.alt ? 'alt' : false);
 
-/** Ancient forms (Fossil Site): every colour turned to amber stone, keeping its light and dark. */
-export function fossilise(col: number): number {
+/**
+ * Prehistoric forms: its colours from an earlier era. Muted and earthier (nudged toward ochre),
+ * keeping their light and dark, so it still reads as the same Hexling.
+ */
+export function primal(col: number): number {
   const r = (col >> 16) & 255;
   const g = (col >> 8) & 255;
   const b = col & 255;
   const lum = 0.3 * r + 0.59 * g + 0.11 * b;
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  return (c(lum * 1.08 + 28) << 16) | (c(lum * 0.86 + 14) << 8) | c(lum * 0.58 + 4);
+  // A third of the colour drained toward its own grey, then a little earth (ochre brown) mixed in.
+  const EARTH = [0x9a, 0x74, 0x48];
+  const ch = (v: number, e: number) => Math.max(0, Math.min(255, Math.round(((v * 0.65 + lum * 0.35) * 0.78 + e * 0.22) * 0.94)));
+  return (ch(r, EARTH[0]) << 16) | (ch(g, EARTH[1]) << 8) | ch(b, EARTH[2]);
 }
 
 function paletteFor(speciesId: string, stage: number, shiny: Colours = false) {
   const p = basePalette(speciesId, stage);
   if (!shiny) return p;
   if (shiny === 'ancient') {
-    // Amber stone, with a teal glow where its signature colour was.
-    for (const k of [1, 2, 3, 9]) p.pal[k] = fossilise(p.pal[k]);
-    p.pal[10] = 0x3fc7b4;
-    p.pal[11] = 0x9ff5e6;
-    return { pal: p.pal, outline: fossilise(p.outline), shadow: fossilise(p.shadow), light: fossilise(p.light) };
+    // Prehistoric: earthy colours, amber where its signature glow was, old ivory for bone.
+    for (const k of [1, 2, 3, 9]) p.pal[k] = primal(p.pal[k]);
+    p.pal[6] = 0xe6d8b0;
+    p.pal[10] = 0xe08a2e;
+    p.pal[11] = 0xffc870;
+    return { pal: p.pal, outline: primal(p.outline), shadow: primal(p.shadow), light: primal(p.light) };
   }
   const deg = shiny === 'alt' ? altHue(speciesId) : shinyHue(speciesId);
   for (const k of [1, 2, 3, 9, 10, 11]) p.pal[k] = hueShift(p.pal[k], deg);

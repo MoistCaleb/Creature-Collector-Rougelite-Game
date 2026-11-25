@@ -28,7 +28,7 @@ export const SURPRISE_LIST: SurpriseDef[] = [
   S('eclipse', 'floor', 'Eclipse', 'Night lasts the whole floor: only Shadow and Spirit Hexlings, and every battle is at night.', 'A floor where the sun never rises.'),
   S('stormfront', 'floor', 'Storm Front', 'Every battle on this floor starts in wild weather.', 'A floor where the sky is never calm.'),
   S('mirror', 'floor', 'Mirror Floor', "The wild Hexlings are your own team's lines.", 'A floor that looks back at you.'),
-  S('ruins', 'floor', 'Ancient Ruins', 'A legendary is sure to roam, relic chests stand among the ruins, and a stone titan guards the top (an Elder).', 'A floor older than the rest.'),
+  S('ruins', 'floor', 'Ancient Ruins', 'A legendary is sure to roam, relic chests stand among the ruins, 1 wild Hexling in 6 is a Prehistoric form, and a stone titan guards the top (an Elder).', 'A floor older than the rest.'),
   S('shattered', 'floor', 'Shattered Floor', "Two lands at once: wild Hexlings come from both, and the guardian's team mixes them.", 'A floor split in two.'),
   // ------------------------------------------------------------ elder guardians
   S('elder', 'elder', 'Elder guardian', 'A rare, older guardian: 2 levels higher, an extra rule, and every Hexling with its rare ◆ trait. Beat it for a mythic boon offer.', 'Some guardians are older than others.'),
@@ -37,7 +37,7 @@ export const SURPRISE_LIST: SurpriseDef[] = [
   S('altar', 'hex', 'Cursed Altar', 'Give up a Hexling or half your coins for a mythic boon.', 'A dark stone that asks for a price.'),
   S('hiddenshop', 'hex', 'Hidden Shop', 'A secret stall that sells boons.', 'Someone sells more than items, if you can find them.'),
   S('hatchery', 'hex', 'Hatchery', "An egg that hatches after 5 battles into a line you haven't caught, always with its rare ◆ trait.", 'A warm nest, left alone.'),
-  S('fossil', 'hex', 'Fossil Site', 'Dig up one of three fossils and bring back an ancient form: a rare amber-stone version of its line, kept in the Hexlidex like Gilded.', 'Old bones in the rock.'),
+  S('fossil', 'hex', 'Fossil Site', 'Dig up one of three fossils and bring back a Prehistoric form: its line from an earlier era, with older colours and parts, kept in the Hexlidex like Gilded.', 'Old bones in the rock.'),
   S('dojo', 'hex', 'Dojo', 'Three trainer battles in a row with no healing between. Win them all for a boon and a Limit Breaker.', 'A place to test yourself, three times over.'),
   // ------------------------------------------------------------ rare encounters
   S('gildedtrainer', 'encounter', 'Gilded trainer', 'A trainer whose whole team is Gilded.', 'A trainer who shines.'),

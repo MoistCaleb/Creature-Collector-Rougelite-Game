@@ -3,7 +3,7 @@ import type { Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { DEX_SPECIES } from '../data/legends';
 import { LINE_PLANS } from './linePlans';
-import { altHue, buildGrid, fossilise, hueShift, paletteFor, type Colours, type FaceInfo } from './sprites';
+import { altHue, buildGrid, hueShift, paletteFor, primal, type Colours, type FaceInfo } from './sprites';
 
 /**
  * Hexbound 2.0 art: the line part plans, drawn on a finer grid (64 px) and painted with light and
@@ -72,7 +72,7 @@ function measureFit(speciesId: string, stage: number): number {
 export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny: Colours = false, back = false) {
   const k = fitScale(speciesId, stage);
   const face: Partial<FaceInfo> = {};
-  const g = buildGrid(speciesId, stage, k, face, true, back) as number[][];
+  const g = buildGrid(speciesId, stage, k, face, true, back, shiny === 'ancient') as number[][];
   const f = face as FaceInfo;
   const N = g.length;
   // Centre the creature and stand it on the bottom of the frame.
@@ -140,6 +140,9 @@ export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string,
       for (let i = 0; i < 3; i++) set(O(f.cx - f.spread - 1) + 1 - i * 0.5, O(f.eyeY) + 2 + i, 2);
       break;
   }
+
+  // ---- Prehistoric form: two of its era's features, the same two for every Hexling of the line
+  if (shiny === 'ancient') drawPrehistoric(g, f, O, k, set, speciesId, stage, back);
 
   // ---- fur: furry lines (mammal-like body plans, by line) get tufts along their upper edges
   const furry = (f.loco === 'biped' || f.loco === 'quad') && ['Fire', 'Frost', 'Nature', 'Earth', 'Storm', 'Light', 'Shadow'].includes(el) && hashString(speciesId + ':fur') % 3 !== 0;
@@ -471,9 +474,9 @@ function recolour(pal: Record<number, number>, speciesId: string, stage: number,
     pal[10] = g.sig;
     pal[11] = light(g.sig, 0.45);
   }
-  // Bond colours turn the hue; an ancient form is amber stone (paletteFor's own rule).
+  // Bond colours turn the hue; a Prehistoric form wears its era's earthy colours.
   const deg = shiny === 'alt' ? altHue(speciesId) : 0;
-  const sh = (c: number) => (shiny === 'ancient' ? fossilise(c) : shiny === 'alt' ? hueShift(c, deg) : c);
+  const sh = (c: number) => (shiny === 'ancient' ? primal(c) : shiny === 'alt' ? hueShift(c, deg) : c);
   pal[1] = sh(base);
   pal[2] = sh(sec);
   pal[3] = sh(stage === 2 ? light(mix(base, sec, 0.35), 0.22) : light(base, 0.4));
@@ -549,5 +552,153 @@ export function gildedColours(speciesId: string, base: number, sec: number, sig:
     case 'rose': // Rose and silver.
       return { base: fromHsl(338, 0.65, Math.max(0.5, Math.min(0.66, bl))), sec: fromHsl(220, 0.15, 0.78), sig: 0xfff0f6 };
   }
+  }
+}
+
+// ---------------------------------------------------------------- Prehistoric forms
+
+/** What a Prehistoric form can have: a line gets two (seeded), so lines differ from each other. */
+export const PREHISTORIC_FEATURES = ['crest', 'frill', 'horns', 'tusks', 'stripes', 'spikes'] as const;
+export type PrehistoricFeature = (typeof PREHISTORIC_FEATURES)[number];
+
+/** A line's two Prehistoric features. */
+export function prehistoricFeatures(speciesId: string): [PrehistoricFeature, PrehistoricFeature] {
+  const h = hashString(`${speciesId}:prehistoric`);
+  const n = PREHISTORIC_FEATURES.length;
+  const a = h % n;
+  const b = (a + 1 + ((h >>> 8) % (n - 1))) % n;
+  return [PREHISTORIC_FEATURES[a], PREHISTORIC_FEATURES[b]];
+}
+
+/** Bone and horn (ivory), and the bony frill and crest (its accent colour), in palette slots. */
+const BONE = 6;
+const ACCENT = 2;
+const DARK = 9;
+
+/**
+ * Draws a Prehistoric form's features into the grid (so they're shaded and outlined like the rest).
+ * Crest, frill, horns and spikes grow only into empty space; tusks and stripes go over the body.
+ */
+function drawPrehistoric(
+  g: number[][],
+  f: FaceInfo,
+  O: (d: number) => number,
+  k: number,
+  set: (x: number, y: number, v: number, mirror?: boolean) => void,
+  speciesId: string,
+  stage: number,
+  back: boolean,
+) {
+  const N = g.length;
+  const cx = Math.round(O(f.cx));
+  const empty = (x: number, y: number) => x >= 0 && y >= 0 && x < N && y < N && !g[Math.round(y)][Math.round(x)];
+  const grow = (x: number, y: number, v: number) => {
+    if (empty(x, y)) set(x, y, v);
+  };
+  // The top of the silhouette in a column.
+  const topAt = (x: number) => {
+    for (let y = 0; y < N; y++) if (g[y][x]) return y;
+    return -1;
+  };
+  // The left edge of the silhouette in a row.
+  const leftAt = (y: number) => {
+    for (let x = 0; x < N / 2; x++) if (g[y]?.[x]) return x;
+    return -1;
+  };
+  const size = 1 + stage;
+  for (const feat of prehistoricFeatures(speciesId)) {
+    switch (feat) {
+      case 'crest': {
+        // A saw-toothed bony crest standing up from the middle of the head.
+        const top = topAt(cx);
+        if (top < 0) break;
+        const w = 3 + stage;
+        const h = 5 + stage * 2;
+        for (let dx = 0; dx <= w; dx++) {
+          const hh = Math.round(h * (1 - dx / (w + 1))) - (dx % 2);
+          for (let dy = 1; dy <= hh; dy++) grow(cx - dx, top - dy + 1, dy > hh - 1 && dx % 2 === 0 ? 10 : ACCENT);
+        }
+        break;
+      }
+      case 'frill': {
+        // A bony fan around the upper head: a band just outside its outline, spotted along the rim.
+        const hy = O(f.hy);
+        const t = 3 + stage * 1.5;
+        // Only around the head (not wings or ears out to the sides).
+        const headW = f.hrx * k * 1.1;
+        const reach = headW + t;
+        const near = (x: number, y: number) => {
+          let best = 99;
+          for (let dy = -Math.ceil(t); dy <= Math.ceil(t); dy++)
+            for (let dx = -Math.ceil(t); dx <= Math.ceil(t); dx++) {
+              const X = x + dx;
+              const Y = y + dy;
+              if (X >= 0 && Y >= 0 && X < N && Y < N && g[Y][X] && Y <= hy + 1 && Math.abs(X - cx) <= headW) best = Math.min(best, Math.hypot(dx, dy));
+            }
+          return best;
+        };
+        const band: [number, number, number][] = [];
+        for (let y = 0; y <= hy; y++)
+          for (let x = Math.max(0, Math.floor(cx - reach)); x <= cx; x++) {
+            if (g[y][x]) continue;
+            const d = near(x, y);
+            if (d <= t) band.push([x, y, d]);
+          }
+        for (const [x, y, d] of band) set(x, y, d > t - 1 && (x + y) % 3 === 0 ? 10 : ACCENT);
+        break;
+      }
+      case 'horns': {
+        // Two horns from the top of the head, curving out and up.
+        const sx = Math.round(cx - Math.max(2, f.hrx * k * 0.55));
+        const top = topAt(sx);
+        if (top < 0) break;
+        const len = 5 + stage * 2;
+        for (let i = 0; i < len; i++) {
+          const x = sx - Math.round(i * 0.6);
+          const y = top - i + 1;
+          grow(x, y, BONE);
+          if (i < len * 0.7) grow(x + 1, y, BONE);
+          if (i < len * 0.3) grow(x + 2, y, BONE);
+        }
+        break;
+      }
+      case 'tusks': {
+        // Two tusks down from the corners of the mouth (from the front only).
+        if (back) break;
+        const my = Math.round(O(f.my));
+        const tx = Math.round(cx - Math.max(2, f.spread * k * 0.7));
+        for (let i = 0; i < 3 + size; i++) {
+          set(tx + (i > 2 ? 1 : 0), my + i, BONE);
+          if (i < 2) set(tx - 1, my + i, BONE);
+        }
+        break;
+      }
+      case 'stripes': {
+        // Dark bands across the flanks.
+        const y0 = Math.round(O(f.shoulderY));
+        for (let y = y0; y < N - 2; y++) {
+          if ((y - y0) % 4 !== 1) continue;
+          const left = leftAt(y);
+          if (left < 0) continue;
+          const reach = Math.max(2, Math.round((cx - left) * 0.45));
+          for (let x = left; x < left + reach; x++) if (g[y][x] === 1) set(x, y, DARK);
+        }
+        break;
+      }
+      case 'spikes': {
+        // Bony spikes out from the shoulders and flanks.
+        const y0 = Math.round(O(f.shoulderY)) + 1;
+        for (let k = 0; k < 2 + Math.min(1, stage); k++) {
+          const y = y0 + k * (3 + stage);
+          const left = leftAt(y);
+          if (left < 1) continue;
+          for (let i = 1; i <= 2 + size; i++) {
+            grow(left - i, y - Math.floor(i / 2), BONE);
+            if (i <= size - 1) grow(left - i, y - Math.floor(i / 2) + 1, BONE);
+          }
+        }
+        break;
+      }
+    }
   }
 }
