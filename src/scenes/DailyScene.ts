@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SPECIES_BY_ID } from '../data/species';
+import { SURPRISES } from '../data/surprises';
 import { TWISTS, twistShort, weekId, weeklyInfo, weeklyPlayed } from '../logic/run';
 import { MAP_BY_ID } from '../data/maps';
 import { abandonSavedRun, dailyPassives, dailyPlayed, dailyStarters, describeDaily, hasSavedRun, PASSIVES, todayUtc } from '../logic/run';
@@ -118,7 +119,7 @@ export class DailyScene extends Phaser.Scene {
     const when = date === todayUtc() ? 'Today' : `${MONTHS[m - 1]} ${d}, ${y}`;
     openPicker(this, {
       title: `Daily run · ${when}`,
-      subtitle: `Starters, each with a passive that suits it:\n${starters}\nHeat 0.\n${rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'}`,
+      subtitle: `Starters, each with a passive that suits it:\n${starters}\nHeat 0, and a boon to start.\n${rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'}`,
       options: [{ label: rec ? 'Play again' : 'Play', color: 0x3b6d4a, glyph: 'play' }],
       onPick: () => this.play(date),
       onCancel: () => {},
@@ -135,7 +136,7 @@ export class DailyScene extends Phaser.Scene {
     openPicker(this, {
       title: `Weekly: ${TWISTS[week.twist].name}`,
       subtitle:
-        `${TWISTS[week.twist].desc}\n\nWeek of ${MONTHS[m - 1]} ${d} · ${MAP_BY_ID[week.mapId]?.name ?? 'Wildlands'} · Heat 0 · ${left <= 1 ? 'last day!' : `${left} days left`}\n` +
+        `${TWISTS[week.twist].desc}${week.omen ? `\n${SURPRISES[week.omen].name}: ${SURPRISES[week.omen].desc}` : ''}\n\nWeek of ${MONTHS[m - 1]} ${d} · ${MAP_BY_ID[week.mapId]?.name ?? 'Wildlands'} · Heat 0 · ${left <= 1 ? 'last day!' : `${left} days left`}\n` +
         `Starters:\n${starters}\n` +
         (rec?.best ? `Your best: ${describeDaily(rec.best)} (${rec.attempts} attempt${rec.attempts === 1 ? '' : 's'})` : 'Not played yet.'),
       options: [{ label: rec ? 'Play again' : 'Play', color: 0x3b6d4a, glyph: 'play' }],

@@ -1,10 +1,12 @@
 import { accountsAvailable, currentUser } from '../net/account';
 import Phaser from 'phaser';
 import { SPECIES } from '../data/species';
-import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterShiny, todayUtc, dailyPlayed, saveMeta } from '../logic/run';
+import { abandonSavedRun, clearSavedRun, hasSavedRun, loadRun, PASSIVES, starterLook, todayUtc, dailyPlayed, saveMeta } from '../logic/run';
 import { needsTour } from '../logic/welcomeBack';
 import { prefs } from '../ui/prefs';
 import { openTour } from '../ui/tour';
+import { maybeShowMotionWarning } from '../ui/accessibility';
+
 import { state } from '../state';
 import { installOption, onInstallChange, promptInstall } from '../pwa';
 import { openPicker, showMessage } from '../ui/picker';
@@ -23,6 +25,9 @@ import { openHowToPlay } from '../ui/howto';
 import { openCredits, maybeShowWhatsNew } from '../ui/credits';
 import { APP_VERSION } from '../data/changelog';
 import { background, button, COLORS, H, LANDSCAPE, muteButton, text, W } from '../ui/widgets';
+
+/** The flashing-lights warning shows once per launch, not every visit to the title. */
+let motionWarned = false;
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -71,7 +76,8 @@ export class TitleScene extends Phaser.Scene {
     // Parade of creatures you've unlocked as starters
     const ids = meta.unlockedStarters.slice(0, 6);
     ids.forEach((id, i) => {
-      const key = ensureCreatureTexture(this, id, 0, starterShiny(meta, id));
+      const look = starterLook(meta, id);
+      const key = ensureCreatureTexture(this, id, 0, look === 'gilded' ? true : look === 'prehistoric' ? 'ancient' : look === 'bond' ? 'alt' : false);
       const x = lx - 170 + i * 68;
       const img = this.add.image(x, ly(190), key).setScale(2.2 * SPRITE_FIT);
       this.tweens.add({ targets: img, y: ly(180), yoyo: true, repeat: -1, duration: 700 + i * 90, ease: 'Sine.easeInOut' });
@@ -163,12 +169,17 @@ export class TitleScene extends Phaser.Scene {
 
     // After an update: what changed (once). Otherwise, once you have a title: where to find titles.
     // Played before 2.0: the 2.0 tour instead (once; it covers what's new).
-    if (needsTour(meta)) {
-      meta.welcome!.toured = true;
-      prefs.lastVersion = APP_VERSION;
-      saveMeta(meta);
-      openTour(this, meta.welcome!.paid ? 0 : meta.welcome!.embers);
-    } else if (!maybeShowWhatsNew(this, meta.runs > 0) && earnedTitles(meta).length) tip(this, 'titles');
+    // First, once per launch: the flashing-lights warning (until "Don't show again").
+    const popups = () => {
+      if (needsTour(meta)) {
+        meta.welcome!.toured = true;
+        prefs.lastVersion = APP_VERSION;
+        saveMeta(meta);
+        openTour(this, meta.welcome!.paid ? 0 : meta.welcome!.embers);
+      } else if (!maybeShowWhatsNew(this, meta.runs > 0) && earnedTitles(meta).length) tip(this, 'titles');
+    };
+    if (motionWarned || !maybeShowMotionWarning(this, () => this.scene.isActive() && popups())) popups();
+    motionWarned = true;
 
     // How to play and Records (sideways: under the title, on the left).
     const hx = LANDSCAPE ? lx : cx;

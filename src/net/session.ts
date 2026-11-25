@@ -166,19 +166,25 @@ class Session {
   connectGuest(): Promise<boolean> {
     return new Promise((resolve) => {
       let done = false;
+      let conn: DataConnection | null = null;
       const finish = (ok: boolean, err = '') => {
         if (done) return;
         done = true;
-        if (!ok) this.setStatus('error', err);
+        if (!ok) {
+          // A late failure must not undo a connection another attempt already made.
+          if (conn && conn !== this.conn) conn.close();
+          if (this.status !== 'connected') this.setStatus('error', err);
+        }
         resolve(ok);
       };
       const start = () => {
-        const conn = this.peer!.connect(PREFIX + this.code, { reliable: true });
+        conn = this.peer!.connect(PREFIX + this.code, { reliable: true });
         conn.on('open', () => finish(true));
         this.wire(conn);
         // The code answered but no network path could be found: say so, instead of waiting it out.
-        watchLink(conn, () => finish(false, LINK_FAILED));
-        setTimeout(() => finish(false, linkStarted(conn) ? LINK_FAILED : 'No answer from that code. Check it and try again.'), JOIN_TIMEOUT);
+        const c = conn;
+        watchLink(c, () => finish(false, LINK_FAILED));
+        setTimeout(() => finish(false, linkStarted(c) ? LINK_FAILED : 'No answer from that code. Check it and try again.'), JOIN_TIMEOUT);
       };
       if (this.peer && !this.peer.destroyed && this.peer.open) return start();
       this.peer?.destroy();
@@ -242,9 +248,11 @@ class Session {
 
 /** Calls `onFail` if the connection's network path fails (WebRTC ICE "failed"). */
 function watchLink(conn: DataConnection, onFail: () => void) {
+  let tries = 0;
   const check = () => {
     const pc = conn.peerConnection;
-    if (!pc) return void setTimeout(check, 250);
+    // The join times out on its own; don't keep looking for a link that never started.
+    if (!pc) return void (++tries < 200 && setTimeout(check, 250));
     const on = () => {
       if (pc.iceConnectionState === 'failed') onFail();
     };

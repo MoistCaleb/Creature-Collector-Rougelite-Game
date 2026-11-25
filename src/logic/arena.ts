@@ -9,6 +9,7 @@ import { createCreature, extraMoves, learnset, MAX_MOVES, teamElement, type Crea
 import { hasSeenForm } from './dex';
 import { Rng } from './rng';
 import type { Meta } from './run';
+import { campHearts } from './camp';
 
 /**
  * The Battle Arena: raw battling at a fixed level. Build a team from creatures you've caught (any
@@ -27,6 +28,10 @@ export interface ArenaPick {
   moves: string[];
   /** Bring it in its shiny colours (only for species you've caught shiny). */
   shiny?: boolean;
+  /** Bring it as its Prehistoric form (only once you've found that form). */
+  ancient?: boolean;
+  /** Bring it in its bond colours (only with 5 camp hearts). */
+  alt?: boolean;
   /** Its trait: any of the line's traits you've found (2.0). */
   trait?: TraitId;
 }
@@ -40,6 +45,34 @@ export function arenaTrait(p: ArenaPick): TraitId | undefined {
 /** Have you caught (or claimed) this species shiny? Then it can be brought shiny. */
 export function ownsShiny(meta: Meta, speciesId: string): boolean {
   return (meta.shinyOwned ?? []).includes(speciesId);
+}
+
+/** How a pick can look: its usual colours, Gilded, Prehistoric, or its bond colours. */
+export type PickLook = 'normal' | 'gilded' | 'prehistoric' | 'bond';
+export const LOOK_LABEL: Record<PickLook, string> = { normal: 'Usual look', gilded: '✦ Gilded', prehistoric: '◈ Prehistoric', bond: '♥ Bond colours' };
+
+/** The looks you've unlocked for a line (its usual colours always). */
+export function pickLooks(meta: Meta, speciesId: string): PickLook[] {
+  const out: PickLook[] = ['normal'];
+  if (ownsShiny(meta, speciesId)) out.push('gilded');
+  if ((meta.ancientFound ?? []).includes(speciesId)) out.push('prehistoric');
+  if (campHearts(meta, speciesId) >= 5) out.push('bond');
+  return out;
+}
+
+/** A pick's look. */
+export const lookOf = (p: { shiny?: boolean; ancient?: boolean; alt?: boolean }): PickLook => (p.shiny ? 'gilded' : p.ancient ? 'prehistoric' : p.alt ? 'bond' : 'normal');
+
+/** The pick in another look (one look at a time). */
+export function withLook<T extends { shiny?: boolean; ancient?: boolean; alt?: boolean }>(p: T, look: PickLook): T {
+  const { shiny: _s, ancient: _a, alt: _b, ...rest } = p;
+  return { ...rest, ...(look === 'gilded' ? { shiny: true } : look === 'prehistoric' ? { ancient: true } : look === 'bond' ? { alt: true } : {}) } as T;
+}
+
+/** Keep a pick's look only if it's unlocked for this player. */
+function lookFields(meta: Meta, p: { speciesId: string; shiny?: boolean; ancient?: boolean; alt?: boolean }) {
+  const look = lookOf(p);
+  return withLook({}, pickLooks(meta, p.speciesId).includes(look) ? look : 'normal');
 }
 
 /** Species you can bring: everything you've caught (legendaries too), plus your starters. */
@@ -124,6 +157,8 @@ export function makeArenaCreature(p: ArenaPick, opts: { level?: number } = {}): 
   c.pendingMoves = [];
   c.learnIndex = learnset(SPECIES_BY_ID[p.speciesId]).length;
   if (p.shiny) c.shiny = true;
+  else if (p.ancient) c.ancient = true;
+  else if (p.alt) c.alt = true;
   c.trait = arenaTrait(p);
   return c;
 }
@@ -137,7 +172,8 @@ export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): Aren
       const legal = legalArenaMoves(meta, p.speciesId, p.stage);
       const moves = (p.moves ?? []).filter((id) => legal.includes(id)).slice(0, MAX_MOVES);
       // No legal moves left: fall back to the ones it would naturally know.
-      const shiny = p.shiny && ownsShiny(meta, p.speciesId) ? true : undefined;
+      // Only looks you've unlocked.
+      const look = lookFields(meta, p);
       // Only traits you've found for the line (the first found, or the line's first, by default).
       const found = traitsFound(meta.dex, p.speciesId);
       const trait = p.trait && found.includes(p.trait) ? p.trait : (found[0] ?? traitsOf(p.speciesId)[0]);
@@ -145,7 +181,7 @@ export function validArenaTeam(meta: Meta, picks: ArenaPick[] | undefined): Aren
         speciesId: p.speciesId,
         stage: p.stage,
         moves: moves.length ? moves : defaultArenaMoves(p.speciesId, p.stage),
-        ...(shiny ? { shiny } : {}),
+        ...look,
         ...(trait ? { trait } : {}),
       };
     })
@@ -228,6 +264,9 @@ export interface SavedLoadout {
   label: string;
   /** It was shiny. */
   shiny?: boolean;
+  /** It was a Prehistoric form, or in bond colours. */
+  ancient?: boolean;
+  alt?: boolean;
 }
 
 /** Save a run creature's loadout (newest first; the oldest drop off past the limit). */
@@ -238,7 +277,7 @@ export function saveLoadout(meta: Meta, c: Creature, label: string): SavedLoadou
     stage: c.stage,
     moves: c.moves.map((m) => m.id),
     label,
-    ...(c.shiny ? { shiny: true } : {}),
+    ...(c.shiny ? { shiny: true } : c.ancient ? { ancient: true } : c.alt ? { alt: true } : {}),
   };
   meta.loadouts = [l, ...(meta.loadouts ?? [])].slice(0, MAX_LOADOUTS);
   return l;
@@ -263,6 +302,5 @@ export function applyLoadout(meta: Meta, l: SavedLoadout): ArenaPick {
   const stage = forms.includes(l.stage) ? l.stage : Math.max(...forms.filter((f) => f <= l.stage), 0);
   const pool = legalArenaMoves(meta, l.speciesId, stage);
   const moves = l.moves.filter((id) => pool.includes(id)).slice(0, MAX_MOVES);
-  const shiny = l.shiny && ownsShiny(meta, l.speciesId);
-  return { speciesId: l.speciesId, stage, moves: moves.length ? moves : defaultArenaMoves(l.speciesId, stage), ...(shiny ? { shiny: true } : {}) };
+  return { speciesId: l.speciesId, stage, moves: moves.length ? moves : defaultArenaMoves(l.speciesId, stage), ...lookFields(meta, l) };
 }

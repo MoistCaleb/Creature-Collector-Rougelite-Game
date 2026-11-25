@@ -61,6 +61,11 @@ export interface Creature {
   hpCut?: number;
   /** Its trait (2.0): rolled when it's created and kept through evolution (see data/traits). */
   trait?: import('../data/traits').TraitId;
+  /**
+   * A hatchling (2.07, from an egg): `other` is the parent whose line it isn't. Bit i of `mix` set:
+   * learnset entry i comes from that parent's line instead (see learnsetOf). Its name blends both.
+   */
+  heir?: { other: string; mix: number };
 }
 
 export type Stats = BaseStats;
@@ -81,7 +86,45 @@ export function species(c: Creature): Species {
 }
 
 export function creatureName(c: Creature): string {
-  return species(c).names[c.stage];
+  return c.heir ? hatchName(c.speciesId, c.stage, c.heir.other) : species(c).names[c.stage];
+}
+
+const VOWEL = /[aeiouy]/i;
+/**
+ * A hatchling's name, from both parents: the start of its own line's name and the end of the other
+ * parent's (Emberkit × Puddlet: Emberlet). The same at every stage, from each line's name at it.
+ */
+export function hatchName(speciesId: string, stage: number, other: string): string {
+  const a = SPECIES_BY_ID[speciesId]?.names[stage] ?? speciesId;
+  const b = SPECIES_BY_ID[other]?.names[Math.min(stage, 2)] ?? other;
+  // Its own name up to about half way, ending on a consonant.
+  let n = Math.max(2, Math.round(a.length * 0.5));
+  while (n < a.length && VOWEL.test(a[n - 1])) n++;
+  // The other's from its second half, starting just before a vowel.
+  let m = Math.floor(b.length * 0.5);
+  while (m < b.length - 1 && !VOWEL.test(b[m])) m++;
+  if (m > 0 && !VOWEL.test(b[m - 1])) m--;
+  let head = a.slice(0, n);
+  const tail = b.slice(m).toLowerCase();
+  if (head[head.length - 1]?.toLowerCase() === tail[0]) head = head.slice(0, -1);
+  return head + tail;
+}
+
+/**
+ * The moves a creature learns, in order: its line's learnset, or for a hatchling each entry from
+ * one parent or the other (the same count, at the same levels). Its first move and signature are
+ * always its own line's.
+ */
+export function learnsetOf(c: Creature): LearnEntry[] {
+  const own = learnset(species(c));
+  const other = c.heir && SPECIES_BY_ID[c.heir.other];
+  if (!other) return own;
+  const theirs = learnset(other);
+  return own.map((e, i) => {
+    const t = theirs[i];
+    if (i === 0 || !t || MOVES[e.id]?.signature || MOVES[t.id]?.signature || !((c.heir!.mix >> i) & 1)) return e;
+    return { id: t.id, level: e.level };
+  });
 }
 
 export function creatureTypes(c: Creature): TypePair {
@@ -312,7 +355,7 @@ export const WEATHER_LINES: Record<string, WeatherId> = {
 
 export function learnMoves(c: Creature, auto = false): string[] {
   const learned: string[] = [];
-  const set = learnset(species(c));
+  const set = learnsetOf(c);
   // The team move comes on top of the learnset (so older saved creatures' learn order is untouched),
   // in level order: after anything learned up to Lv 26.
   const offerTeam = () => {
@@ -610,7 +653,7 @@ export function recommendReason(c: Creature, id: string, slot: number | null, ct
 export function naturalMoves(c: Creature): string[] {
   const out: string[] = [];
   const add = (id: string) => !out.includes(id) && !knows(c, id) && out.push(id);
-  for (const e of learnset(species(c))) {
+  for (const e of learnsetOf(c)) {
     if (e.level > c.level) continue;
     const d = MOVES[e.id];
     if (d.kind === 'attack' && d.rank >= 0) for (let r = d.rank; r <= Math.min(3, d.rank + c.stage); r++) add(attackId(attackEl(d), r));

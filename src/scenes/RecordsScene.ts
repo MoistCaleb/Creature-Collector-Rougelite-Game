@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 import { campHearts, closestBond } from '../logic/camp';
 import { formatDuration } from '../logic/runClock';
 import { gildedCount } from '../logic/gilded';
-import { earnedTitles, TITLES } from '../logic/titles';
+import { earnedTitles, prehistoricCount, TITLES } from '../logic/titles';
 import { MAP_BY_ID } from '../data/maps';
 import { BOON_COLOR } from '../data/boons';
 import { ELEMENTS } from '../data/types';
@@ -14,7 +14,8 @@ import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { mostUsed, type RunRecord } from '../logic/run';
 import { state } from '../state';
 import { Scroller } from '../ui/scroll';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { icon } from '../ui/icons';
 import { shinySparkle } from '../ui/shiny';
 import { background, button, clipList, COLORS, H, LANDSCAPE, text, W } from '../ui/widgets';
 
@@ -150,6 +151,7 @@ export class RecordsScene extends Phaser.Scene {
       ['Deepest Gilded Hunt', meta.bestHunt ? `Floor ${meta.bestHunt}${meta.bestHuntHeat ? ` · Heat ${meta.bestHuntHeat}` : ''}` : '—'],
       ['Best hunt haul', meta.bestHuntShinies ? `${meta.bestHuntShinies} gilded` : '—'],
       ['Gilded species', `${gildedCount(meta)}/${SPECIES.length}`],
+      ['Prehistoric forms', `${prehistoricCount(meta)}/${SPECIES.length}`],
       ['Titles earned', `${earnedTitles(meta).length}/${TITLES.length}`],
       ['Closest camp bond', closest ? `${SPECIES_BY_ID[closest.speciesId].names[0]} ${'♥'.repeat(campHearts(meta, closest.speciesId))}` : '—'],
       ['Camp challenges', String(meta.camp?.done ?? 0)],
@@ -224,9 +226,10 @@ export class RecordsScene extends Phaser.Scene {
     // The team that finished the run (up to 4 shown).
     r.team.slice(0, 4).forEach((c, i) => {
       const sx = x + w - 24 - i * 40;
-      const img = this.add.image(sx, y + 30, ensureCreatureTexture(this, c.speciesId, c.stage, c.shiny)).setScale(1.15 * SPRITE_FIT);
+      const img = this.add.image(sx, y + 30, ensureCreatureTexture(this, c.speciesId, c.stage, colours(c))).setScale(1.15 * SPRITE_FIT);
       list.add(img);
       if (c.shiny) list.add(shinySparkle(this, sx + 12, y + 14, 8));
+      else if (c.ancient) list.add(icon(this, sx + 12, y + 14, 'amber', 9));
       list.add(text(this, sx, y + 56, `${c.level}`, 10, COLORS.textDim).setOrigin(0.5));
     });
     return y + h + 6;

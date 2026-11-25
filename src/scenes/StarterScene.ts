@@ -2,15 +2,18 @@ import Phaser from 'phaser';
 import { rollTrait, TRAITS, type TraitId } from '../data/traits';
 import { traitDescOf, traitName } from '../ui/traitText';
 import { tip } from '../ui/tips';
-import { bondColours, bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTrait } from '../logic/camp';
+import { bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTrait } from '../logic/camp';
 import { traitsFound } from '../logic/dex';
 import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
-import { createCreature, moveDef, stats } from '../logic/creature';
+import { createCreature, creatureName, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { omenFor } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
-import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, starterShiny, startRun, toggleStarterShiny } from '../logic/run';
+import { startNestRun } from '../logic/run';
+import { hatchlingPreview } from '../logic/nest';
+import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, setStarterLook, starterLook, startRun } from '../logic/run';
+import { LOOK_LABEL, pickLooks, type PickLook } from '../logic/arena';
 import { formName } from '../logic/dex';
 import { dex, state } from '../state';
 import { MAP_BY_ID } from '../data/maps';
@@ -27,8 +30,11 @@ import { wsHas } from '../logic/workshop';
 import { gildedStarterOffer } from '../logic/huntMilestones';
 
 /** This visit's three random starters. */
+/** How each starter look is drawn. */
+const LOOK_COLOURS: Record<PickLook, Colours> = { normal: false, gilded: true, prehistoric: 'ancient', bond: 'alt' };
 let rolled: string[] | null = null;
-/** The starters' traits come from this (shared seeds: the same for everyone; otherwise rolled per visit). */
+/** The starters' traits come from this (shared seeds: the same for everyone; otherwise rolled per visit, and
+ *  never left over from a race or daily screen that closed without a pick). */
 let traitKey: string | null = null;
 
 export class StarterScene extends Phaser.Scene {
@@ -77,7 +83,8 @@ export class StarterScene extends Phaser.Scene {
 
     // Shared seeds: everyone gets the same omen, so it's shown before you pick.
     const omenSeed = this.race ? this.race.seed : week ? week.seed : this.daily ? dailySeed(this.daily) : null;
-    const omen = omenSeed !== null ? omenFor(omenSeed) : undefined;
+    // Omen Week: the week's omen.
+    const omen = week?.omen ?? (omenSeed !== null ? omenFor(omenSeed) : undefined);
     if (omen) {
       const o = text(this, W / 2 + 20, 84, `✶ Omen: ${SURPRISES[omen].name}  (tap)`, 13, '#ff7ad9', { fontStyle: 'bold' }).setOrigin(0.5);
       o.setInteractive({ useHandCursor: true }).on('pointerup', () => showMessage(this, `Omen: ${SURPRISES[omen].name}`, SURPRISES[omen].desc));
@@ -89,8 +96,16 @@ export class StarterScene extends Phaser.Scene {
     // Daily runs and weekly challenges: each starter comes with a passive that suits it.
     const passives = this.race ? racePassives(this.race.seed, this.race.starters) : week ? week.passives : this.daily ? dailyPassives(this.daily) : null;
     this.gold = !this.race && !week && !this.daily ? gildedStarterOffer(state.meta, choices) : null;
-    traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : (traitKey ?? `free:${Math.random()}`);
+    traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : traitKey?.startsWith('free:') ? traitKey : `free:${Math.random()}`;
     const free = !this.race && !week && !this.daily;
+    // Hatchlings from the camp Nest (2.07): one more pick, on normal runs only.
+    const brood = free ? (state.meta.camp?.nest?.brood ?? []) : [];
+    const nestBar = brood.length > 0;
+    if (nestBar) {
+      const label = `From the nest (${brood.length})`;
+      if (LANDSCAPE) button(this, W - 92, 34, 164, 36, label, () => this.nestPick(), { fontSize: 13, color: 0x6a4a1c, glyph: 'star' });
+      else button(this, W / 2, 773, W - 40, 38, label, () => this.nestPick(), { fontSize: 15, color: 0x6a4a1c, glyph: 'star' });
+    }
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       const trait = this.cardTrait(id);
@@ -99,7 +114,7 @@ export class StarterScene extends Phaser.Scene {
       const tName = trait ? `Trait: ${traitName(id, trait)}${choose ? ' ♥' : ''}` : '';
       dex.form(id, 0);
       const preview = createCreature(id, BALANCE.starterLevel + (free ? bondStarterLevels(state.meta, id) : 0));
-      const look: Colours = starterShiny(state.meta, id) || id === this.gold ? true : bondColours(state.meta, id) ? 'alt' : false;
+      const look: Colours = id === this.gold ? true : LOOK_COLOURS[starterLook(state.meta, id)];
       const s = stats(preview);
       if (LANDSCAPE) {
         // Sideways: three tall cards side by side.
@@ -133,8 +148,9 @@ export class StarterScene extends Phaser.Scene {
         button(this, mid, y + 328, cw - 40, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
         return;
       }
-      const y = 100 + i * 228;
-      const card = this.add.rectangle(20, y, W - 40, 214, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+      // (A little tighter when the Nest bar needs the bottom of the screen.)
+      const y = 100 + i * (nestBar ? 218 : 228);
+      const card = this.add.rectangle(20, y, W - 40, nestBar ? 207 : 214, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
       card.setInteractive({ useHandCursor: true });
       card.on('pointerup', () => this.pick(id));
 
@@ -217,15 +233,17 @@ export class StarterScene extends Phaser.Scene {
     });
   }
 
-  /** Shiny unlocked for this line: start it shiny (tap to switch to its normal colours and back). */
+  /** Another look unlocked for this line (Gilded, Prehistoric, bond colours): tap to switch the one it starts in. */
   private shinyToggle(id: string, x: number, y: number, w: number) {
     const meta = state.meta;
-    if (!(meta.shinyOwned ?? []).includes(id)) return;
-    const on = starterShiny(meta, id);
-    button(this, x, y, w, 24, on ? '✦ Gilded' : '✦ Normal', () => {
-      toggleStarterShiny(meta, id);
+    const looks = pickLooks(meta, id);
+    if (looks.length < 2) return;
+    const look = starterLook(meta, id);
+    const color = look === 'gilded' ? 0x7a5a1c : look === 'prehistoric' ? 0x6a4a28 : look === 'bond' ? 0x6a2a4a : 0x2a2440;
+    button(this, x, y, w, 24, LOOK_LABEL[look], () => {
+      setStarterLook(meta, id, looks[(looks.indexOf(look) + 1) % looks.length]);
       this.scene.restart({ mapId: this.mapId, quick: this.quick, daily: this.daily ?? undefined, weekly: this.weekly ?? undefined, race: this.race ?? undefined });
-    }, { fontSize: 11, color: on ? 0x7a5a1c : 0x2a2440 });
+    }, { fontSize: 11, color, oneLine: true });
   }
 
   private pick(id: string) {
@@ -260,7 +278,39 @@ export class StarterScene extends Phaser.Scene {
       noteShinyOwned(state.meta, id);
       saveMeta(state.meta);
     }
-    const run = state.run;
+    this.goOn(others, key);
+  }
+
+  /** A hatchling from the Nursery as your starter (2.07). It stays in the Nursery for later runs. */
+  private nestPick() {
+    const brood = state.meta.camp?.nest?.brood ?? [];
+    const previews = brood.map((h) => hatchlingPreview(h));
+    openPicker(this, {
+      title: 'From the nest',
+      subtitle: 'Start this run with one of your hatchlings: its trait, stars and moves from both parents.',
+      options: previews.map((c, i) => ({
+        icon: c,
+        label: `${creatureName(c)}${brood[i].stars ? `  ${'★'.repeat(brood[i].stars)}` : ''}`,
+        sub: `${SPECIES_BY_ID[brood[i].speciesId].names[0]} × ${SPECIES_BY_ID[brood[i].other]?.names[0] ?? '?'}${brood[i].trait ? ` · ${traitName(brood[i].speciesId, brood[i].trait!)}` : ''}`,
+      })),
+      rowHeight: 64,
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => {
+        const others = rolled ?? [];
+        const key = traitKey;
+        rolled = null;
+        traitKey = null;
+        this.gold = null;
+        state.run = startNestRun(state.meta, brood[i], Date.now(), this.mapId, this.quick);
+        this.goOn(others, key);
+      },
+    });
+  }
+
+  /** After the starter's chosen: the Partner (Workshop) pick if you have it, then camp or the map. */
+  private goOn(others: string[], key: string | null) {
+    const run = state.run!;
     // Every run but dailies and weeklies stops at camp first: one thing for the road, and the news.
     const go = () => (prepsAvailable(run) ? this.scene.start('Camp', { prep: true }) : this.scene.start('Map', {}));
     if (!wsHas(run, 'partner') || !others.length) return go();

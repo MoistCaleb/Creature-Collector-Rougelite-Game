@@ -1,5 +1,5 @@
 /** The game's version, shown on the title screen and in Credits. Bump it (and add an entry) per release. */
-export const APP_VERSION = '2.06';
+export const APP_VERSION = '2.07';
 
 export interface ChangelogEntry {
   version: string;
@@ -9,6 +9,21 @@ export interface ChangelogEntry {
 
 /** Newest first. The What's new popup shows every entry newer than the last version you saw. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.07',
+    title: 'Eggs, fossils and friends',
+    items: [
+      'Eggs and the Nest: at camp, breed two crew Hexlings with 3+ hearts (or one of them and a legendary you\u2019ve caught). The egg hatches after 3 to 7 runs, and the longer it takes, the stronger the baby: better odds of its rare trait, and up to \u2605\u2605.',
+      'Each baby is one parent\u2019s line wearing the other parent\u2019s colour and one of its parts, with a name from both, and every move it learns comes from one parent or the other. Keep up to 6 in the Nursery and tap From the nest on the starter screen to start a normal run with one.',
+      'Hatchery eggs found on a run work the same way now: 3 to 7 won battles, with two parents of their own. Every pair you hatch gets a card (and a family tree) in the Hexlidex\u2019s new Hatched tab, with titles and trainer gear for hatching milestones.',
+      'Prehistoric forms: rare ancient versions of each line, with earthy colours and parts from an earlier era. Find them in the wild (about 1 in 250), far more often in Ancient Ruins, or at a Fossil Site. They get their own big reveal in battle, an amber glow and an amber tag, and milestone titles and gear (Skull helm, Bone tail, Bone wings, Amber aura).',
+      'Switch looks: the team builder and starter screen can cycle each line\u2019s unlocked looks (usual, Gilded, Prehistoric, bond colours). Your pick shows in every run, stage battle and online.',
+      'Accessibility: every element has its own symbol, everywhere elements show. Settings has a new Accessibility page with Larger text, Brighter text, Reduce motion and a flashing lights warning at start-up.',
+      'Daily runs start with a boon pick. From Nov 30, four new weekly twists join the rotation: Omen Week, Wild Skies, Elder Week and Boon Rush.',
+      'Camp: pet, feed and play each build bond. Crew Hexlings find gifts of embers while you\u2019re away, and close pairs keep each other company (+1 bond each).',
+      'Fixed: online, the host ignored the trait each guest picked for their Hexlings. Fixed: enemies in battle never showed their Gilded or Prehistoric look. Fixed: Element Duo weeks could hide a surprise on the wrong map. Saves are safer, and the app icons are smaller.',
+    ],
+  },
   {
     version: '2.06',
     title: 'Gone with the wind',

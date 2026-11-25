@@ -1,7 +1,7 @@
 import { takeNewTitles} from '../logic/titles';
 import { titleNews } from '../logic/cosmetics';
 import Phaser from 'phaser';
-import { MOVES, moveColor } from '../data/moves';
+import { MOVES } from '../data/moves';
 import {
   ARENA_LEVEL,
   ARENA_ROUNDS,
@@ -19,10 +19,11 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { openPicker, showMessage } from '../ui/picker';
 import { playMusic } from '../ui/sound';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
 import type { BattleMatch } from './BattleScene';
 import { startTournament } from './TournamentScene';
+import { elementIcon } from '../ui/elementIcons';
 
 /** A ladder in progress: which round is next, and its seed. */
 interface Ladder {
@@ -109,7 +110,7 @@ export class ArenaScene extends Phaser.Scene {
       text(this, x + sw / 2, y + (SLOT_H - 8) / 2, '+ Add a Hexling', 16, COLORS.textDim).setOrigin(0.5);
       return;
     }
-    const key = ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny);
+    const key = ensureCreatureTexture(this, p.speciesId, p.stage, colours(p));
     this.add.image(x + 42, y + 46, key).setScale(2.2 * SPRITE_FIT);
     const c = createCreature(p.speciesId, ARENA_LEVEL, p.stage);
     text(this, x + 88, y + 8, `${creatureName(c)}  Lv ${ARENA_LEVEL}`, 16, COLORS.text, { fontStyle: 'bold' });
@@ -118,7 +119,7 @@ export class ArenaScene extends Phaser.Scene {
       const d = MOVES[id];
       const mx = x + 88 + (k % 2) * 140;
       const my = y + 58 + Math.floor(k / 2) * 18;
-      this.add.rectangle(mx, my + 7, 7, 7, moveColor(d.element)).setOrigin(0, 0.5);
+      elementIcon(this, mx + 4, my + 7, d.element, 10);
       text(this, mx + 11, my, d.name, 12, COLORS.text);
     });
     text(this, x + sw - 14, y + 8, 'Edit ›', 13, '#ffc94d', { fontStyle: 'bold' }).setOrigin(1, 0);

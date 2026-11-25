@@ -26,6 +26,8 @@ const PALETTE: Record<string, string> = {
   n: '#6a4020',
   S: '#f0a0b0',
   E: '#f4ead0',
+  A: '#e8a95a',
+  a: '#8a5222',
 };
 const OUTLINE = '#1a1426';
 
@@ -275,6 +277,20 @@ const ICONS = {
     '..YYY..YYY..',
     '.YYY....YYY.',
     '.YY......YY.',
+  ],
+  /** Prehistoric: an amber stone with a fossil diamond inside. */
+  amber: [
+    '.....a......',
+    '....aAa.....',
+    '...aAAAa....',
+    '..aAAEAAa...',
+    '.aAAEaEAAa..',
+    'aAAEaaaEAAa.',
+    '.aAAEaEAAa..',
+    '..aAAEAAa...',
+    '...aAAAa....',
+    '....aAa.....',
+    '.....a......',
   ],
   sparkle: [
     '.....P......',

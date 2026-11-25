@@ -27,6 +27,9 @@ function set(key: string, value: string) {
   write(key, value);
 }
 
+/** The device's reduced-motion setting, looked up once (calm() asks for it often). */
+const reducedMotionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+
 export const BATTLE_SPEEDS = [1, 2, 3] as const;
 
 export const prefs = {
@@ -72,11 +75,32 @@ export const prefs = {
   },
   /** Tone down screen shake, flashes and zooms. Starts on when the device asks for reduced motion. */
   get reduceMotion(): boolean {
-    const os = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const os = !!reducedMotionQuery?.matches;
     return get('ccr-reduce-motion', os ? '1' : '0') === '1';
   },
   set reduceMotion(v: boolean) {
     set('ccr-reduce-motion', v ? '1' : '0');
+  },
+  /** Accessibility: small text drawn bigger (see widgets.text). */
+  get largerText(): boolean {
+    return get('ccr-larger-text', '0') === '1';
+  },
+  set largerText(v: boolean) {
+    set('ccr-larger-text', v ? '1' : '0');
+  },
+  /** Accessibility: dim grey text drawn brighter. */
+  get brightText(): boolean {
+    return get('ccr-bright-text', '0') === '1';
+  },
+  set brightText(v: boolean) {
+    set('ccr-bright-text', v ? '1' : '0');
+  },
+  /** The flashing-lights warning on launch, until "Don't show again". */
+  get motionWarning(): boolean {
+    return get('ccr-motion-warning', '1') === '1';
+  },
+  set motionWarning(v: boolean) {
+    set('ccr-motion-warning', v ? '1' : '0');
   },
   /** Day and night, and holiday themes, on the map (from the device's clock). */
   get worldClock(): boolean {

@@ -113,7 +113,7 @@ export interface RaceProgress {
   boons?: string[];
   /** Map node they're on, and their lead Hexling (shown grayed out on the other player's map). */
   at?: string;
-  lead?: { speciesId: string; stage: number; shiny?: boolean };
+  lead?: { speciesId: string; stage: number; shiny?: boolean; ancient?: boolean; alt?: boolean };
 }
 
 /** Someone in the session, as the host lists them for everyone. */
@@ -141,7 +141,7 @@ export interface Standing {
   fighting?: boolean;
   /** Map hex they're on, and their lead Hexling (drawn grayed out on everyone's map). */
   at?: string;
-  lead?: { speciesId: string; stage: number; shiny?: boolean };
+  lead?: { speciesId: string; stage: number; shiny?: boolean; ancient?: boolean; alt?: boolean };
 }
 
 export type DuelMsg =

@@ -140,7 +140,8 @@ describe('the Workshop (2.0)', () => {
       expect(run.team.map((c) => c.level)).toEqual(plain.team.map((c) => c.level));
       expect(boonInPool(run, 'pact')).toBe(true);
       expect(surpriseInPool(run, 'bloodmoon')).toBe(true);
-      expect(run.boons?.offer ?? null).toBeNull();
+      // No Workshop offer (a daily's own starting offer is the same as without upgrades).
+      expect(run.boons?.offer?.ids ?? null).toEqual(plain.boons?.offer?.ids ?? null);
     }
     // A daily rolls the same boon offers with or without upgrades.
     const a = startRun(mkMeta(), 'emberkit', 9, 'wildlands', '2026-11-22');

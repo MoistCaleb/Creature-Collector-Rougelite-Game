@@ -13,9 +13,14 @@ import { activeTeam, activeTeamIndex, ARENA_LEVEL, ARENA_TEAM, arenaForms, arena
 import { openPicker, showMessage } from '../ui/picker';
 import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
+import { HATCH_MILESTONES, hatchedCount, PREHISTORIC_MILESTONES, prehistoricCount } from '../logic/titles';
+import { eggImage } from '../ui/hatch';
+import { rewardText } from '../logic/cosmetics';
+import { hatchedPairs, TIER_NAMES, type PairRecord } from '../logic/nest';
+import { openPanel } from '../ui/panel';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
-import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
+import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
@@ -23,15 +28,16 @@ import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, LANDSCAPE, text, typeChip, W } from '../ui/widgets';
-import { createCreature, stageCap, stats } from '../logic/creature';
+import { createCreature, hatchName, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
 import { saveMeta, toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
 import { openElementChart } from '../ui/elementChart';
 import { shinySparkle } from '../ui/shiny';
 import { searchBox } from '../ui/searchBox';
+import { elementIcon } from '../ui/elementIcons';
 
-type Tab = 'creatures' | 'moves' | 'elements' | 'boons';
+type Tab = 'creatures' | 'moves' | 'elements' | 'boons' | 'hatched';
 /** Content starts below the header, tabs and the element filter bar. */
 /** Where the list starts, under the header (a shorter header on the wide board). */
 let TOP = 196;
@@ -50,7 +56,7 @@ const INFO_BTN = 48;
 
 /** Hexlings tab: search text and which lines to show (kept while you browse). */
 let dexQuery = '';
-type DexFilter = 'all' | 'caught' | 'uncaught' | 'unseen' | 'gilded';
+type DexFilter = 'all' | 'caught' | 'uncaught' | 'unseen' | 'gilded' | 'prehistoric';
 let dexFilter: DexFilter = 'all';
 /** The first chip steps through these (tap again for the next; the last goes back to all). */
 const CATCH_STEPS: { f: DexFilter; label: string; color: number }[] = [
@@ -126,6 +132,7 @@ export class DexScene extends Phaser.Scene {
     if (this.tab === 'creatures') this.drawCreatures();
     else if (this.tab === 'moves') this.drawMoves();
     else if (this.tab === 'boons') this.drawBoons();
+    else if (this.tab === 'hatched') this.drawHatched();
     else this.drawElements();
     this.refreshRows();
 
@@ -157,6 +164,7 @@ export class DexScene extends Phaser.Scene {
       ['moves', 'Moves'],
       ['elements', 'Elements'],
       ['boons', 'Boons'],
+      ['hatched', 'Hatched'],
     ];
     // Sideways on the Hexlings tab, the tabs take the left half and the search the right half.
     const tabsW = LANDSCAPE && L.search ? W / 2 - 24 : W - 32;
@@ -241,7 +249,9 @@ export class DexScene extends Phaser.Scene {
       const k = Math.max(0, CATCH_STEPS.findIndex((s) => s.f === dexFilter));
       const step = CATCH_STEPS[k];
       chip(0, k > 0, step.label, step.color, () => (dexFilter = CATCH_STEPS[(k + 1) % CATCH_STEPS.length].f));
-      chip(1, dexFilter === 'gilded', '✦ Gilded', 0x7a5a1c, () => (dexFilter = dexFilter === 'gilded' ? 'all' : 'gilded'));
+      // All -> Gilded -> Prehistoric -> all.
+      const pre = dexFilter === 'prehistoric';
+      chip(1, dexFilter === 'gilded' || pre, pre ? '◈ Prehistoric' : '✦ Gilded', pre ? 0x7a4a1c : 0x7a5a1c, () => (dexFilter = dexFilter === 'gilded' ? 'prehistoric' : pre ? 'all' : 'gilded'));
     }
   }
 
@@ -299,10 +309,15 @@ export class DexScene extends Phaser.Scene {
       const ry = y;
       this.addRow(ry, 58, (row) => this.rewardsRow(row, ry));
       y += 58;
+      const py = y;
+      this.addRow(py, 58, (row) => this.prehistoricRow(row, py));
+      y += 58;
     }
+    const ancient = state.meta.ancientFound ?? [];
     DEX_SPECIES.forEach((sp, i) => {
       if (dexFilter === 'caught' && !dex.caught.includes(sp.id)) return;
       if (dexFilter === 'gilded' && !owned.includes(sp.id)) return;
+      if (dexFilter === 'prehistoric' && !ancient.includes(sp.id)) return;
       if (dexFilter === 'uncaught' && dex.caught.includes(sp.id)) return;
       if (dexFilter === 'unseen' && sp.names.some((_, st) => hasSeenForm(dex, sp.id, st))) return;
       if (elFilter && !sp.types.includes(elFilter)) return;
@@ -318,7 +333,9 @@ export class DexScene extends Phaser.Scene {
       const msg =
         dexFilter === 'gilded' && !owned.length
           ? 'No Gilded Hexlings yet. Catch one to unlock its whole line!'
-          : !q && !elFilter && dexFilter === 'uncaught'
+          : dexFilter === 'prehistoric' && !ancient.length
+            ? 'No Prehistoric forms yet. Look for them in the wild, in Ancient Ruins and at Fossil Sites.'
+            : !q && !elFilter && dexFilter === 'uncaught'
             ? "You've caught every Hexling!"
             : !q && !elFilter && dexFilter === 'unseen'
               ? "You've seen every Hexling!"
@@ -368,8 +385,8 @@ export class DexScene extends Phaser.Scene {
     this.tapArea(row, y, h, i, true, owned);
     row.add(text(this, 22, y + 8, `#${String(i + 1).padStart(3, '0')}`, 12, COLORS.textDim));
     if (owned) row.add(text(this, W - 138, y + 26, '✦ Gilded unlocked: every form', 11, '#ffd86b', { fontStyle: 'bold' }).setOrigin(1, 0));
-    // Fossil Site (a surprise): its ancient form, once brought back.
-    else if ((state.meta.ancientFound ?? []).includes(sp.id)) row.add(text(this, W - 138, y + 26, '◈ Ancient form found', 11, '#e0a85a', { fontStyle: 'bold' }).setOrigin(1, 0));
+    // Its Prehistoric form (Fossil Site, or caught in the wild), once found.
+    else if ((state.meta.ancientFound ?? []).includes(sp.id)) row.add(text(this, W - 138, y + 26, '◈ Prehistoric form found', 11, '#e0a85a', { fontStyle: 'bold' }).setOrigin(1, 0));
     const t = sp.types;
     (t[0] === t[1] ? [t[0]] : t).forEach((el, k) => row.add(typeChip(this, 70 + k * 64, y + 16, el)));
     const caught = dex.caught.includes(sp.id);
@@ -388,6 +405,7 @@ export class DexScene extends Phaser.Scene {
       }, { fontSize: 12, glyph: 'star', color: fav ? 0x7a5a1c : 0x3a3450, enabled: canFav || fav }),
     );
     const shinySeen = (meta.shinySeen ?? []).includes(sp.id);
+    const prehistoric = (meta.ancientFound ?? []).includes(sp.id);
     const stages = dexStages(sp.id);
     stages.forEach((s, k) => {
       const sy = y + 38 + k * 136;
@@ -404,6 +422,11 @@ export class DexScene extends Phaser.Scene {
           row.add(this.add.rectangle(112, sy + 100, 44, 44, 0x2a2244).setStrokeStyle(1, owned ? COLORS.stroke : 0xffc94d, 0.7));
           row.add(this.add.image(112, sy + 100, ensureCreatureTexture(this, sp.id, s, !owned)).setScale(1 * SPRITE_FIT));
           if (!owned) row.add(icon(this, 128, sy + 84, 'sparkle', 10));
+        }
+        // Its Prehistoric form, once found: in the other corner.
+        if (prehistoric) {
+          row.add(this.add.rectangle(48, sy + 100, 44, 44, 0x2a2018).setStrokeStyle(1, 0xe0a85a, 0.7));
+          row.add(this.add.image(48, sy + 100, ensureCreatureTexture(this, sp.id, s, 'ancient')).setScale(1 * SPRITE_FIT));
         }
         row.add(text(this, 150, sy + 6, formName(dex, sp.id, s), 20, COLORS.text, { fontStyle: 'bold' }));
         row.add(text(this, 150, sy + 34, isLegend(sp.id) ? 'Legendary' : STAGE_LABEL[s], 12, isLegend(sp.id) ? '#e0c8ff' : '#8e86ad'));
@@ -525,7 +548,7 @@ export class DexScene extends Phaser.Scene {
     const about = next
       ? caught || pts
         ? `Next: ${bondReward(hearts + 1, name)}.`
-        : `Catch one, then play runs together and visit it at camp (+${BOND_POINTS.care} after each run).`
+        : `Catch one, then play runs together and pet, feed and play with it at camp (+${BOND_POINTS.care} each, after each run).`
       : `${bondReward(BOND_HEART.max, name).replace(/^./, (ch) => ch.toUpperCase())}.`;
     row.add(text(this, 22, y + 50, about, 12, COLORS.text, { wordWrap: { width: W - 50 }, maxLines: 2 }));
     y += INFO_BOND;
@@ -650,6 +673,64 @@ export class DexScene extends Phaser.Scene {
     row.add(text(this, 54, y + 8, 'Completion rewards', 15, '#ffc94d', { fontStyle: 'bold' }));
     row.add(text(this, 54, y + 28, ready ? `${ready} ready to claim! Tap to collect your embers.` : `${claimed}/${list.length} claimed · fill the Hexlidex for embers`, 12, ready ? '#ffe08a' : COLORS.textDim));
     row.add(icon(this, W - 30, y + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+  }
+
+  /** Prehistoric forms found, and the next milestone (a title and its gear). Tap for every milestone. */
+  private prehistoricRow(row: Phaser.GameObjects.Container, y: number) {
+    const n = prehistoricCount(state.meta);
+    const next = PREHISTORIC_MILESTONES.find(([c]) => c > n);
+    const bg = this.add
+      .rectangle(12, y, W - 24, 50, COLORS.panel)
+      .setOrigin(0)
+      .setStrokeStyle(1, n ? 0xe0a85a : COLORS.stroke)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => !this.scroller.moved && this.openPrehistoric());
+    row.add(bg);
+    row.add(text(this, 34, y + 25, '◈', 20, '#e8a95a', { fontStyle: 'bold' }).setOrigin(0.5));
+    row.add(text(this, 54, y + 8, `Prehistoric forms  ${n}/${SPECIES.length}`, 15, '#e8a95a', { fontStyle: 'bold' }));
+    const sub = next ? `Next: ${next[1]} at ${next[0]} · ${rewardText(next[1]).replace(/^Unlocks /, '')}` : 'Every Prehistoric milestone reached!';
+    row.add(text(this, 54, y + 28, sub, 12, COLORS.textDim, { fixedWidth: W - 100 }));
+    row.add(icon(this, W - 30, y + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+  }
+
+  private openPrehistoric() {
+    const n = prehistoricCount(state.meta);
+    this.overlay((done) =>
+      openPicker(this, {
+        title: '◈ Prehistoric milestones',
+        subtitle: `${n}/${SPECIES.length} lines found. Catch a Prehistoric Hexling (1 in 250 in the wild, far more in Ancient Ruins) or take one from a Fossil Site.\nEach milestone is a title and trainer gear.`,
+        options: PREHISTORIC_MILESTONES.map(([c, t]) => ({
+          label: `${n >= c ? '◈ ' : ''}${c} lines · ${t}`,
+          sub: `${n >= c ? 'Earned' : `${n}/${c}`} · ${rewardText(t)}`,
+          disabled: true,
+          color: n >= c ? 0x7a4a1c : undefined,
+        })),
+        rowHeight: 56,
+        cancelLabel: 'Back',
+        onCancel: done,
+        onPick: () => {},
+      }),
+    );
+  }
+
+  private openHatchMilestones() {
+    const n = hatchedCount(state.meta);
+    this.overlay((done) =>
+      openPicker(this, {
+        title: 'Hatching milestones',
+        subtitle: `${n} different pair${n === 1 ? '' : 's'} hatched (a pair is a baby's line and its other parent). Each milestone is a title and trainer gear.`,
+        options: HATCH_MILESTONES.map(([c, t]) => ({
+          label: `${n >= c ? '✓ ' : ''}${c} pairs · ${t}`,
+          sub: `${n >= c ? 'Earned' : `${n}/${c}`} · ${rewardText(t)}`,
+          disabled: true,
+          color: n >= c ? 0x6a3a5a : undefined,
+        })),
+        rowHeight: 56,
+        cancelLabel: 'Back',
+        onCancel: done,
+        onPick: () => {},
+      }),
+    );
   }
 
   private openRewards() {
@@ -783,7 +864,7 @@ export class DexScene extends Phaser.Scene {
           row.add(this.add.rectangle(12, my, W - 24, 34, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
           if (seen) {
             const kind = kindOf(id);
-            row.add(this.add.rectangle(22, my + 17, 8, 8, moveColor(el)));
+            row.add(elementIcon(this, 22, my + 17, el, 12));
             row.add(text(this, 34, my + 9, m.name, 14, COLORS.text));
             row.add(text(this, 170, my + 10, kind, 12, COLORS.textDim));
             row.add(text(this, W - 22, my + 10, `${moveSummary(m, 1)} · ${accText(m)}`, 12, COLORS.textDim).setOrigin(1, 0));
@@ -806,6 +887,121 @@ export class DexScene extends Phaser.Scene {
    * Boons (2.0): every boon you've been offered; the rest are ???. Element boons by element. Lore
    * hints: a boon still locked behind a Lore upgrade says which one, with a vague hint.
    */
+  /**
+   * Hatched (2.07): a card for each pair you've hatched (from the camp Nest or a Hatchery egg), newest
+   * first. No blank cards: it fills in as you breed new pairs.
+   */
+  private drawHatched() {
+    const meta = state.meta;
+    const all = hatchedPairs(meta);
+    const list = elFilter ? all.filter((p) => SPECIES_BY_ID[p.speciesId].types.includes(elFilter!)) : all;
+    const lines = new Set(all.map((p) => p.speciesId)).size;
+    let y = 8;
+    const hy = y;
+    this.addRow(hy, 50, (row) => {
+      row.add(text(this, 16, hy + 4, `${all.length} pairing${all.length === 1 ? '' : 's'} hatched · ${lines} line${lines === 1 ? '' : 's'}`, 16, '#ffc94d', { fontStyle: 'bold' }));
+      row.add(text(this, 16, hy + 26, 'Breed at camp’s Nest, or carry a Hatchery egg on a run.', 12, COLORS.textDim));
+    });
+    y += 52;
+    // The next hatching milestone (a title and trainer gear); tap for all of them.
+    const my0 = y;
+    this.addRow(my0, 58, (row) => {
+      const n = hatchedCount(meta);
+      const next = HATCH_MILESTONES.find(([c]) => c > n);
+      row.add(
+        this.add
+          .rectangle(12, my0, W - 24, 50, COLORS.panel)
+          .setOrigin(0)
+          .setStrokeStyle(1, n ? 0xffc0d8 : COLORS.stroke)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerup', () => !this.scroller.moved && this.openHatchMilestones()),
+      );
+      row.add(eggImage(this, 34, my0 + 25, { a: 'sproutle', b: 'emberkit', tier: 3 }, 30));
+      row.add(text(this, 54, my0 + 8, `Hatching milestones  ${n}/${HATCH_MILESTONES[HATCH_MILESTONES.length - 1][0]}`, 15, '#ffc0d8', { fontStyle: 'bold' }));
+      row.add(text(this, 54, my0 + 28, next ? `Next: ${next[1]} at ${next[0]} pairs · ${rewardText(next[1]).replace(/^Unlocks /, '')}` : 'Every hatching milestone reached!', 12, COLORS.textDim, { fixedWidth: W - 100 }));
+      row.add(icon(this, W - 30, my0 + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+    });
+    y += 58;
+    if (!list.length) {
+      const my = y;
+      this.addRow(my, 80, (row) =>
+        row.add(text(this, W / 2, my + 36, all.length ? 'No hatched pairs of this element yet.' : 'No eggs hatched yet. Each new pair you hatch adds a card here.', 14, COLORS.textDim, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5)),
+      );
+      y += 80;
+    }
+    const nm = (id: string) => SPECIES_BY_ID[id]?.names[0] ?? id;
+    for (const p of list) {
+      const ry = y;
+      this.addRow(ry, 80, (row) => {
+        const gold = !!p.rec.legendary;
+        row.add(
+          this.add
+            .rectangle(12, ry, W - 24, 74, COLORS.panel)
+            .setOrigin(0)
+            .setStrokeStyle(gold ? 3 : 2, gold ? 0xffd86b : COLORS.stroke)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerup', () => !this.scroller.moved && this.openFamily(p.speciesId, p.other, p.rec)),
+        );
+        row.add(icon(this, W - 30, ry + 37, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+        row.add(this.add.image(52, ry + 38, ensureCreatureTexture(this, p.speciesId, 0, `hatch:${p.other}`)).setScale(1.7 * SPRITE_FIT));
+        row.add(text(this, 96, ry + 8, hatchName(p.speciesId, 0, p.other), 16, gold ? '#ffd86b' : COLORS.text, { fontStyle: 'bold' }));
+        row.add(text(this, 96, ry + 30, `${nm(p.speciesId)} × ${nm(p.other)}${gold ? ' (legendary)' : ''}`, 13, COLORS.textDim));
+        const when = new Date(p.rec.first).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        row.add(text(this, 96, ry + 50, `Hatched ${p.rec.n}× · best: ${TIER_NAMES[p.rec.best - 1]} egg · first ${when}`, 11, '#8e86ad'));
+      });
+      y += 80;
+    }
+    this.contentH = y + 8;
+  }
+
+  /**
+   * A hatched pair's family tree: its two parents at the top, joined to the hatchling below, then the
+   * hatchling's evolutions (all wearing its hatchling look).
+   */
+  private openFamily(speciesId: string, other: string, rec: PairRecord) {
+    const nm = (id: string) => SPECIES_BY_ID[id]?.names[0] ?? id;
+    const gold = !!rec.legendary;
+    const lineC = gold ? 0xffd86b : 0x8e86ad;
+    const ph = LANDSCAPE ? 430 : 560;
+    this.overlay((done) => {
+      const p = openPanel(this, 'Family tree', { w: LANDSCAPE ? 600 : 430, h: ph, onClose: done });
+      const add = <T extends Phaser.GameObjects.GameObject>(o: T) => (p.root.add(o), o);
+      const cx = p.x + p.w / 2;
+      const S = LANDSCAPE ? 2.3 : 2.8; // sprite scale
+      const parentY = p.top + (LANDSCAPE ? 44 : 58);
+      const kidY = p.top + (LANDSCAPE ? 214 : 286);
+      const step = Math.min(p.w / 3, LANDSCAPE ? 170 : 140);
+      const xs = [cx - step, cx, cx + step]; // hatchling and its evolutions
+      // Parents: its own line on the left, the other parent on the right.
+      const pxs = [cx - p.w * 0.24, cx + p.w * 0.24];
+      [speciesId, other].forEach((id, i) => {
+        add(this.add.image(pxs[i], parentY, ensureCreatureTexture(this, id, 0)).setScale(S * SPRITE_FIT));
+        add(text(this, pxs[i], parentY + 44, nm(id), 14, isLegend(id) ? '#ffd86b' : COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
+        add(text(this, pxs[i], parentY + 63, i === 0 ? 'its line' : isLegend(id) ? 'legendary parent' : 'colour, part and moves', 11, COLORS.textDim).setOrigin(0.5, 0));
+      });
+      // The tree: down from each parent, across, and down to the hatchling.
+      const g = add(this.add.graphics());
+      const joinY = parentY + (kidY - parentY) * 0.62;
+      g.lineStyle(3, lineC, 0.9);
+      g.lineBetween(pxs[0], parentY + 82, pxs[0], joinY);
+      g.lineBetween(pxs[1], parentY + 82, pxs[1], joinY);
+      g.lineBetween(Math.min(xs[0], pxs[0]), joinY, Math.max(xs[0], pxs[1]), joinY);
+      g.lineBetween(xs[0], joinY, xs[0], kidY - 44);
+      g.fillStyle(lineC, 1).fillCircle(xs[0], joinY, 4);
+      // The hatchling, then its evolutions.
+      for (let st = 0; st < 3; st++) {
+        const x = xs[st];
+        if (st === 0) add(this.add.circle(x, kidY, 40, gold ? 0x5a4a1c : 0x3a3352, 0.6));
+        add(this.add.image(x, kidY, ensureCreatureTexture(this, speciesId, st, `hatch:${other}`)).setScale((st === 0 ? S : S * 0.92) * SPRITE_FIT));
+        add(text(this, x, kidY + 46, hatchName(speciesId, st, other), 14, st === 0 ? (gold ? '#ffd86b' : '#ffe9a8') : COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
+        add(text(this, x, kidY + 65, st === 0 ? 'Hatchling' : st === 1 ? 'Evolved' : 'Final form', 11, COLORS.textDim).setOrigin(0.5, 0));
+        if (st > 0) add(text(this, (xs[st - 1] + x) / 2, kidY - 6, '›', 26, '#8e86ad', { fontStyle: 'bold' }).setOrigin(0.5));
+      }
+      const when = new Date(rec.first).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      add(text(this, cx, kidY + 96, `Hatched ${rec.n}× · best: ${TIER_NAMES[rec.best - 1]} egg · first ${when}`, 12, '#8e86ad').setOrigin(0.5, 0));
+    });
+  }
+
   private drawBoons() {
     const seen = state.meta.boonsSeen ?? [];
     const lock = (id: string) => loreLock(state.meta, 'boon', id);

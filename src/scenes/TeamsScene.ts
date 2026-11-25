@@ -5,7 +5,7 @@ import { saveMeta } from '../logic/run';
 import { state } from '../state';
 import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
-import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
+import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, LANDSCAPE, text, W } from '../ui/widgets';
 
 const ROW_H = 96;
@@ -49,7 +49,7 @@ export class TeamsScene extends Phaser.Scene {
       else text(this, cx + 12, y + 30, `${picks.length}/${ARENA_TEAM} Hexlings`, 11, COLORS.textDim);
       picks.forEach((p, k) => {
         const x = cx + 34 + k * 56;
-        this.add.image(x, y + 64, ensureCreatureTexture(this, p.speciesId, p.stage, p.shiny)).setScale(1.1 * SPRITE_FIT);
+        this.add.image(x, y + 64, ensureCreatureTexture(this, p.speciesId, p.stage, colours(p))).setScale(1.1 * SPRITE_FIT);
       });
       if (!picks.length) text(this, cx + 12, y + 54, 'Empty', 13, COLORS.textDim);
       button(this, cx + cw - 40, LANDSCAPE ? y + 24 : y + ROW_H / 2 - 4, LANDSCAPE ? 56 : 72, LANDSCAPE ? 30 : 34, '•••', () => this.menu(i), { fontSize: 16 });

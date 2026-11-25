@@ -1,6 +1,7 @@
 import { cleanBoonIds } from './duel';
 import type Phaser from 'phaser';
 import { cleanLook, type TrainerLook } from '../data/trainerLook';
+import { traitsOf } from '../data/traits';
 import { cleanTitle } from '../logic/titles';
 import type { ArenaPick } from '../logic/arena';
 import { SPECIES_BY_ID } from '../data/species';
@@ -109,10 +110,15 @@ export function cleanRoster(x: unknown): RosterEntry[] {
 export const cleanNodeId = (x: unknown): string | undefined => (typeof x === 'string' && x.length <= 40 ? x : undefined);
 
 /** The other player's lead Hexling, for their grayed-out token on the map. */
-export function cleanLead(x: unknown): { speciesId: string; stage: number; shiny?: boolean } | undefined {
-  const l = x as { speciesId?: unknown; stage?: unknown; shiny?: unknown } | null;
+export function cleanLead(x: unknown): { speciesId: string; stage: number; shiny?: boolean; ancient?: boolean; alt?: boolean } | undefined {
+  const l = x as { speciesId?: unknown; stage?: unknown; shiny?: unknown; ancient?: unknown; alt?: unknown } | null;
   if (!l || typeof l.speciesId !== 'string' || !SPECIES_BY_ID[l.speciesId] || ![0, 1, 2].includes(l.stage as number)) return undefined;
-  return { speciesId: l.speciesId, stage: l.stage as number, ...(l.shiny === true ? { shiny: true } : {}) };
+  return { speciesId: l.speciesId, stage: l.stage as number, ...cleanColours(l) };
+}
+
+/** A Hexling's look from another phone (Gilded, Prehistoric or bond colours; one at a time). Cosmetic. */
+function cleanColours(x: { shiny?: unknown; ancient?: unknown; alt?: unknown }): { shiny?: true; ancient?: true; alt?: true } {
+  return x.shiny === true ? { shiny: true } : x.ancient === true ? { ancient: true } : x.alt === true ? { alt: true } : {};
 }
 
 /** Drop anything malformed from creatures another phone sent (race finale, bracket matches). */
@@ -131,6 +137,10 @@ export function cleanCreatures(list: unknown): Creature[] {
         .slice(0, 4),
       held: c.held && HELD[c.held] ? c.held : undefined,
       shiny: c.shiny === true ? true : undefined,
+      ancient: c.shiny !== true && c.ancient === true ? true : undefined,
+      alt: c.shiny !== true && c.ancient !== true && c.alt === true ? true : undefined,
+      // A hatchling (a Hatchery egg on the run): its other parent and which moves came from it.
+      heir: c.heir && typeof c.heir.other === 'string' && SPECIES_BY_ID[c.heir.other] ? { other: c.heir.other, mix: Math.max(0, Math.min(255, Math.round(Number(c.heir.mix) || 0))) } : undefined,
       pendingMoves: [],
     }))
     .filter((c) => c.moves.length > 0)
@@ -220,8 +230,10 @@ function cleanTeam(team: unknown): ArenaPick[] {
       speciesId: p.speciesId,
       stage: p.stage,
       moves: (Array.isArray(p.moves) ? p.moves : []).filter((id) => typeof id === 'string' && !!MOVES[id]).slice(0, 4),
-      // Their shiny shows up shiny on your screen too.
-      ...(p.shiny === true ? { shiny: true } : {}),
+      // Their look (Gilded, Prehistoric, bond colours) shows on your screen too.
+      ...cleanColours(p),
+      // And the trait they chose (one of the line's), so the host's battle uses it.
+      ...(typeof p.trait === 'string' && traitsOf(p.speciesId).includes(p.trait) ? { trait: p.trait } : {}),
     }))
     .slice(0, 4);
 }
@@ -507,9 +519,18 @@ export function leaveDuel() {
 // During a race (not mid-duel; the battle screen handles that), a guest whose link drops keeps
 // retrying the same code, and both sides re-share their progress once reconnected.
 let retry: ReturnType<typeof setInterval> | null = null;
+/** One attempt at a time: each can take a while to give up, and they'd pile up every 3 seconds. */
+let trying = false;
 session.onStatus((s) => {
   if (s === 'lost' && session.role === 'guest' && ((duel.race && !duel.controller) || royale.active) && !retry) {
-    retry = setInterval(() => void session.connectGuest().then((ok) => ok && sendHello()), 3000);
+    retry = setInterval(() => {
+      if (trying) return;
+      trying = true;
+      void session.connectGuest().then((ok) => {
+        trying = false;
+        if (ok) sendHello();
+      });
+    }, 3000);
   }
   if (s === 'connected') {
     if (retry) clearInterval(retry);

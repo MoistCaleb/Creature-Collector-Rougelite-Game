@@ -25,9 +25,19 @@ const VOID = 0x1c1030;
 const ROYAL = 0x8a1a2a;
 const ERMINE = 0xf4f0e8;
 const FLAME = [0xffe060, 0xff9a2a, 0xff5a1a];
+/** Prehistoric gear: old bone and dried hide. */
+const BONE = 0xeee2c0;
+const BONE_DARK = 0xb8a47a;
+const HIDE = 0x9a7448;
+/** Hatching gear: eggshell, woven straw, chick yellow. */
+const SHELL = 0xfaf4e4;
+const SHELL_DARK = 0xd8ccb0;
+const STRAW = 0xc8963c;
+const STRAW_DARK = 0x8a5e22;
+const CHICK = 0xffd84a;
 
 /** The outline color for each aura (0: the usual ink). */
-export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820];
+export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820, 0xc87a20, 0xe890b8];
 
 const shade = (c: number, k: number) => {
   const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k)));
@@ -148,6 +158,18 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     for (const x of [8, 11, 15, 18]) put(x, 29, 0xf4f8ff);
     rect(8, 33, 12, 33, 0xc8d8ec);
     rect(15, 33, 19, 33, 0xc8d8ec);
+  } else if (look.shoes === 6) {
+    // Chick slippers: round yellow chicks, beaks pointing forward.
+    round(8, 30, 12, 32, CHICK, 1);
+    round(15, 30, 19, 32, CHICK, 1);
+    put(10, 29, CHICK);
+    put(17, 29, CHICK);
+    if (!back) {
+      put(9, 30, INK); // eyes
+      put(16, 30, INK);
+      put(8, 31, 0xff8a2a); // beaks
+      put(15, 31, 0xff8a2a);
+    }
   } else if (look.shoes === 2) {
     rect(9, 31, 12, 32, skin); // sandals: a strap and a sole
     rect(15, 31, 18, 32, skin);
@@ -389,6 +411,11 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
     rect(17, 19, 17, 25, STEEL_DARK);
     rect(11, 22, 16, 22, STEEL_DARK);
     rect(13, 22, 14, 22, GOLD);
+  }
+  if (!back && look.back === 12) {
+    // Egg basket straps over the shoulders.
+    rect(10, 19, 10, 25, STRAW_DARK);
+    rect(17, 19, 17, 25, STRAW_DARK);
   }
   if (!back && look.back === 4) {
     // The greatsword's strap across the chest, from the hilt's shoulder down to the other hip.
@@ -714,6 +741,43 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           return f < 0.33 ? FLAME[0] : f < 0.7 ? FLAME[1] : FLAME[2];
         }, 4, 26, 9);
         break;
+      case 10: { // bone tail: a spine of vertebrae curling up to a spiked club
+        const path = back
+          ? [[14, 27], [16, 28], [18, 28], [20, 27], [22, 26], [23, 25], [24, 24], [25, 22], [25, 21]]
+          : [[19, 28], [21, 28], [22, 27], [24, 26], [25, 25], [26, 23], [26, 22], [27, 21]];
+        path.forEach(([x, y], i) => rect(x, y, x + 1, y + 1, i % 2 ? BONE_DARK : BONE));
+        const [tx, ty] = path[path.length - 1];
+        round(tx - 1, ty - 4, tx + 2, ty - 1, BONE, 1); // the club
+        rect(tx, ty - 3, tx + 1, ty - 2, BONE_DARK);
+        put(tx - 2, ty - 3, BONE); // its spikes
+        put(tx + 3, ty - 3, BONE);
+        put(tx, ty - 5, BONE);
+        put(tx + 1, ty - 5, BONE);
+        break;
+      }
+      case 12: // egg basket: a woven basket on your back, eggs peeking out the top
+        if (back) {
+          round(8, 18, 19, 28, STRAW, 1);
+          for (let y = 19; y <= 27; y++) for (let x = 9; x <= 18; x++) if ((x + y * 2) % 4 === 0) put(x, y, STRAW_DARK);
+          rect(8, 18, 19, 18, STRAW_DARK); // the rim
+          for (const [ex, c] of [[10, SHELL], [13, 0xbfe8ff], [16, 0xffd0e0]] as const) {
+            round(ex, 14, ex + 2, 17, c, 1);
+            put(ex, 15, 0xffffff);
+          }
+        } else {
+          // From the front: the basket's woven sides behind your shoulders, eggs piled over them.
+          for (const [x0, egg] of [[2, SHELL], [21, 0xbfe8ff]] as const) {
+            round(x0, 15, x0 + 5, 22, STRAW, 1);
+            for (let y = 16; y <= 21; y++) for (let x = x0; x <= x0 + 5; x++) if ((x + y) % 2 === 0) put(x, y, STRAW_DARK);
+            rect(x0, 15, x0 + 5, 15, STRAW_DARK); // the rim
+            round(x0 + 1, 10, x0 + 4, 14, egg, 1);
+            put(x0 + 2, 11, 0xffffff);
+          }
+        }
+        break;
+      case 11: // bone wings: long finger bones with dried hide stretched between
+        wings((i, w, y) => (i === w - 1 || i % 3 === 0 ? (y % 4 === 0 ? BONE_DARK : BONE) : (i + y) % 5 === 0 ? shade(HIDE, 0.85) : HIDE), 5, 26, 9);
+        break;
       default:
         break;
     }
@@ -948,6 +1012,34 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           rect(13, Y0, 14, Y0, 0x3a6ad8);
           put(X1 - 3, Y0, 0x5ab84a);
         }
+        break;
+      case 28: { // skull helm: an old beast's skull worn as a helm, its teeth for a brim, horns up top
+        round(X0, Y0 - 4, X1, Y0 + 2, BONE, 2);
+        if (back) {
+          rect(X0 + 1, Y0 + 1, X1 - 1, Y0 + 2, BONE_DARK);
+          for (let y = Y0 - 3; y <= Y0; y += 2) put(13, y, BONE_DARK);
+        } else {
+          rect(X0 + 3, Y0 - 2, X0 + 5, Y0 - 1, INK); // eye sockets
+          rect(X1 - 5, Y0 - 2, X1 - 3, Y0 - 1, INK);
+          rect(13, Y0 - 1, 14, Y0, BONE_DARK); // nose holes
+          for (let x = X0; x <= X1; x++) put(x, Y0 + 2, x % 2 ? BONE : BONE_DARK); // teeth
+          put(X0, Y0 + 3, BONE);
+          put(X1, Y0 + 3, BONE);
+        }
+        // Short horns curving out and up from its temples.
+        for (const [x, d] of [[X0 - 1, -1], [X1 + 1, 1]] as const) {
+          put(x, Y0 - 1, BONE);
+          put(x, Y0 - 2, BONE);
+          put(x + d, Y0 - 3, BONE);
+          put(x + d, Y0 - 4, BONE_DARK);
+        }
+        break;
+      }
+      case 29: // eggshell cap: the top half of a cracked egg, worn as a hat
+        round(X0, Y0 - 4, X1, Y0 + 1, SHELL, 2);
+        for (let x = X0; x <= X1; x++) put(x, Y0 + 1 + ((x - X0) % 3 === 1 ? 1 : 0), (x - X0) % 3 === 1 ? SHELL_DARK : SHELL); // jagged edge
+        if (!back) for (const [x, y] of [[X0 + 3, Y0 - 2], [X1 - 4, Y0 - 3], [13, Y0 - 1]]) put(x, y, 0xffc0d8); // speckles
+        put(X0 + 2, Y0 - 3, 0xffffff);
         break;
       case 17: // propeller cap
         round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);

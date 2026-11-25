@@ -295,6 +295,7 @@ Proposed math:
 ## Daily runs
 
 - One run per day, the same for everyone: the same 3 starters, map (Wildlands, seeded by the date) and Heat 0.
+- **A boon to start** (2.07): every daily opens with a boon offer, seeded, so everyone with that starter sees the same three.
   Play today's or any missed day from the calendar; your best result per day is kept.
 - **Each starter comes with a passive that suits it** (your own equipped passive isn't used). Every element
   has three fitting passives, and a starter draws from its elements' lists, seeded by the date, with the
@@ -327,7 +328,11 @@ Proposed math:
   (as dailies), Heat 0, and a **twist**. Twists rotate weekly: **Element Duo** (two elements only: every
   floor, wild Hexling, trainer and starter), **Swarm** (every wild battle is two Hexlings), **Glass Cannon**
   (both sides deal +30% damage), **Lean Times** (half healing after battles, +50% coins), **Gilded Week**
-  (1 wild Hexling in 15 is Gilded). From the Daily & weekly screen. Best result and attempts per week are kept
+  (1 wild Hexling in 15 is Gilded). From 2026-11-30 (2.07) four more join, using the 2.0 systems, in the order
+  Duo, **Omen Week** (the whole run under an omen; Blood Moon, Golden Age, Wild Surge and Starfall take turns),
+  Swarm, **Wild Skies** (every battle opens in weather, as on a Storm Front floor), Glass Cannon, **Elder Week**
+  (every guardian is an Elder), Lean Times, **Boon Rush** (a rare boon offer to start, a Boon hex every floor),
+  Gilded. Weeks before that keep the five-twist rotation, so past records keep their twist. From the Daily & weekly screen. Best result and attempts per week are kept
   (`meta.weeklies`); no Gilded Hunt after a weekly. The crown on the map bar shows the twist.
 
 ## Gilded milestones
@@ -518,3 +523,69 @@ Hunt depth and the weekly twists. The bot is simple, so its numbers are for comp
 rule loss rates (the report's rule table is small and noisy).
 
 ## Open questions
+
+## Prehistoric forms (2.07)
+
+- A Hexling's line from an earlier era: still recognisably the same Hexling, but with earthier, muted
+  colours (amber where its element glow was, old ivory for bone) and different parts. Cosmetic only;
+  Gilded wins if a Hexling is both. Saved as `ancient` on the creature and `meta.ancientFound` (the
+  2.0 Fossil Site's "ancient form", renamed and redrawn).
+- **Parts** (seeded per line, the same at every stage, `prehistoricPlan` in ui/sprites.ts): wings,
+  capes, manes, fins and crystals not grown yet (bony plates or spines instead), antennae, ears,
+  crowns and antlers swapped for horns, a spiked ridge or a crest, thin and flame tails clubbed or
+  spiked, long arms shortened, a toothier mouth. Legs are only ever lost: a third of legged lines
+  have none (they slither), and some six-legged lines walk on four.
+- **Features** (two per line, `prehistoricFeatures` in ui/sprites2.ts): saw-toothed crest, bony frill
+  around the head, horns, tusks, flank stripes, shoulder spikes.
+- **Where:** about 1 wild Hexling in 250; 1 in 6 on an Ancient Ruins floor; the Fossil Site. Caught
+  ones stay Prehistoric. The Hexlidex shows the form in the corner of each stage once found.
+- **Looks:** once a line's Gilded, Prehistoric or bond colours (5 camp hearts) are unlocked, the
+  team builder (Arena picks, `ArenaPick.shiny/ancient/alt`) and the starter screen
+  (`meta.starterLook`) have a button that cycles through them, one look at a time. Starters carry
+  the look into normal runs, dailies, weeklies and stage battles; online, the other phones see it
+  (teams, finale creatures and map leads all carry it).
+- **Always obvious** (as clear as Gilded, in amber instead of gold; ui/prehistoric.ts): a foe's first
+  appearance gets its own reveal (the ground shakes, rocks fall, amber light, a "◈ PREHISTORIC! ◈"
+  banner, a roar) and yours a shorter one; it glows amber with drifting dust while it's out, its
+  attacks throw rock, and its battle panel has an amber frame, amber name and a PREHISTORIC tab.
+  Catch buttons carry a PREHISTORIC badge (and, like a Gilded one, a fainted Prehistoric foe in a
+  double battle can still be caught). Team rows and run history mark it with an amber stone icon
+  and an amber name (Gilded names are gold). Shakes and flashes follow Reduce motion.
+- **Milestones** (titles, logic/titles.ts, with gear, logic/cosmetics.ts): 3 lines Fossil Finder (rare,
+  Skull helm), 10 Paleontologist (epic, Bone tail), 25 Primeval (legendary, Bone wings), 50 Living
+  Fossil (mythic, Amber aura). The Hexlidex has a Prehistoric row (count and next milestone, tap for
+  all of them) and a ◈ Prehistoric filter (the Gilded chip cycles to it); Records counts them.
+
+## Camp while you were away (2.07)
+
+- After each finished run (not online races), each camp crew Hexling may find a gift: chance
+  25% + 10% per camp heart, worth 1 + hearts/2 (+0-1) embers, described as a trinket. Up to 6 wait
+  at camp and are opened on arrival ("While you were away").
+- Crew pairs where both have 3+ hearts keep each other company: +1 bond each per run.
+- Eggs and breeding build on this later (docs/BACKLOG.md).
+
+## Eggs and the Nest (2.07)
+
+- **One idea for every egg** (logic/nest.ts): a strength 1-5 rolled when it's laid (weights 30/25/20/15/10),
+  taking strength + 2 = 3-7 finished runs (camp Nest) or won battles (a Hatchery egg on a run). Stronger:
+  rare ◆ trait odds 35/55/75/100/100%, ★ stars 0/0/1/1/2 (never more). Otherwise one of its line's other two traits.
+- **Two parents**: the baby is one parent's line (seeded 50/50; never a legendary's). Its look
+  (`Colours` `hatch:<other>`, ui/sprites hatchSlot) takes the other parent's body colour as its accent, and one
+  part of the other parent (back, head top, tail or arms, whichever changes it most, the same at every stage)
+  painted in that parent's colour (or its most contrasting one); if nothing borrowed shows, its own biggest
+  part is painted instead. Each learnset entry (but its first move and signature) comes from one parent's
+  learnset or the other's, a coin flip per entry (`Creature.heir.mix`, `learnsetOf`): the same count at the same
+  levels. Its name blends both (`hatchName`: Emberkit × Puddlet = Emberlet).
+- **Camp Nest**: parents are camp crew lines with 3+ hearts, or one of them and a caught legendary (legendary
+  eggs are strength 3+, a gold band on the egg). One egg at a time; it ticks on every finished run but online
+  races, and hatches with an animation when you arrive at camp. The Nursery keeps up to 6 hatchlings for good
+  (release one for 2-10 embers by strength). Hatchlings can't be parents, so nothing stacks.
+- **Starting with one**: on normal runs, the starter screen's From the nest button (`startNestRun`): its line at the
+  usual starter level, with its trait, stars and moves. Not for dailies, weeklies or online play (no cosmetic either).
+- **Hatchery egg on a run**: two parents from the run's seed (any lines, yours or not), so it works online too
+  (`heir` is kept when creatures sync). Older saved eggs hatch the old way (5 wins, the rare trait).
+- **Hexlidex Hatched tab**: a card per pair hatched (Nest or Hatchery), newest first, no blank cards; legendary
+  pairs have a gold border.
+- **Hatching milestones** (titles with gear): different pairs hatched, 3 Egg Sitter (rare, Eggshell cap), 10 Nest
+  Keeper (epic, Egg basket), 25 Brood Master (legendary, Chick slippers), 60 Lineweaver (mythic, Nestling aura).
+  Shown at the top of the Hatched tab (tap for all of them).

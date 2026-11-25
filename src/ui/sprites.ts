@@ -16,7 +16,8 @@ export const SPRITE_FIT = 32 / ART_SIZE;
  * 0 empty, 1 body, 2 secondary (markings, wings, fins), 3 belly / plates, 4 eye white, 5 pupil,
  * 6 horn / bone, 7 glow, 8 claw / fang, 9 dark (brow, mouth), 10 signature (element feature), 11 signature highlight
  */
-type Px = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+/** 12: a hatchling's borrowed part, painted in its other parent's colour. */
+type Px = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 type Loco = 'biped' | 'quad' | 'insect' | 'floater' | 'slime' | 'serpent' | 'avian';
 type BodyShape = 'round' | 'pear' | 'drop' | 'oval' | 'vtorso' | 'boxy' | 'wide' | 'segmented' | 'tall' | 'hulk';
@@ -355,7 +356,36 @@ export interface FaceInfo {
 
 /** The design grid is 40 pixels; `k` > 1 draws it finer (k = 1.4: 56 pixels). `face`: filled in, and with k > 1 the face is left out for the caller to draw. */
 /** `back`: the 2.0 back view (for the player's side in battle): no face, and wings, shells, capes and tails in front of the body. */
-export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false): Px[][] {
+/**
+ * A Prehistoric form's body plan: the line before it evolved some of its parts. Decided once per
+ * line (seeded), so every stage changes the same way: wings not grown yet (bony plates or spines
+ * instead), antennae and ears swapped for horns or a spiked ridge, tails clubbed or spiked, long
+ * arms shortened, a toothier mouth, and legs only ever lost: some lines have none yet, some
+ * six-legged ones walk on four.
+ */
+export function prehistoricPlan(speciesId: string, P: StagePlan, fam: Family) {
+  const r = new Rng(hashString(`${speciesId}:prehistoric-plan`));
+  // Rolled in a fixed order, so the choices don't depend on this stage's parts.
+  const backTo: Back = r.chance(0.5) ? 'plates' : r.chance(0.6) ? 'spines' : 'none';
+  const topTo: Top = r.pick<Top>(['spikerow', 'horns-twin', 'unihorn', 'crest', 'none']);
+  const tailTo: Tail = r.chance(0.5) ? 'club' : 'spiked';
+  const shortArms = r.chance(0.6);
+  const toothy: Mouth = r.chance(0.5) ? 'fangs' : 'jaw';
+  // Legs are only ever lost, never added: a third of lines have none yet (they slither), and some
+  // six-legged lines walk on four.
+  const legs = r.next();
+  if (['batwings', 'featherwings', 'bugwings', 'cape', 'mane', 'fins', 'crystals'].includes(P.back)) P.back = backTo;
+  if (['antennae', 'ears', 'longears', 'crown', 'tuft', 'antlers'].includes(P.top)) P.top = topTo;
+  if (fam.tail === 'thin' || fam.tail === 'flame') fam.tail = tailTo;
+  if (shortArms && ['long', 'claws', 'fists', 'tentacles', 'blades'].includes(P.arms)) P.arms = 'stub';
+  if (['smile', 'none', 'beak'].includes(P.mouth) && fam.loco !== 'avian') P.mouth = toothy;
+  const legged = ['biped', 'quad', 'insect', 'avian'].includes(fam.loco);
+  if (legs < 0.34 && legged) fam.loco = 'serpent';
+  else if (legs < 0.67 && fam.loco === 'insect') fam.loco = 'quad';
+}
+
+/** A line's body plan at a stage (its family, and this stage's parts), before any Prehistoric or hatchling changes. */
+function linePlan(speciesId: string, stage: number, v2: boolean): { fam: Family; P: StagePlan } {
   const types = SPECIES_BY_ID[speciesId].types;
   const legend = v2 ? LEGEND_PLANS[speciesId] : undefined;
   const lp = v2 ? LINE_PLANS[speciesId] : undefined;
@@ -364,9 +394,6 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
   const P = { ...stagePlan(speciesId, stage, fam, types), ...(legend?.plan ?? {}), ...lineStage };
   /** 2.0 art: extra parts rolled from their own seed, so the original rolls stay as they are. */
   const r2 = new Rng(hashString(`${speciesId}:v2:${stage}`));
-  const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
-  /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
-  const sigVariant = v2 ? (lp?.sig ?? hashString(`${speciesId}:sigv`) % 3) : 0;
   if (v2 && !legend && !lp) {
     const has = (e: Element) => types.includes(e);
     if (stage > 0 && r2.chance(0.45))
@@ -383,6 +410,105 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
         cape: fam.loco === 'biped' || fam.loco === 'floater' ? (has('Shadow') || has('Spirit') || has('Light') ? 3 : 0.4) : 0,
       });
   }
+  return { fam, P };
+}
+
+/** A hatchling (2.07): bred from two lines. `other` is the parent whose line it isn't. */
+export interface Hatch {
+  other: string;
+  /** Its accent colour from the other parent. */
+  colours?: boolean;
+  /** One part (a top, back or tail) from the other parent, painted in that parent's colour. */
+  part?: boolean;
+  /** Which part, and borrowed or its own one repainted (internal: hatchSlot decides once per pair). */
+  slot?: HatchSlot;
+  strip?: boolean;
+}
+/** How a hatchling shows its other parent: that parent's part ('borrow'), or its own part in that parent's colour ('tint'). */
+export interface HatchPart {
+  slot: HatchSlot;
+  mode: 'borrow' | 'tint';
+}
+export type HatchSlot = 'top' | 'back' | 'tail' | 'arms';
+
+/** Put the other parent's part in this slot (when it has one there and it's different). */
+function applyHatchSlot(slot: HatchSlot, other: string, stage: number, P: StagePlan, fam: Family, v2: boolean, strip = false) {
+  if (strip) {
+    // Take its own part off (to find which pixels are that part).
+    if (slot === 'top') P.top = 'none';
+    if (slot === 'back') P.back = 'none';
+    if (slot === 'tail') fam.tail = 'none';
+    if (slot === 'arms') P.arms = 'none';
+    return;
+  }
+  if (!SPECIES_BY_ID[other]) return;
+  // Always the part the other parent has in its middle form, so it's the same part at every stage.
+  void stage;
+  const o = linePlan(other, 1, v2);
+  if (slot === 'top' && o.P.top !== 'none') P.top = o.P.top;
+  if (slot === 'arms' && !['serpent', 'slime', 'floater'].includes(fam.loco)) P.arms = o.P.arms;
+  if (slot === 'back' && o.P.back !== 'none') P.back = o.P.back;
+  if (slot === 'tail' && o.fam.tail !== 'none' && fam.loco !== 'serpent' && fam.loco !== 'slime') fam.tail = o.fam.tail;
+}
+
+const HATCH_SLOT_CACHE = new Map<string, HatchPart | null>();
+/** Pixels that differ between two grids (and are filled in `a`). */
+function changed(a: Px[][], b: Px[][]): number {
+  let n = 0;
+  for (let y = 0; y < a.length; y++) for (let x = 0; x < a.length; x++) if (a[y][x] && a[y][x] !== b[y][x]) n++;
+  return n;
+}
+/**
+ * How a hatchling shows its other parent, decided once per pair (on the first stage) and kept at
+ * every stage: borrow whichever of that parent's head top, back, tail or arms changes it the most;
+ * if none would show clearly, its own biggest part is painted in that parent's colour instead.
+ */
+export function hatchSlot(speciesId: string, other: string): HatchPart | null {
+  const key = `${speciesId}+${other}`;
+  if (HATCH_SLOT_CACHE.has(key)) return HATCH_SLOT_CACHE.get(key)!;
+  let best: HatchPart | null = null;
+  if (SPECIES_BY_ID[other] && other !== speciesId) {
+    const SLOTS: HatchSlot[] = ['back', 'top', 'tail', 'arms'];
+    const plain = buildGrid(speciesId, 0, 1, {}, true);
+    let most = 9; // fewer changed pixels than this doesn't read as a new part
+    for (const slot of SLOTS) {
+      const n = changed(buildGrid(speciesId, 0, 1, {}, true, false, false, { other, slot }), plain);
+      if (n > most) [most, best] = [n, { slot, mode: 'borrow' }];
+    }
+    if (!best) {
+      most = 2;
+      for (const slot of SLOTS) {
+        const n = changed(plain, buildGrid(speciesId, 0, 1, {}, true, false, false, { other, slot, strip: true }));
+        if (n > most) [most, best] = [n, { slot, mode: 'tint' }];
+      }
+    }
+  }
+  HATCH_SLOT_CACHE.set(key, best);
+  return best;
+}
+
+/** `pre`: its Prehistoric form (2.07): the same line from an earlier era, some parts lost or swapped (see prehistoricPlan). */
+export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partial<FaceInfo>, v2 = false, back = false, pre = false, mix?: Hatch): Px[][] {
+  const types = SPECIES_BY_ID[speciesId].types;
+  const lp = v2 ? LINE_PLANS[speciesId] : undefined;
+  const { fam, P } = linePlan(speciesId, stage, v2);
+  const fr2 = new Rng(hashString(`${speciesId}:v2fam`));
+  /** 2.0: where the line shows its element: 0 on the head, 1 on the shoulders (swapped for shoulder elements), 2 only in the tail. */
+  const sigVariant = v2 ? (lp?.sig ?? hashString(`${speciesId}:sigv`) % 3) : 0;
+  if (pre) prehistoricPlan(speciesId, P, fam);
+  // A hatchling's borrowed part (hatchSlot picks which).
+  const hp = mix?.slot ? null : mix?.part ? hatchSlot(speciesId, mix.other) : null;
+  if (mix?.slot) applyHatchSlot(mix.slot, mix.other, stage, P, fam, v2, mix.strip);
+  else if (mix && hp?.mode === 'borrow') applyHatchSlot(hp.slot, mix.other, stage, P, fam, v2);
+  /** The grid, with a hatchling's part marked (12: painted in its other parent's colour). */
+  const finish = (): Px[][] => {
+    if (mix && hp) {
+      // Borrowed: every pixel that differs from how it looks without; its own part: from it taken off.
+      const ref = hp.mode === 'borrow' ? buildGrid(speciesId, stage, k, {}, v2, back, pre) : buildGrid(speciesId, stage, k, {}, v2, back, pre, { other: mix.other, slot: hp.slot, strip: true });
+      for (let y = 0; y < g.length; y++) for (let x = 0; x < g.length; x++) if (g[y][x] && g[y][x] !== ref[y][x] && ![4, 5, 7, 8].includes(g[y][x])) g[y][x] = 12;
+    }
+    return g;
+  };
   const S = 40;
   const N = Math.round(S * k);
   const g: Px[][] = Array.from({ length: N }, () => Array<Px>(N).fill(0));
@@ -829,7 +955,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
       cx, eyeY, spread, faceR, my: Math.round(faceY + faceR * 0.55), eyes: fam.eyes, visor, hollow, mouth: P.mouth, stage,
       headTop, hy, by, rx, ry, shoulderX, shoulderY, hrx: merged ? rx : H.rx, loco: L, back: P.back, ground,
     } satisfies FaceInfo);
-    if (k > 1) return g;
+    if (k > 1) return finish();
   }
   const eyeAt = (x: number, y: number) => {
     if (hollow) {
@@ -915,7 +1041,7 @@ export function buildGrid(speciesId: string, stage: number, k = 1, face?: Partia
     case 'none':
       break;
   }
-  return g;
+  return finish();
 }
 
 /** 2.0 tails: tapered and curved, with a tip that shows the element. */
@@ -1291,35 +1417,45 @@ export function shinyHue(speciesId: string): number {
 /**
  * A sprite's colours: its own, Gilded (`true`), or its bond colours (`'alt'`, camp bond heart 5).
  */
-export type Colours = boolean | 'alt' | 'ancient';
+/** A look: Gilded (true), bond colours, Prehistoric, or a hatchling's (`hatch:<other parent>`, 2.07). */
+export type Colours = boolean | 'alt' | 'ancient' | `hatch:${string}`;
+/** The other parent of a hatchling look, or null. */
+export const hatchOf = (c: Colours): string | null => (typeof c === 'string' && c.startsWith('hatch:') ? c.slice(6) : null);
 
 /** Bond colours: turned the other way round the wheel from Gilded, so the two never match. */
 export function altHue(speciesId: string): number {
   return (shinyHue(speciesId) + 120) % 360;
 }
 
-/** A Hexling's colours: Gilded first, then an ancient form's, then its bond colours. */
-export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean }): Colours => (c.shiny ? true : c.ancient ? 'ancient' : c.alt ? 'alt' : false);
+/** A Hexling's colours: Gilded first, then a Prehistoric form's, then its bond colours. */
+export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean; heir?: { other: string } }): Colours =>
+  c.shiny ? true : c.ancient ? 'ancient' : c.heir ? `hatch:${c.heir.other}` : c.alt ? 'alt' : false;
 
-/** Ancient forms (Fossil Site): every colour turned to amber stone, keeping its light and dark. */
-export function fossilise(col: number): number {
+/**
+ * Prehistoric forms: its colours from an earlier era. Muted and earthier (nudged toward ochre),
+ * keeping their light and dark, so it still reads as the same Hexling.
+ */
+export function primal(col: number): number {
   const r = (col >> 16) & 255;
   const g = (col >> 8) & 255;
   const b = col & 255;
   const lum = 0.3 * r + 0.59 * g + 0.11 * b;
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  return (c(lum * 1.08 + 28) << 16) | (c(lum * 0.86 + 14) << 8) | c(lum * 0.58 + 4);
+  // A third of the colour drained toward its own grey, then a little earth (ochre brown) mixed in.
+  const EARTH = [0x9a, 0x74, 0x48];
+  const ch = (v: number, e: number) => Math.max(0, Math.min(255, Math.round(((v * 0.65 + lum * 0.35) * 0.78 + e * 0.22) * 0.94)));
+  return (ch(r, EARTH[0]) << 16) | (ch(g, EARTH[1]) << 8) | ch(b, EARTH[2]);
 }
 
 function paletteFor(speciesId: string, stage: number, shiny: Colours = false) {
   const p = basePalette(speciesId, stage);
-  if (!shiny) return p;
+  if (!shiny || hatchOf(shiny)) return p;
   if (shiny === 'ancient') {
-    // Amber stone, with a teal glow where its signature colour was.
-    for (const k of [1, 2, 3, 9]) p.pal[k] = fossilise(p.pal[k]);
-    p.pal[10] = 0x3fc7b4;
-    p.pal[11] = 0x9ff5e6;
-    return { pal: p.pal, outline: fossilise(p.outline), shadow: fossilise(p.shadow), light: fossilise(p.light) };
+    // Prehistoric: earthy colours, amber where its signature glow was, old ivory for bone.
+    for (const k of [1, 2, 3, 9]) p.pal[k] = primal(p.pal[k]);
+    p.pal[6] = 0xe6d8b0;
+    p.pal[10] = 0xe08a2e;
+    p.pal[11] = 0xffc870;
+    return { pal: p.pal, outline: primal(p.outline), shadow: primal(p.shadow), light: primal(p.light) };
   }
   const deg = shiny === 'alt' ? altHue(speciesId) : shinyHue(speciesId);
   for (const k of [1, 2, 3, 9, 10, 11]) p.pal[k] = hueShift(p.pal[k], deg);
@@ -1384,7 +1520,8 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
 
 /** `back`: the view from behind (your side in battle). */
 export function creatureTextureKey(speciesId: string, stage: number, shiny: Colours = false, back = false): string {
-  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}${back ? '-b' : ''}`;
+  const h = hatchOf(shiny);
+  return `cr-${speciesId}-${stage}${h ? `-h${h}` : shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}${back ? '-b' : ''}`;
 }
 
 /**

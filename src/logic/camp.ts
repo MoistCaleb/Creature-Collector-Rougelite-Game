@@ -1,4 +1,5 @@
 import { LEGEND_CHANCE, LEGENDS } from '../data/legends';
+import { tickNest } from './nest';
 import { MAP_BY_ID } from '../data/maps';
 import { SPECIES_BY_ID } from '../data/species';
 import { traitsFound } from './dex';
@@ -41,7 +42,24 @@ export interface CampState {
   cared: Record<string, string[]>;
   /** Workshop upgrades bought (2.0, see logic/workshop). */
   workshop?: import('../data/workshop').WorkshopId[];
+  /** Gifts your camp crew found while you were on a run, waiting to be opened (2.07). */
+  gifts?: CampGift[];
+  /** The Nest (2.07): the egg in it, the hatchlings in the Nursery, and every pair hatched. See logic/nest. */
+  nest?: import('./nest').NestState;
 }
+
+/** Something a crew Hexling found while you were away. */
+export interface CampGift {
+  speciesId: string;
+  embers: number;
+  /** What it found, for the message ("a shiny pebble"). */
+  what: string;
+}
+
+/** The trinkets gifts are described as (embers either way). */
+export const GIFT_THINGS = ['a shiny pebble', 'a warm ember stone', 'a feather', 'a pretty shell', 'a lost coin', 'a smooth crystal', 'a bundle of herbs', 'an old bone'];
+/** Hearts both crew Hexlings need to keep each other company. */
+export const PAIR_HEARTS = 3;
 
 export const CREW_MAX = 3;
 
@@ -252,7 +270,7 @@ export const BOND_HEART = { startBond: 3, trait: 4, max: 5 } as const;
 export const CAMP_START_BOND = 3;
 /** Heart 5: extra starting levels as your starter. */
 export const BOND_START_LEVELS = 2;
-/** Bond points from a run (see payRunBond) and from camp (the first care after each run). */
+/** Bond points from a run (see payRunBond) and from camp (each care after each run). */
 export const BOND_POINTS = { care: 1, finished: 2, won: 4, mvp: 3, guardian: 1 } as const;
 
 /** The bond scale saved points are on. */
@@ -314,16 +332,14 @@ export function addBond(m: Meta, speciesId: string, points: number): { before: n
 }
 
 /**
- * Spend time with a Hexling (each kind once between runs; the first each time builds your bond).
+ * Spend time with a Hexling (each kind once between runs, and each one builds your bond).
  * Returns the hearts gained (0 or 1), or null if that was already done since your last run.
  */
 export function care(m: Meta, speciesId: string, what: Care): number | null {
   const c = camp(m);
   const done = (c.cared[speciesId] ??= []);
   if (done.includes(what)) return null;
-  const first = !done.length;
   done.push(what);
-  if (!first) return 0;
   const r = addBond(m, speciesId, BOND_POINTS.care);
   return r.after - r.before;
 }
@@ -437,7 +453,51 @@ export function payRunBond(meta: Meta, run: Run, won: boolean): { speciesId: str
   // Every finished run (losses too, not online races) makes camp care fresh again.
   if (!run.race) camp(meta).cared = {};
   for (const o of out) Object.assign(o, addBond(meta, o.speciesId, o.points));
+  if (!run.race) {
+    campWhileAway(meta, run.seed);
+    tickNest(meta);
+  }
   return out;
+}
+
+/**
+ * While you were on a run, at camp: each crew Hexling may find a gift (more often, and bigger, the
+ * closer you are), and crew pairs who are both close (PAIR_HEARTS) keep each other company (+1 bond each).
+ * Returns the pairs, for the camp to show.
+ */
+export function campWhileAway(meta: Meta, seed: number): [string, string][] {
+  const c = camp(meta);
+  const crew = campCrew(meta).map((x) => x.speciesId);
+  const rng = new Rng(hashString(`${seed}:camp-away`));
+  const gifts = (c.gifts ??= []);
+  for (const id of crew) {
+    const h = campHearts(meta, id);
+    if (gifts.length < 6 && rng.chance(0.25 + 0.1 * h)) gifts.push({ speciesId: id, embers: 1 + Math.floor(h / 2) + rng.int(0, 1), what: rng.pick(GIFT_THINGS) });
+  }
+  const pairs = campPairs(meta);
+  for (const [a, b] of pairs) {
+    addBond(meta, a, 1);
+    addBond(meta, b, 1);
+  }
+  return pairs;
+}
+
+/** Crew Hexlings close enough to keep each other company. */
+export function campPairs(meta: Meta): [string, string][] {
+  const close = campCrew(meta).map((x) => x.speciesId).filter((id) => campHearts(meta, id) >= PAIR_HEARTS);
+  const out: [string, string][] = [];
+  for (let i = 0; i + 1 < close.length; i += 2) out.push([close[i], close[i + 1]]);
+  return out;
+}
+
+/** Open the gifts waiting at camp: their embers are yours. Returns them (empty if none). */
+export function openGifts(meta: Meta): CampGift[] {
+  const c = camp(meta);
+  const g = c.gifts ?? [];
+  if (!g.length) return [];
+  c.gifts = [];
+  c.embers += g.reduce((n, x) => n + x.embers, 0);
+  return g;
 }
 
 /** A guardian beaten: each Hexling standing on the team helped. */

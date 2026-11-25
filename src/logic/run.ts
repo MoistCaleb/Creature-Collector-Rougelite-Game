@@ -8,6 +8,10 @@ import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
+import { SURPRISES } from '../data/surprises';
+import { noteAncient } from './surprises';
+import { hatchlingCreature, type Hatchling } from './nest';
+import { pickLooks, type PickLook } from './arena';
 import { dojoOn, dojoResult, elderHere, floorSurprise, lastWinTeam, tickEgg, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
@@ -47,7 +51,7 @@ import { earnedTitles } from './titles';
 import { itemId, unlockedExtras } from './cosmetics';
 import { checkAchievements, emptyStats, track, type MetaStats } from './achievements';
 import { freshWelcome, noteWelcomeBack } from './welcomeBack';
-import { applyCampBond, bondStarterLevels, camp, CAMP_START_BOND, noteGuardianBond, type PrepId } from './camp';
+import { applyCampBond, bondColours, bondStarterLevels, camp, CAMP_START_BOND, noteGuardianBond, type PrepId } from './camp';
 import { lines, noteCatch, noteRunRecord } from './dexInfo';
 import { emptyDex, type Dex } from './dex';
 import type { Shop } from './shop';
@@ -205,6 +209,8 @@ export interface Meta {
   shinyOwned?: string[];
   /** Shiny-unlocked species you've chosen to start runs with in their normal colours. */
   shinyOff?: string[];
+  /** The look each starter line starts runs in, once chosen on the starter screen (2.07). */
+  starterLook?: Record<string, PickLook>;
   /** Shiny Hexlings: species ids ever seen shiny, and how many you've caught. */
   shinySeen?: string[];
   shinyCaught?: number;
@@ -265,7 +271,7 @@ export interface RunRecord {
   battlesWon: number;
   caught: number;
   /** Who finished the run (survivors), up to 7. */
-  team: { speciesId: string; stage: number; level: number; shiny?: boolean }[];
+  team: { speciesId: string; stage: number; level: number; shiny?: boolean; ancient?: boolean; alt?: boolean }[];
   mvp?: { speciesId: string; stage: number; name: string; dealt: number };
   endedBy?: string;
   /** Active play time (ms). */
@@ -303,7 +309,7 @@ export function recordRun(run: Run, won: boolean) {
     caught: run.log.caught,
     team: allCreatures(run)
       .slice(0, 7)
-      .map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, ...(c.shiny ? { shiny: true } : {}) })),
+      .map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, ...(c.shiny ? { shiny: true } : c.ancient ? { ancient: true } : c.alt ? { alt: true } : {}) })),
     mvp: mvp && mvp.dealt > 0 ? { speciesId: mvp.speciesId, stage: mvp.stage, name: mvp.name, dealt: mvp.dealt } : undefined,
     endedBy: won ? undefined : run.log.endedBy?.label,
     ...(run.playMs ? { time: run.playMs } : {}),
@@ -336,6 +342,32 @@ export function countQuickResult(meta: Meta, won: boolean) {
 /** Does this species start runs shiny? (Caught shiny in any form, unless you've switched it off.) */
 export function starterShiny(meta: Meta, speciesId: string): boolean {
   return (meta.shinyOwned ?? []).includes(speciesId) && !(meta.shinyOff ?? []).includes(speciesId);
+}
+
+/**
+ * The look a starter starts in: the one picked on the starter screen if it's still unlocked,
+ * else Gilded (if owned and not switched off), else its bond colours (if on at camp), else usual.
+ */
+export function starterLook(meta: Meta, speciesId: string): PickLook {
+  const chosen = meta.starterLook?.[speciesId];
+  if (chosen && pickLooks(meta, speciesId).includes(chosen)) return chosen;
+  return starterShiny(meta, speciesId) ? 'gilded' : bondColours(meta, speciesId) ? 'bond' : 'normal';
+}
+
+/** Choose the look a starter starts runs in. */
+export function setStarterLook(meta: Meta, speciesId: string, look: PickLook) {
+  (meta.starterLook ??= {})[speciesId] = look;
+  saveMeta(meta);
+}
+
+/** A creature in one look (one at a time). */
+export function applyLook(c: Creature, look: PickLook) {
+  delete c.shiny;
+  delete c.ancient;
+  delete c.alt;
+  if (look === 'gilded') c.shiny = true;
+  else if (look === 'prehistoric') c.ancient = true;
+  else if (look === 'bond') c.alt = true;
 }
 
 /** Switch a shiny-unlocked starter between its shiny and normal colours. */
@@ -405,11 +437,25 @@ export function loadMeta(): Meta {
     newAchievements: [],
     welcome: freshWelcome(),
   };
+  let raw: string | null = null;
+  let saved: Partial<Meta> & Record<string, any>;
+  let meta: Meta;
   try {
-    const raw = storage.getItem(META_KEY);
+    raw = storage.getItem(META_KEY);
     if (!raw) return fallback;
-    const saved = JSON.parse(raw);
-    const meta: Meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
+    saved = JSON.parse(raw);
+    meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
+  } catch {
+    // Unreadable: keep a copy before the fresh save overwrites it, so the progress can still be recovered.
+    try {
+      if (raw) storage.setItem(`${META_KEY}-unreadable`, raw);
+    } catch {
+      /* storage unavailable */
+    }
+    return fallback;
+  }
+  // A step below failing must not lose the save (it would be overwritten with a fresh one): keep what loaded.
+  try {
     if (!saved.stats) meta.stats.caught = meta.dex.caught.length; // older saves: count known catches
     // Saves from before shinies were tracked per species: count the ones seen shiny as caught.
     if (!saved.shinyOwned && (saved.shinyCaught ?? 0) > 0) meta.shinyOwned = [...(saved.shinySeen ?? [])];
@@ -427,10 +473,10 @@ export function loadMeta(): Meta {
       delete meta.welcome;
       noteWelcomeBack(meta);
     }
-    return meta;
-  } catch {
-    return fallback;
+  } catch (e) {
+    console.warn('Couldn’t update the save', e);
   }
+  return meta;
 }
 
 /** Set the run W/L and the win streak from your recent runs (newest first in history). */
@@ -632,6 +678,16 @@ export interface ActiveBattle {
 }
 
 /** Three starter choices: the favorite (if unlocked) plus random others from the unlocked pool. */
+/**
+ * Start a normal run with a hatchling from the Nest's Nursery (2.07): its line as the starter, with
+ * its rolled trait, egg stars and moves from both parents. It stays in the Nursery for later runs.
+ */
+export function startNestRun(meta: Meta, h: Hatchling, seed = Date.now(), mapId = 'wildlands', quick = false): Run {
+  const run = startRun(meta, h.speciesId, seed, mapId, undefined, false, undefined, undefined, quick);
+  if (run.team[0]) hatchlingCreature(h, run.team[0]);
+  return run;
+}
+
 export function rollStarterChoices(meta: Meta, rng: Rng): string[] {
   const fav = meta.favorite && meta.unlockedStarters.includes(meta.favorite) ? meta.favorite : null;
   const others = rng.shuffle(meta.unlockedStarters.filter((id) => id !== fav));
@@ -732,7 +788,7 @@ function suitedPassives(starters: string[], salt: string): Record<string, Passiv
 // ---------------------------------------------------------------- weekly challenge
 
 /** A weekly challenge's twist: one rule that changes the whole run. */
-export type TwistId = 'duo' | 'swarm' | 'glass' | 'lean' | 'gilded';
+export type TwistId = 'duo' | 'swarm' | 'glass' | 'lean' | 'gilded' | 'omen' | 'skies' | 'elders' | 'boonrush';
 
 export const TWISTS: Record<TwistId, { name: string; desc: string }> = {
   duo: { name: 'Element Duo', desc: 'Only two elements: every floor, wild Hexling, trainer and starter is one of them.' },
@@ -740,6 +796,10 @@ export const TWISTS: Record<TwistId, { name: string; desc: string }> = {
   glass: { name: 'Glass Cannon', desc: 'Every Hexling, yours and theirs, deals 30% more damage.' },
   lean: { name: 'Lean Times', desc: 'Half the healing after battles, but 50% more coins.' },
   gilded: { name: 'Gilded Week', desc: 'One wild Hexling in 15 is Gilded. Catch them while you can!' },
+  omen: { name: 'Omen Week', desc: 'The whole run is under an omen, the same one for everyone this week.' },
+  skies: { name: 'Wild Skies', desc: 'Every battle opens in wild weather: rain, sun, hail or dust, one after another.' },
+  elders: { name: 'Elder Week', desc: 'Every guardian is an Elder: older, tougher, with an extra rule. Each one beaten offers a mythic boon.' },
+  boonrush: { name: 'Boon Rush', desc: 'Start with a rare boon, and every floor has a Boon hex.' },
 };
 /** One line about a week's twist (Element Duo names its elements). */
 export function twistShort(info: WeeklyInfo): string {
@@ -752,6 +812,14 @@ export function twistShort(info: WeeklyInfo): string {
       return 'Every Hexling deals +30% damage';
     case 'lean':
       return 'Half healing after battles · +50% coins';
+    case 'omen':
+      return `Omen: ${info.omen ? (SURPRISES[info.omen]?.name ?? info.omen) : '?'} all run`;
+    case 'skies':
+      return 'Every battle opens in wild weather';
+    case 'elders':
+      return 'Every guardian is an Elder';
+    case 'boonrush':
+      return 'A rare boon to start · a Boon hex every floor';
     default:
       return 'One wild Hexling in 15 is Gilded';
   }
@@ -760,8 +828,14 @@ export function twistShort(info: WeeklyInfo): string {
 /** Glass Cannon: damage multiplier for both sides. */
 export const GLASS_MULT = 1.3;
 
-/** The twists in the order the weeks go through them. */
-export const TWIST_ORDER: TwistId[] = ['duo', 'swarm', 'glass', 'lean', 'gilded'];
+/** The twists in the order the weeks go through them (from TWISTS_V2_FROM; before it, TWIST_ORDER_V1). */
+export const TWIST_ORDER: TwistId[] = ['duo', 'omen', 'swarm', 'skies', 'glass', 'elders', 'lean', 'boonrush', 'gilded'];
+/** The first five twists, for weeks before 2.07's new ones (so past weeks keep the twist they had). */
+const TWIST_ORDER_V1: TwistId[] = ['duo', 'swarm', 'glass', 'lean', 'gilded'];
+/** The first week of the longer rotation (a Monday). */
+export const TWISTS_V2_FROM = '2026-11-30';
+/** The omens Omen Week can bring. */
+const WEEKLY_OMENS = ['bloodmoon', 'goldenage', 'wildsurge', 'starfall'];
 
 const DAY = 86400000;
 
@@ -781,13 +855,17 @@ export interface WeeklyInfo {
   mapId: string;
   /** Element Duo: the two elements. */
   duo?: [Element, Element];
+  /** Omen Week: the omen. */
+  omen?: string;
   starters: string[];
   passives: Record<string, PassiveId>;
 }
 
 export function weeklyInfo(week: string): WeeklyInfo {
-  const index = Math.floor(Date.parse(`${week}T00:00:00Z`) / (7 * DAY));
-  const twist = TWIST_ORDER[((index % TWIST_ORDER.length) + TWIST_ORDER.length) % TWIST_ORDER.length];
+  const v2 = week >= TWISTS_V2_FROM;
+  const order = v2 ? TWIST_ORDER : TWIST_ORDER_V1;
+  const index = Math.floor((Date.parse(`${week}T00:00:00Z`) - (v2 ? Date.parse(`${TWISTS_V2_FROM}T00:00:00Z`) : 0)) / (7 * DAY));
+  const twist = order[((index % order.length) + order.length) % order.length];
   const rng = new Rng(hashString(`weekly-setup:${week}`));
   let duo: [Element, Element] | undefined;
   let pool = SPECIES;
@@ -800,7 +878,9 @@ export function weeklyInfo(week: string): WeeklyInfo {
     mapId = 'wildlands';
   }
   const starters = rng.shuffle(pool.map((sp) => sp.id)).slice(0, 3);
-  return { week, seed: hashString(`weekly:${week}`), twist, mapId, duo, starters, passives: suitedPassives(starters, `weekly-passive:${week}`) };
+  // Omen Week: the omens take turns, so a month of them shows each one.
+  const omen = twist === 'omen' ? WEEKLY_OMENS[Math.floor(index / order.length) % WEEKLY_OMENS.length] : undefined;
+  return { week, seed: hashString(`weekly:${week}`), twist, mapId, duo, ...(omen ? { omen } : {}), starters, passives: suitedPassives(starters, `weekly-passive:${week}`) };
 }
 
 /** The record for one week's challenge (created empty if it hasn't been played). */
@@ -837,7 +917,12 @@ export function startWeekly(meta: Meta, week: string, starterId: string): Run {
     run.map = generateFloor(0, run.biomes[0], run.rng.int(0, 2 ** 31));
     run.currentId = run.map.startId;
     run.visited = [run.map.startId];
+    // The first floor's surprises were rolled on the old map: roll them again on this one.
+    if (run.surprises) run.surprises.floors = {};
+    rollFloorSurprises(run);
   }
+  // Boon Rush: a rare boon offer before the first hex.
+  if (info.twist === 'boonrush') openOffer(run, 'weekly-start', 'rare');
   return run;
 }
 
@@ -949,6 +1034,8 @@ export function startRun(
   if (!daily && !weekly) meta.lastStarter = starterId;
   camp(meta);
   applyCampBond(run, starter);
+  // The look chosen on the starter screen (Gilded, Prehistoric, bond colours or usual).
+  applyLook(starter, starterLook(meta, starterId));
   makeRival(run);
   applyFloorCap(run);
   // Rare surprises: the run's omen and the first floor's (seeded runs can't be forced).
@@ -956,6 +1043,8 @@ export function startRun(
   applyWorkshopStart(run);
   // A quick run gets to its build fast: a boon offer before the first step.
   if (quick) queueOffer(run, 'quick');
+  // A daily run starts with a boon offer (seeded: the same for everyone with that starter).
+  if (daily) queueOffer(run, 'daily-start');
   return run;
 }
 
@@ -1586,6 +1675,11 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
     const charm = (1 + teamTrait(run.team, 'gilded') * 0.5) * (fsur.floor === 'grove' ? 5 : 1) * glint;
     if (odds && (run.hunt ? roll % 100000 < (100000 * charm) / odds : roll % Math.max(1, Math.round(odds / charm)) === 0)) c.shiny = true;
     if (goldTrainer) c.shiny = true;
+    // About 1 wild Hexling in 250 is a Prehistoric form; on Ancient Ruins floors, 1 in 6. A hash too.
+    if (kind === 'battle' && !c.shiny) {
+      const preIn = fsur.floor === 'ruins' ? PREHISTORIC_RUINS_IN : PREHISTORIC_IN;
+      if (hashString(`${run.seed}:prehistoric:${run.hunt?.depth ?? 0}:${run.log.fights}:${i}`) % preIn === 0) c.ancient = true;
+    }
     c.hp = stats(c).hp;
     enemies.push(c);
   }
@@ -1609,6 +1703,9 @@ export function makeEncounter(run: Run, node: MapNode): Creature[] {
 
 /** One wild Hexling in this many is shiny. */
 export const SHINY_IN = 200;
+/** One wild Hexling in this many is a Prehistoric form (cosmetic), and on an Ancient Ruins floor. */
+export const PREHISTORIC_IN = 250;
+export const PREHISTORIC_RUINS_IN = 6;
 /** Gilded Week (a weekly twist): one wild Hexling in this many is shiny. */
 export const GILDED_WEEK_IN = 15;
 /** Shiny Hunting: one in this many wild Hexlings, and trainers' / guardians' Hexlings, is shiny. */
@@ -1926,6 +2023,11 @@ export function catchCreature(
   c.nature = enemy.nature;
   c.trait = enemy.trait;
   c.hp = Math.max(1, Math.round(stats(c).hp * BALANCE.catchHp));
+  // A Prehistoric form stays one (and goes in the Hexlidex).
+  if (enemy.ancient) {
+    c.ancient = true;
+    noteAncient(run.meta, c.speciesId);
+  }
   if (enemy.shiny) {
     c.shiny = true;
     noteShinyOwned(run.meta, c.speciesId);

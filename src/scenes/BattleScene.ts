@@ -17,6 +17,7 @@ import { tip, tipDone } from '../ui/tips';
 import { trainerCutIn } from '../ui/cutin';
 import { bossRuleCard, RULE_TAGS } from '../ui/bossCard';
 import { shinyAttackStart, shinyAura, shinyImpact, shinyReveal, type ShinyAura } from '../ui/shiny';
+import { AMBER, AMBER_TEXT, prehistoricAttackStart, prehistoricAura, prehistoricImpact, prehistoricReveal } from '../ui/prehistoric';
 import { openSettings } from '../ui/settings';
 import { openElementChart } from '../ui/elementChart';
 import Phaser from 'phaser';
@@ -119,6 +120,7 @@ import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
 import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, placeAbove, placeBelow, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
+import { ensureElementIcon } from '../ui/elementIcons';
 
 interface SidePanel {
   root: Phaser.GameObjects.Container;
@@ -129,9 +131,10 @@ interface SidePanel {
   status: Phaser.GameObjects.Container;
   /** Held item icon, just after the name. */
   held: Phaser.GameObjects.Image;
-  /** The panel's frame (gold for a shiny) and the SHINY tab on its bottom edge. */
+  /** The panel's frame (gold for a shiny, amber for a Prehistoric one) and the tab on its bottom edge. */
   frame: Phaser.GameObjects.Rectangle;
   shiny: Phaser.GameObjects.Container;
+  ancient: Phaser.GameObjects.Container;
 }
 
 /**
@@ -269,6 +272,11 @@ export class BattleScene extends Phaser.Scene {
     // "already wrapped up" flag, queued next step or fast-forward.
     this.watchEnded = false;
     this.duelNext = null;
+    // The scene's clock and objects were cleared on shutdown: drop what pointed at them, or auto-battle
+    // waits on a timer that never fires and callouts stack above ribbons that are gone.
+    this.autoTimer = null;
+    this.callouts = { player: 0, enemy: 0 };
+    this.auras = {};
     this.weatherShown = null;
     this.weatherFx = [];
     this.skySynced = false;
@@ -421,7 +429,7 @@ export class BattleScene extends Phaser.Scene {
       : legend
         ? `The legendary ${creatureName(this.enemies[0])} appeared! It won't stay long...`
         : this.kind === 'battle'
-        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦GILDED✦' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
+        ? `A ${this.enemies.map((e) => `${e.shiny ? '✦GILDED✦' : e.ancient ? '◈PREHISTORIC◈' : 'wild'} ${creatureName(e)}`).join(' and a ')} appeared!`
         : this.kind === 'elite'
           ? `${trainer} challenges ${state.meta.duelName ? myName(state.meta) : 'you'}!`
           : `${boss!.name}, ${boss!.title}, blocks your way!`;
@@ -990,7 +998,7 @@ export class BattleScene extends Phaser.Scene {
     const c = this.battle.e.c;
     const el = creatureTypes(c)[0];
     const voice = () => cry(c.speciesId, c.stage);
-    const shine = (p: Promise<unknown>) => (c.shiny ? p.then(() => this.shinyEntrance('enemy', c)) : p);
+    const shine = (p: Promise<unknown>) => (c.shiny || c.ancient ? p.then(() => this.shinyEntrance('enemy', c)) : p);
     if (this.kind === 'battle') return shine(emergeFrom(this, this.enemySprite, el, voice));
     this.order('enemy');
     return shine(releaseFromHex(this, this.enemySprite, ELEMENT_COLORS[el], voice));
@@ -1000,7 +1008,7 @@ export class BattleScene extends Phaser.Scene {
     const c = this.battle.p.c;
     this.order('player');
     const p = releaseFromHex(this, this.playerSprite, ELEMENT_COLORS[creatureTypes(c)[0]], () => cry(c.speciesId, c.stage));
-    return c.shiny ? p.then(() => this.shinyEntrance('player', c)) : p;
+    return c.shiny || c.ancient ? p.then(() => this.shinyEntrance('player', c)) : p;
   }
 
   // ------------------------------------------------------------ shiny Hexlings
@@ -1014,6 +1022,15 @@ export class BattleScene extends Phaser.Scene {
    */
   private async shinyEntrance(side: 'player' | 'enemy', c: Creature) {
     const sprite = this.spriteOf(side);
+    if (!c.shiny) {
+      // Prehistoric: the ground shakes and rocks fall (its own reveal, as big as a Gilded one's).
+      const first = side === 'enemy' && !this.revealed.has(c.uid);
+      if (side === 'enemy') this.revealed.add(c.uid);
+      if (first) this.msg.setText(`The ground shakes! A PREHISTORIC ${creatureName(c)}, from an age long gone!`);
+      await prehistoricReveal(this, sprite, first, () => this.restoreOrder(side));
+      this.startAura(side);
+      return;
+    }
     if (side === 'enemy') {
       const first = !this.revealed.has(c.uid);
       this.revealed.add(c.uid);
@@ -1030,6 +1047,7 @@ export class BattleScene extends Phaser.Scene {
     const c = side === 'player' ? this.shownPlayer : this.shownEnemy;
     const s = this.spriteOf(side);
     if (c?.shiny && s.visible && s.alpha > 0.5) this.auras[side] = shinyAura(this, s);
+    else if (c?.ancient && s.visible && s.alpha > 0.5) this.auras[side] = prehistoricAura(this, s);
   }
 
   private clearAura(side: 'player' | 'enemy') {
@@ -1297,7 +1315,13 @@ export class BattleScene extends Phaser.Scene {
     shiny.add(text(this, 0, 0, '✦ GILDED ✦', 13, '#4a2a00', { fontStyle: 'bold' }).setOrigin(0.5));
     root.add(shiny);
     this.tweens.add({ targets: shiny, scale: 1.08, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
-    return { root, name, chips, bar, status, held, frame, shiny };
+    // PREHISTORIC tab, the same place.
+    const ancient = this.add.container(135, 74).setVisible(false);
+    ancient.add(this.add.rectangle(0, 0, 150, 22, AMBER).setStrokeStyle(2, 0x3a2008));
+    ancient.add(text(this, 0, 0, '◈ PREHISTORIC ◈', 13, '#2a1404', { fontStyle: 'bold' }).setOrigin(0.5));
+    root.add(ancient);
+    this.tweens.add({ targets: ancient, scale: 1.06, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+    return { root, name, chips, bar, status, held, frame, shiny, ancient };
   }
 
   private setStatus(p: SidePanel, id: StatusId | null) {
@@ -1329,9 +1353,10 @@ export class BattleScene extends Phaser.Scene {
     // Also fits the name line (see fitName).
     this.setStatus(p, c.status?.id ?? null);
     // A shiny's panel is gold, with a SHINY tab.
-    p.name.setColor(c.shiny ? '#ffd86b' : COLORS.text);
-    p.frame.setStrokeStyle(c.shiny ? 3 : 2, c.shiny ? 0xffd86b : COLORS.stroke);
+    p.name.setColor(c.shiny ? '#ffd86b' : c.ancient ? AMBER_TEXT : COLORS.text);
+    p.frame.setStrokeStyle(c.shiny || c.ancient ? 3 : 2, c.shiny ? 0xffd86b : c.ancient ? AMBER : COLORS.stroke);
     p.shiny.setVisible(!!c.shiny);
+    p.ancient.setVisible(!c.shiny && !!c.ancient);
     p.chips.removeAll(true);
     const t = creatureTypes(c);
     (t[0] === t[1] ? [t[0]] : t).forEach((el, i) => p.chips.add(typeChip(this, i * 64, 0, el, false)));
@@ -1347,7 +1372,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.shownEnemy !== e) this.clearAura('enemy');
     this.shownEnemy = e;
     dex.creature(e);
-    this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage, e.shiny)).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
+    this.enemySprite.setTexture(ensureCreatureTexture(this, e.speciesId, e.stage, colours(e))).setAlpha(1).setPosition(ENEMY_POS.x, ENEMY_POS.y);
     this.enemySprite.setScale((this.kind === 'boss' ? 6 : 5) * SPRITE_FIT);
     this.fillPanel(this.enemyPanel, e, hp);
     const alive = this.battle.enemy.filter((x) => isAlive(x.c)).length;
@@ -1422,6 +1447,9 @@ export class BattleScene extends Phaser.Scene {
           // Long names stay on one line (shrinking), clear of the accuracy and uses in the corners.
           oneLine: true,
           contentDy: LANDSCAPE ? 6 : 2,
+          // The move's element as a symbol beside its name (shape as well as colour).
+          glyphKey: ensureElementIcon(this, d.element),
+          glyphSize: 16,
         }),
       );
       // Hit chance in the top-left corner; limited moves show their uses left in the top-right.
@@ -1628,6 +1656,7 @@ export class BattleScene extends Phaser.Scene {
     let lastStyle: Style = 'element';
     let attackerHome: { x: number; y: number } | undefined;
     let shinyHit = false;
+    let ancientHit = false;
     // "X used Y!" is shown as the attack starts, so the hit lands right as the effect arrives.
     let shownEarly: BattleEvent | null = null;
     for (let idx = 0; idx < events.length; idx++) {
@@ -1672,8 +1701,11 @@ export class BattleScene extends Phaser.Scene {
           }
           attackerHome = { x: ev.side === 'player' ? PLAYER_POS.x : ENEMY_POS.x, y: ev.side === 'player' ? PLAYER_POS.y : ENEMY_POS.y };
           // Shiny Hexlings attack with extra sparkle.
-          shinyHit = !!(ev.side === 'player' ? this.shownPlayer : this.shownEnemy)?.shiny;
+          const atk = ev.side === 'player' ? this.shownPlayer : this.shownEnemy;
+          shinyHit = !!atk?.shiny;
+          ancientHit = !shinyHit && !!atk?.ancient;
           if (shinyHit) shinyAttackStart(this, s, target);
+          else if (ancientHit) prehistoricAttackStart(this, s, target);
           // Each move animates by what its name describes: bites bite, waves crash, roars shake.
           if (def) lastStyle = await playMove(this, def, s, target);
           // Status moves have no hit to follow, so keep their name up long enough to read.
@@ -1689,6 +1721,7 @@ export class BattleScene extends Phaser.Scene {
             const weak = ev.mult < 0.99;
             moveImpact(this, lastStyle, ev.element ?? lastEl, at, big ? 1.7 : weak ? 0.6 : 1, attackerHome);
             if (shinyHit) shinyImpact(this, at, s.depth + 3);
+            else if (ancientHit) prehistoricImpact(this, at, s.depth + 3);
             sfx.hit(ev.mult);
             if (big) {
               this.crowd?.cheer(1);
@@ -2120,23 +2153,25 @@ export class BattleScene extends Phaser.Scene {
     let chosen = false;
     // The one exception: in a two-Hexling wild battle, a shiny that fainted first can still be caught.
     const shinyFirst =
-      this.kind === 'battle' && this.enemies.length === 2 && this.enemies[0].shiny && !isAlive(this.enemies[0]) ? this.enemies[0] : null;
+      this.kind === 'battle' && this.enemies.length === 2 && (this.enemies[0].shiny || this.enemies[0].ancient) && !isAlive(this.enemies[0]) ? this.enemies[0] : null;
+    const specialTag = (c: Creature) => (c.shiny ? { word: 'gilded', badge: 'GILDED', glyph: 'sparkle' as const, mark: '✦', color: 0x7a5a1c } : { word: 'Prehistoric', badge: 'PREHISTORIC', glyph: 'amber' as const, mark: '◈', color: 0x7a4a1c });
     if (shinyFirst) {
+      const tag = specialTag(shinyFirst);
       const sLevel = catchLevel(run, shinyFirst);
       const sStars = catchStars(run, shinyFirst);
       this.msg.setText(
         wild
-          ? `The gilded ${creatureName(shinyFirst)} can still be caught! Catch it, catch the ${creatureName(wild)}, or finish for the rewards.`
-          : `The gilded ${creatureName(shinyFirst)} can still be caught!`,
+          ? `The ${tag.word} ${creatureName(shinyFirst)} can still be caught! Catch it, catch the ${creatureName(wild)}, or finish for the rewards.`
+          : `The ${tag.word} ${creatureName(shinyFirst)} can still be caught!`,
       );
       const half = wild ? (L.catchBtn.w - 8) / 2 : L.catchBtn.w;
       const sx = wild ? L.catchBtn.x - L.catchBtn.w / 2 + half / 2 : L.catchBtn.x;
-      const btn = button(this, sx, L.catchBtn.y, half, L.catchBtn.h, `Catch ✦ ${creatureName(shinyFirst)}`, () => {
+      const btn = button(this, sx, L.catchBtn.y, half, L.catchBtn.h, `Catch ${tag.mark} ${creatureName(shinyFirst)}`, () => {
         if (chosen) return;
         chosen = true;
         if (!full) return this.doCatch(shinyFirst, fallen);
         this.pickRelease(`Catch ${creatureName(shinyFirst)}`, (out) => this.doCatch(shinyFirst, fallen, out), () => (chosen = false));
-      }, { color: 0x7a5a1c, fontSize: wild ? 15 : 20, glyph: 'sparkle', badge: 'GILDED', sub: exiled ? 'Exiled: no catching this floor' : `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}`, enabled: !exiled });
+      }, { color: tag.color, fontSize: wild ? 15 : 20, glyph: tag.glyph, badge: tag.badge, sub: exiled ? 'Exiled: no catching this floor' : `Lv ${sLevel}${sStars ? ` · ${'★'.repeat(sStars)}` : ''}`, enabled: !exiled });
       this.actions.add(btn);
     }
     if (wild) {
@@ -2151,7 +2186,8 @@ export class BattleScene extends Phaser.Scene {
           // Party full: release one to make room, or back out and keep deciding.
           this.pickRelease(`Catch ${creatureName(wild)}`, (out) => this.doCatch(wild, fallen, out), () => (chosen = false));
         }, {
-          color: 0x3a4f7a,
+          // A Gilded or Prehistoric one says so on its button.
+          ...(wild.shiny || wild.ancient ? { color: specialTag(wild).color, badge: specialTag(wild).badge } : { color: 0x3a4f7a }),
           fontSize: shinyFirst ? 15 : 20,
           glyph: 'crystal',
           enabled: !exiled,
@@ -2210,7 +2246,7 @@ export class BattleScene extends Phaser.Scene {
     this.msg.setText(`You throw a bond crystal at ${creatureName(wild)}!`);
     playCatch(
       this,
-      ensureCreatureTexture(this, wild.speciesId, wild.stage, wild.shiny),
+      ensureCreatureTexture(this, wild.speciesId, wild.stage, colours(wild)),
       5 * SPRITE_FIT,
       { x: PLAYER_POS.x + 30, y: PLAYER_POS.y - 30 },
       ENEMY_POS,

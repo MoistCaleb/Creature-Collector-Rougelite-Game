@@ -447,6 +447,36 @@ export const sfx = {
     [24, 19, 28, 24, 31].forEach((s, i) => tone(note(s, 523), 0.3, { type: 'sine', vol: 0.09, delay: 0.5 + i * 0.09 }));
     noise(1.1, { freq: 10000, to: 3500, vol: 0.1, type: 'highpass', delay: 0.05 });
   },
+  /** An egg wobbles (n: 0, 1, 2, each a little higher and harder). */
+  eggWobble(n = 0) {
+    tone(320 + n * 60, 0.08, { type: 'triangle', vol: 0.1 });
+    tone(260 + n * 60, 0.08, { type: 'triangle', vol: 0.08, delay: 0.09 });
+    noise(0.05, { freq: 2400, vol: 0.06 + n * 0.03, type: 'bandpass', q: 2, delay: 0.2 });
+  },
+  /** An egg hatches: a shell crack and a bright little fanfare. */
+  eggHatch() {
+    noise(0.12, { freq: 3000, to: 1200, vol: 0.25, type: 'bandpass', q: 1.2 });
+    [0, 4, 7, 12, 16].forEach((st, i) => tone(note(st, 659), 0.18, { type: 'triangle', vol: 0.12, delay: 0.1 + i * 0.06 }));
+    tone(note(19, 659), 0.6, { type: 'sine', vol: 0.07, delay: 0.42, attack: 0.02 });
+  },
+  /** A Prehistoric Hexling appears: a deep rumble, a roar, and an old, low chord. */
+  prehistoricReveal() {
+    noise(0.9, { freq: 300, to: 60, vol: 0.4 });
+    tone(55, 0.8, { type: 'sawtooth', vol: 0.18, slide: 40 });
+    tone(180, 0.55, { type: 'sawtooth', vol: 0.12, slide: 90, delay: 0.25 });
+    noise(0.5, { freq: 1400, to: 500, vol: 0.18, type: 'bandpass', q: 1.2, delay: 0.25 });
+    [0, 7, 12, 15].forEach((s, i) => tone(note(s, 147), 1.1, { type: 'triangle', vol: 0.1, delay: 0.6 + i * 0.08, attack: 0.03 }));
+  },
+  /** A Prehistoric Hexling attacks: a short low growl. */
+  prehistoricGrowl() {
+    tone(110, 0.22, { type: 'sawtooth', vol: 0.1, slide: 70 });
+    noise(0.18, { freq: 700, to: 250, vol: 0.12, type: 'bandpass', q: 1.5 });
+  },
+  /** A Prehistoric Hexling's hit lands: stone cracking. */
+  prehistoricHit() {
+    noise(0.14, { freq: 2600, to: 800, vol: 0.22, type: 'bandpass', q: 1.4 });
+    tone(90, 0.2, { type: 'sine', vol: 0.3, slide: 45 });
+  },
   /** A shiny attacks: a quick sparkling sweep. */
   shinyZing() {
     tone(1568, 0.18, { type: 'triangle', vol: 0.09, slide: 3136 });
@@ -841,6 +871,12 @@ function startTheme(key: string) {
   const schedule = () => {
     if (!ctx || playing !== key) return;
     while (next < ctx.currentTime + 0.3) {
+      // Music turned all the way down: keep time (so it picks up in step) without making any sound nodes.
+      if (prefs.musicVol <= 0 || muted) {
+        i++;
+        next += step;
+        continue;
+      }
       const delay = Math.max(0, next - ctx.currentTime);
       const pos = i % steps.length;
       const barNo = Math.floor(pos / 8);

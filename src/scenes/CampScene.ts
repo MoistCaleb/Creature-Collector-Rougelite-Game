@@ -36,6 +36,8 @@ import {
   type Care,
   type ChallengeState,
   type PrepId,
+  campPairs,
+  openGifts,
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
 import { type WorkshopBranch } from '../data/workshop';
@@ -45,6 +47,8 @@ import { workshopProgress } from '../logic/workshop';
 import { payHuntMilestones } from '../logic/huntMilestones';
 import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
 import { tip } from '../ui/tips';
+import { nestReady } from '../logic/nest';
+import { hatchNow, openNest } from '../ui/nestUi';
 import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, floorsOf, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
@@ -100,6 +104,22 @@ export class CampScene extends Phaser.Scene {
   init(data: { prep?: boolean; workshop?: WorkshopBranch | 'list' }) {
     this.prep = !!data.prep && !!state.run;
     this.reopen = data.workshop ?? null;
+  }
+
+  /** Gifts your crew found while you were away (2.07): opened on arrival, their embers yours. */
+  private showGifts(then: () => void) {
+    const meta = state.meta;
+    const gifts = openGifts(meta);
+    const pairs = campPairs(meta);
+    // The Nest's egg is ready (2.07): it hatches as you arrive.
+    if (!gifts.length) return nestReady(meta) ? hatchNow(this, () => this.scene.restart()) : then();
+    saveMeta(meta);
+    sfx.coin();
+    const name = (id: string) => SPECIES_BY_ID[id]?.names[campStage(meta, id)] ?? SPECIES_BY_ID[id]?.names[0] ?? id;
+    const lines = gifts.map((g) => `${name(g.speciesId)} found ${g.what}: +${g.embers} embers`);
+    const together = pairs.length ? `\n\n${pairs.map(([a, b]) => `${name(a)} and ${name(b)}`).join(', ')} kept each other company (+1 bond each).` : '';
+    showMessage(this, 'While you were away', `${lines.join('\n')}${together}`, () => this.scene.restart());
+    void then;
   }
 
   create() {
@@ -239,7 +259,7 @@ export class CampScene extends Phaser.Scene {
       if (welcome) {
         sfx.coin();
         showMessage(this, 'Welcome to Hexbound 2.0!', welcomeText(welcome), () => this.scene.restart());
-      } else announceHunt(this, meta, () => tip(this, 'camp'));
+      } else announceHunt(this, meta, () => this.showGifts(() => tip(this, 'camp')));
       if (this.reopen) {
         this.reopen = null;
         this.workshop();
@@ -632,7 +652,7 @@ export class CampScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(400, 2500), act);
   }
 
-  /** Pet, feed or play with a camp Hexling (each once between runs, losses too; the first each time builds your bond). */
+  /** Pet, feed or play with a camp Hexling (each once between runs, losses too; each one builds your bond). */
   private careFor(speciesId: string, stage: number, c: Phaser.GameObjects.Container) {
     const meta = state.meta;
     const name = SPECIES_BY_ID[speciesId].names[stage] ?? SPECIES_BY_ID[speciesId].names[0];
@@ -646,7 +666,7 @@ export class CampScene extends Phaser.Scene {
     };
     const now = hearts ? `${hearts >= BOND_HEART.max ? 'Best friends! ' : ''}${bondReward(Math.min(hearts, BOND_HEART.max), name).replace(/^./, (ch) => ch.toUpperCase())}.` : '';
     const toNext = next
-      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and your first time together here after each run (+${BOND_POINTS.care}).`
+      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and pet, feed and play here after each run (+${BOND_POINTS.care} each).`
       : '';
     const alt = hearts >= BOND_HEART.max;
     const altOn = bondColours(meta, speciesId);
@@ -666,11 +686,10 @@ export class CampScene extends Phaser.Scene {
           this.scene.restart();
           return;
         }
-        const first = !done.length;
         const gained = care(meta, speciesId, CARE[i]);
         saveMeta(meta);
         sfx.coin();
-        this.bubble(c, first ? '♥ +1' : '♥', '#ff8ab0');
+        this.bubble(c, `♥ +${BOND_POINTS.care}`, '#ff8ab0');
         if (gained) {
           sfx.bondHeart();
           const h = campHearts(meta, speciesId);
@@ -824,6 +843,7 @@ export class CampScene extends Phaser.Scene {
       [`Ember stall · ${c.embers}`, () => this.stall(), 0x6a3a1a],
       [workshopProgress(meta).next && c.embers >= workshopProgress(meta).next!.cost ? 'Workshop (!)' : 'Workshop', () => this.workshop(), 0x4a3a5a],
       ['Camp crew', () => this.crewPicker(), 0x3a4a2a],
+      [nestReady(meta) ? 'Nest (hatching!)' : c.nest?.egg ? `Nest · ${c.nest.egg.left} to go` : 'Nest', () => openNest(this, () => this.scene.restart()), nestReady(meta) ? 0x8a5a1a : 0x5a4a2a],
     ];
     items.forEach(([label, fn, color], i) => {
       // Upright: a stack top right. Sideways: a row along the top right.

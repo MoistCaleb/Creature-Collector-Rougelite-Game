@@ -2010,7 +2010,8 @@ describe('shinies in the Arena and online duels', () => {
 });
 
 // ---------------------------------------------------------------- 1.0: weekly, gilded, save codes
-import { postBattleRecover, startWeekly, TWIST_ORDER, weekId, weeklyInfo, weeklyPlayed, recordWeekly } from '../src/logic/run';
+import { stormFrontWeather } from '../src/logic/surprises';
+import { postBattleRecover, startWeekly, TWIST_ORDER, TWISTS_V2_FROM, weekId, weeklyInfo, weeklyPlayed, recordWeekly } from '../src/logic/run';
 import { GILDED_MILESTONES, gildedCount, lockedBy, takeNewMilestones } from '../src/logic/gilded';
 import { cleanTitle, earnedTitles, myTitle, takeNewTitles, TIERS, TITLES, TITLE_BY_NAME } from '../src/logic/titles';
 import { LOOK_PARTS, randomLook, lookForName, bossLook, FREE_COLORS } from '../src/data/trainerLook';
@@ -2043,7 +2044,7 @@ describe('weekly challenge', () => {
   it('is the same for everyone and rotates through every twist', () => {
     expect(weeklyInfo('2026-11-16')).toEqual(weeklyInfo('2026-11-16'));
     const twists = new Set<string>();
-    let d = Date.parse('2026-11-16T00:00:00Z');
+    let d = Date.parse(`${TWISTS_V2_FROM}T00:00:00Z`);
     for (let i = 0; i < TWIST_ORDER.length; i++, d += 7 * 86400000) twists.add(weeklyInfo(new Date(d).toISOString().slice(0, 10)).twist);
     expect(twists.size).toBe(TWIST_ORDER.length);
     const w = weeklyInfo('2026-11-16');
@@ -2070,6 +2071,48 @@ describe('weekly challenge', () => {
       const node = Object.values(run.map.nodes).find((n) => n.kind === 'battle')!;
       for (const c of makeEncounter(run, node)) expect(SPECIES_BY_ID[c.speciesId].types.some((t) => info.duo!.includes(t))).toBe(true);
     }
+  });
+  it('past weeks keep the twist they had before the longer rotation', () => {
+    // 2026-11-16 to 2026-11-23 were Gilded Week and Element Duo under the five-twist rotation.
+    const v1 = ['duo', 'swarm', 'glass', 'lean', 'gilded'];
+    const idx = (w: string) => Math.floor(Date.parse(`${w}T00:00:00Z`) / (7 * 86400000)) % 5;
+    for (const w of ['2026-10-26', '2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23']) expect(weeklyInfo(w).twist).toBe(v1[idx(w)]);
+    expect(weeklyInfo(TWISTS_V2_FROM).twist).toBe(TWIST_ORDER[0]);
+  });
+  it('Omen Week puts the whole run under the week\'s omen, and the omens take turns', () => {
+    const omens = new Set<string>();
+    let d = Date.parse(`${TWISTS_V2_FROM}T00:00:00Z`);
+    for (let n = 0; n < 4 * TWIST_ORDER.length; n++, d += 7 * 86400000) {
+      const w = new Date(d).toISOString().slice(0, 10);
+      const info = weeklyInfo(w);
+      if (info.twist !== 'omen') continue;
+      omens.add(info.omen!);
+      const run = startWeekly(blankMeta(), w, info.starters[0]);
+      expect(run.surprises?.omen).toBe(info.omen);
+    }
+    expect(omens.size).toBe(4);
+  });
+  it('Elder Week makes every guardian an Elder; Boon Rush starts with a rare offer and a Boon hex', () => {
+    const e = weekWith('elders');
+    const er = startWeekly(blankMeta(), e, weeklyInfo(e).starters[0]);
+    expect(er.surprises?.floors['0']?.elder).toBe(true);
+    const b = weekWith('boonrush');
+    const br = startWeekly(blankMeta(), b, weeklyInfo(b).starters[0]);
+    expect(br.boons?.offer?.mode).toBe('rare');
+    expect(Object.values(br.map.nodes).some((n) => n.kind === 'boon')).toBe(true);
+  });
+  it('Wild Skies opens every battle in weather', () => {
+    const w = weekWith('skies');
+    const run = startWeekly(blankMeta(), w, weeklyInfo(w).starters[0]);
+    expect(stormFrontWeather(run)).toBeTruthy();
+    expect(stormFrontWeather(startRun(blankMeta(), 'emberkit', 5))).toBeNull();
+  });
+  it('a daily run starts with the same boon offer for everyone', () => {
+    const a = startRun(blankMeta(), 'emberkit', 42, 'wildlands', '2026-11-25');
+    const b = startRun(blankMeta(), 'emberkit', 42, 'wildlands', '2026-11-25');
+    expect(a.boons?.offer?.ids.length).toBeGreaterThan(0);
+    expect(a.boons?.offer?.ids).toEqual(b.boons?.offer?.ids);
+    expect(startRun(blankMeta(), 'emberkit', 42).boons?.offer ?? null).toBeNull();
   });
   it('Swarm sends two wild Hexlings from the first battle', () => {
     const week = weekWith('swarm');
@@ -2173,7 +2216,7 @@ describe('changelog', () => {
     expect(versionNewer('1.0', '0.9')).toBe(true);
     expect(versionNewer('0.9', '1.0')).toBe(false);
     expect(versionNewer('1.0', '1.0')).toBe(false);
-    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.06', '2.05', '2.04', '2.03', '2.02', '2.01', '2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
+    expect(changesSince('0.9').map((e) => e.version)).toEqual(['2.07', '2.06', '2.05', '2.04', '2.03', '2.02', '2.01', '2.0', '1.52', '1.51', '1.50', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.39', '1.38', '1.37', '1.36', '1.35', '1.34', '1.33', '1.32', '1.31', '1.30', '1.29', '1.28', '1.27', '1.26', '1.25', '1.24', '1.23', '1.22', '1.21', '1.20', '1.19', '1.18', '1.17', '1.16', '1.15', '1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8', '1.7', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0']);
     expect(changesSince(APP_VERSION)).toEqual([]);
   });
 });

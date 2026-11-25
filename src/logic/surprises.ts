@@ -2,10 +2,11 @@ import { SURPRISE_LIST, SURPRISES } from '../data/surprises';
 import { ELEMENTS, type Element } from '../data/types';
 import type { WeatherId } from '../data/moves';
 import { hashString, Rng } from './rng';
-import { highestLevel, placeRng, placeRoamer, saveMeta, type Meta, type Run } from './run';
+import { highestLevel, placeRng, placeRoamer, saveMeta, weeklyInfo, type Meta, type Run } from './run';
 import { SPECIES } from '../data/species';
 import { rollTrait, traitsOf } from '../data/traits';
 import { createCreature, stats, type Creature } from './creature';
+import { EGG_STARS, eggLength, eggTrait, makeHatchling, rollEggTier, rollMix, type EggTier } from './nest';
 import { hiddenBoost, surpriseInPool } from './workshop';
 
 /**
@@ -68,10 +69,17 @@ export interface RunSurprises {
 export interface Egg {
   speciesId: string;
   wins: number;
+  /** Its other parent, strength and won battles it needs (2.07; older eggs: none, 3 and 5). */
+  other?: string;
+  tier?: EggTier;
+  need?: number;
+  seed?: number;
 }
 
-/** Hatchery: battles won before the egg hatches. */
+/** Hatchery: battles won before an egg from before 2.07 hatches. */
 export const EGG_WINS = 5;
+/** Won battles this egg needs. */
+export const eggNeed = (egg: Egg): number => egg.need ?? EGG_WINS;
 /** Dojo: trainers in a row. */
 export const DOJO_ROUNDS = 3;
 
@@ -102,7 +110,8 @@ export function omenFor(seed: number, omens: string[] = of('omen')): string | un
 /** A new run: its omen, and (if it's been a while) a promise of a surprise on the first floor. */
 export function startSurprises(run: Run, seeded: boolean) {
   const rs = runSurprises(run);
-  rs.omen = omenFor(run.seed, of('omen', run));
+  // Omen Week (a weekly twist): the week's omen instead of the seed's.
+  rs.omen = (run.weekly && run.twist === 'omen' ? weeklyInfo(run.weekly).omen : undefined) ?? omenFor(run.seed, of('omen', run));
   if (!seeded && (run.meta.surpriseDrought ?? 0) >= DROUGHT_MAX) rs.forced = true;
   rollFloorSurprises(run);
 }
@@ -115,7 +124,8 @@ export function rollFloorSurprises(run: Run) {
   const rng = new Rng(hashString(`${run.seed}:surprise:${key}`));
   const fs: FloorSurprise = {};
   if (rng.chance(ODDS.floor)) fs.floor = rng.pick(of('floor', run));
-  if (rng.chance(ODDS.elder)) fs.elder = true;
+  // Elder Week (a weekly twist): every guardian is an Elder.
+  if (rng.chance(ODDS.elder) || (run.twist === 'elders' && !run.hunt)) fs.elder = true;
   // Keen eye (Workshop): hidden hexes half again as often.
   let hex = rng.chance(ODDS.hex * hiddenBoost(run)) ? rng.pick(of('hex', run)) : undefined;
   // A friend's ghost is never rolled itself: it takes Echo of yourself's place now and then.
@@ -168,8 +178,8 @@ export function rollFloorSurprises(run: Run) {
     }
     placeRoamer(run, true);
   }
-  // Starfall (an omen): every floor has a Boon hex.
-  if (rs.omen === 'starfall' && !Object.values(run.map.nodes).some((n) => n.kind === 'boon')) {
+  // Starfall (an omen) and Boon Rush (a weekly twist): every floor has a Boon hex.
+  if ((rs.omen === 'starfall' || run.twist === 'boonrush') && !Object.values(run.map.nodes).some((n) => n.kind === 'boon')) {
     const spots = battles().filter((id) => id !== fs.encNode);
     if (spots.length) run.map.nodes[spots[rng.int(0, spots.length - 1)]].kind = 'boon';
   }
@@ -200,9 +210,10 @@ export function findSurprise(meta: Meta, id: string): boolean {
   return true;
 }
 
-/** Storm Front: each battle on the floor opens in a different weather. */
+/** Storm Front (and Wild Skies): each battle opens in a different weather. */
 export function stormFrontWeather(run: Run): WeatherId | null {
-  if (floorSurprise(run).floor !== 'stormfront') return null;
+  // Wild Skies (a weekly twist) does it on every floor.
+  if (floorSurprise(run).floor !== 'stormfront' && run.twist !== 'skies') return null;
   return (['rain', 'sun', 'hail', 'dust'] as WeatherId[])[run.log.fights % 4];
 }
 
@@ -222,19 +233,30 @@ export function layEgg(run: Run): Egg {
   const caught = run.meta.dex.caught;
   const fresh = SPECIES.filter((sp) => !caught.includes(sp.id));
   const pool = (fresh.length ? fresh : SPECIES).map((sp) => sp.id).sort();
-  return (rs.egg = { speciesId: placeRng(run, 'hatchery').pick(pool), wins: 0 });
+  // Like every egg (see logic/nest): two parents, here from the run's seed (any lines, yours or not),
+  // and a strength that sets how many won battles it takes (3-7).
+  const r = placeRng(run, 'hatchery');
+  const speciesId = r.pick(pool);
+  const other = r.pick(SPECIES.map((sp) => sp.id).filter((id) => id !== speciesId).sort());
+  const seed = r.int(0, 2 ** 31);
+  const tier = rollEggTier(seed);
+  return (rs.egg = { speciesId, other, tier, need: eggLength(tier), seed, wins: 0 });
 }
 
 /** The egg is ready to hatch. */
-export const eggReady = (run: Run | null | undefined): boolean => !!run?.surprises?.egg && run.surprises.egg.wins >= EGG_WINS;
+export const eggReady = (run: Run | null | undefined): boolean => !!run?.surprises?.egg && run.surprises.egg.wins >= eggNeed(run.surprises.egg);
 
 /** A battle won: the egg gets closer to hatching. */
 export function tickEgg(run: Run) {
   const egg = run.surprises?.egg;
-  if (egg && egg.wins < EGG_WINS) egg.wins += 1;
+  if (egg && egg.wins < eggNeed(egg)) egg.wins += 1;
 }
 
-/** Hatch the egg: its line at a level near your best, always with its rare ◆ trait. Null if no egg is ready. */
+/**
+ * Hatch the egg: its line at a level near your best, with a trait and stars by its strength, its
+ * other parent's colour, part and some of its moves. (An egg from before 2.07: its rare ◆ trait.)
+ * Null if no egg is ready.
+ */
 export function hatchEgg(run: Run): Creature | null {
   if (!eggReady(run)) return null;
   const egg = run.surprises!.egg!;
@@ -244,8 +266,13 @@ export function hatchEgg(run: Run): Creature | null {
     return null;
   }
   const c = createCreature(egg.speciesId, Math.max(1, Math.round(highestLevel(run) * 0.85)), Math.min(2, run.floor));
-  c.trait = traitsOf(c.speciesId)[2] ?? c.trait;
-  c.hp = stats(c).hp;
+  if (egg.other && egg.tier && SPECIES.some((sp) => sp.id === egg.other)) {
+    const seed = egg.seed ?? hashString(`${run.seed}:egg`);
+    makeHatchling(c, egg.other, rollMix(seed), eggTrait(egg.speciesId, egg.tier, seed), EGG_STARS[egg.tier - 1]);
+  } else {
+    c.trait = traitsOf(c.speciesId)[2] ?? c.trait;
+    c.hp = stats(c).hp;
+  }
   delete run.surprises!.egg;
   return c;
 }
