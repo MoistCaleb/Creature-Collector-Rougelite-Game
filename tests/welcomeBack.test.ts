@@ -61,4 +61,17 @@ describe('welcome-back embers (2.0)', () => {
     fresh.welcome = { embers: 0, wins: 0, runs: 0, paid: false };
     expect(needsTour(fresh)).toBe(false);
   });
+
+  it('a save that fails to load is kept, not overwritten by a fresh one', () => {
+    storage.setItem(KEY, '{"runs": 12, "wins"');
+    const m = loadMeta();
+    expect(m.runs).toBe(0);
+    expect(storage.getItem(`${KEY}-unreadable`)).toBe('{"runs": 12, "wins"');
+    // A save that reads fine but trips an update step keeps its progress.
+    storage.setItem(KEY, JSON.stringify({ runs: 9, wins: 3, history: 'not a list' }));
+    const kept = loadMeta();
+    expect(kept.runs).toBe(9);
+    expect(kept.wins).toBe(3);
+    storage.removeItem(KEY);
+  });
 });

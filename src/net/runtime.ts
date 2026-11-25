@@ -507,9 +507,18 @@ export function leaveDuel() {
 // During a race (not mid-duel; the battle screen handles that), a guest whose link drops keeps
 // retrying the same code, and both sides re-share their progress once reconnected.
 let retry: ReturnType<typeof setInterval> | null = null;
+/** One attempt at a time: each can take a while to give up, and they'd pile up every 3 seconds. */
+let trying = false;
 session.onStatus((s) => {
   if (s === 'lost' && session.role === 'guest' && ((duel.race && !duel.controller) || royale.active) && !retry) {
-    retry = setInterval(() => void session.connectGuest().then((ok) => ok && sendHello()), 3000);
+    retry = setInterval(() => {
+      if (trying) return;
+      trying = true;
+      void session.connectGuest().then((ok) => {
+        trying = false;
+        if (ok) sendHello();
+      });
+    }, 3000);
   }
   if (s === 'connected') {
     if (retry) clearInterval(retry);

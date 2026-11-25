@@ -841,6 +841,12 @@ function startTheme(key: string) {
   const schedule = () => {
     if (!ctx || playing !== key) return;
     while (next < ctx.currentTime + 0.3) {
+      // Music turned all the way down: keep time (so it picks up in step) without making any sound nodes.
+      if (prefs.musicVol <= 0 || muted) {
+        i++;
+        next += step;
+        continue;
+      }
       const delay = Math.max(0, next - ctx.currentTime);
       const pos = i % steps.length;
       const barNo = Math.floor(pos / 8);

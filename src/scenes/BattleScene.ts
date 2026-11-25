@@ -269,6 +269,11 @@ export class BattleScene extends Phaser.Scene {
     // "already wrapped up" flag, queued next step or fast-forward.
     this.watchEnded = false;
     this.duelNext = null;
+    // The scene's clock and objects were cleared on shutdown: drop what pointed at them, or auto-battle
+    // waits on a timer that never fires and callouts stack above ribbons that are gone.
+    this.autoTimer = null;
+    this.callouts = { player: 0, enemy: 0 };
+    this.auras = {};
     this.weatherShown = null;
     this.weatherFx = [];
     this.skySynced = false;

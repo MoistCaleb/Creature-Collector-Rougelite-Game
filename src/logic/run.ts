@@ -405,11 +405,25 @@ export function loadMeta(): Meta {
     newAchievements: [],
     welcome: freshWelcome(),
   };
+  let raw: string | null = null;
+  let saved: Partial<Meta> & Record<string, any>;
+  let meta: Meta;
   try {
-    const raw = storage.getItem(META_KEY);
+    raw = storage.getItem(META_KEY);
     if (!raw) return fallback;
-    const saved = JSON.parse(raw);
-    const meta: Meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
+    saved = JSON.parse(raw);
+    meta = { ...fallback, ...saved, dex: { ...emptyDex(), ...(saved.dex ?? {}) }, stats: { ...emptyStats(), ...(saved.stats ?? {}) } };
+  } catch {
+    // Unreadable: keep a copy before the fresh save overwrites it, so the progress can still be recovered.
+    try {
+      if (raw) storage.setItem(`${META_KEY}-unreadable`, raw);
+    } catch {
+      /* storage unavailable */
+    }
+    return fallback;
+  }
+  // A step below failing must not lose the save (it would be overwritten with a fresh one): keep what loaded.
+  try {
     if (!saved.stats) meta.stats.caught = meta.dex.caught.length; // older saves: count known catches
     // Saves from before shinies were tracked per species: count the ones seen shiny as caught.
     if (!saved.shinyOwned && (saved.shinyCaught ?? 0) > 0) meta.shinyOwned = [...(saved.shinySeen ?? [])];
@@ -427,10 +441,10 @@ export function loadMeta(): Meta {
       delete meta.welcome;
       noteWelcomeBack(meta);
     }
-    return meta;
-  } catch {
-    return fallback;
+  } catch (e) {
+    console.warn('Couldn’t update the save', e);
   }
+  return meta;
 }
 
 /** Set the run W/L and the win streak from your recent runs (newest first in history). */

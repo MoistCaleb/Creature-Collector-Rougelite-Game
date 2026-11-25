@@ -197,16 +197,18 @@ export function shinyAura(scene: Phaser.Scene, sprite: Phaser.GameObjects.Image)
     halo.setPosition(sprite.x, sprite.y).setVisible(sprite.visible && sprite.alpha > 0.3);
   };
   scene.events.on('update', follow);
-  return {
-    destroy: () => {
-      glitter.destroy();
-      pulse?.remove();
-      haloPulse.remove();
-      halo.destroy();
-      scene.events.off('update', follow);
-      if (fx && sprite.preFX) sprite.preFX.remove(fx);
-    },
+  const destroy = () => {
+    scene.events.off('update', follow);
+    scene.events.off('shutdown', destroy);
+    glitter.destroy();
+    pulse?.remove();
+    haloPulse.remove();
+    halo.destroy();
+    if (fx && sprite.preFX) sprite.preFX.remove(fx);
   };
+  // Scene event listeners outlive the scene: stop following when it shuts down with the shiny still out.
+  scene.events.once('shutdown', destroy);
+  return { destroy };
 }
 
 // ------------------------------------------------------------ attacks
