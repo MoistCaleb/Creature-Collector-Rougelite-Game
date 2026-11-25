@@ -6,10 +6,12 @@ import { bondStarterLevels, bondTrait, canChooseTrait, prepsAvailable, setBondTr
 import { traitsFound } from '../logic/dex';
 import { SPECIES_BY_ID } from '../data/species';
 import { BALANCE } from '../data/balance';
-import { createCreature, moveDef, stats } from '../logic/creature';
+import { createCreature, creatureName, moveDef, stats } from '../logic/creature';
 import { Rng } from '../logic/rng';
 import { omenFor } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
+import { startNestRun } from '../logic/run';
+import { hatchlingPreview } from '../logic/nest';
 import { addPartner, noteShinyOwned, saveMeta, dailyPassives, dailySeed, racePassives, dailyStarters, PASSIVES, startWeekly, TWISTS, twistShort, weeklyInfo, rollStarterChoices, setStarterLook, starterLook, startRun } from '../logic/run';
 import { LOOK_LABEL, pickLooks, type PickLook } from '../logic/arena';
 import { formName } from '../logic/dex';
@@ -96,6 +98,14 @@ export class StarterScene extends Phaser.Scene {
     this.gold = !this.race && !week && !this.daily ? gildedStarterOffer(state.meta, choices) : null;
     traitKey = this.race ? `race:${this.race.seed}` : week ? `week:${this.weekly}` : this.daily ? `daily:${this.daily}` : traitKey?.startsWith('free:') ? traitKey : `free:${Math.random()}`;
     const free = !this.race && !week && !this.daily;
+    // Hatchlings from the camp Nest (2.07): one more pick, on normal runs only.
+    const brood = free ? (state.meta.camp?.nest?.brood ?? []) : [];
+    const nestBar = brood.length > 0;
+    if (nestBar) {
+      const label = `From the nest (${brood.length})`;
+      if (LANDSCAPE) button(this, W - 92, 34, 164, 36, label, () => this.nestPick(), { fontSize: 13, color: 0x6a4a1c, glyph: 'star' });
+      else button(this, W / 2, 773, W - 40, 38, label, () => this.nestPick(), { fontSize: 15, color: 0x6a4a1c, glyph: 'star' });
+    }
     choices.forEach((id, i) => {
       const sp = SPECIES_BY_ID[id];
       const trait = this.cardTrait(id);
@@ -138,8 +148,9 @@ export class StarterScene extends Phaser.Scene {
         button(this, mid, y + 328, cw - 40, 32, 'Pick', () => this.pick(id), { color: 0x3b6d4a, fontSize: 16 });
         return;
       }
-      const y = 100 + i * 228;
-      const card = this.add.rectangle(20, y, W - 40, 214, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
+      // (A little tighter when the Nest bar needs the bottom of the screen.)
+      const y = 100 + i * (nestBar ? 218 : 228);
+      const card = this.add.rectangle(20, y, W - 40, nestBar ? 207 : 214, COLORS.panel).setOrigin(0).setStrokeStyle(2, COLORS.stroke);
       card.setInteractive({ useHandCursor: true });
       card.on('pointerup', () => this.pick(id));
 
@@ -267,7 +278,39 @@ export class StarterScene extends Phaser.Scene {
       noteShinyOwned(state.meta, id);
       saveMeta(state.meta);
     }
-    const run = state.run;
+    this.goOn(others, key);
+  }
+
+  /** A hatchling from the Nursery as your starter (2.07). It stays in the Nursery for later runs. */
+  private nestPick() {
+    const brood = state.meta.camp?.nest?.brood ?? [];
+    const previews = brood.map((h) => hatchlingPreview(h));
+    openPicker(this, {
+      title: 'From the nest',
+      subtitle: 'Start this run with one of your hatchlings: its trait, stars and moves from both parents.',
+      options: previews.map((c, i) => ({
+        icon: c,
+        label: `${creatureName(c)}${brood[i].stars ? `  ${'★'.repeat(brood[i].stars)}` : ''}`,
+        sub: `${SPECIES_BY_ID[brood[i].speciesId].names[0]} × ${SPECIES_BY_ID[brood[i].other]?.names[0] ?? '?'}${brood[i].trait ? ` · ${traitName(brood[i].speciesId, brood[i].trait!)}` : ''}`,
+      })),
+      rowHeight: 64,
+      cancelLabel: 'Back',
+      onCancel: () => {},
+      onPick: (i) => {
+        const others = rolled ?? [];
+        const key = traitKey;
+        rolled = null;
+        traitKey = null;
+        this.gold = null;
+        state.run = startNestRun(state.meta, brood[i], Date.now(), this.mapId, this.quick);
+        this.goOn(others, key);
+      },
+    });
+  }
+
+  /** After the starter's chosen: the Partner (Workshop) pick if you have it, then camp or the map. */
+  private goOn(others: string[], key: string | null) {
+    const run = state.run!;
     // Every run but dailies and weeklies stops at camp first: one thing for the road, and the news.
     const go = () => (prepsAvailable(run) ? this.scene.start('Camp', { prep: true }) : this.scene.start('Map', {}));
     if (!wsHas(run, 'partner') || !others.length) return go();

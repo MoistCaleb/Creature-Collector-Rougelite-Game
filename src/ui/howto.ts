@@ -124,6 +124,18 @@ export const HOW_TO_PLAY: Page[] = [
     ],
   },
   {
+    title: 'Eggs and the Nest',
+    glyph: 'heart',
+    lines: [
+      'At camp, open the Nest and choose two parents: camp crew Hexlings with 3 or more hearts, or one of them and a legendary you’ve caught.',
+      'The egg hatches after 3 to 7 finished runs. The longer it takes, the stronger the baby: better odds of its line’s rare trait, and up to ★★.',
+      'The baby is one parent’s line (never a legendary’s), wearing the other parent’s colour and one of its parts, with a name from both. Each move it learns comes from one parent’s moves or the other’s.',
+      'Hatchlings wait in the Nursery (up to 6). On the starter screen, tap From the nest to start a normal run with one. Release ones you don’t want for embers.',
+      'A Hatchery egg found on a run works the same way, counted in won battles, with two parents of its own.',
+      'Every pair you hatch gets a card in the Hexlidex’s Hatched tab.',
+    ],
+  },
+  {
     title: 'Elements',
     glyph: 'sparkle',
     lines: [

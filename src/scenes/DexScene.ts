@@ -15,6 +15,7 @@ import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { PREHISTORIC_MILESTONES, prehistoricCount } from '../logic/titles';
 import { rewardText } from '../logic/cosmetics';
+import { hatchedPairs, TIER_NAMES } from '../logic/nest';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
@@ -25,7 +26,7 @@ import { formName, hasSeenForm } from '../logic/dex';
 import { state } from '../state';
 import { ensureCreatureTexture, ensureGrayTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, COLORS, H, LANDSCAPE, text, typeChip, W } from '../ui/widgets';
-import { createCreature, stageCap, stats } from '../logic/creature';
+import { createCreature, hatchName, stageCap, stats } from '../logic/creature';
 import { cry } from '../ui/cries';
 import { saveMeta, toggleFavorite } from '../logic/run';
 import { icon } from '../ui/icons';
@@ -34,7 +35,7 @@ import { shinySparkle } from '../ui/shiny';
 import { searchBox } from '../ui/searchBox';
 import { elementIcon } from '../ui/elementIcons';
 
-type Tab = 'creatures' | 'moves' | 'elements' | 'boons';
+type Tab = 'creatures' | 'moves' | 'elements' | 'boons' | 'hatched';
 /** Content starts below the header, tabs and the element filter bar. */
 /** Where the list starts, under the header (a shorter header on the wide board). */
 let TOP = 196;
@@ -129,6 +130,7 @@ export class DexScene extends Phaser.Scene {
     if (this.tab === 'creatures') this.drawCreatures();
     else if (this.tab === 'moves') this.drawMoves();
     else if (this.tab === 'boons') this.drawBoons();
+    else if (this.tab === 'hatched') this.drawHatched();
     else this.drawElements();
     this.refreshRows();
 
@@ -160,6 +162,7 @@ export class DexScene extends Phaser.Scene {
       ['moves', 'Moves'],
       ['elements', 'Elements'],
       ['boons', 'Boons'],
+      ['hatched', 'Hatched'],
     ];
     // Sideways on the Hexlings tab, the tabs take the left half and the search the right half.
     const tabsW = LANDSCAPE && L.search ? W / 2 - 24 : W - 32;
@@ -862,6 +865,46 @@ export class DexScene extends Phaser.Scene {
    * Boons (2.0): every boon you've been offered; the rest are ???. Element boons by element. Lore
    * hints: a boon still locked behind a Lore upgrade says which one, with a vague hint.
    */
+  /**
+   * Hatched (2.07): a card for each pair you've hatched (from the camp Nest or a Hatchery egg), newest
+   * first. No blank cards: it fills in as you breed new pairs.
+   */
+  private drawHatched() {
+    const meta = state.meta;
+    const all = hatchedPairs(meta);
+    const list = elFilter ? all.filter((p) => SPECIES_BY_ID[p.speciesId].types.includes(elFilter!)) : all;
+    const lines = new Set(all.map((p) => p.speciesId)).size;
+    let y = 8;
+    const hy = y;
+    this.addRow(hy, 50, (row) => {
+      row.add(text(this, 16, hy + 4, `${all.length} pairing${all.length === 1 ? '' : 's'} hatched · ${lines} line${lines === 1 ? '' : 's'}`, 16, '#ffc94d', { fontStyle: 'bold' }));
+      row.add(text(this, 16, hy + 26, 'Breed at camp’s Nest, or carry a Hatchery egg on a run.', 12, COLORS.textDim));
+    });
+    y += 52;
+    if (!list.length) {
+      const my = y;
+      this.addRow(my, 80, (row) =>
+        row.add(text(this, W / 2, my + 36, all.length ? 'No hatched pairs of this element yet.' : 'No eggs hatched yet. Each new pair you hatch adds a card here.', 14, COLORS.textDim, { align: 'center', wordWrap: { width: W - 60 } }).setOrigin(0.5)),
+      );
+      y += 80;
+    }
+    const nm = (id: string) => SPECIES_BY_ID[id]?.names[0] ?? id;
+    for (const p of list) {
+      const ry = y;
+      this.addRow(ry, 80, (row) => {
+        const gold = !!p.rec.legendary;
+        row.add(this.add.rectangle(12, ry, W - 24, 74, COLORS.panel).setOrigin(0).setStrokeStyle(gold ? 3 : 2, gold ? 0xffd86b : COLORS.stroke));
+        row.add(this.add.image(52, ry + 38, ensureCreatureTexture(this, p.speciesId, 0, `hatch:${p.other}`)).setScale(1.7 * SPRITE_FIT));
+        row.add(text(this, 96, ry + 8, hatchName(p.speciesId, 0, p.other), 16, gold ? '#ffd86b' : COLORS.text, { fontStyle: 'bold' }));
+        row.add(text(this, 96, ry + 30, `${nm(p.speciesId)} × ${nm(p.other)}${gold ? ' (legendary)' : ''}`, 13, COLORS.textDim));
+        const when = new Date(p.rec.first).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        row.add(text(this, 96, ry + 50, `Hatched ${p.rec.n}× · best: ${TIER_NAMES[p.rec.best - 1]} egg · first ${when}`, 11, '#8e86ad'));
+      });
+      y += 80;
+    }
+    this.contentH = y + 8;
+  }
+
   private drawBoons() {
     const seen = state.meta.boonsSeen ?? [];
     const lock = (id: string) => loreLock(state.meta, 'boon', id);

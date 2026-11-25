@@ -563,3 +563,26 @@ rule loss rates (the report's rule table is small and noisy).
   at camp and are opened on arrival ("While you were away").
 - Crew pairs where both have 3+ hearts keep each other company: +1 bond each per run.
 - Eggs and breeding build on this later (docs/BACKLOG.md).
+
+## Eggs and the Nest (2.07)
+
+- **One idea for every egg** (logic/nest.ts): a strength 1-5 rolled when it's laid (weights 30/25/20/15/10),
+  taking strength + 2 = 3-7 finished runs (camp Nest) or won battles (a Hatchery egg on a run). Stronger:
+  rare ◆ trait odds 35/55/75/100/100%, ★ stars 0/0/1/1/2 (never more). Otherwise one of its line's other two traits.
+- **Two parents**: the baby is one parent's line (seeded 50/50; never a legendary's). Its look
+  (`Colours` `hatch:<other>`, ui/sprites hatchSlot) takes the other parent's body colour as its accent, and one
+  part of the other parent (back, head top, tail or arms, whichever changes it most, the same at every stage)
+  painted in that parent's colour (or its most contrasting one); if nothing borrowed shows, its own biggest
+  part is painted instead. Each learnset entry (but its first move and signature) comes from one parent's
+  learnset or the other's, a coin flip per entry (`Creature.heir.mix`, `learnsetOf`): the same count at the same
+  levels. Its name blends both (`hatchName`: Emberkit × Puddlet = Emberlet).
+- **Camp Nest**: parents are camp crew lines with 3+ hearts, or one of them and a caught legendary (legendary
+  eggs are strength 3+, a gold band on the egg). One egg at a time; it ticks on every finished run but online
+  races, and hatches with an animation when you arrive at camp. The Nursery keeps up to 6 hatchlings for good
+  (release one for 2-10 embers by strength). Hatchlings can't be parents, so nothing stacks.
+- **Starting with one**: on normal runs, the starter screen's From the nest button (`startNestRun`): its line at the
+  usual starter level, with its trait, stars and moves. Not for dailies, weeklies or online play (no cosmetic either).
+- **Hatchery egg on a run**: two parents from the run's seed (any lines, yours or not), so it works online too
+  (`heir` is kept when creatures sync). Older saved eggs hatch the old way (5 wins, the rare trait).
+- **Hexlidex Hatched tab**: a card per pair hatched (Nest or Hatchery), newest first, no blank cards; legendary
+  pairs have a gold border.
