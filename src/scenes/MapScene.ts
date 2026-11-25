@@ -1423,7 +1423,7 @@ export class MapScene extends Phaser.Scene {
           if (!joinParty(run, c, release)) return this.done();
           const fresh = noteAncient(state.meta, c.speciesId);
           dex.creature(c, true);
-          sfx.shinyReveal();
+          sfx.prehistoricReveal();
           persist();
           showMessage(
             this,

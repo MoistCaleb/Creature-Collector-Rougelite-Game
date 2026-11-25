@@ -38,6 +38,11 @@ const topHeat = (meta: Meta) => Math.max(0, ...Object.values(meta.mapHeats ?? {}
 const mapsWonAt = (meta: Meta, heat: number) => MAPS.filter((m) => (meta.mapHeats?.[m.id] ?? []).includes(heat)).length;
 const weeklyWins = (meta: Meta) => Object.values(meta.weeklies ?? {}).filter((w) => w.best?.won).length;
 const gilded = (meta: Meta) => (meta.shinyOwned ?? []).length;
+/** Lines whose Prehistoric form you've found. */
+export const prehistoricCount = (meta: Meta) => (meta.ancientFound ?? []).length;
+/** Prehistoric milestones: [lines found, title]. */
+export const PREHISTORIC_MILESTONES: [number, string][] = [[3, 'Fossil Finder'], [10, 'Paleontologist'], [25, 'Primeval'], [50, 'Living Fossil']];
+const pre = (n: number) => (m: Meta): [number, number] => [prehistoricCount(m), n];
 
 export const TITLES: TitleDef[] = [
   // Common
@@ -54,6 +59,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Duelist', tier: 'rare', desc: 'Win an online duel or stage battle.', progress: (m) => [m.onlineWins ?? 0, 1] },
   { name: 'Myth Touched', tier: 'rare', desc: 'Take a mythic boon.', progress: (m) => [Math.min(mythicsFound(m), 1), 1] },
   { name: 'Kindred', tier: 'rare', desc: 'Reach 3 bond hearts with a line.', progress: (m) => [Object.values(m.camp?.bond ?? {}).some((p) => p >= CAMP_HEARTS[2]) ? 1 : 0, 1] },
+  { name: 'Fossil Finder', tier: 'rare', desc: 'Find the Prehistoric form of 3 lines.', progress: pre(3) },
   { name: 'Gilded Seeker', tier: 'rare', desc: 'Own 5 Gilded species.', progress: (m) => [gilded(m), 5], gilded: true },
   // Epic
   { name: 'Heatseeker', tier: 'epic', desc: 'Win a run at Heat 4 or higher.', progress: (m) => [Math.min(topHeat(m), 4), 4] },
@@ -68,6 +74,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Curious', tier: 'epic', desc: 'Find 10 different rare surprises.', progress: (m) => [Math.min(found(m), 10), 10] },
   { name: 'Tinkerer', tier: 'epic', desc: 'Build 10 Workshop upgrades.', progress: (m) => [Math.min(workshopOwned(m), 10), 10] },
   { name: 'Soulbound', tier: 'epic', desc: 'Reach all 5 bond hearts with a line.', progress: (m) => [Math.min(maxBondLines(m), 1), 1] },
+  { name: 'Paleontologist', tier: 'epic', desc: 'Find the Prehistoric form of 10 lines.', progress: pre(10) },
   { name: 'Gilded Collector', tier: 'epic', desc: 'Own 30 Gilded species.', progress: (m) => [gilded(m), 30], gilded: true },
   // Legendary
   { name: 'Inferno Walker', tier: 'legendary', desc: 'Win a run at Heat 8.', progress: (m) => [Math.min(topHeat(m), 8), 8] },
@@ -80,6 +87,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Wonderfinder', tier: 'legendary', desc: `Find all ${COLLECTABLE.length} rare surprises.`, progress: (m) => [found(m), COLLECTABLE.length] },
   { name: 'Master Builder', tier: 'legendary', desc: `Build all ${WORKSHOP.length} Workshop upgrades.`, progress: (m) => [workshopOwned(m), WORKSHOP.length] },
   { name: 'Mythweaver', tier: 'legendary', desc: `Take each of the ${MYTHICS.length} mythic boons.`, progress: (m) => [mythicsFound(m), MYTHICS.length] },
+  { name: 'Primeval', tier: 'legendary', desc: 'Find the Prehistoric form of 25 lines.', progress: pre(25) },
   { name: 'Gilded Legend', tier: 'legendary', desc: 'Own 60 Gilded species.', progress: (m) => [gilded(m), 60], gilded: true },
   // Mythic
   { name: 'Unstoppable', tier: 'mythic', desc: 'Win 20 runs in a row.', progress: (m) => [m.bestStreak ?? 0, 20] },
@@ -87,6 +95,7 @@ export const TITLES: TitleDef[] = [
   { name: 'Battle Monarch', tier: 'mythic', desc: 'Win an 8-player battle royale.', progress: (m) => [(m.royaleBest ?? 0) >= 8 ? 1 : 0, 1] },
   { name: 'Endless Hunter', tier: 'mythic', desc: 'Reach floor 30 of a Gilded Hunt.', progress: (m) => [m.bestHunt ?? 0, 30], gilded: true },
   { name: 'Heart of Camp', tier: 'mythic', desc: 'Reach all 5 bond hearts with 10 lines.', progress: (m) => [Math.min(maxBondLines(m), 10), 10] },
+  { name: 'Living Fossil', tier: 'mythic', desc: 'Find the Prehistoric form of 50 lines.', progress: pre(50) },
   { name: 'Gilded Master', tier: 'mythic', desc: 'Own 120 Gilded species.', progress: (m) => [gilded(m), 120], gilded: true },
 ];
 

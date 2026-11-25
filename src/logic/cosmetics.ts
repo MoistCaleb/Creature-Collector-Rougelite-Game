@@ -57,6 +57,11 @@ export const TITLE_REWARDS: Record<string, Cosmetic[]> = {
   Unstoppable: [aura('Rainbow'), hat('Astral halo')],
   Hexbound: [top('Void cloak'), aura('Void')],
   'Battle Monarch': [hat('Monarch crown'), top('Royal mantle')],
+  // Prehistoric milestones
+  'Fossil Finder': [hat('Skull helm')],
+  Paleontologist: [back('Bone tail')],
+  Primeval: [back('Bone wings')],
+  'Living Fossil': [aura('Amber')],
 };
 
 /** The title that unlocks this look option, if a title does. */

@@ -373,7 +373,9 @@ export function creatureRow(
   cont.add(bg);
   cont.add(scene.add.image(34, h / 2, ensureCreatureTexture(scene, c.speciesId, c.stage, colours(c))).setScale(1.8 * SPRITE_FIT));
   if (c.shiny) cont.add(iconImage(scene, 56, 12, 'sparkle', 14));
-  const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16);
+  else if (c.ancient) cont.add(iconImage(scene, 56, 12, 'amber', 14));
+  // Gilded names in gold, Prehistoric ones in amber, so they stand out in every list.
+  const nameText = text(scene, 66, 6, `${creatureName(c)}  ${stars(c.stars)}`, 16, c.shiny ? '#ffd86b' : c.ancient ? '#e8a95a' : COLORS.text);
   cont.add(nameText);
   const cap = levelCap(c);
   const lvText = text(scene, w - 8, 7, `Lv ${c.level}${c.level >= cap ? ' (MAX)' : ''}`, 13, c.level >= cap ? '#ffc94d' : COLORS.textDim).setOrigin(1, 0);

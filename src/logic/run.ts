@@ -270,7 +270,7 @@ export interface RunRecord {
   battlesWon: number;
   caught: number;
   /** Who finished the run (survivors), up to 7. */
-  team: { speciesId: string; stage: number; level: number; shiny?: boolean }[];
+  team: { speciesId: string; stage: number; level: number; shiny?: boolean; ancient?: boolean; alt?: boolean }[];
   mvp?: { speciesId: string; stage: number; name: string; dealt: number };
   endedBy?: string;
   /** Active play time (ms). */
@@ -308,7 +308,7 @@ export function recordRun(run: Run, won: boolean) {
     caught: run.log.caught,
     team: allCreatures(run)
       .slice(0, 7)
-      .map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, ...(c.shiny ? { shiny: true } : {}) })),
+      .map((c) => ({ speciesId: c.speciesId, stage: c.stage, level: c.level, ...(c.shiny ? { shiny: true } : c.ancient ? { ancient: true } : c.alt ? { alt: true } : {}) })),
     mvp: mvp && mvp.dealt > 0 ? { speciesId: mvp.speciesId, stage: mvp.stage, name: mvp.name, dealt: mvp.dealt } : undefined,
     endedBy: won ? undefined : run.log.endedBy?.label,
     ...(run.playMs ? { time: run.playMs } : {}),

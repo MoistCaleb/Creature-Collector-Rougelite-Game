@@ -25,9 +25,13 @@ const VOID = 0x1c1030;
 const ROYAL = 0x8a1a2a;
 const ERMINE = 0xf4f0e8;
 const FLAME = [0xffe060, 0xff9a2a, 0xff5a1a];
+/** Prehistoric gear: old bone and dried hide. */
+const BONE = 0xeee2c0;
+const BONE_DARK = 0xb8a47a;
+const HIDE = 0x9a7448;
 
 /** The outline color for each aura (0: the usual ink). */
-export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820];
+export const AURA_OUTLINE = [OUTLINE, 0xc08a10, 0xc8401a, 0x4ab0d8, 0xc8b020, 0x4a1a7a, 0x3a9a2a, 0x8a9ae8, 0xd84ab8, 0x6a2ab8, 0xd8a820, 0xc87a20];
 
 const shade = (c: number, k: number) => {
   const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k)));
@@ -714,6 +718,23 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           return f < 0.33 ? FLAME[0] : f < 0.7 ? FLAME[1] : FLAME[2];
         }, 4, 26, 9);
         break;
+      case 10: { // bone tail: a spine of vertebrae curling up to a spiked club
+        const path = back
+          ? [[14, 27], [16, 28], [18, 28], [20, 27], [22, 26], [23, 25], [24, 24], [25, 22], [25, 21]]
+          : [[19, 28], [21, 28], [22, 27], [24, 26], [25, 25], [26, 23], [26, 22], [27, 21]];
+        path.forEach(([x, y], i) => rect(x, y, x + 1, y + 1, i % 2 ? BONE_DARK : BONE));
+        const [tx, ty] = path[path.length - 1];
+        round(tx - 1, ty - 4, tx + 2, ty - 1, BONE, 1); // the club
+        rect(tx, ty - 3, tx + 1, ty - 2, BONE_DARK);
+        put(tx - 2, ty - 3, BONE); // its spikes
+        put(tx + 3, ty - 3, BONE);
+        put(tx, ty - 5, BONE);
+        put(tx + 1, ty - 5, BONE);
+        break;
+      }
+      case 11: // bone wings: long finger bones with dried hide stretched between
+        wings((i, w, y) => (i === w - 1 || i % 3 === 0 ? (y % 4 === 0 ? BONE_DARK : BONE) : (i + y) % 5 === 0 ? shade(HIDE, 0.85) : HIDE), 5, 26, 9);
+        break;
       default:
         break;
     }
@@ -949,6 +970,28 @@ export function paintTrainer(ctx: CanvasRenderingContext2D, look: TrainerLook, p
           put(X1 - 3, Y0, 0x5ab84a);
         }
         break;
+      case 28: { // skull helm: an old beast's skull worn as a helm, its teeth for a brim, horns up top
+        round(X0, Y0 - 4, X1, Y0 + 2, BONE, 2);
+        if (back) {
+          rect(X0 + 1, Y0 + 1, X1 - 1, Y0 + 2, BONE_DARK);
+          for (let y = Y0 - 3; y <= Y0; y += 2) put(13, y, BONE_DARK);
+        } else {
+          rect(X0 + 3, Y0 - 2, X0 + 5, Y0 - 1, INK); // eye sockets
+          rect(X1 - 5, Y0 - 2, X1 - 3, Y0 - 1, INK);
+          rect(13, Y0 - 1, 14, Y0, BONE_DARK); // nose holes
+          for (let x = X0; x <= X1; x++) put(x, Y0 + 2, x % 2 ? BONE : BONE_DARK); // teeth
+          put(X0, Y0 + 3, BONE);
+          put(X1, Y0 + 3, BONE);
+        }
+        // Short horns curving out and up from its temples.
+        for (const [x, d] of [[X0 - 1, -1], [X1 + 1, 1]] as const) {
+          put(x, Y0 - 1, BONE);
+          put(x, Y0 - 2, BONE);
+          put(x + d, Y0 - 3, BONE);
+          put(x + d, Y0 - 4, BONE_DARK);
+        }
+        break;
+      }
       case 17: // propeller cap
         round(X0, Y0 - 3, X1, Y0 + 1, hatC, 2);
         rect(X0 + 1, Y0 - 3, 13, Y0 - 1, acc);

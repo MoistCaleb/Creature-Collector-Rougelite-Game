@@ -13,6 +13,8 @@ import { activeTeam, activeTeamIndex, ARENA_LEVEL, ARENA_TEAM, arenaForms, arena
 import { openPicker, showMessage } from '../ui/picker';
 import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
+import { PREHISTORIC_MILESTONES, prehistoricCount } from '../logic/titles';
+import { rewardText } from '../logic/cosmetics';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
@@ -51,7 +53,7 @@ const INFO_BTN = 48;
 
 /** Hexlings tab: search text and which lines to show (kept while you browse). */
 let dexQuery = '';
-type DexFilter = 'all' | 'caught' | 'uncaught' | 'unseen' | 'gilded';
+type DexFilter = 'all' | 'caught' | 'uncaught' | 'unseen' | 'gilded' | 'prehistoric';
 let dexFilter: DexFilter = 'all';
 /** The first chip steps through these (tap again for the next; the last goes back to all). */
 const CATCH_STEPS: { f: DexFilter; label: string; color: number }[] = [
@@ -242,7 +244,9 @@ export class DexScene extends Phaser.Scene {
       const k = Math.max(0, CATCH_STEPS.findIndex((s) => s.f === dexFilter));
       const step = CATCH_STEPS[k];
       chip(0, k > 0, step.label, step.color, () => (dexFilter = CATCH_STEPS[(k + 1) % CATCH_STEPS.length].f));
-      chip(1, dexFilter === 'gilded', '✦ Gilded', 0x7a5a1c, () => (dexFilter = dexFilter === 'gilded' ? 'all' : 'gilded'));
+      // All -> Gilded -> Prehistoric -> all.
+      const pre = dexFilter === 'prehistoric';
+      chip(1, dexFilter === 'gilded' || pre, pre ? '◈ Prehistoric' : '✦ Gilded', pre ? 0x7a4a1c : 0x7a5a1c, () => (dexFilter = dexFilter === 'gilded' ? 'prehistoric' : pre ? 'all' : 'gilded'));
     }
   }
 
@@ -300,10 +304,15 @@ export class DexScene extends Phaser.Scene {
       const ry = y;
       this.addRow(ry, 58, (row) => this.rewardsRow(row, ry));
       y += 58;
+      const py = y;
+      this.addRow(py, 58, (row) => this.prehistoricRow(row, py));
+      y += 58;
     }
+    const ancient = state.meta.ancientFound ?? [];
     DEX_SPECIES.forEach((sp, i) => {
       if (dexFilter === 'caught' && !dex.caught.includes(sp.id)) return;
       if (dexFilter === 'gilded' && !owned.includes(sp.id)) return;
+      if (dexFilter === 'prehistoric' && !ancient.includes(sp.id)) return;
       if (dexFilter === 'uncaught' && dex.caught.includes(sp.id)) return;
       if (dexFilter === 'unseen' && sp.names.some((_, st) => hasSeenForm(dex, sp.id, st))) return;
       if (elFilter && !sp.types.includes(elFilter)) return;
@@ -319,7 +328,9 @@ export class DexScene extends Phaser.Scene {
       const msg =
         dexFilter === 'gilded' && !owned.length
           ? 'No Gilded Hexlings yet. Catch one to unlock its whole line!'
-          : !q && !elFilter && dexFilter === 'uncaught'
+          : dexFilter === 'prehistoric' && !ancient.length
+            ? 'No Prehistoric forms yet. Look for them in the wild, in Ancient Ruins and at Fossil Sites.'
+            : !q && !elFilter && dexFilter === 'uncaught'
             ? "You've caught every Hexling!"
             : !q && !elFilter && dexFilter === 'unseen'
               ? "You've seen every Hexling!"
@@ -657,6 +668,44 @@ export class DexScene extends Phaser.Scene {
     row.add(text(this, 54, y + 8, 'Completion rewards', 15, '#ffc94d', { fontStyle: 'bold' }));
     row.add(text(this, 54, y + 28, ready ? `${ready} ready to claim! Tap to collect your embers.` : `${claimed}/${list.length} claimed · fill the Hexlidex for embers`, 12, ready ? '#ffe08a' : COLORS.textDim));
     row.add(icon(this, W - 30, y + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+  }
+
+  /** Prehistoric forms found, and the next milestone (a title and its gear). Tap for every milestone. */
+  private prehistoricRow(row: Phaser.GameObjects.Container, y: number) {
+    const n = prehistoricCount(state.meta);
+    const next = PREHISTORIC_MILESTONES.find(([c]) => c > n);
+    const bg = this.add
+      .rectangle(12, y, W - 24, 50, COLORS.panel)
+      .setOrigin(0)
+      .setStrokeStyle(1, n ? 0xe0a85a : COLORS.stroke)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => !this.scroller.moved && this.openPrehistoric());
+    row.add(bg);
+    row.add(text(this, 34, y + 25, '◈', 20, '#e8a95a', { fontStyle: 'bold' }).setOrigin(0.5));
+    row.add(text(this, 54, y + 8, `Prehistoric forms  ${n}/${SPECIES.length}`, 15, '#e8a95a', { fontStyle: 'bold' }));
+    const sub = next ? `Next: ${next[1]} at ${next[0]} · ${rewardText(next[1]).replace(/^Unlocks /, '')}` : 'Every Prehistoric milestone reached!';
+    row.add(text(this, 54, y + 28, sub, 12, COLORS.textDim, { fixedWidth: W - 100 }));
+    row.add(icon(this, W - 30, y + 25, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
+  }
+
+  private openPrehistoric() {
+    const n = prehistoricCount(state.meta);
+    this.overlay((done) =>
+      openPicker(this, {
+        title: '◈ Prehistoric milestones',
+        subtitle: `${n}/${SPECIES.length} lines found. Catch a Prehistoric Hexling (1 in 250 in the wild, far more in Ancient Ruins) or take one from a Fossil Site.\nEach milestone is a title and trainer gear.`,
+        options: PREHISTORIC_MILESTONES.map(([c, t]) => ({
+          label: `${n >= c ? '◈ ' : ''}${c} lines · ${t}`,
+          sub: `${n >= c ? 'Earned' : `${n}/${c}`} · ${rewardText(t)}`,
+          disabled: true,
+          color: n >= c ? 0x7a4a1c : undefined,
+        })),
+        rowHeight: 56,
+        cancelLabel: 'Back',
+        onCancel: done,
+        onPick: () => {},
+      }),
+    );
   }
 
   private openRewards() {

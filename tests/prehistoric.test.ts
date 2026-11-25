@@ -91,3 +91,32 @@ describe('Looks in the team builder and on the starter screen', () => {
     expect(c.shiny).toBeUndefined();
   });
 });
+
+import { PREHISTORIC_MILESTONES, prehistoricCount, takeNewTitles, TITLE_BY_NAME, hasTitle } from '../src/logic/titles';
+import { lockOf, TITLE_REWARDS } from '../src/logic/cosmetics';
+
+describe('Prehistoric milestones', () => {
+  it('earn a title and its gear at each count', () => {
+    const meta = mkMeta();
+    meta.ancientFound = [];
+    for (const [count, title] of PREHISTORIC_MILESTONES) {
+      const t = TITLE_BY_NAME[title];
+      const gear = TITLE_REWARDS[title];
+      expect(gear.length).toBeGreaterThan(0);
+      meta.ancientFound = SPECIES.slice(0, count - 1).map((s) => s.id);
+      expect(hasTitle(meta, t)).toBe(false);
+      for (const c of gear) expect(lockOf(meta, c.key, c.value)).not.toBeNull();
+      meta.ancientFound = SPECIES.slice(0, count).map((s) => s.id);
+      expect(prehistoricCount(meta)).toBe(count);
+      expect(hasTitle(meta, t)).toBe(true);
+      for (const c of gear) expect(lockOf(meta, c.key, c.value)).toBeNull();
+    }
+  });
+
+  it('are announced like other titles', () => {
+    const meta = mkMeta();
+    meta.ancientFound = SPECIES.slice(0, 3).map((s) => s.id);
+    expect(takeNewTitles(meta).map((t) => t.name)).toContain('Fossil Finder');
+    expect(takeNewTitles(meta).map((t) => t.name)).not.toContain('Fossil Finder');
+  });
+});

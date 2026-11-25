@@ -544,6 +544,17 @@ rule loss rates (the report's rule table is small and noisy).
   (`meta.starterLook`) have a button that cycles through them, one look at a time. Starters carry
   the look into normal runs, dailies, weeklies and stage battles; online, the other phones see it
   (teams, finale creatures and map leads all carry it).
+- **Always obvious** (as clear as Gilded, in amber instead of gold; ui/prehistoric.ts): a foe's first
+  appearance gets its own reveal (the ground shakes, rocks fall, amber light, a "◈ PREHISTORIC! ◈"
+  banner, a roar) and yours a shorter one; it glows amber with drifting dust while it's out, its
+  attacks throw rock, and its battle panel has an amber frame, amber name and a PREHISTORIC tab.
+  Catch buttons carry a PREHISTORIC badge (and, like a Gilded one, a fainted Prehistoric foe in a
+  double battle can still be caught). Team rows and run history mark it with an amber stone icon
+  and an amber name (Gilded names are gold). Shakes and flashes follow Reduce motion.
+- **Milestones** (titles, logic/titles.ts, with gear, logic/cosmetics.ts): 3 lines Fossil Finder (rare,
+  Skull helm), 10 Paleontologist (epic, Bone tail), 25 Primeval (legendary, Bone wings), 50 Living
+  Fossil (mythic, Amber aura). The Hexlidex has a Prehistoric row (count and next milestone, tap for
+  all of them) and a ◈ Prehistoric filter (the Gilded chip cycles to it); Records counts them.
 
 ## Camp while you were away (2.07)
 
