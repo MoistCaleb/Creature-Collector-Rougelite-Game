@@ -1417,7 +1417,10 @@ export function shinyHue(speciesId: string): number {
 /**
  * A sprite's colours: its own, Gilded (`true`), or its bond colours (`'alt'`, camp bond heart 5).
  */
-export type Colours = boolean | 'alt' | 'ancient';
+/** A look: Gilded (true), bond colours, Prehistoric, or a hatchling's (`hatch:<other parent>`, 2.07). */
+export type Colours = boolean | 'alt' | 'ancient' | `hatch:${string}`;
+/** The other parent of a hatchling look, or null. */
+export const hatchOf = (c: Colours): string | null => (typeof c === 'string' && c.startsWith('hatch:') ? c.slice(6) : null);
 
 /** Bond colours: turned the other way round the wheel from Gilded, so the two never match. */
 export function altHue(speciesId: string): number {
@@ -1425,7 +1428,8 @@ export function altHue(speciesId: string): number {
 }
 
 /** A Hexling's colours: Gilded first, then a Prehistoric form's, then its bond colours. */
-export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean }): Colours => (c.shiny ? true : c.ancient ? 'ancient' : c.alt ? 'alt' : false);
+export const colours = (c: { shiny?: boolean; alt?: boolean; ancient?: boolean; heir?: { other: string } }): Colours =>
+  c.shiny ? true : c.ancient ? 'ancient' : c.heir ? `hatch:${c.heir.other}` : c.alt ? 'alt' : false;
 
 /**
  * Prehistoric forms: its colours from an earlier era. Muted and earthier (nudged toward ochre),
@@ -1444,7 +1448,7 @@ export function primal(col: number): number {
 
 function paletteFor(speciesId: string, stage: number, shiny: Colours = false) {
   const p = basePalette(speciesId, stage);
-  if (!shiny) return p;
+  if (!shiny || hatchOf(shiny)) return p;
   if (shiny === 'ancient') {
     // Prehistoric: earthy colours, amber where its signature glow was, old ivory for bone.
     for (const k of [1, 2, 3, 9]) p.pal[k] = primal(p.pal[k]);
@@ -1516,7 +1520,8 @@ export function paintCreature(ctx: CanvasRenderingContext2D, speciesId: string, 
 
 /** `back`: the view from behind (your side in battle). */
 export function creatureTextureKey(speciesId: string, stage: number, shiny: Colours = false, back = false): string {
-  return `cr-${speciesId}-${stage}${shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}${back ? '-b' : ''}`;
+  const h = hatchOf(shiny);
+  return `cr-${speciesId}-${stage}${h ? `-h${h}` : shiny === 'alt' ? '-a' : shiny === 'ancient' ? '-n' : shiny ? '-s' : ''}${back ? '-b' : ''}`;
 }
 
 /**

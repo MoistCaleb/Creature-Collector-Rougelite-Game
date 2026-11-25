@@ -139,6 +139,8 @@ export function cleanCreatures(list: unknown): Creature[] {
       shiny: c.shiny === true ? true : undefined,
       ancient: c.shiny !== true && c.ancient === true ? true : undefined,
       alt: c.shiny !== true && c.ancient !== true && c.alt === true ? true : undefined,
+      // A hatchling (a Hatchery egg on the run): its other parent and which moves came from it.
+      heir: c.heir && typeof c.heir.other === 'string' && SPECIES_BY_ID[c.heir.other] ? { other: c.heir.other, mix: Math.max(0, Math.min(255, Math.round(Number(c.heir.mix) || 0))) } : undefined,
       pendingMoves: [],
     }))
     .filter((c) => c.moves.length > 0)

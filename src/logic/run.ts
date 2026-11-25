@@ -10,6 +10,7 @@ import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
 import { SURPRISES } from '../data/surprises';
 import { noteAncient } from './surprises';
+import { hatchlingCreature, type Hatchling } from './nest';
 import { pickLooks, type PickLook } from './arena';
 import { dojoOn, dojoResult, elderHere, floorSurprise, lastWinTeam, tickEgg, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
@@ -677,6 +678,16 @@ export interface ActiveBattle {
 }
 
 /** Three starter choices: the favorite (if unlocked) plus random others from the unlocked pool. */
+/**
+ * Start a normal run with a hatchling from the Nest's Nursery (2.07): its line as the starter, with
+ * its rolled trait, egg stars and moves from both parents. It stays in the Nursery for later runs.
+ */
+export function startNestRun(meta: Meta, h: Hatchling, seed = Date.now(), mapId = 'wildlands', quick = false): Run {
+  const run = startRun(meta, h.speciesId, seed, mapId, undefined, false, undefined, undefined, quick);
+  if (run.team[0]) hatchlingCreature(h, run.team[0]);
+  return run;
+}
+
 export function rollStarterChoices(meta: Meta, rng: Rng): string[] {
   const fav = meta.favorite && meta.unlockedStarters.includes(meta.favorite) ? meta.favorite : null;
   const others = rng.shuffle(meta.unlockedStarters.filter((id) => id !== fav));

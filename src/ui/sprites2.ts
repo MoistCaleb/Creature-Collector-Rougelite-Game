@@ -3,7 +3,7 @@ import { ELEMENT_COLORS, type Element } from '../data/types';
 import { hashString, Rng } from '../logic/rng';
 import { DEX_SPECIES } from '../data/legends';
 import { LINE_PLANS } from './linePlans';
-import { altHue, buildGrid, hueShift, paletteFor, primal, type Colours, type FaceInfo, type Hatch } from './sprites';
+import { altHue, buildGrid, hueShift, paletteFor, primal, type Colours, type FaceInfo, type Hatch, hatchOf } from './sprites';
 
 /**
  * Hexbound 2.0 art: the line part plans, drawn on a finer grid (64 px) and painted with light and
@@ -70,6 +70,12 @@ function measureFit(speciesId: string, stage: number): number {
 
 /** `back`: the view from behind (the player's side in battle). */
 export function paintCreature2(ctx: CanvasRenderingContext2D, speciesId: string, stage: number, ox0 = 0, oy0 = 0, shiny: Colours = false, back = false, hatch?: Hatch) {
+  // A hatchling look (2.07): its other parent's colour and part, on its own line's colours.
+  const from = hatchOf(shiny);
+  if (from) {
+    hatch = { other: from, colours: true, part: true };
+    shiny = false;
+  }
   const k = fitScale(speciesId, stage);
   const face: Partial<FaceInfo> = {};
   const g = buildGrid(speciesId, stage, k, face, true, back, shiny === 'ancient', hatch) as number[][];

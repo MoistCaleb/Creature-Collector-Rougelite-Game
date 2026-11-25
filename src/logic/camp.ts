@@ -1,4 +1,5 @@
 import { LEGEND_CHANCE, LEGENDS } from '../data/legends';
+import { tickNest } from './nest';
 import { MAP_BY_ID } from '../data/maps';
 import { SPECIES_BY_ID } from '../data/species';
 import { traitsFound } from './dex';
@@ -43,6 +44,8 @@ export interface CampState {
   workshop?: import('../data/workshop').WorkshopId[];
   /** Gifts your camp crew found while you were on a run, waiting to be opened (2.07). */
   gifts?: CampGift[];
+  /** The Nest (2.07): the egg in it, the hatchlings in the Nursery, and every pair hatched. See logic/nest. */
+  nest?: import('./nest').NestState;
 }
 
 /** Something a crew Hexling found while you were away. */
@@ -450,7 +453,10 @@ export function payRunBond(meta: Meta, run: Run, won: boolean): { speciesId: str
   // Every finished run (losses too, not online races) makes camp care fresh again.
   if (!run.race) camp(meta).cared = {};
   for (const o of out) Object.assign(o, addBond(meta, o.speciesId, o.points));
-  if (!run.race) campWhileAway(meta, run.seed);
+  if (!run.race) {
+    campWhileAway(meta, run.seed);
+    tickNest(meta);
+  }
   return out;
 }
 

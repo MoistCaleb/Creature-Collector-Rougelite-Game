@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SURPRISES } from '../data/surprises';
 import { ELEMENT_COLORS } from '../data/types';
 import type { Run } from '../logic/run';
-import { EGG_WINS, floorSurprise } from '../logic/surprises';
+import { eggNeed, floorSurprise } from '../logic/surprises';
 import { calm } from './motion';
 import { showMessage } from './picker';
 import { text } from './widgets';
@@ -29,7 +29,7 @@ export function activeSurprises(run: Run): { name: string; lines: string[]; big:
     lines.push(`An Elder guardian waits at the top of this floor.\n${SURPRISES.elder.desc}`);
   }
   if (fs.hexNode && !run.visited.includes(fs.hexNode)) lines.push('Something glitters on a hex ahead (???).');
-  if (rs.egg) lines.push(`Egg: ${Math.min(rs.egg.wins, EGG_WINS)} / ${EGG_WINS} battles to hatch.`);
+  if (rs.egg) lines.push(`Egg: ${Math.min(rs.egg.wins, eggNeed(rs.egg))} / ${eggNeed(rs.egg)} battles to hatch.`);
   if (!lines.length) return null;
   return { name: names.length === 1 ? names[0] : names.length ? `${names.length} surprises` : 'Surprise', lines, big: names.length > 0 };
 }
