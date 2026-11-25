@@ -67,7 +67,8 @@ describe('Looks in the team builder and on the starter screen', () => {
     meta.ancientFound = ['emberkit'];
     meta.shinyOwned = ['emberkit'];
     expect(pickLooks(meta, 'emberkit')).toEqual(['normal', 'gilded', 'prehistoric']);
-    const p = withLook(withLook({ speciesId: 'emberkit', stage: 0, moves: [] as string[] }, 'gilded'), 'prehistoric');
+    const base: import('../src/logic/arena').ArenaPick = { speciesId: 'emberkit', stage: 0, moves: [] };
+    const p = withLook(withLook(base, 'gilded'), 'prehistoric');
     expect(lookOf(p)).toBe('prehistoric');
     expect(p.shiny).toBeUndefined();
     expect(makeArenaCreature(p).ancient).toBe(true);

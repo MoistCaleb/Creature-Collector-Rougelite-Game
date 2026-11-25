@@ -167,3 +167,31 @@ describe('Camp bond, deepened (2.0)', () => {
     expect(campVisitor(m)).toBe('emberkit');
   });
 });
+
+describe('Camp while you were away (2.07)', () => {
+  it('crew find gifts after a run (not online races); opening them pays embers', async () => {
+    const { openGifts, campPairs, PAIR_HEARTS } = await import('../src/logic/camp');
+    const m = mkMeta();
+    camp(m).crew = ['emberkit', 'frostling'];
+    let total = 0;
+    for (let seed = 1; seed <= 20; seed++) payRunBond(m, startRun(m, 'emberkit', seed), false);
+    expect((camp(m).gifts ?? []).length).toBeGreaterThan(0);
+    expect((camp(m).gifts ?? []).length).toBeLessThanOrEqual(6);
+    const before = camp(m).embers;
+    for (const g of openGifts(m)) total += g.embers;
+    expect(camp(m).embers).toBe(before + total);
+    expect(openGifts(m)).toEqual([]);
+    const race = startRun(m, 'emberkit', 99);
+    race.race = {} as never;
+    payRunBond(m, race, true);
+    expect(camp(m).gifts ?? []).toEqual([]);
+    // Pairs: both close.
+    expect(campPairs(m)).toEqual([]);
+    at(m, 'emberkit', CAMP_HEARTS[PAIR_HEARTS - 1]);
+    at(m, 'frostling', CAMP_HEARTS[PAIR_HEARTS - 1]);
+    expect(campPairs(m)).toEqual([['emberkit', 'frostling']]);
+    const fb = camp(m).bond.frostling;
+    payRunBond(m, startRun(m, 'emberkit', 123), false);
+    expect(camp(m).bond.frostling).toBe(fb + 1);
+  });
+});

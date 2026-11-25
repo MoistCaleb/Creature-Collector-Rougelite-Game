@@ -36,6 +36,8 @@ import {
   type Care,
   type ChallengeState,
   type PrepId,
+  campPairs,
+  openGifts,
 } from '../logic/camp';
 import { createCreature } from '../logic/creature';
 import { type WorkshopBranch } from '../data/workshop';
@@ -100,6 +102,21 @@ export class CampScene extends Phaser.Scene {
   init(data: { prep?: boolean; workshop?: WorkshopBranch | 'list' }) {
     this.prep = !!data.prep && !!state.run;
     this.reopen = data.workshop ?? null;
+  }
+
+  /** Gifts your crew found while you were away (2.07): opened on arrival, their embers yours. */
+  private showGifts(then: () => void) {
+    const meta = state.meta;
+    const gifts = openGifts(meta);
+    const pairs = campPairs(meta);
+    if (!gifts.length) return then();
+    saveMeta(meta);
+    sfx.coin();
+    const name = (id: string) => SPECIES_BY_ID[id]?.names[campStage(meta, id)] ?? SPECIES_BY_ID[id]?.names[0] ?? id;
+    const lines = gifts.map((g) => `${name(g.speciesId)} found ${g.what}: +${g.embers} embers`);
+    const together = pairs.length ? `\n\n${pairs.map(([a, b]) => `${name(a)} and ${name(b)}`).join(', ')} kept each other company (+1 bond each).` : '';
+    showMessage(this, 'While you were away', `${lines.join('\n')}${together}`, () => this.scene.restart());
+    void then;
   }
 
   create() {
@@ -239,7 +256,7 @@ export class CampScene extends Phaser.Scene {
       if (welcome) {
         sfx.coin();
         showMessage(this, 'Welcome to Hexbound 2.0!', welcomeText(welcome), () => this.scene.restart());
-      } else announceHunt(this, meta, () => tip(this, 'camp'));
+      } else announceHunt(this, meta, () => this.showGifts(() => tip(this, 'camp')));
       if (this.reopen) {
         this.reopen = null;
         this.workshop();

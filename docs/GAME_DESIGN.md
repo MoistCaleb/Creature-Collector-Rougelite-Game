@@ -544,3 +544,11 @@ rule loss rates (the report's rule table is small and noisy).
   (`meta.starterLook`) have a button that cycles through them, one look at a time. Starters carry
   the look into normal runs, dailies, weeklies and stage battles; online, the other phones see it
   (teams, finale creatures and map leads all carry it).
+
+## Camp while you were away (2.07)
+
+- After each finished run (not online races), each camp crew Hexling may find a gift: chance
+  25% + 10% per camp heart, worth 1 + hearts/2 (+0-1) embers, described as a trinket. Up to 6 wait
+  at camp and are opened on arrival ("While you were away").
+- Crew pairs where both have 3+ hearts keep each other company: +1 bond each per run.
+- Eggs and breeding build on this later (docs/BACKLOG.md).
