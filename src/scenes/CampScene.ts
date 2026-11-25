@@ -47,6 +47,8 @@ import { workshopProgress } from '../logic/workshop';
 import { payHuntMilestones } from '../logic/huntMilestones';
 import { payWelcomeBack, welcomeText } from '../logic/welcomeBack';
 import { tip } from '../ui/tips';
+import { nestReady } from '../logic/nest';
+import { hatchNow, openNest } from '../ui/nestUi';
 import { announceHunt } from '../ui/gildedUi';
 import { Rng } from '../logic/rng';
 import { applyPrep, clearSavedRun, floorsOf, hasSavedRun, legendsCaught, loadRun, rivalHello, saveMeta } from '../logic/run';
@@ -109,7 +111,8 @@ export class CampScene extends Phaser.Scene {
     const meta = state.meta;
     const gifts = openGifts(meta);
     const pairs = campPairs(meta);
-    if (!gifts.length) return then();
+    // The Nest's egg is ready (2.07): it hatches as you arrive.
+    if (!gifts.length) return nestReady(meta) ? hatchNow(this, () => this.scene.restart()) : then();
     saveMeta(meta);
     sfx.coin();
     const name = (id: string) => SPECIES_BY_ID[id]?.names[campStage(meta, id)] ?? SPECIES_BY_ID[id]?.names[0] ?? id;
@@ -840,6 +843,7 @@ export class CampScene extends Phaser.Scene {
       [`Ember stall · ${c.embers}`, () => this.stall(), 0x6a3a1a],
       [workshopProgress(meta).next && c.embers >= workshopProgress(meta).next!.cost ? 'Workshop (!)' : 'Workshop', () => this.workshop(), 0x4a3a5a],
       ['Camp crew', () => this.crewPicker(), 0x3a4a2a],
+      [nestReady(meta) ? 'Nest (hatching!)' : c.nest?.egg ? `Nest · ${c.nest.egg.left} to go` : 'Nest', () => openNest(this, () => this.scene.restart()), nestReady(meta) ? 0x8a5a1a : 0x5a4a2a],
     ];
     items.forEach(([label, fn, color], i) => {
       // Upright: a stack top right. Sideways: a row along the top right.

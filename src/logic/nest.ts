@@ -2,7 +2,9 @@ import { LEGENDS } from '../data/legends';
 import { SPECIES_BY_ID } from '../data/species';
 import { traitsOf, type TraitId } from '../data/traits';
 import { camp, campCrew, campHearts } from './camp';
-import { learnMoves, stats, type Creature } from './creature';
+import { BALANCE } from '../data/balance';
+import { MOVES } from '../data/moves';
+import { createCreature, learnMoves, learnsetOf, stats, type Creature } from './creature';
 import { hashString, Rng } from './rng';
 import type { Meta } from './run';
 
@@ -247,4 +249,19 @@ export function hatchedPairs(meta: Meta): { speciesId: string; other: string; re
     })
     .filter((p) => SPECIES_BY_ID[p.speciesId] && SPECIES_BY_ID[p.other])
     .sort((a, b) => b.rec.last - a.rec.last);
+}
+
+/** A hatchling as it would start a run (for the Nursery and the starter screen). */
+export function hatchlingPreview(h: Hatchling, level = BALANCE.starterLevel): Creature {
+  return hatchlingCreature(h, createCreature(h.speciesId, level));
+}
+
+/** The moves (names) a hatchling's line would learn from its other parent instead of its own, in order. */
+export function inheritedMoves(h: { speciesId: string; other: string; mix: number }): string[] {
+  const c = createCreature(h.speciesId, 1);
+  c.heir = { other: h.other, mix: h.mix };
+  const own = learnsetOf({ ...c, heir: undefined });
+  return learnsetOf(c)
+    .filter((e, i) => e.id !== own[i].id)
+    .map((e) => MOVES[e.id]?.name ?? e.id);
 }

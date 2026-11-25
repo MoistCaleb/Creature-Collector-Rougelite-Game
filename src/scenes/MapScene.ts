@@ -1,5 +1,5 @@
 import { hasBoon, openOffer, rollOffer, runBoons, takeBoon } from '../logic/boons';
-import { DOJO_ROUNDS, EGG_WINS, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
+import { DOJO_ROUNDS, eggNeed, eggReady, enterDojo, findSurprise, floorSurprise, fossilChoices, hatchEgg, layEgg, leaveDojo, noteAncient } from '../logic/surprises';
 import { SURPRISES } from '../data/surprises';
 import { surpriseBadge, surpriseEdge, surpriseTint } from '../ui/surpriseUi';
 import { BOONS } from '../data/boons';
@@ -46,6 +46,8 @@ import { SPECIES_BY_ID } from '../data/species';
 import { traitName } from '../ui/traitText';
 import { dex, persist, state } from '../state';
 import { announceGilded } from '../ui/gildedUi';
+import { playHatch } from '../ui/hatch';
+import { noteHatched } from '../logic/nest';
 import { bagHasNew, TWISTS } from '../logic/run';
 import { EVENT_BY_ID, leaveEvent, rollEvent, rollTreasure, type EventOption } from '../logic/events';
 import { openPicker, showMessage } from '../ui/picker';
@@ -1267,21 +1269,20 @@ export class MapScene extends Phaser.Scene {
   private hatchIfReady(then: () => void) {
     const run = state.run!;
     if (!eggReady(run)) return then();
-    const name = SPECIES_BY_ID[run.surprises!.egg!.speciesId]?.names[0] ?? 'a Hexling';
+    const egg = run.surprises!.egg!;
+    const name = SPECIES_BY_ID[egg.speciesId]?.names[0] ?? 'a Hexling';
     const hatch = (release?: Creature) => {
       const gone = release ? creatureName(release) : '';
       const c = hatchEgg(run);
       if (!c) return then();
       joinParty(run, c, release);
       dex.creature(c, true);
-      sfx.shinyReveal();
+      // Its pair goes in the Hexlidex's Hatched tab (2.07).
+      if (c.heir) noteHatched(state.meta, c.speciesId, c.heir.other, egg.tier ?? 3);
       persist();
-      showMessage(
-        this,
-        'The egg hatches!',
-        `${release ? `${gone} was released.\n\n` : ''}Out pops ${creatureName(c)} (Lv ${c.level}), with its rare trait${c.trait ? `: ${traitName(c.speciesId, c.trait)}` : ''}. It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`,
-        then,
-      );
+      const other = c.heir ? SPECIES_BY_ID[c.heir.other]?.names[0] : null;
+      const info = `${release ? `${gone} was released.\n\n` : ''}Out pops ${creatureName(c)} (Lv ${c.level})${other ? `, ${name} × ${other}` : ''}${c.trait ? `, with its trait ${traitName(c.speciesId, c.trait)}` : ''}${c.stars ? ` and ${'★'.repeat(c.stars)}` : ''}. It joins your ${run.team.includes(c) ? 'team' : 'bench'}.`;
+      playHatch(this, { a: egg.speciesId, b: egg.other, tier: egg.tier ?? 3 }, c, () => showMessage(this, 'The egg hatches!', info, then));
     };
     if (!rosterFull(run)) return hatch();
     const all = allCreatures(run);
@@ -1307,16 +1308,16 @@ export class MapScene extends Phaser.Scene {
         return showMessage(this, 'Hatchery', 'An empty nest. You already carry an egg, warm in your bag.', this.done);
       return openPicker(this, {
         title: 'Hatchery',
-        subtitle: `A warm nest, left alone, with one speckled egg in it. Carry it for ${EGG_WINS} won battles and it hatches into a line you haven't caught yet, always with its rare ◆ trait.`,
+        subtitle: `A warm nest, left alone, with one speckled egg in it. Carry it for 3 to 7 won battles and it hatches into a line you haven't caught yet: the longer it takes, the stronger the baby.`,
         options: [
           { label: 'Take the egg', color: 0x2f6b4a },
           { label: 'Leave it', color: 0x3a3450 },
         ],
         onPick: (i) => {
           if (i === 1) return this.done();
-          layEgg(run);
+          const e = layEgg(run);
           persist();
-          showMessage(this, 'Hatchery', `You tuck the egg into your bag. It hatches after ${EGG_WINS} won battles.`, this.done);
+          showMessage(this, 'Hatchery', `You tuck the egg into your bag. It hatches after ${eggNeed(e)} won battles.`, this.done);
         },
       });
     }
