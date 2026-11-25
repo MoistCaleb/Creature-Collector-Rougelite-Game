@@ -15,7 +15,8 @@ import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { PREHISTORIC_MILESTONES, prehistoricCount } from '../logic/titles';
 import { rewardText } from '../logic/cosmetics';
-import { hatchedPairs, TIER_NAMES } from '../logic/nest';
+import { hatchedPairs, TIER_NAMES, type PairRecord } from '../logic/nest';
+import { openPanel } from '../ui/panel';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
 import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
@@ -893,7 +894,15 @@ export class DexScene extends Phaser.Scene {
       const ry = y;
       this.addRow(ry, 80, (row) => {
         const gold = !!p.rec.legendary;
-        row.add(this.add.rectangle(12, ry, W - 24, 74, COLORS.panel).setOrigin(0).setStrokeStyle(gold ? 3 : 2, gold ? 0xffd86b : COLORS.stroke));
+        row.add(
+          this.add
+            .rectangle(12, ry, W - 24, 74, COLORS.panel)
+            .setOrigin(0)
+            .setStrokeStyle(gold ? 3 : 2, gold ? 0xffd86b : COLORS.stroke)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerup', () => !this.scroller.moved && this.openFamily(p.speciesId, p.other, p.rec)),
+        );
+        row.add(icon(this, W - 30, ry + 37, 'arrowUp', 12).setAngle(90).setAlpha(0.5));
         row.add(this.add.image(52, ry + 38, ensureCreatureTexture(this, p.speciesId, 0, `hatch:${p.other}`)).setScale(1.7 * SPRITE_FIT));
         row.add(text(this, 96, ry + 8, hatchName(p.speciesId, 0, p.other), 16, gold ? '#ffd86b' : COLORS.text, { fontStyle: 'bold' }));
         row.add(text(this, 96, ry + 30, `${nm(p.speciesId)} × ${nm(p.other)}${gold ? ' (legendary)' : ''}`, 13, COLORS.textDim));
@@ -903,6 +912,54 @@ export class DexScene extends Phaser.Scene {
       y += 80;
     }
     this.contentH = y + 8;
+  }
+
+  /**
+   * A hatched pair's family tree: its two parents at the top, joined to the hatchling below, then the
+   * hatchling's evolutions (all wearing its hatchling look).
+   */
+  private openFamily(speciesId: string, other: string, rec: PairRecord) {
+    const nm = (id: string) => SPECIES_BY_ID[id]?.names[0] ?? id;
+    const gold = !!rec.legendary;
+    const lineC = gold ? 0xffd86b : 0x8e86ad;
+    const ph = LANDSCAPE ? 430 : 560;
+    this.overlay((done) => {
+      const p = openPanel(this, 'Family tree', { w: LANDSCAPE ? 600 : 430, h: ph, onClose: done });
+      const add = <T extends Phaser.GameObjects.GameObject>(o: T) => (p.root.add(o), o);
+      const cx = p.x + p.w / 2;
+      const S = LANDSCAPE ? 2.3 : 2.8; // sprite scale
+      const parentY = p.top + (LANDSCAPE ? 44 : 58);
+      const kidY = p.top + (LANDSCAPE ? 214 : 286);
+      const step = Math.min(p.w / 3, LANDSCAPE ? 170 : 140);
+      const xs = [cx - step, cx, cx + step]; // hatchling and its evolutions
+      // Parents: its own line on the left, the other parent on the right.
+      const pxs = [cx - p.w * 0.24, cx + p.w * 0.24];
+      [speciesId, other].forEach((id, i) => {
+        add(this.add.image(pxs[i], parentY, ensureCreatureTexture(this, id, 0)).setScale(S * SPRITE_FIT));
+        add(text(this, pxs[i], parentY + 44, nm(id), 14, isLegend(id) ? '#ffd86b' : COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
+        add(text(this, pxs[i], parentY + 63, i === 0 ? 'its line' : isLegend(id) ? 'legendary parent' : 'colour, part and moves', 11, COLORS.textDim).setOrigin(0.5, 0));
+      });
+      // The tree: down from each parent, across, and down to the hatchling.
+      const g = add(this.add.graphics());
+      const joinY = parentY + (kidY - parentY) * 0.62;
+      g.lineStyle(3, lineC, 0.9);
+      g.lineBetween(pxs[0], parentY + 82, pxs[0], joinY);
+      g.lineBetween(pxs[1], parentY + 82, pxs[1], joinY);
+      g.lineBetween(Math.min(xs[0], pxs[0]), joinY, Math.max(xs[0], pxs[1]), joinY);
+      g.lineBetween(xs[0], joinY, xs[0], kidY - 44);
+      g.fillStyle(lineC, 1).fillCircle(xs[0], joinY, 4);
+      // The hatchling, then its evolutions.
+      for (let st = 0; st < 3; st++) {
+        const x = xs[st];
+        if (st === 0) add(this.add.circle(x, kidY, 40, gold ? 0x5a4a1c : 0x3a3352, 0.6));
+        add(this.add.image(x, kidY, ensureCreatureTexture(this, speciesId, st, `hatch:${other}`)).setScale((st === 0 ? S : S * 0.92) * SPRITE_FIT));
+        add(text(this, x, kidY + 46, hatchName(speciesId, st, other), 14, st === 0 ? (gold ? '#ffd86b' : '#ffe9a8') : COLORS.text, { fontStyle: 'bold' }).setOrigin(0.5, 0));
+        add(text(this, x, kidY + 65, st === 0 ? 'Hatchling' : st === 1 ? 'Evolved' : 'Final form', 11, COLORS.textDim).setOrigin(0.5, 0));
+        if (st > 0) add(text(this, (xs[st - 1] + x) / 2, kidY - 6, '›', 26, '#8e86ad', { fontStyle: 'bold' }).setOrigin(0.5));
+      }
+      const when = new Date(rec.first).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      add(text(this, cx, kidY + 96, `Hatched ${rec.n}× · best: ${TIER_NAMES[rec.best - 1]} egg · first ${when}`, 12, '#8e86ad').setOrigin(0.5, 0));
+    });
   }
 
   private drawBoons() {
