@@ -2,7 +2,7 @@ import { SURPRISE_LIST, SURPRISES } from '../data/surprises';
 import { ELEMENTS, type Element } from '../data/types';
 import type { WeatherId } from '../data/moves';
 import { hashString, Rng } from './rng';
-import { highestLevel, placeRng, placeRoamer, saveMeta, type Meta, type Run } from './run';
+import { highestLevel, placeRng, placeRoamer, saveMeta, weeklyInfo, type Meta, type Run } from './run';
 import { SPECIES } from '../data/species';
 import { rollTrait, traitsOf } from '../data/traits';
 import { createCreature, stats, type Creature } from './creature';
@@ -102,7 +102,8 @@ export function omenFor(seed: number, omens: string[] = of('omen')): string | un
 /** A new run: its omen, and (if it's been a while) a promise of a surprise on the first floor. */
 export function startSurprises(run: Run, seeded: boolean) {
   const rs = runSurprises(run);
-  rs.omen = omenFor(run.seed, of('omen', run));
+  // Omen Week (a weekly twist): the week's omen instead of the seed's.
+  rs.omen = (run.weekly && run.twist === 'omen' ? weeklyInfo(run.weekly).omen : undefined) ?? omenFor(run.seed, of('omen', run));
   if (!seeded && (run.meta.surpriseDrought ?? 0) >= DROUGHT_MAX) rs.forced = true;
   rollFloorSurprises(run);
 }
@@ -115,7 +116,8 @@ export function rollFloorSurprises(run: Run) {
   const rng = new Rng(hashString(`${run.seed}:surprise:${key}`));
   const fs: FloorSurprise = {};
   if (rng.chance(ODDS.floor)) fs.floor = rng.pick(of('floor', run));
-  if (rng.chance(ODDS.elder)) fs.elder = true;
+  // Elder Week (a weekly twist): every guardian is an Elder.
+  if (rng.chance(ODDS.elder) || (run.twist === 'elders' && !run.hunt)) fs.elder = true;
   // Keen eye (Workshop): hidden hexes half again as often.
   let hex = rng.chance(ODDS.hex * hiddenBoost(run)) ? rng.pick(of('hex', run)) : undefined;
   // A friend's ghost is never rolled itself: it takes Echo of yourself's place now and then.
@@ -168,8 +170,8 @@ export function rollFloorSurprises(run: Run) {
     }
     placeRoamer(run, true);
   }
-  // Starfall (an omen): every floor has a Boon hex.
-  if (rs.omen === 'starfall' && !Object.values(run.map.nodes).some((n) => n.kind === 'boon')) {
+  // Starfall (an omen) and Boon Rush (a weekly twist): every floor has a Boon hex.
+  if ((rs.omen === 'starfall' || run.twist === 'boonrush') && !Object.values(run.map.nodes).some((n) => n.kind === 'boon')) {
     const spots = battles().filter((id) => id !== fs.encNode);
     if (spots.length) run.map.nodes[spots[rng.int(0, spots.length - 1)]].kind = 'boon';
   }
@@ -200,9 +202,10 @@ export function findSurprise(meta: Meta, id: string): boolean {
   return true;
 }
 
-/** Storm Front: each battle on the floor opens in a different weather. */
+/** Storm Front (and Wild Skies): each battle opens in a different weather. */
 export function stormFrontWeather(run: Run): WeatherId | null {
-  if (floorSurprise(run).floor !== 'stormfront') return null;
+  // Wild Skies (a weekly twist) does it on every floor.
+  if (floorSurprise(run).floor !== 'stormfront' && run.twist !== 'skies') return null;
   return (['rain', 'sun', 'hail', 'dust'] as WeatherId[])[run.log.fights % 4];
 }
 

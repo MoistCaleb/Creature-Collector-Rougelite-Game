@@ -77,7 +77,8 @@ export class StarterScene extends Phaser.Scene {
 
     // Shared seeds: everyone gets the same omen, so it's shown before you pick.
     const omenSeed = this.race ? this.race.seed : week ? week.seed : this.daily ? dailySeed(this.daily) : null;
-    const omen = omenSeed !== null ? omenFor(omenSeed) : undefined;
+    // Omen Week: the week's omen.
+    const omen = week?.omen ?? (omenSeed !== null ? omenFor(omenSeed) : undefined);
     if (omen) {
       const o = text(this, W / 2 + 20, 84, `✶ Omen: ${SURPRISES[omen].name}  (tap)`, 13, '#ff7ad9', { fontStyle: 'bold' }).setOrigin(0.5);
       o.setInteractive({ useHandCursor: true }).on('pointerup', () => showMessage(this, `Omen: ${SURPRISES[omen].name}`, SURPRISES[omen].desc));

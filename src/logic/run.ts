@@ -8,6 +8,7 @@ import { heatRules, MAX_HEAT } from '../data/heat';
 import { MAP_BY_ID, MAPS, mapUnlocked } from '../data/maps';
 import { bondHearts, natureFor } from '../data/natures';
 import { rollTrait, traitOf, traitsOf, traitValue, type TraitId } from '../data/traits';
+import { SURPRISES } from '../data/surprises';
 import { dojoOn, dojoResult, elderHere, floorSurprise, lastWinTeam, tickEgg, noteRunSurprises, omenOf, rollFloorSurprises, startSurprises } from './surprises';
 import { cleanBoons, floorCurse, guardianBoonLevels, hasBoon, openOffer, runHpCut, teamMax, type RunBoons } from './boons';
 import { isLegend, LEGEND_CHANCE, LEGEND_RECOVER, LEGENDS } from '../data/legends';
@@ -746,7 +747,7 @@ function suitedPassives(starters: string[], salt: string): Record<string, Passiv
 // ---------------------------------------------------------------- weekly challenge
 
 /** A weekly challenge's twist: one rule that changes the whole run. */
-export type TwistId = 'duo' | 'swarm' | 'glass' | 'lean' | 'gilded';
+export type TwistId = 'duo' | 'swarm' | 'glass' | 'lean' | 'gilded' | 'omen' | 'skies' | 'elders' | 'boonrush';
 
 export const TWISTS: Record<TwistId, { name: string; desc: string }> = {
   duo: { name: 'Element Duo', desc: 'Only two elements: every floor, wild Hexling, trainer and starter is one of them.' },
@@ -754,6 +755,10 @@ export const TWISTS: Record<TwistId, { name: string; desc: string }> = {
   glass: { name: 'Glass Cannon', desc: 'Every Hexling, yours and theirs, deals 30% more damage.' },
   lean: { name: 'Lean Times', desc: 'Half the healing after battles, but 50% more coins.' },
   gilded: { name: 'Gilded Week', desc: 'One wild Hexling in 15 is Gilded. Catch them while you can!' },
+  omen: { name: 'Omen Week', desc: 'The whole run is under an omen, the same one for everyone this week.' },
+  skies: { name: 'Wild Skies', desc: 'Every battle opens in wild weather: rain, sun, hail or dust, one after another.' },
+  elders: { name: 'Elder Week', desc: 'Every guardian is an Elder: older, tougher, with an extra rule. Each one beaten offers a mythic boon.' },
+  boonrush: { name: 'Boon Rush', desc: 'Start with a rare boon, and every floor has a Boon hex.' },
 };
 /** One line about a week's twist (Element Duo names its elements). */
 export function twistShort(info: WeeklyInfo): string {
@@ -766,6 +771,14 @@ export function twistShort(info: WeeklyInfo): string {
       return 'Every Hexling deals +30% damage';
     case 'lean':
       return 'Half healing after battles · +50% coins';
+    case 'omen':
+      return `Omen: ${info.omen ? (SURPRISES[info.omen]?.name ?? info.omen) : '?'} all run`;
+    case 'skies':
+      return 'Every battle opens in wild weather';
+    case 'elders':
+      return 'Every guardian is an Elder';
+    case 'boonrush':
+      return 'A rare boon to start · a Boon hex every floor';
     default:
       return 'One wild Hexling in 15 is Gilded';
   }
@@ -774,8 +787,14 @@ export function twistShort(info: WeeklyInfo): string {
 /** Glass Cannon: damage multiplier for both sides. */
 export const GLASS_MULT = 1.3;
 
-/** The twists in the order the weeks go through them. */
-export const TWIST_ORDER: TwistId[] = ['duo', 'swarm', 'glass', 'lean', 'gilded'];
+/** The twists in the order the weeks go through them (from TWISTS_V2_FROM; before it, TWIST_ORDER_V1). */
+export const TWIST_ORDER: TwistId[] = ['duo', 'omen', 'swarm', 'skies', 'glass', 'elders', 'lean', 'boonrush', 'gilded'];
+/** The first five twists, for weeks before 2.07's new ones (so past weeks keep the twist they had). */
+const TWIST_ORDER_V1: TwistId[] = ['duo', 'swarm', 'glass', 'lean', 'gilded'];
+/** The first week of the longer rotation (a Monday). */
+export const TWISTS_V2_FROM = '2026-11-30';
+/** The omens Omen Week can bring. */
+const WEEKLY_OMENS = ['bloodmoon', 'goldenage', 'wildsurge', 'starfall'];
 
 const DAY = 86400000;
 
@@ -795,13 +814,17 @@ export interface WeeklyInfo {
   mapId: string;
   /** Element Duo: the two elements. */
   duo?: [Element, Element];
+  /** Omen Week: the omen. */
+  omen?: string;
   starters: string[];
   passives: Record<string, PassiveId>;
 }
 
 export function weeklyInfo(week: string): WeeklyInfo {
-  const index = Math.floor(Date.parse(`${week}T00:00:00Z`) / (7 * DAY));
-  const twist = TWIST_ORDER[((index % TWIST_ORDER.length) + TWIST_ORDER.length) % TWIST_ORDER.length];
+  const v2 = week >= TWISTS_V2_FROM;
+  const order = v2 ? TWIST_ORDER : TWIST_ORDER_V1;
+  const index = Math.floor((Date.parse(`${week}T00:00:00Z`) - (v2 ? Date.parse(`${TWISTS_V2_FROM}T00:00:00Z`) : 0)) / (7 * DAY));
+  const twist = order[((index % order.length) + order.length) % order.length];
   const rng = new Rng(hashString(`weekly-setup:${week}`));
   let duo: [Element, Element] | undefined;
   let pool = SPECIES;
@@ -814,7 +837,9 @@ export function weeklyInfo(week: string): WeeklyInfo {
     mapId = 'wildlands';
   }
   const starters = rng.shuffle(pool.map((sp) => sp.id)).slice(0, 3);
-  return { week, seed: hashString(`weekly:${week}`), twist, mapId, duo, starters, passives: suitedPassives(starters, `weekly-passive:${week}`) };
+  // Omen Week: the omens take turns, so a month of them shows each one.
+  const omen = twist === 'omen' ? WEEKLY_OMENS[Math.floor(index / order.length) % WEEKLY_OMENS.length] : undefined;
+  return { week, seed: hashString(`weekly:${week}`), twist, mapId, duo, ...(omen ? { omen } : {}), starters, passives: suitedPassives(starters, `weekly-passive:${week}`) };
 }
 
 /** The record for one week's challenge (created empty if it hasn't been played). */
@@ -851,7 +876,12 @@ export function startWeekly(meta: Meta, week: string, starterId: string): Run {
     run.map = generateFloor(0, run.biomes[0], run.rng.int(0, 2 ** 31));
     run.currentId = run.map.startId;
     run.visited = [run.map.startId];
+    // The first floor's surprises were rolled on the old map: roll them again on this one.
+    if (run.surprises) run.surprises.floors = {};
+    rollFloorSurprises(run);
   }
+  // Boon Rush: a rare boon offer before the first hex.
+  if (info.twist === 'boonrush') openOffer(run, 'weekly-start', 'rare');
   return run;
 }
 
@@ -970,6 +1000,8 @@ export function startRun(
   applyWorkshopStart(run);
   // A quick run gets to its build fast: a boon offer before the first step.
   if (quick) queueOffer(run, 'quick');
+  // A daily run starts with a boon offer (seeded: the same for everyone with that starter).
+  if (daily) queueOffer(run, 'daily-start');
   return run;
 }
 

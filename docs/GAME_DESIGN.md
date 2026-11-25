@@ -295,6 +295,7 @@ Proposed math:
 ## Daily runs
 
 - One run per day, the same for everyone: the same 3 starters, map (Wildlands, seeded by the date) and Heat 0.
+- **A boon to start** (2.07): every daily opens with a boon offer, seeded, so everyone with that starter sees the same three.
   Play today's or any missed day from the calendar; your best result per day is kept.
 - **Each starter comes with a passive that suits it** (your own equipped passive isn't used). Every element
   has three fitting passives, and a starter draws from its elements' lists, seeded by the date, with the
@@ -327,7 +328,11 @@ Proposed math:
   (as dailies), Heat 0, and a **twist**. Twists rotate weekly: **Element Duo** (two elements only: every
   floor, wild Hexling, trainer and starter), **Swarm** (every wild battle is two Hexlings), **Glass Cannon**
   (both sides deal +30% damage), **Lean Times** (half healing after battles, +50% coins), **Gilded Week**
-  (1 wild Hexling in 15 is Gilded). From the Daily & weekly screen. Best result and attempts per week are kept
+  (1 wild Hexling in 15 is Gilded). From 2026-11-30 (2.07) four more join, using the 2.0 systems, in the order
+  Duo, **Omen Week** (the whole run under an omen; Blood Moon, Golden Age, Wild Surge and Starfall take turns),
+  Swarm, **Wild Skies** (every battle opens in weather, as on a Storm Front floor), Glass Cannon, **Elder Week**
+  (every guardian is an Elder), Lean Times, **Boon Rush** (a rare boon offer to start, a Boon hex every floor),
+  Gilded. Weeks before that keep the five-twist rotation, so past records keep their twist. From the Daily & weekly screen. Best result and attempts per week are kept
   (`meta.weeklies`); no Gilded Hunt after a weekly. The crown on the map bar shows the twist.
 
 ## Gilded milestones
