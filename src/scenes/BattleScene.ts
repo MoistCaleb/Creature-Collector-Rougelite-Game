@@ -119,6 +119,7 @@ import { openPicker, showMessage } from '../ui/picker';
 import { openGameMenu } from '../ui/gameMenu';
 import { colours, ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, placeAbove, placeBelow, button, COLORS, HpBar, stars, text, typeChip, LANDSCAPE, W, H, OX, OY, FW, FH } from '../ui/widgets';
+import { ensureElementIcon } from '../ui/elementIcons';
 
 interface SidePanel {
   root: Phaser.GameObjects.Container;
@@ -1427,6 +1428,9 @@ export class BattleScene extends Phaser.Scene {
           // Long names stay on one line (shrinking), clear of the accuracy and uses in the corners.
           oneLine: true,
           contentDy: LANDSCAPE ? 6 : 2,
+          // The move's element as a symbol beside its name (shape as well as colour).
+          glyphKey: ensureElementIcon(this, d.element),
+          glyphSize: 16,
         }),
       );
       // Hit chance in the top-left corner; limited moves show their uses left in the top-right.

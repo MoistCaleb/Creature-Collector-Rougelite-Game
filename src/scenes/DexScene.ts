@@ -15,7 +15,7 @@ import { sfx } from '../ui/sound';
 import { openGildedMilestones } from '../ui/gildedUi';
 import { loreLock } from '../logic/workshop';
 import { LORE_BOON_HINTS } from '../data/workshop';
-import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, moveColor, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
+import { accText, allMoveIds, BULWARK_ID, elementPool, fastId, MOVES, moveSummary, NEUTRAL_COLOR, NEUTRAL_IDS, slowId, WARP_ID } from '../data/moves';
 import { SPECIES, SPECIES_BY_ID } from '../data/species';
 import { ELEMENT_COLORS, elementTextColor, ELEMENTS, STRONG_AGAINST, type Element } from '../data/types';
 import { Scroller } from '../ui/scroll';
@@ -30,6 +30,7 @@ import { icon } from '../ui/icons';
 import { openElementChart } from '../ui/elementChart';
 import { shinySparkle } from '../ui/shiny';
 import { searchBox } from '../ui/searchBox';
+import { elementIcon } from '../ui/elementIcons';
 
 type Tab = 'creatures' | 'moves' | 'elements' | 'boons';
 /** Content starts below the header, tabs and the element filter bar. */
@@ -783,7 +784,7 @@ export class DexScene extends Phaser.Scene {
           row.add(this.add.rectangle(12, my, W - 24, 34, COLORS.panel).setOrigin(0).setStrokeStyle(1, COLORS.stroke));
           if (seen) {
             const kind = kindOf(id);
-            row.add(this.add.rectangle(22, my + 17, 8, 8, moveColor(el)));
+            row.add(elementIcon(this, 22, my + 17, el, 12));
             row.add(text(this, 34, my + 9, m.name, 14, COLORS.text));
             row.add(text(this, 170, my + 10, kind, 12, COLORS.textDim));
             row.add(text(this, W - 22, my + 10, `${moveSummary(m, 1)} · ${accText(m)}`, 12, COLORS.textDim).setOrigin(1, 0));

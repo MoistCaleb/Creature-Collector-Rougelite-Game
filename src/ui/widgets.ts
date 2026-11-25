@@ -7,6 +7,8 @@ import { creatureName, creatureTypes, levelCap, stats, type Creature } from '../
 import { isMuted, setMuted, sfx } from './sound';
 import { colours, ensureCreatureTexture, SPRITE_FIT } from './sprites';
 import { ensureIcon, icon as iconImage, type IconId } from './icons';
+import { elementIcon } from './elementIcons';
+import { prefs } from './prefs';
 
 /**
  * The game is laid out on a 450x800 board held upright, or an 800x450 board for screens that
@@ -162,7 +164,19 @@ export function text(
   color = COLORS.text,
   style: Partial<Phaser.Types.GameObjects.Text.TextStyle> = {},
 ): Phaser.GameObjects.Text {
-  return scene.add.text(x, y, str, { fontFamily: FONT, fontSize: `${size}px`, color, resolution: ZOOM, ...style });
+  return scene.add.text(x, y, str, { fontFamily: FONT, fontSize: `${textSize(size)}px`, color: textColour(color), resolution: ZOOM, ...style });
+}
+
+/** Settings › Accessibility › Larger text: small text (under 16px) grows by about a sixth. */
+export function textSize(size: number): number {
+  return prefs.largerText && size < 16 ? Math.round(size * 1.17) : size;
+}
+
+/** The dim greys used for secondary text, and the brighter grey Settings › Accessibility › Brighter text swaps in. */
+const DIM_GREYS = new Set(['#a49cc0', '#8e86ad', '#6d6588', '#5d5578', '#8a86a0', '#9a94b0']);
+const BRIGHT_GREY = '#dcd6ee';
+function textColour(color: string | undefined): string | undefined {
+  return prefs.brightText && color && DIM_GREYS.has(color.toLowerCase()) ? BRIGHT_GREY : color;
 }
 
 export interface ButtonOpts {
@@ -177,6 +191,9 @@ export interface ButtonOpts {
   badge?: string;
   /** A pixel icon drawn just left of the label (or alone, when the label is empty). */
   glyph?: IconId;
+  /** Instead of `glyph`: any texture (e.g. an element symbol), `glyphSize` pixels across. */
+  glyphKey?: string;
+  glyphSize?: number;
   /** Keep the label on one line, shrinking it to fit (narrow buttons with long names). */
   oneLine?: boolean;
   /** Move the label and sub-line down (room for corner tags). */
@@ -216,13 +233,16 @@ export function button(
     t.y += opts.contentDy;
     if (subT) subT.y += opts.contentDy;
   }
-  if (opts.glyph) {
-    const size = Math.round((opts.fontSize ?? 18) * 1.25);
+  if (opts.glyph || opts.glyphKey) {
+    const size = opts.glyphSize ?? Math.round((opts.fontSize ?? 18) * 1.25);
     const gap = label ? 6 : 0;
-    const total = size + gap + (label ? t.width : 0);
+    // A one-line label shrinks to leave room for the glyph.
+    const room = w - 12 - iconW - size - gap;
+    if (opts.oneLine && t.displayWidth > room) t.setScale(room / t.width);
+    const total = size + gap + (label ? t.displayWidth : 0);
     const left = tx - total / 2;
-    const g = iconImage(scene, left + size / 2, t.y, opts.glyph, size).setName('glyph');
-    t.setX(left + size + gap + t.width / 2);
+    const g = (opts.glyphKey ? scene.add.image(left + size / 2, t.y, opts.glyphKey).setDisplaySize(size, size) : iconImage(scene, left + size / 2, t.y, opts.glyph!, size)).setName('glyph');
+    t.setX(left + size + gap + t.displayWidth / 2);
     c.add(g);
   }
   if (opts.icon) c.add(creatureSprite(scene, -w / 2 + 32, -8, opts.icon, 1.6));
@@ -280,7 +300,12 @@ export function typeChip(scene: Phaser.Scene, x: number, y: number, el: Element,
   const h = small ? 16 : 20;
   const c = scene.add.container(x, y);
   c.add(scene.add.rectangle(0, 0, w, h, ELEMENT_COLORS[el]).setOrigin(0, 0.5));
-  c.add(text(scene, w / 2, 0, el.toUpperCase(), small ? 10 : 11, elementTextColor(el), { fontStyle: 'bold' }).setOrigin(0.5));
+  // The element's symbol at the left (shape as well as colour, for colour-blind players); the name shrinks into the rest.
+  const sym = h - 2;
+  c.add(elementIcon(scene, 1 + sym / 2, 0, el, sym, true));
+  const t = text(scene, sym + (w - sym) / 2, 0, el.toUpperCase(), small ? 10 : 11, elementTextColor(el), { fontStyle: 'bold' }).setOrigin(0.5);
+  if (t.width > w - sym - 4) t.setScale((w - sym - 4) / t.width);
+  c.add(t);
   return c;
 }
 

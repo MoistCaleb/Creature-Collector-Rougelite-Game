@@ -81,6 +81,27 @@ export const prefs = {
   set reduceMotion(v: boolean) {
     set('ccr-reduce-motion', v ? '1' : '0');
   },
+  /** Accessibility: small text drawn bigger (see widgets.text). */
+  get largerText(): boolean {
+    return get('ccr-larger-text', '0') === '1';
+  },
+  set largerText(v: boolean) {
+    set('ccr-larger-text', v ? '1' : '0');
+  },
+  /** Accessibility: dim grey text drawn brighter. */
+  get brightText(): boolean {
+    return get('ccr-bright-text', '0') === '1';
+  },
+  set brightText(v: boolean) {
+    set('ccr-bright-text', v ? '1' : '0');
+  },
+  /** The flashing-lights warning on launch, until "Don't show again". */
+  get motionWarning(): boolean {
+    return get('ccr-motion-warning', '1') === '1';
+  },
+  set motionWarning(v: boolean) {
+    set('ccr-motion-warning', v ? '1' : '0');
+  },
   /** Day and night, and holiday themes, on the map (from the device's clock). */
   get worldClock(): boolean {
     return get('ccr-world-clock', '1') === '1';

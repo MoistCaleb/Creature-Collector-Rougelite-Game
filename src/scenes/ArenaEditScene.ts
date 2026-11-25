@@ -3,7 +3,7 @@ import { traitsOf } from '../data/traits';
 import { traitsFound } from '../logic/dex';
 import { traitDescOf, traitName } from '../ui/traitText';
 import { Scroller } from '../ui/scroll';
-import { accText, maxUses, MOVES, moveSummary, moveColor } from '../data/moves';
+import { accText, maxUses, MOVES, moveSummary } from '../data/moves';
 import { SPECIES_BY_ID } from '../data/species';
 import {
   activeTeamIndex,
@@ -24,6 +24,7 @@ import { openPicker } from '../ui/picker';
 import { playMusic } from '../ui/sound';
 import { ensureCreatureTexture, SPRITE_FIT } from '../ui/sprites';
 import { background, button, clipList, COLORS, H, LANDSCAPE, text, typeChips, W } from '../ui/widgets';
+import { elementIcon } from '../ui/elementIcons';
 
 const KIND_LABEL: Record<string, string> = { attack: 'Attack', buff: 'Boost', debuff: 'Hinder', heal: 'Heal' };
 const ROW = 42;
@@ -299,7 +300,7 @@ export class ArenaEditScene extends Phaser.Scene {
     const d = MOVES[id];
     const x = this.lx;
     const right = this.lx + this.lw - 22;
-    list.add(this.add.rectangle(x + 24, y + 19, 10, 10, moveColor(d.element)));
+    list.add(elementIcon(this, x + 24, y + 19, d.element, 13));
     list.add(text(this, x + 36, y + 4, d.name, 14, COLORS.text, { fontStyle: 'bold' }));
     list.add(text(this, x + 36, y + 21, `${d.team ? 'Team' : KIND_LABEL[d.kind] ?? ''} · ${moveSummary(d, 1)} · ${accText(d)}`, 11, COLORS.textDim));
     const max = maxUses(d);

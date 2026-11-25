@@ -6,6 +6,7 @@ import { flushCloud } from '../storage';
 import { openElementChart } from './elementChart';
 import { openHowToPlay } from './howto';
 import { openPanel } from './panel';
+import { openAccessibility } from './accessibility';
 import { openCredits } from './credits';
 import { APP_VERSION } from '../data/changelog';
 import { decodeSave, exportSave, importSave, summarize } from '../logic/saveCode';
@@ -23,11 +24,11 @@ const ROW_H = 50;
  * battle speed, first-time tips, How to play, the element chart, and erasing all progress.
  */
 export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}) {
-  const rows = 7;
+  const rows = 6;
   // Sideways the board is only 450 tall: slightly shorter rows keep the last one clear of Close.
   const ROW = LANDSCAPE ? 48 : ROW_H;
   // Bug reports need the server (not in the claude.ai version).
-  const bigs = accountsAvailable() ? 6 : 5;
+  const bigs = accountsAvailable() ? 7 : 6;
   const p = openPanel(scene, 'Settings', {
     w: LANDSCAPE ? 760 : 430,
     h: LANDSCAPE ? 440 : 50 + rows * ROW + 4 + bigs * 54 + 66,
@@ -45,7 +46,12 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
     const label = (s: string, sub?: string) => {
       body.add(scene.add.rectangle(x0, y, colW, ROW - 6, COLORS.panelLight).setOrigin(0));
       body.add(text(scene, x0 + 12, y + (sub ? 8 : (ROW - 6) / 2), s, 15, COLORS.text, { fontStyle: 'bold' }).setOrigin(0, sub ? 0 : 0.5));
-      if (sub) body.add(text(scene, x0 + 12, y + 27, sub, 11, COLORS.textDim));
+      if (sub) {
+        // Clear of the controls on the right (Larger text makes it longer).
+        const t = text(scene, x0 + 12, y + 27, sub, 11, COLORS.textDim);
+        if (t.width > colW - 110) t.setScale((colW - 110) / t.width);
+        body.add(t);
+      }
     };
     const cy = () => y + (ROW - 6) / 2;
     const right = x0 + colW - 10;
@@ -96,9 +102,6 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
       if (prefs.tips) prefs.tipsSeen = [];
     });
 
-    toggle('Reduce motion', 'Less screen shake, flashes and zooms', prefs.reduceMotion, () => {
-      prefs.reduceMotion = !prefs.reduceMotion;
-    });
     toggle('Day, night & holidays', 'The map and battle skies follow your clock and calendar', prefs.worldClock, () => {
       prefs.worldClock = !prefs.worldClock;
     });
@@ -120,10 +123,14 @@ export function openSettings(scene: Phaser.Scene, onClose: () => void = () => {}
     const bx = LANDSCAPE ? p.x + 14 + 420 + 16 : x0;
     const bw = LANDSCAPE ? p.w - 28 - 420 - 16 : colW;
     let by = LANDSCAPE ? p.top : y + 4;
+    // Sideways the buttons share the column's height above Close.
+    const step = LANDSCAPE ? Math.min(54, Math.floor((p.y + p.h - 56 - p.top) / bigs)) : 54;
     const big = (name: string, sub: string, fn: () => void, color?: number, glyph?: import('./icons').IconId) => {
-      body.add(button(scene, bx + bw / 2, by + 23, bw, 46, name, fn, { fontSize: 16, sub, color, glyph }));
-      by += 54;
+      const b = button(scene, bx + bw / 2, by + (step - 8) / 2, bw, step - 8, name, fn, { fontSize: step < 50 ? 15 : 16, sub, color, glyph });
+      body.add(b);
+      by += step;
     };
+    big('Accessibility', 'Reduce motion, text size, flashing lights', () => openAccessibility(scene), 0x2f5a5a, 'lens');
     big('How to play', 'The basics, in a few pages', () => openHowToPlay(scene), 0x2f4a6b, 'book');
     big('Element chart', 'What beats what', () => openElementChart(scene), 0x2f4a6b);
     if (accountsAvailable()) {
