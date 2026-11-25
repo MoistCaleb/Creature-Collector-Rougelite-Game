@@ -632,7 +632,7 @@ export class CampScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(400, 2500), act);
   }
 
-  /** Pet, feed or play with a camp Hexling (each once between runs, losses too; the first each time builds your bond). */
+  /** Pet, feed or play with a camp Hexling (each once between runs, losses too; each one builds your bond). */
   private careFor(speciesId: string, stage: number, c: Phaser.GameObjects.Container) {
     const meta = state.meta;
     const name = SPECIES_BY_ID[speciesId].names[stage] ?? SPECIES_BY_ID[speciesId].names[0];
@@ -646,7 +646,7 @@ export class CampScene extends Phaser.Scene {
     };
     const now = hearts ? `${hearts >= BOND_HEART.max ? 'Best friends! ' : ''}${bondReward(Math.min(hearts, BOND_HEART.max), name).replace(/^./, (ch) => ch.toUpperCase())}.` : '';
     const toNext = next
-      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and your first time together here after each run (+${BOND_POINTS.care}).`
+      ? `${next.points}/${next.next} bond to the next heart: ${bondReward(hearts + 1, name)}. Bond grows from runs together (finishing +${BOND_POINTS.finished}, winning +${BOND_POINTS.won}, MVP +${BOND_POINTS.mvp}, each guardian +${BOND_POINTS.guardian}) and pet, feed and play here after each run (+${BOND_POINTS.care} each).`
       : '';
     const alt = hearts >= BOND_HEART.max;
     const altOn = bondColours(meta, speciesId);
@@ -666,11 +666,10 @@ export class CampScene extends Phaser.Scene {
           this.scene.restart();
           return;
         }
-        const first = !done.length;
         const gained = care(meta, speciesId, CARE[i]);
         saveMeta(meta);
         sfx.coin();
-        this.bubble(c, first ? '♥ +1' : '♥', '#ff8ab0');
+        this.bubble(c, `♥ +${BOND_POINTS.care}`, '#ff8ab0');
         if (gained) {
           sfx.bondHeart();
           const h = campHearts(meta, speciesId);

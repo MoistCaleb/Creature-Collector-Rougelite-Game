@@ -252,7 +252,7 @@ export const BOND_HEART = { startBond: 3, trait: 4, max: 5 } as const;
 export const CAMP_START_BOND = 3;
 /** Heart 5: extra starting levels as your starter. */
 export const BOND_START_LEVELS = 2;
-/** Bond points from a run (see payRunBond) and from camp (the first care after each run). */
+/** Bond points from a run (see payRunBond) and from camp (each care after each run). */
 export const BOND_POINTS = { care: 1, finished: 2, won: 4, mvp: 3, guardian: 1 } as const;
 
 /** The bond scale saved points are on. */
@@ -314,16 +314,14 @@ export function addBond(m: Meta, speciesId: string, points: number): { before: n
 }
 
 /**
- * Spend time with a Hexling (each kind once between runs; the first each time builds your bond).
+ * Spend time with a Hexling (each kind once between runs, and each one builds your bond).
  * Returns the hearts gained (0 or 1), or null if that was already done since your last run.
  */
 export function care(m: Meta, speciesId: string, what: Care): number | null {
   const c = camp(m);
   const done = (c.cared[speciesId] ??= []);
   if (done.includes(what)) return null;
-  const first = !done.length;
   done.push(what);
-  if (!first) return 0;
   const r = addBond(m, speciesId, BOND_POINTS.care);
   return r.after - r.before;
 }

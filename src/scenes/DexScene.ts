@@ -525,7 +525,7 @@ export class DexScene extends Phaser.Scene {
     const about = next
       ? caught || pts
         ? `Next: ${bondReward(hearts + 1, name)}.`
-        : `Catch one, then play runs together and visit it at camp (+${BOND_POINTS.care} after each run).`
+        : `Catch one, then play runs together and pet, feed and play with it at camp (+${BOND_POINTS.care} each, after each run).`
       : `${bondReward(BOND_HEART.max, name).replace(/^./, (ch) => ch.toUpperCase())}.`;
     row.add(text(this, 22, y + 50, about, 12, COLORS.text, { wordWrap: { width: W - 50 }, maxLines: 2 }));
     y += INFO_BOND;

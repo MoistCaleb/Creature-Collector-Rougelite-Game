@@ -77,12 +77,14 @@ describe('Camp bond, deepened (2.0)', () => {
     expect(camp(fresh).bondV).toBe(BOND_VERSION);
   });
 
-  it('caring builds bond once between runs (the other two cares are just for fun)', () => {
+  it('pet, feed and play each build bond once between runs', () => {
     const m = mkMeta();
     expect(care(m, 'emberkit', 'pet')).toBe(0);
     expect(care(m, 'emberkit', 'feed')).toBe(0);
     expect(care(m, 'emberkit', 'pet')).toBeNull();
-    expect(camp(m).bond.emberkit).toBe(BOND_POINTS.care);
+    expect(care(m, 'emberkit', 'play')).toBe(0);
+    expect(care(m, 'emberkit', 'play')).toBeNull();
+    expect(camp(m).bond.emberkit).toBe(BOND_POINTS.care * 3);
     at(m, 'frostling', CAMP_HEARTS[0] - 1);
     expect(care(m, 'frostling', 'play')).toBe(1);
   });

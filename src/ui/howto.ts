@@ -116,7 +116,7 @@ export const HOW_TO_PLAY: Page[] = [
     title: 'Camp bond',
     glyph: 'heart',
     lines: [
-      'Each line you play builds a bond, up to 5 hearts: finishing a run together, winning, being MVP, beating guardians, and your first time together at camp after each run (wins or losses; not online or the Battle Arena).',
+      'Each line you play builds a bond, up to 5 hearts: finishing a run together, winning, being MVP, beating guardians, and petting, feeding and playing at camp after each run (wins or losses; not online or the Battle Arena).',
       'Hearts 1 and 2 evolve it at camp. Heart 3: it starts your runs with a bond heart.',
       'Heart 4: as your starter, tap its trait to choose any trait you\'ve found on its line.',
       'Heart 5: it starts 2 levels higher as your starter, wears its bond colours, and visits your camp.',
